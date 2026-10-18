@@ -51,6 +51,7 @@ const SETTINGS_FIELD = {
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   EXPERIMENTS: "experiments",
   MAC_REPOSITORIES: "macRepositories",
+  PRODUCT_EVENT_DAYS: "productEventDays",
   VERSION: "version",
 } as const;
 
@@ -332,6 +333,77 @@ function storedMacRepositories(value: UnparsedWireValue): MacRepositories | unde
 }
 
 /**
+ * One once-a-day usage count as last sent: which event, for what, for which
+ * account (the sender's opaque account key), and the UTC day.
+ */
+export interface KeptProductEventDay {
+  readonly name: string;
+  readonly discriminator: string;
+  readonly account: string;
+  readonly day: string;
+}
+
+/**
+ * The UTC day each once-a-day usage count was last sent, by event, then
+ * discriminator, then account: nested rather than an interpolated key, so the
+ * three stay apart. Local bookkeeping only, so a relaunch the same day does
+ * not count the day again; it is kept whoever signs in, since the point is
+ * that another account's day is its own, and only the newest day stays.
+ */
+type ProductEventDays = Readonly<
+  Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
+>;
+
+function productEventDayEntries(days: ProductEventDays | undefined): KeptProductEventDay[] {
+  const entries: KeptProductEventDay[] = [];
+  for (const [name, byDiscriminator] of Object.entries(days ?? {})) {
+    for (const [discriminator, byAccount] of Object.entries(byDiscriminator)) {
+      for (const [account, day] of Object.entries(byAccount)) {
+        entries.push({ name, discriminator, account, day });
+      }
+    }
+  }
+  return entries;
+}
+
+/** The nested record of these entries, built through `Map`s so no key from the file reaches a prototype. */
+function productEventDaysFrom(entries: readonly KeptProductEventDay[]): ProductEventDays {
+  const byName = new Map<string, Map<string, Map<string, string>>>();
+  for (const { name, discriminator, account, day } of entries) {
+    const byDiscriminator = byName.get(name) ?? new Map<string, Map<string, string>>();
+    const byAccount = byDiscriminator.get(discriminator) ?? new Map<string, string>();
+    byAccount.set(account, day);
+    byDiscriminator.set(discriminator, byAccount);
+    byName.set(name, byDiscriminator);
+  }
+  return Object.fromEntries(
+    [...byName].map(([name, byDiscriminator]) => [
+      name,
+      Object.fromEntries(
+        [...byDiscriminator].map(([discriminator, byAccount]) => [
+          discriminator,
+          Object.fromEntries(byAccount),
+        ]),
+      ),
+    ]),
+  );
+}
+
+function storedProductEventDays(value: UnparsedWireValue): ProductEventDays | undefined {
+  const kept: KeptProductEventDay[] = [];
+  for (const [name, byDiscriminator] of Object.entries(readWireRecord(value) ?? {})) {
+    for (const [discriminator, byAccount] of Object.entries(
+      readWireRecord(byDiscriminator) ?? {},
+    )) {
+      for (const [account, day] of Object.entries(readWireRecord(byAccount) ?? {})) {
+        if (isWireString(day) && day) kept.push({ name, discriminator, account, day });
+      }
+    }
+  }
+  return kept.length === 0 ? undefined : productEventDaysFrom(kept);
+}
+
+/**
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
@@ -349,6 +421,7 @@ const PersistedSettingsSchema = Schema.Struct({
   ),
   [SETTINGS_FIELD.EXPERIMENTS]: Schema.optionalKey(settingsField(storedExperiments)),
   [SETTINGS_FIELD.MAC_REPOSITORIES]: Schema.optionalKey(settingsField(storedMacRepositories)),
+  [SETTINGS_FIELD.PRODUCT_EVENT_DAYS]: Schema.optionalKey(settingsField(storedProductEventDays)),
   ...storedSettingFields,
 });
 
@@ -626,6 +699,45 @@ export class SettingsStore {
       );
       const next = entry.command === null ? others : { ...others, [key]: entry };
       return Object.keys(next).length === 0 ? rest : { ...rest, macRepositories: next };
+    });
+  }
+
+  /** The UTC day one once-a-day usage count was last sent for this account, or nothing. */
+  lastProductEventDay(
+    name: string,
+    discriminator: string,
+    account: string,
+  ): Effect.Effect<string | undefined, PlatformError> {
+    return Effect.map(
+      this.#load(),
+      (persisted) =>
+        productEventDayEntries(persisted.productEventDays).find(
+          (entry) =>
+            entry.name === name &&
+            entry.discriminator === discriminator &&
+            entry.account === account,
+        )?.day,
+    );
+  }
+
+  /**
+   * Keeps the day one once-a-day usage count was last sent, as the clock
+   * read it, back as well as forward, so a clock that was wrong never hides a
+   * real day. Every entry from an earlier day is dropped, since no guard
+   * reads it again.
+   */
+  keepProductEventDay(kept: KeptProductEventDay): Effect.Effect<void, PlatformError> {
+    return this.#mutate((persisted) => {
+      const entries = productEventDayEntries(persisted.productEventDays);
+      const held = entries.find(
+        (entry) =>
+          entry.name === kept.name &&
+          entry.discriminator === kept.discriminator &&
+          entry.account === kept.account,
+      );
+      if (held?.day === kept.day) return undefined;
+      const others = entries.filter((entry) => entry !== held && entry.day >= kept.day);
+      return { ...persisted, productEventDays: productEventDaysFrom([...others, kept]) };
     });
   }
 

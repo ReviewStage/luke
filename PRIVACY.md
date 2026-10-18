@@ -853,9 +853,25 @@ your name and email to that record. The counts are event names and values from
 a fixed list. A voice session's start is counted with the source that opened
 it, our voice service on your account, and never with a session id. A count
 made before you sign in waits in Luke's memory and is sent under your account
-if you sign in before Luke quits, and is dropped otherwise. Nothing you type
+if you sign in before Luke quits, and is dropped otherwise. The mark that you
+used Luke on a day is counted once a day for each account signed in, so Luke
+keeps in its settings file on your Mac, for each account it was sent for, the
+email address and the UTC day it was last sent, and only the newest day; it is
+never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
+
+Our service also counts, under the same account, the work done through it:
+a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
+it runs on, and whether an automation started it), a pull request an agent
+opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
+answered, a Chat message you posted, an issue filed, an automation made (with
+what triggers it), and an integration connected or disconnected (with which
+provider). These counts are event names and values from a fixed list too, and
+carry no titles, names, repositories, branches, prompts, messages, or the
+words of any of them. They go from our service to PostHog, so PostHog never
+sees your network address for them, and deleting your account erases them
+with the rest of your usage data.
 
 **Screen recordings.** Luke records what his own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
@@ -892,12 +908,16 @@ yours.
 
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
-and renderer code, process-session status, and native minidumps when an
+and renderer code, and of the errors it caught but could not recover from: a
+launch that could not start, a window whose state could not be read, and an
+internal error in an action, a background task, or a part of Luke shutting
+down. It also sends process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
-traces: how long Luke took to start, how each window's page loaded, and the
-requests each made. Luke uses Sentry's default data collection, so reports
-and traces carry the exception message and code path, breadcrumbs (among them
-messages Luke wrote to its console and the addresses of requests it made),
+traces for about one launch or page load in ten: how long Luke took to start,
+how each window's page loaded, and the requests each made. Luke uses Sentry's
+default data collection, so reports and traces carry the exception message
+and code path, breadcrumbs (among them messages Luke wrote to its console and
+the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
@@ -907,22 +927,33 @@ Luke account, and does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
-Luke's agents send Sentry what its SDK collects by default, so that we can find
-and fix failures. That is: every error our service did not handle, with its
-message, stack trace, the lines of code around it, and the values of local
-variables; performance traces of each request our service answers, each
-database query, and each request it makes, with their headers, bodies, query
-parameters, and database query parameters, and the IP address a request came
-from; every line our service logs; counts and timings; and, each minute,
-whether the scheduled sweep ran. Luke's agents also send Sentry's agent
-traces of each turn: the instructions and messages sent to the model (which
-include the plan, the conversation, what was said on a call, and what Luke and
-his workers read, such as code, a command's output from your Mac, and an
-integration's answer), the model's replies, and each tool call with its
-arguments and result. Sentry replaces a value whose name looks like a
-credential (such as `auth`, `token`, `secret`, `password`, `key`, or `session`)
-before it leaves, but not a credential written in free text, such as a key
-pasted into a conversation. Terminal tabs' bytes are not sent. What reaches
+Luke's agents send Sentry reports so that we can find and fix failures. Our
+service's web functions send every error they did not handle or that ended
+work they run apart from a request (such as following a turn for a call, or
+standing the voice or terminal service), with its message, stack trace, and
+the lines of code around it; performance traces of a share of the requests
+they answer, each database query, and each request they
+make, with the method, address, and query parameters, the status, the
+browser's or app's user agent, and the query's text; every line they log;
+counts and timings; and, each minute, whether the scheduled sweep ran. They do
+not send a request's headers or body, the values of local variables, or the IP
+address a request came from. Luke's agents send what Sentry's SDK collects by
+default: every error they did not handle or that ended work they started
+apart from a turn, with its message, stack trace, the lines of code around it,
+and the values of local variables; performance traces
+of each request they answer, each database query, and each request they make,
+with their headers, bodies, query parameters, and database query parameters,
+and the IP address a request came from; every line they log; and Sentry's
+agent traces of each turn: the instructions and messages sent to the model
+(which include the plan, the conversation, what was said on a call, and what
+Luke and his workers read, such as code, a command's output from your Mac, and
+an integration's answer), the model's replies, and each tool call with its
+arguments and result. In what the agents send, Sentry replaces a value whose
+name looks like a credential (such as `auth`, `token`, `secret`, `password`,
+`key`, or `session`) before it leaves, but not a credential written in free
+text, such as a key pasted into a conversation; the address and query
+parameters of a request the web functions trace are sent as the request
+carried them. Terminal tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
 
@@ -1028,7 +1059,8 @@ only when you press Send.
   Mac loads straight from Keyframe's public storage as the menu is drawn, so
   Keyframe sees your Mac's IP address then, as any site serving an image does;
   no referrer and nothing of yours is sent with it.
-- PostHog, for usage data and screen recordings from the Mac app. The counts
+- PostHog, for usage data and screen recordings from the Mac app, and the
+  counts our service makes of the work done through it. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the Mac app's crash and performance reports, and our service's
   and Luke's agents' error, performance, log, and agent reports, described
@@ -1191,11 +1223,17 @@ We do not sell your information or use it for advertising.
 tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
 records the pages themselves, except the sign-in pages, which it does not
 record. A press is counted by what was clicked and where, never the words on
-it, and a recording masks what you type into a field. When you finish signing
-in, the site names you to PostHog by your account's id, name, and email
-address, which links your earlier visits to your account. Your browser
-contacts PostHog directly, so PostHog sees your network address, as it does
-for the app's recordings.
+it, and a recording masks what you type into a field. Before a count or a
+recording leaves your browser, the site takes out of every address in it, on
+every page, any sign-in code, state, error, challenge, signature, or token a
+sign-in or a link put there, and cuts a sign-in page's address to the page
+itself. It collects nothing else, whatever our PostHog project's settings
+say: no errors, nothing from your browser's console, no network requests,
+no page or network timings, no heatmaps, no chat widget, surveys, or product
+tours, and no feature flags. When you finish signing in, the site names you
+to PostHog by your account's id, name, and email address, which links your
+earlier visits to your account. Your browser contacts PostHog directly, so
+PostHog sees your network address, as it does for the app's recordings.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
@@ -1253,8 +1291,12 @@ and error, performance, and agent reports by Sentry.
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
-  versions left there — and asks PostHog to erase your usage data and
-  recordings, which does not reach a recording never attached to your account.
+  versions left there — and asks PostHog to erase the person it holds for your
+  account with its usage data and recordings, which PostHog queues and carries
+  out shortly after rather than at once, and which does not reach a recording
+  never attached to your account. If PostHog cannot be reached, refuses, or
+  reports that it could not erase them, the account is deleted anyway and
+  PostHog keeps what it holds.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
   already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account

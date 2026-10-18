@@ -1,5 +1,8 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { agentPlace, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import {
   HoverCard,
   HoverCardHead,
@@ -15,7 +18,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { agentPlace, useCopyLinkItem } from "../copy-link-item";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../tasks/agent-ref";
 import { AgentTabCard } from "../tasks/agent-tab-card";
@@ -26,8 +28,6 @@ import { PageCard } from "../tasks/page-card";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
@@ -430,7 +430,7 @@ function withCards(
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
   const { sidePanel, mainTabs, agents, work } = tasks;
-  const workers = taskWorkers(workRowsOf(work.conversation, work.callLive));
+  const workers = taskWorkers(workRowsOf(work.conversation));
   const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;

@@ -63,6 +63,9 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
 import { useAutomationRuns } from "@luke/panel/desktop/use-automation-runs";
 import {
@@ -70,10 +73,13 @@ import {
   type RunChoices,
   useRunChoices,
 } from "@luke/panel/desktop/use-run-choices";
+import { FoldingButton } from "@luke/panel/folding-button";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { SwitchRow } from "@luke/panel/settings/switch-row";
 import { Spinner } from "@luke/panel/spinner";
 import { dayAndTimeText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -86,9 +92,11 @@ import {
   Chip,
   ChipName,
   ConfirmDialog,
+  DetailPage,
   EllipsisIcon,
   ErrorState,
   IconButton,
+  PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -118,20 +126,14 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { FoldingButton } from "../folding-button";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
-import { SwitchRow } from "../settings/switch-row";
 import { AgentModelChip } from "../tasks/agent-model-chip";
 import { AgentServersButton } from "../tasks/agent-servers";
 import { ModelMenu } from "../tasks/model-menu";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
@@ -1730,7 +1732,7 @@ export function AutomationEditor({
     },
   );
   return (
-    <section className="automations-view" aria-label="Automation">
+    <div className="automations-view">
       <EditorToolbar
         automation={automation}
         dirty={dirty}
@@ -1744,7 +1746,7 @@ export function AutomationEditor({
         runsPanel={runsPanel}
       />
       <div ref={editorLayout} className="automation-editor-layout">
-        <div className="automations-scroll scroll-fade-top">
+        <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
           <div className="automation-editor">
             <TextField
               ref={nameField}
@@ -1780,7 +1782,7 @@ export function AutomationEditor({
               onDraft={editDraft}
             />
           </div>
-        </div>
+        </DetailPage>
         <AutomationRunsPanel
           panel={runsPanel}
           mine={automation === undefined || automation.mine === true}
@@ -1810,6 +1812,6 @@ export function AutomationEditor({
           running: "Deleting",
         }}
       />
-    </section>
+    </div>
   );
 }

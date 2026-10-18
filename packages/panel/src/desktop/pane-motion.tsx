@@ -12,11 +12,11 @@
  * document is uncovered from its old edge to its new one. A pane leaving holds itself drawn
  * through its own exit (side-panel.tsx), so only arrivals and displacement
  * are played here. A smaller pane docked at the right of what it stands
- * beside, a File tab's tree, a Terminal tab's shells, an automation's
- * Runs, or an issue's peek, slides in and out on the same tokens
- * (`usePaneSlide`), and an automation's form, or the Issues list, glides as
- * the pane beside it comes and goes, as the document does beside the side
- * panel.
+ * beside, a File tab's tree, a Terminal tab's shells, or an automation's
+ * Runs, slides in and out on the same tokens (`usePaneSlide`), and an
+ * automation's form glides as its Runs come and go, as the document, or the
+ * Issues list and board beside the side panel peeking an issue, do beside
+ * the side panel.
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
@@ -53,7 +53,8 @@ const STILL = 0.5;
 /**
  * Which panes are drawn under the root, and how, each by a name of its
  * owner's: the window's sidebar, side panel, and the plan's pinned summary,
- * an automation's Runs, or an issue's peek. A change to any of them is what plays.
+ * an automation's Runs, or the side panel peeking an issue beside the
+ * Issues list. A change to any of them is what plays.
  */
 type PaneLayout = Readonly<Record<string, boolean>>;
 
@@ -177,7 +178,7 @@ function play(root: HTMLElement, before: Snapshot): void {
 
 /**
  * Plays the pane changes over the box at `root`: the window's shell, an
- * automation's page beside its Runs, or the Issues page beside its peek. Note that this is
+ * automation's page beside its Runs, or the Issues page beside the side panel peeking an issue. Note that this is
  * a class, because `getSnapshotBeforeUpdate` is the one moment React gives to
  * read the layout a commit is about to change, and the glide starts from
  * there; it draws nothing of its own.

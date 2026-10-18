@@ -125,7 +125,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
 
   return (
     <Dialog
-      size={DIALOG_SIZE.WIDE}
+      size={DIALOG_SIZE.COMPOSER}
       labelledBy={titleId}
       busy={starting}
       initialFocus={field}

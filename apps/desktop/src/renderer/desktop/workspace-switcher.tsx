@@ -1,5 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { useNewWorkspaceDialog } from "@luke/panel/desktop/new-workspace-dialog";
+import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "@luke/panel/desktop/workspace-ref";
 import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import {
   ChevronDownIcon,
@@ -12,8 +14,6 @@ import {
 } from "@luke/ui";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { ActionMenu, type MenuAction } from "./action-menu";
-import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 
 /**
  * workspace-switcher.tsx -- the sidebar's head: the workspace listed, by its tile and name and who shares it, and the menu that lists another.

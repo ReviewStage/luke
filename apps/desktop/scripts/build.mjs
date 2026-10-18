@@ -17,6 +17,16 @@ const brandRoot = BRAND_ASSETS_DIRECTORY;
 const appVersion = JSON.parse(
   await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
 ).version;
+// The one release every build's reports and uploaded source maps share, a
+// Developer ID build's or not: main reports under it (`PACKAGED_SENTRY_RELEASE`)
+// and the upload below files the maps under it, so the two cannot drift.
+const sentryRelease = `Luke@${appVersion}`;
+// Whether this build uploads its source maps (`sentryPlugins` below): where
+// the token is set, unless the build is a Release workflow rehearsal (a
+// manual dispatch), which publishes no release and so must not file maps
+// under the real one. A tag's build and a release cut by hand both upload.
+const uploadsSourceMaps =
+  Boolean(process.env.SENTRY_AUTH_TOKEN) && process.env.GITHUB_EVENT_NAME !== "workflow_dispatch";
 const budgetFile = path.join(appRoot, "bundle-budget.json");
 // The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
@@ -218,14 +228,22 @@ async function assertModuleEntry(document, entry) {
   }
 }
 
+// The source-map upload, for a build that uploads (`uploadsSourceMaps`). A
+// failed upload fails the build.
+// Note that the plugin only logs a refused release or upload unless an
+// `errorHandler` throws, whatever its documentation says, so a release
+// could otherwise ship with no maps behind it and a green build.
 function sentryPlugins() {
-  if (!process.env.SENTRY_AUTH_TOKEN) return [];
+  if (!uploadsSourceMaps) return [];
   return [
     sentryEsbuildPlugin({
       authToken: process.env.SENTRY_AUTH_TOKEN,
       org: "stage-review",
       project: "luke-desktop",
-      release: { name: `Luke@${appVersion}` },
+      release: { name: sentryRelease },
+      errorHandler: (error) => {
+        throw error;
+      },
     }),
   ];
 }
@@ -290,6 +308,40 @@ const LOADED_AFTER = {
   ),
 };
 
+// The worker Pierre's diffs highlights a Files changed list in
+// (`src/renderer/diff-view/index.ts`'s `highlightPool`), bundled whole as one
+// classic script and handed to the diff bundle as text
+// (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
+// place the panel's policy admits a worker from. Its WebAssembly engine is
+// answered with nothing, since the policy admits no WebAssembly and the
+// bundle asks for Shiki's JavaScript engine; carried, it would be 600 KB of
+// the worker's text.
+const SHIKI_WASM = /^shiki\/wasm$/;
+const shikiWasmLeftOut = {
+  name: "shiki-wasm-left-out",
+  setup(build) {
+    build.onResolve({ filter: SHIKI_WASM }, (args) => ({ path: args.path, namespace: "no-wasm" }));
+    build.onLoad({ filter: /.*/, namespace: "no-wasm" }, () => ({
+      contents: "export default undefined;",
+      loader: "js",
+    }));
+  },
+};
+const highlightWorker = await build({
+  entryPoints: [fileURLToPath(import.meta.resolve("@pierre/diffs/worker/worker.js"))],
+  bundle: true,
+  write: false,
+  platform: "browser",
+  format: "iife",
+  target: "chrome140",
+  minify: true,
+  conditions: ["production"],
+  plugins: [shikiWasmLeftOut],
+  define: { "process.env.NODE_ENV": '"production"' },
+  logLevel: "info",
+});
+const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
+
 // The renderer, as ES modules: one entry per window role, so a window parses
 // only the surface it mounts, the side bundles above, and the chunks the
 // entries share, with no wrapper around the whole, which is about 6 KB
@@ -325,7 +377,10 @@ const rendererBuild = build({
     sideStylesheetsLinked,
     ...sentryPlugins(),
   ],
-  sourcemap: true,
+  // Every map is written beside its file and named by none: the maps stay
+  // out of the app (`electron-builder-config.mjs`), so a comment would point
+  // at a file that is not there. The upload finds each by `<file>.map`.
+  sourcemap: "external",
   logLevel: "info",
   define: {
     "process.env.NODE_ENV": '"production"',
@@ -336,6 +391,7 @@ const rendererBuild = build({
     // kill switch the site's own counting has, so a local run or an
     // unconfigured build cannot record into a stranger's project.
     PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
+    DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   },
 });
 
@@ -352,13 +408,14 @@ await Promise.all([
     plugins: sentryPlugins(),
     define: {
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
+      PACKAGED_SENTRY_RELEASE: JSON.stringify(sentryRelease),
       PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
       // the run answers to; see `@luke/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
-    sourcemap: true,
+    sourcemap: "external",
     logLevel: "info",
   }),
   build({
@@ -370,7 +427,7 @@ await Promise.all([
     target: "node22",
     external: ["electron"],
     plugins: sentryPlugins(),
-    sourcemap: true,
+    sourcemap: "external",
     logLevel: "info",
   }),
   build({
@@ -383,7 +440,7 @@ await Promise.all([
     target: "chrome140",
     plugins: [tailwindPlugin()],
     minify: true,
-    sourcemap: true,
+    sourcemap: "external",
     logLevel: "info",
   }),
   // The stylesheets the whiteboard's and a Terminal tab's entries import,
@@ -419,7 +476,7 @@ await Promise.all([
     format: "esm",
     target: "chrome140",
     minify: true,
-    sourcemap: true,
+    sourcemap: "external",
     logLevel: "info",
   }),
 ]);
@@ -480,6 +537,11 @@ await Promise.all(
 // loaded already. Each file is gzipped on its own, as each is read on its own.
 // Every renderer entry is measured, so a new one with no baseline fails until
 // one is recorded.
+//
+// Note that a build that uploads its source maps is not measured, because the
+// upload plugin adds a debug-ID snippet of a few hundred bytes to every file,
+// past a small bundle's slack. The release job runs `check.sh`, which builds
+// the same source without the token and measures it, before it runs this one.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
 const { metafile } = await rendererBuild;
 const rendererEntries = [
@@ -506,7 +568,9 @@ const measured = Object.fromEntries(
   ),
 );
 
-if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
+if (uploadsSourceMaps) {
+  process.stdout.write("bundle budget not measured: this build carries Sentry's debug IDs\n");
+} else if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
   await fs.writeFile(
     budgetFile,
     `${JSON.stringify({ ...budget, gzipBytes: measured }, undefined, 2)}\n`,

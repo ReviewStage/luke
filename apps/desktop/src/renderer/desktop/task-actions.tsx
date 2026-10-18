@@ -2,10 +2,22 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import {
+  copyTaskLinkItem,
+  markReadItem,
+  type ReadMark,
+  renameTaskItem,
+  taskLinkPlace,
+  versionHistoryItem,
+} from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useReadMarks } from "@luke/panel/tasks/use-task-looks";
+import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -14,6 +26,7 @@ import {
   BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
+  DIALOG_TONE,
   type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
@@ -35,31 +48,21 @@ import {
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
+  archiveAsks,
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
   TASK_MARK,
   type TaskMark,
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { usePlanDrafted } from "../composer-drafts";
-import { useCopyToast } from "../copy-feedback";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref";
 import { lastEditOf } from "../tasks/plan-body";
-import { RelativeTime } from "../tasks/relative-time";
-import {
-  copyTaskLinkItem,
-  markReadItem,
-  type ReadMark,
-  renameTaskItem,
-  taskLinkPlace,
-  versionHistoryItem,
-} from "../tasks/task-menu-items";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
@@ -81,6 +84,9 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
  * where it is not the open one, the one item that moves it. Pin and Archive
  * move the task in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
+ * Archive stops and archives the task's coding agents with it, so a task
+ * with an agent not yet archived asks first, whichever door it was chosen
+ * from, and one with none archives at once.
  * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
  * reader started. Move to section, beside Pin and Archive while the account
@@ -126,13 +132,17 @@ function placeMarks(task: TaskSummary): PlaceMark[] {
   ];
 }
 
-/** Pin and Archive as the menu's items; nothing for a task neither the list nor the document holds. */
-function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
+/** Pin and Archive as the menu's items, Archive through `archive`, which asks first where it must; nothing for a task neither the list nor the document holds. */
+function placeActions(
+  tasks: TasksControl,
+  task: TaskSummary | undefined,
+  archive: () => void,
+): MenuAction[] {
   if (task === undefined) return [];
   return placeMarks(task).map(({ mark, label, icon }) => ({
     label,
     icon,
-    onSelect: () => tasks.onMarkTask(task.id, mark),
+    onSelect: mark === TASK_MARK.ARCHIVE ? archive : () => tasks.onMarkTask(task.id, mark),
   }));
 }
 
@@ -152,11 +162,14 @@ function SidebarTaskMarks({
   task,
   current,
   disabled,
+  onArchive,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
   current: boolean;
   disabled: boolean;
+  /** Archives the task as its menu's Archive does, asking first where it must. */
+  onArchive: () => void;
 }): React.JSX.Element {
   return (
     <>
@@ -171,7 +184,7 @@ function SidebarTaskMarks({
             label={label}
             size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
-            onClick={() => tasks.onMarkTask(task.id, mark)}
+            onClick={mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark)}
           />
         </Tooltip>
       ))}
@@ -197,6 +210,7 @@ function taskActionGroups(
   doors: {
     rename: () => void;
     askDelete: () => void;
+    archive: () => void;
     askMove: (() => void) | undefined;
     copy: (words: string, label: string) => void;
     read: ReadMark;
@@ -234,7 +248,10 @@ function taskActionGroups(
   };
   const groups: MenuEntry[][] = [
     [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
-    [...placeActions(tasks, task), ...(doors.section === undefined ? [] : [doors.section])],
+    [
+      ...placeActions(tasks, task, doors.archive),
+      ...(doors.section === undefined ? [] : [doors.section]),
+    ],
     [
       ...(archived ? [] : [change]),
       ...move,
@@ -319,8 +336,22 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
   };
 }
 
+/** The question Archive asks of a task with coding agents not yet archived, naming the task, since the archive stops them and an Unarchive brings them back. */
+function archiveQuestion(name: string): DialogQuestion {
+  return {
+    title: "Archive task?",
+    body: `Archiving “${name}” will stop and archive all its agents. Unarchiving it brings them back.`,
+    verb: "Archive",
+    running: "Archiving",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
+
+/** What the archive question answers once Archive is pressed: the archive is drawn at once, and a refusal says so in its toast. */
+const ARCHIVE_ASKED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
+
 /**
- * One task's menu and its delete question, held for whichever door offers
+ * One task's menu and its archive and delete questions, held for whichever door offers
  * them. Neither outlives the tab going off screen, the menu does not
  * outlive its door, and the question does not outlive the task: each is
  * taken down in the render that finds it gone, so neither is left standing
@@ -338,6 +369,17 @@ function useTaskMenu(
   const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
+  const archiving = useConfirmDialog(
+    { subject: task !== undefined && task.archivedAt === undefined, surfaceOpen: tasks.shown },
+    () => {
+      tasks.onMarkTask(taskId, TASK_MARK.ARCHIVE);
+      return Promise.resolve(ARCHIVE_ASKED);
+    },
+  );
+  const archive = () => {
+    if (task !== undefined && archiveAsks([task])) archiving.ask();
+    else tasks.onMarkTask(taskId, TASK_MARK.ARCHIVE);
+  };
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
@@ -357,6 +399,7 @@ function useTaskMenu(
         groups={taskActionGroups(tasks, taskId, {
           rename: doors.rename,
           askDelete: deletion.ask,
+          archive,
           askMove: moving.ask,
           copy,
           section,
@@ -376,11 +419,12 @@ function useTaskMenu(
         confirm={deletion}
         question={deleteQuestion(name, task?.archivedAt !== undefined)}
       />
+      <ConfirmDialog confirm={archiving} question={archiveQuestion(name)} />
       {moving.dialog}
       {sections.dialog}
     </>
   );
-  return { deletion, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
+  return { deletion, archive, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
 }
 
 /**
@@ -388,8 +432,8 @@ function useTaskMenu(
  * while the task's own tab is chosen, because the menu is the task's and not
  * an agent's. It is also what offers the open task's Archive and Permanently
  * delete shortcuts, on every tab of the task, so each runs exactly as its
- * menu item would: Permanently delete still asks first, and an archived task
- * has no Archive to offer.
+ * menu item would: Permanently delete still asks first, as Archive does of a
+ * task with agents, and an archived task has no Archive to offer.
  */
 export function TaskActions({
   tasks,
@@ -415,7 +459,7 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.DELETE_TASK, asking || deletion.busy ? undefined : deletion.ask);
   useAppCommand(
     APP_COMMAND.ARCHIVE_TASK,
-    task.archivedAt === undefined ? () => tasks.onMarkTask(task.id, TASK_MARK.ARCHIVE) : undefined,
+    task.archivedAt === undefined ? actions.archive : undefined,
   );
   return (
     <>
@@ -575,6 +619,7 @@ export function SidebarTask({
                 task={task}
                 current={current}
                 disabled={actions.deletion.busy}
+                onArchive={actions.archive}
               />
             )
           }

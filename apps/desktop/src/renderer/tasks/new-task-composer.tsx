@@ -8,6 +8,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
+import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
@@ -17,6 +18,7 @@ import {
   CloseIcon,
   IconButton,
   PencilIcon,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -30,7 +32,6 @@ import {
 } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { PICKER_ALIGN } from "../settings/picker-row";
-import { Tooltip } from "../tooltip";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
@@ -62,9 +63,8 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   it on a draft agent's tab holding the words, the files, and the model on
  *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
  *   agent refused leaves the words there with why and Retry. The model chip
- *   starts on the account's default, and a pick here is written as the
- *   default, as Start's menu writes it, which another card standing, Home's
- *   under the dialog, follows where its own chip was not picked.
+ *   starts on the account's default, and a pick here runs this one agent
+ *   alone: only Settings changes the default.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the
@@ -97,10 +97,6 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  * owner's, as is a workspace's own issue it was opened from, which names
  * the task and offers no Linear chip.
  */
-
-/** What the card says where a model picked on its chip was not kept as the account's default. */
-const DEFAULT_NOT_KEPT =
-  "The model could not be kept as your default. This agent still starts on it.";
 
 /** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
@@ -148,7 +144,7 @@ function IssueChip({
 }): React.JSX.Element {
   return (
     <div className="new-task-issue" data-issue-chip="">
-      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
       <span className="new-task-issue-key">{issue.identifier}</span>
       <span className="new-task-issue-title">{issue.title}</span>
       {issue.state === undefined ? null : (
@@ -168,73 +164,25 @@ function IssueChip({
   );
 }
 
-/**
- * Every mounted card's hearing that the default may have moved, Home's and
- * the dialog's over it standing at once, so a card whose chip was not picked
- * in it reads the default again and follows what the account kept.
- */
-const defaultMoves = new Set<() => void>();
-
-/** How many default writes any card is waiting on, the others told only once none is. */
-let pendingWrites = 0;
-
-/** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
+/** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
-): readonly [ModelChoice | undefined, (next: ModelChoice) => void, string | undefined] {
+): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
-  const [refused, setRefused] = useState<string | undefined>(undefined);
   // Note that the control is read through a ref, because the tab hands a
-  // new one on every render; the default is read as the card opens, and
-  // again where another card's writes have settled.
+  // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
   latest.current = newTask;
-  // Whether the chip was picked in this card, whose pick then stands over the default.
-  const pickedHere = useRef(false);
-  // This card's hearing of another's writes, left out when it tells the others of its own.
-  const hearing = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
     let live = true;
     latest.current.readDefault().then((answer) => {
       if (live && !("failure" in answer)) setChoice((picked) => picked ?? answer.choice);
     });
-    // How many reads of the default this card asked for, so only the latest one's answer stands.
-    let reads = 0;
-    const hear = () => {
-      if (pickedHere.current) return;
-      reads += 1;
-      const read = reads;
-      latest.current.readDefault().then((answer) => {
-        if (!live || pickedHere.current || read !== reads || "failure" in answer) return;
-        setChoice(answer.choice);
-      });
-    };
-    hearing.current = hear;
-    defaultMoves.add(hear);
     return () => {
       live = false;
-      defaultMoves.delete(hear);
     };
   }, []);
-  // A pick names the chip at once and is kept as the default, as Start's menu
-  // keeps it; a write that did not take says so under the card, and the
-  // agent still starts on the pick.
-  const choose = (next: ModelChoice) => {
-    pickedHere.current = true;
-    setChoice(next);
-    setRefused(undefined);
-    pendingWrites += 1;
-    latest.current.writeDefault(next).then((answer) => {
-      setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
-      pendingWrites -= 1;
-      // Note that the others read the default the account kept rather than
-      // take this answer, and only once every write has answered, so writes
-      // refused or answered out of order leave them on what was stored.
-      if (pendingWrites > 0) return;
-      for (const hear of defaultMoves) if (hear !== hearing.current) hear();
-    });
-  };
-  return [choice, choose, refused];
+  return [choice, setChoice];
 }
 
 export function NewTaskComposer({
@@ -265,7 +213,7 @@ export function NewTaskComposer({
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  const [choice, choose, choiceNote] = useDefaultChoice(newTask);
+  const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
   // How many times ⌘L asked the Linear chip to open its menu.
@@ -390,7 +338,7 @@ export function NewTaskComposer({
         wording={MODE_WORDS[mode]}
         sendsEmpty={planning || onIssue}
         sendable={!blocked}
-        model={planning || choice === undefined ? undefined : { choice, note: choiceNote, choose }}
+        model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         readModels={newTask.readModels}
         usage={undefined}
@@ -433,19 +381,21 @@ export function NewTaskComposer({
         }
         actions={
           agentOnly ? undefined : (
-            <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-              <Chip
-                look={CHIP_LOOK.FILTER}
-                aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-                aria-pressed={planning}
-                aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-                disabled={starting}
-                onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-              >
-                <PencilIcon />
-                <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-              </Chip>
-            </Tooltip>
+            <span className="new-task-plan-toggle">
+              <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
+                <Chip
+                  look={CHIP_LOOK.FILTER}
+                  aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
+                  aria-pressed={planning}
+                  aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
+                  disabled={starting}
+                  onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
+                >
+                  <PencilIcon />
+                  <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
+                </Chip>
+              </Tooltip>
+            </span>
           )
         }
       />

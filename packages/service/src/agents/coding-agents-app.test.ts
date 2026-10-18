@@ -51,7 +51,12 @@ import { listMessagesPast, sentLineStands } from "@luke/database/models/message-
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
+import {
+  openTaskConversation,
+  readTask,
+  savePlanText,
+  updateTask,
+} from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, user } from "@luke/database/schemas/auth";
@@ -190,6 +195,7 @@ import {
   userMetadataOf,
 } from "../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
@@ -463,6 +469,13 @@ const NO_KEYS: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: undefined,
 };
 
+/** What the endpoints counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** How many of one event the account was counted for. */
+const countedFor = (userId: string, name: string) =>
+  ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
+
 /**
  * The group over the test's own database, GitHub, and eve, stood once and
  * answering every request of the test, so what it keeps between two
@@ -489,6 +502,7 @@ const standing = (
       github.layer,
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+      ANALYTICS.layer,
     );
     const seams = {
       resolveUserId: (incoming: Request) =>
@@ -1108,6 +1122,23 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           [task.id],
         );
         assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start naming a model runs that agent on it and leaves the account's default as it stands, which only Settings writes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+
+        const started = yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), model: SOL, effort: "low" }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.model, SOL);
+        assert.equal(agent.effort, "low");
+        assert.equal((yield* readAccountPreferences(owner))?.codingAgent, undefined);
       }),
   );
 
@@ -3194,6 +3225,62 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member's archive of a plan stops its running agent first and archives it with the plan, a message to it is refused as the plan's, and the plan's unarchive brings it back",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        const marked = (archived: boolean) =>
+          Effect.map(
+            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            (answered) => answered.status,
+          );
+        const archiveNow = () =>
+          Effect.map(readCodingAgent(owner, agent.id), (read) => {
+            const stored = Option.getOrThrow(read);
+            return { archived: stored.archivedAt !== null, by: stored.archivedBy };
+          });
+
+        assert.equal(yield* marked(true), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(yield* archiveNow(), {
+          archived: true,
+          by: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: other, withTask: true },
+        });
+        assert.deepEqual(
+          yield* ask(messageAs(owner, agent.id, { text: "Carry on.", clientKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
+
+        assert.equal(yield* marked(false), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* archiveNow(), { archived: false, by: null });
+      }),
+  );
+
+  it.effect(
+    "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* sent("Rename the subject line too.");
+
+        assert.deepEqual(
+          yield* ask(
+            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
+        assert.deepEqual(eve.cancelled, []);
+      }),
+  );
+
+  it.effect(
     "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
     () =>
       Effect.gen(function* () {
@@ -4604,6 +4691,37 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* message(id, { text: "  ", clientKey: randomUUID() }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
+      }),
+  );
+
+  it.effect(
+    "an Inbox answer is counted once it stands: not where its hand-off failed and was withdrawn, and once however often it is sent again under its key",
+    () =>
+      Effect.gen(function* () {
+        const refused = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const lost = yield* refused.post(QUESTION);
+        assert.ok(Result.isSuccess(lost));
+        const withdrawn = yield* refused.answer(lost.success.id, {
+          revision: lost.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Say hello.",
+        });
+        assert.equal(withdrawn.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.equal(countedFor(refused.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
+
+        const { owner, post, answer } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const body = {
+          revision: asked.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Say hello.",
+        };
+        assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(countedFor(owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
       }),
   );
 
@@ -7686,6 +7804,34 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a member's answer to an ask is counted as their reply in the thread, once however often it is sent again under its key",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat(fakeEve());
+        const asked = yield* chat.agentAsks("Ship with seven-day invites?");
+        const before = countedFor(chat.owner, SERVER_EVENT.CHAT_MESSAGE_SEND);
+        const answer = {
+          answer: { seq: asked.message.seq, revision: 1, reply: { reply: CHAT_REPLY.APPROVED } },
+          clientKey: randomUUID(),
+        };
+
+        const taken = yield* chat.wrote(answer);
+        assert.ok("ask" in taken);
+        assert.equal(taken.taken, true);
+        const again = yield* chat.wrote(answer);
+        assert.ok("ask" in again);
+        assert.equal(again.taken, true);
+        assert.equal(countedFor(chat.owner, SERVER_EVENT.CHAT_MESSAGE_SEND), before + 1);
+        assert.deepEqual(
+          ANALYTICS.recorded.findLast(
+            (event) => event.userId === chat.owner && event.name === SERVER_EVENT.CHAT_MESSAGE_SEND,
+          )?.properties,
+          { is_reply: true },
+        );
       }),
   );
 

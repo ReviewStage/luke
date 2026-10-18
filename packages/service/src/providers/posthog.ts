@@ -13,10 +13,11 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import { HTTP_METHOD, withoutTrailingSlash } from "@luke/wire";
-import { Data, Effect, type Layer } from "effect";
+import { HTTP_METHOD, positiveInteger, withoutTrailingSlash } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Data, Effect, type Layer, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
+import { accountCall, callAnswered, EXCESS_KEYS, fixedBearer, NO_CREDENTIAL } from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {
   PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
@@ -65,6 +66,8 @@ type PosthogPropertyValue = string | number | boolean | PosthogPerson;
 /** One item of the documented batch document, as this build builds it. */
 export interface PosthogBatchItem {
   event: string;
+  /** Who the event belongs to, at the item's top level as the capture docs ask. */
+  distinct_id: string;
   timestamp: string;
   properties: Readonly<Record<string, PosthogPropertyValue>>;
 }
@@ -126,42 +129,81 @@ export class PosthogForgetError extends Data.TaggedError("PosthogForgetError")<{
 }> {}
 
 /**
- * Asks the processor to erase the person behind one distinct id, and the
- * events recorded against them. The documented bulk-delete endpoint takes the
- * distinct ids in its body and `delete_events` in its query, and queues the
- * event deletion rather than performing it — so a settled effect means the
- * erasure was accepted, never that it has already happened. The request runs
- * over the ambient `HttpClient`.
+ * The part of the bulk-delete answer erasure reads. PostHog reports a person
+ * it could not delete in `deletion_errors` under a 202 rather than as an
+ * error status, so a 2xx alone does not mean the erasure was taken; both of
+ * its paths always answer the list, so an answer without it is unreadable.
+ */
+const bulkDeleteAnswerSchema = Schema.Struct({
+  deletion_errors: Schema.Array(Schema.Unknown),
+});
+
+const readBulkDeleteAnswer = readEither(bulkDeleteAnswerSchema, { excess: EXCESS_KEYS.DROP });
+
+/**
+ * Asks the processor to erase the person behind one distinct id, with the
+ * events and the recordings recorded against them. The documented bulk-delete
+ * endpoint (https://posthog.com/docs/api/persons) reads the distinct ids and
+ * both `delete_events` and `delete_recordings` from its body alone, and queues
+ * the work rather than performing it — so a settled effect means the erasure
+ * was accepted, never that it has already happened. An answer that queued no
+ * person settles too: PostHog holds no person for an account it was never told
+ * of, and it still hands the distinct id's recordings to the same deletion. An
+ * answer naming any deletion error, or one that cannot be read, fails, and no
+ * failure quotes the body. The request runs over the ambient `HttpClient`.
  */
 export function forgetPosthogPersonEffect(
   distinctId: string,
   options: PosthogForgetOptions,
 ): Effect.Effect<void, PosthogForgetError, HttpClient.HttpClient> {
+  const requestTimeoutMs = positiveInteger(options.timeoutMs, POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS);
   const call = accountCall({
     baseUrl: resolvePosthogApiHost(options.host),
     credential: fixedBearer(options.personalApiKey),
-    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+    requestTimeoutMs,
   });
-  const path = `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/?delete_events=true`;
-  return Effect.flatMap(
-    call.send({
+  // Note that the deadline spans the body's read too, because the call's own
+  // deadline ends with the headers and a body that never ends would hold the
+  // account's deletion behind it.
+  return Effect.gen(function* () {
+    const answer = yield* call.send({
       method: HTTP_METHOD.POST,
-      path,
-      body: JSON.stringify({ distinct_ids: [distinctId] }),
+      path: `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/`,
+      body: JSON.stringify({
+        distinct_ids: [distinctId],
+        delete_events: true,
+        delete_recordings: true,
+      }),
+    });
+    if (!callAnswered(answer)) {
+      return yield* new PosthogForgetError({
+        message: `network fault: ${answer.errorName ?? "unknown"}`,
+      });
+    }
+    const status = answer.response.status;
+    // The status alone diagnoses the refusal; the body could name the key.
+    if (!answer.response.ok) {
+      return yield* new PosthogForgetError({ message: `refused with status ${status}` });
+    }
+    const payload = yield* Effect.orElseSucceed(
+      Effect.tryPromise(() => answer.response.json()),
+      () => undefined,
+    );
+    const read = readBulkDeleteAnswer(payload);
+    if (Result.isFailure(read)) {
+      return yield* new PosthogForgetError({ message: `unreadable answer with status ${status}` });
+    }
+    const errors = read.success.deletion_errors.length;
+    if (errors > 0) {
+      return yield* new PosthogForgetError({
+        message: `answered status ${status} with ${errors} deletion error(s)`,
+      });
+    }
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: requestTimeoutMs,
+      orElse: () =>
+        Effect.fail(new PosthogForgetError({ message: `no answer within ${requestTimeoutMs}ms` })),
     }),
-    (answer) => {
-      if (!callAnswered(answer)) {
-        return Effect.fail(
-          new PosthogForgetError({ message: `network fault: ${answer.errorName ?? "unknown"}` }),
-        );
-      }
-      // The status alone diagnoses the refusal; the body could name the key.
-      if (!answer.response.ok) {
-        return Effect.fail(
-          new PosthogForgetError({ message: `refused with status ${answer.response.status}` }),
-        );
-      }
-      return Effect.void;
-    },
   );
 }

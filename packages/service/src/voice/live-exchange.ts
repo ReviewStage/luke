@@ -16,11 +16,9 @@ import {
   type LiveSessionStatus,
   type LiveSessionTrace,
 } from "@luke/voice/live-session";
-import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
-import { type PlanDraft, planScribe } from "../tasks/plan-scribe.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
@@ -56,17 +54,6 @@ export interface HostedLiveExchangeOptions {
   readonly liveSessionId: string;
   /** The conversation the spoken asks and the record land in: the task's, under the member who opened it, whoever is calling. */
   readonly conversation: ConversationTarget;
-  /**
-   * The notetaker the call writes its plan through: the task the session is
-   * bound to and the model the scribe runs on. Absent on a deployment with no
-   * model key, which then writes nothing.
-   */
-  readonly scribe?: {
-    readonly taskId: string;
-    readonly model: LanguageModel;
-    /** Where each draft of the plan goes as the notetaker writes it; nowhere where the service sends nothing. */
-    readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
-  };
   /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
   /**
@@ -77,7 +64,7 @@ export interface HostedLiveExchangeOptions {
   readonly eve: EveSessions;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  /** What the voice, the brain, and the notetaker are doing, told whole on each change; the device is shown it. */
+  /** What the voice and the brain are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: TaskActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a task call's device is shown it. */
   readonly onCode?: (shown: TaskShownCode) => void;
@@ -99,8 +86,6 @@ export interface AttachedSession {
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
   readonly started: boolean;
-  /** The device's door for the plan as its notetaker has it now; absent where the service sends it nothing of its own. */
-  readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
   /** The device's door for what each part of Luke is doing on the call; absent where the service sends it nothing of its own. */
   readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
@@ -215,12 +200,11 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   });
 
   /**
-   * What the service and the notetaker last said of themselves, merged into
+   * What the service last said of the voice and the brain, merged into
    * one snapshot the device is told whole each time either changes, so the
    * device holds the frame as it stands and derives nothing from a sequence.
    */
   let status: LiveSessionStatus = { voice: undefined, brain: undefined };
-  let notes = false;
   const tellActivity = () => {
     const { voice: phase, brain } = status;
     options.onActivity?.({
@@ -228,44 +212,22 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ...(brain === undefined
         ? undefined
         : { planner: brain.action === undefined ? {} : { action: brain.action } }),
-      notes,
+      // Note that no notetaker writes beside the call any more: Luke writes the plan himself.
+      notes: false,
     });
   };
 
-  const scribe =
-    options.scribe === undefined
-      ? undefined
-      : yield* planScribe({
-          userId: accountId,
-          taskId: options.scribe.taskId,
-          liveSessionId,
-          model: options.scribe.model,
-          ...(options.scribe.onDraft === undefined
-            ? undefined
-            : { onDraft: options.scribe.onDraft }),
-          onWriting: (writing) => {
-            notes = writing;
-            tellActivity();
-          },
-          createId: options.createId,
-          report,
-        });
-  if (scribe !== undefined) {
-    const unheard = brain.onRunEvent(scribe.observeRun);
-    yield* Effect.addFinalizer(() => Effect.sync(unheard));
-  }
   if (options.onWork !== undefined) {
     const unshown = brain.onWork(options.onWork);
     yield* Effect.addFinalizer(() => Effect.sync(unshown));
   }
 
-  /** The sideband with the record, and the notetaker, listening ahead of the service, on every session adopted. */
+  /** The sideband with the record listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
     return () =>
       Effect.map(attach(), (sideband) =>
         observedSideband(sideband, (event) => {
           written.offerUnsafe(Effect.flatMap(writeReport(record.observe(event)), reported));
-          scribe?.observe(event);
         }),
       );
   };

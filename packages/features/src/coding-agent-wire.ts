@@ -548,7 +548,9 @@ export type CodingAgentArchiver =
  * Who archived an agent, as its banner and card say it: a member, or Luke or
  * another agent on a member's behalf, the member absent once their account
  * is gone, the agent by its id and its title as it stood then, and the
- * reason it was archived for where one was given.
+ * reason it was archived for where one was given. `withTask` marks an agent
+ * a member archived by archiving its task, which brings it back with the
+ * task; a build from before it reads the archive as the member's own.
  */
 export const codingAgentArchivedBySchema = EffectSchema.Struct({
   by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
@@ -557,6 +559,7 @@ export const codingAgentArchivedBySchema = EffectSchema.Struct({
     EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
   ),
   reason: EffectSchema.optionalKey(EffectSchema.String),
+  withTask: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;

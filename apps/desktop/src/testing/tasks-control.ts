@@ -3,6 +3,11 @@ import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import {
+  SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
+  SIDE_PANEL_WIDTH,
+} from "@luke/panel/tasks/use-side-panel";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
@@ -12,11 +17,6 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/task-summary";
 import type { CodingAgentsControl } from "../renderer/tasks/use-coding-agents";
 import { HISTORY_READ } from "../renderer/tasks/use-plan-history";
-import {
-  SIDE_PANEL_TAB,
-  SIDE_PANEL_TABS,
-  SIDE_PANEL_WIDTH,
-} from "../renderer/tasks/use-side-panel";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,
@@ -103,7 +103,6 @@ export function codingAgentsControl(
     models: undefined,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
     continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
@@ -251,7 +250,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
       conversation: undefined,
-      callLive: false,
       onLoadEarlier: () => Promise.resolve(),
       readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
     },
@@ -317,6 +315,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       place: { kind: ISSUES_PAGE.LIST },
       onOpen: ignore,
       onClose: ignore,
+      peeked: undefined,
+      onPeek: ignore,
     },
     callTaskId: undefined,
     chatView: {
@@ -357,7 +357,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       models: undefined,
       readModels: ignore,
       readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-      writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,
       linearIssuesIn: () => undefined,
     },

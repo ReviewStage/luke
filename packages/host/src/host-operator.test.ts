@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INBOX_REPLY } from "@luke/features/inbox-wire";
-import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_ERROR,
+  GATEWAY_METHOD,
+  type GatewayCallResult,
+  type GatewayClient,
+  type GatewayMethod,
+} from "@luke/gateway";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettings } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { createHostOperator } from "./host-operator.js";
+import { recordingReporter } from "./testing/recording-reporter.js";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());
 const REPORTER = "panel-1";
@@ -62,7 +70,7 @@ it.effect("a setting's value travels as the method's value field", () =>
 );
 
 it.effect(
-  "a plan's start carries the workspace it was started in, a start without planning says so, and one naming an agent carries it, to the host; a start naming none carries no such field",
+  "a plan's start carries the workspace it was started in, its brief, a start without planning says so, and one naming an agent carries it, to the host; a start naming none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -77,6 +85,7 @@ it.effect(
       yield* operator.tasksStart({ name: "Teammate invitations" });
       yield* operator.tasksStart({ name: "Typo", planning: false });
       yield* operator.tasksStart({ repository: "acme/ledger", agent });
+      yield* operator.tasksStart({ brief: "Let any member invite a teammate." });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -88,6 +97,7 @@ it.effect(
           [GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" }],
           [GATEWAY_METHOD.TASKS_START, { name: "Typo", planning: false }],
           [GATEWAY_METHOD.TASKS_START, { repository: "acme/ledger", agent }],
+          [GATEWAY_METHOD.TASKS_START, { brief: "Let any member invite a teammate." }],
         ],
       );
     }),
@@ -127,4 +137,29 @@ it.effect("an inbox answer's files travel to the host with its words, under the 
       ],
     );
   }),
+);
+
+it.effect(
+  "a host's refusal is not reported to Sentry, where the handler that died behind it already was; an answer this build cannot read is",
+  () => {
+    const sentry = recordingReporter();
+    return Effect.gen(function* () {
+      const answering = (answer: GatewayCallResult) =>
+        operatorOver({
+          call: () => Effect.succeed(answer),
+          on: () => () => undefined,
+        }).updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, "Alt+Space", REPORTER);
+      // The router's own boundary, which every act's call through the operator runs under.
+      const asked = (answer: GatewayCallResult) =>
+        Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));
+      yield* asked({
+        ok: false,
+        error: { code: GATEWAY_ERROR.INTERNAL, message: "board is undefined" },
+      });
+      yield* asked({ ok: true, result: carried({ status: "sideways" }) });
+      assert.deepEqual(sentry.reported, [
+        `${GATEWAY_METHOD.SETTINGS_UPDATE} answered a shape this client cannot read`,
+      ]);
+    }).pipe(Effect.provide(sentry.layer));
+  },
 );

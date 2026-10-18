@@ -10,6 +10,11 @@ import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import type {
+  FactorySceneModule,
+  FactorySceneProps,
+  SceneHover,
+} from "@luke/panel/factory-world/contract";
 import { PICK_KIND, type WorldModule, type WorldState } from "@luke/panel/factory-world/world";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -40,12 +45,11 @@ import { bundleLanded, landedBundles, onSideBundles } from "#testing/side-bundle
 import { tasksControl } from "#testing/tasks-control";
 import { type SideBundles, sideBundles, worldBundleAtom } from "../bundle-loader";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import type { FactorySceneModule, FactorySceneProps, SceneHover } from "./contract";
 import type { WorldEntry } from "./registry";
 import { FactoryWorldPage } from "./world-page";
 
 /**
- * world-page.test.ts -- a Factory world as the page draws it over a stand-in scene: the snapshot read for the listed workspace and read again while it stands, its loading, empty, and failed states, and the chrome every world shares, the pipeline bar's layers, the hover label, the card and its doors, the scrubber, and Esc stepping back to the overview before it leaves.
+ * world-page.test.ts -- a Factory world as the page draws it over a stand-in scene: the snapshot read for the listed workspace and read again while it stands, its loading, empty, and failed states, and the chrome every world shares, the pipeline bar's layers, the hover label, the card and its doors, and Esc stepping back to the overview before it leaves.
  *
  * The scene bundle is a stand-in recording what the page hands it, since
  * jsdom has no WebGL; the service is a script at the act boundary; the
@@ -457,33 +461,12 @@ test("the keyboard on a count previews its layer as the pointer does, and leavin
   assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
 });
 
-test("the scrubber winds the world back: before a merge it is not shipped, the world is not live, and Now brings it back", async () => {
+test("the world is drawn live as of its snapshot, with no clock to wind it back", async () => {
   const { page } = mount();
   await settle();
-  const time = page.querySelector<HTMLInputElement>('input[aria-label="Time"]');
-  assert.ok(time);
-  assert.equal(Number(time.min), WORLD.shippedSince);
-  assert.equal(Number(time.max), WORLD.snapshotAt);
-  assert.equal(page.querySelectorAll(".factory-world-tick").length, 2, "a tick per merge");
-
-  const instant = FACTORY_NOW - DAY_MS;
-  act(() => {
-    // Note that React hears an input's change through the value setter it watches, not a bare assignment.
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      time,
-      String(instant),
-    );
-    time.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  assert.equal(lastState().live, false);
-  assert.equal(lastState().snapshot.snapshotAt, instant);
-  assert.deepEqual(
-    lastState().view.timeline.map((merged) => merged.number),
-    [3400],
-  );
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "1Shipped", "0Defects"]);
-  act(() => button(page, "Now").click());
+  assert.equal(page.querySelector('input[aria-label="Time"]'), null);
   assert.equal(lastState().live, true);
+  assert.equal(lastState().snapshot.snapshotAt, WORLD.snapshotAt);
   assert.equal(lastState().view.timeline.length, 2);
 });
 

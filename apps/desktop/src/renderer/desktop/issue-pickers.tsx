@@ -6,6 +6,9 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import type { MenuRow } from "@luke/panel/searchable-menu";
+import { GLYPH_STATE, StateGlyph } from "@luke/panel/state-glyph";
+import { Tooltip } from "@luke/panel/tooltip";
 import { CHIP_WIDTH } from "@luke/ui";
 import {
   CircleAlertIcon,
@@ -19,10 +22,7 @@ import {
   SignalLowIcon,
   SignalMediumIcon,
 } from "lucide-react";
-import type { MenuRow } from "../searchable-menu";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
-import { Tooltip } from "../tooltip";
 
 /**
  * issue-pickers.tsx -- an issue's status and priority as glyphs, and the two chips that change them.

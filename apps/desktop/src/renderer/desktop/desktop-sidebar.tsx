@@ -10,7 +10,12 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { type HoverPane, useHoverPane } from "@luke/panel/desktop/hover-pane";
+import { LukeIdentity } from "@luke/panel/desktop/luke-identity";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { type CountNoun, SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import {
   EDGE_SIDE,
   type ResizableEdgeProps,
@@ -21,10 +26,13 @@ import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-director
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { Shortcut } from "@luke/panel/shortcut";
+import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { inColumn, type PinnedTab } from "@luke/panel/tasks/use-side-panel";
 import { useUnreadTasks } from "@luke/panel/tasks/use-task-looks";
+import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -35,10 +43,14 @@ import {
   BUTTON_SIZE,
   Button,
   ComposeIcon,
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
   IconButton,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   PinIcon,
@@ -48,6 +60,7 @@ import {
   Skeleton,
   SkeletonRegion,
   UnpinIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -76,8 +89,9 @@ import {
   sectionOrder,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { archiveAsks, repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   FactoryIcon,
   FolderPlusIcon,
@@ -90,21 +104,13 @@ import {
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
-import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
-import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
-import { LukeIdentity } from "./luke-identity";
 import { SidebarAgent } from "./sidebar-agent";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import {
   type DrawnSection,
@@ -574,23 +580,24 @@ function PinnedSection({
  * have no pin, since they always stand last, and no page to open. A group of
  * archived plans offers no Archive, since its plans are already away, so the
  * plans with no repository offer nothing there.
+ * Archive tasks runs through `onArchive`, which asks first where any of the
+ * tasks has coding agents the archive would stop and archive with it.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
   tasks: TasksControl,
   archived: boolean,
+  onArchive: () => void,
 ): MenuAction[][] {
   const { repository } = group;
-  // Note that only the group's plans are archived from here, because an agent is archived from its own page.
-  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []));
   const archive: MenuAction[] =
-    archived || taskIds.length === 0
+    archived || groupTasks(group).length === 0
       ? []
       : [
           {
             label: "Archive tasks",
             icon: <ArchiveIcon />,
-            onSelect: () => tasks.onArchiveTasks(taskIds),
+            onSelect: onArchive,
           },
         ];
   if (repository === null) return archive.length === 0 ? [] : [archive];
@@ -611,6 +618,22 @@ function repositoryActionGroups(
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
+/** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
+function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
+  return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
+}
+
+/** What a repository's Archive tasks asks where a task under it has coding agents, which the archive stops and archives with them. */
+function archiveTasksQuestion(named: string, count: number): DialogQuestion {
+  return {
+    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
+    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
+    verb: "Archive",
+    running: "Archiving",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
 
 /**
  * One repository's tasks under a header in the headings' voice, which folds
@@ -650,7 +673,19 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
+  const listed = groupTasks(group);
+  const archiveAll = () => context.tasks.onArchiveTasks(listed.map(({ id }) => id));
+  const archiving = useConfirmDialog(
+    { subject: listed.length > 0, surfaceOpen: context.tasks.shown },
+    () => {
+      archiveAll();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
+    if (archiveAsks(listed)) archiving.ask();
+    else archiveAll();
+  });
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -714,6 +749,7 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
+      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, listed.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
@@ -943,8 +979,9 @@ function SidebarHomeRow({
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
- * task at its end, the sum of the counts the Inbox's rows show, muted in
- * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
+ * task at its end, the sum of the counts the Inbox's rows show, in even
+ * figures and the accent's blue, since they wait on the developer, and
+ * nothing at none. Its chord takes the count's place while the row is hovered or
  * reached from the keyboard, as New task's and Search's show theirs. A press
  * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
  * shown while it stands.
@@ -967,6 +1004,7 @@ function SidebarInboxRow({
       count={{
         value: waiting,
         noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+        tone: NAV_COUNT_TONE.ACCENT,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -987,7 +1025,7 @@ function waitingMessages(tasks: TasksControl): number {
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's muted figures, nothing at none. A press opens the window's Chat
+ * Inbox's even figures but muted, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({

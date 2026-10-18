@@ -1,7 +1,7 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "renderer/panel.js": 901571,
+    "renderer/panel.js": 946875,
     "renderer/voice.js": 345922,
     "renderer/call.js": 402844,
     "renderer/whiteboard.js": 441172,
@@ -12,7 +12,7 @@
     "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195523,
-    "renderer/diff-view.js": 178690,
+    "renderer/diff-view.js": 256515,
     "renderer/factory-world.js": 161840,
     "renderer/factory-world-dev.js": 1745,
     "renderer/factory-world-station.js": 32657,

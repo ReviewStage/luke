@@ -9,9 +9,16 @@ import {
   type ActKind,
   type ActOutcome,
 } from "../acts.js";
+import { recordingReporter } from "../testing/recording-reporter.js";
 import { hostActRows } from "./host-act-rows.js";
 import { createHostActRouter, type HostActDependencies, type PlatformActRows } from "./index.js";
-import { type ActRouter, type ActRows, type ActSender, createActRouter } from "./router.js";
+import {
+  ActRefused,
+  type ActRouter,
+  type ActRows,
+  type ActSender,
+  createActRouter,
+} from "./router.js";
 
 // The platform's handle on the window that asked, which no row here reads.
 const SENDER = Symbol("window");
@@ -146,4 +153,27 @@ it.effect("a platform table missing a kind the host leaves it does not build", (
       reason: ACT[ACT_KIND.UPDATE_CHECK].refusal,
     });
   }),
+);
+
+it.effect(
+  "a row that throws is worded as its kind's refusal and reported to Sentry; a refusal is not",
+  () => {
+    const sentry = recordingReporter();
+    return Effect.gen(function* () {
+      const kind = ACT_KIND.WINDOW_FOCUS_PANEL;
+      const answering = (row: ActRows[typeof kind]) =>
+        perform(createActRouter(rowsRecording([], { [kind]: row })), { kind }, PANEL);
+      const threw = yield* answering(() => {
+        throw new TypeError("rows[kind] is not a function");
+      });
+      const died = yield* answering(() => Effect.die(new RangeError("no such window")));
+      yield* answering(() => {
+        throw new ActRefused({ message: "That window is closed." });
+      });
+      yield* answering(() => Effect.fail(new ActRefused({ message: "Sign in first." })));
+      const refusal = { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[kind].refusal };
+      assert.deepEqual([threw, died], [refusal, refusal]);
+      assert.deepEqual(sentry.reported, ["rows[kind] is not a function", "no such window"]);
+    }).pipe(Effect.provide(sentry.layer));
+  },
 );

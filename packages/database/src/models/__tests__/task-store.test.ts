@@ -1,25 +1,39 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { organization, user } from "../../schemas/auth.js";
+import { codingAgent } from "../../schemas/coding-agent.js";
 import { issue } from "../../schemas/issue.js";
+import { conversations } from "../../schemas/storage.js";
 import { taskPin } from "../../schemas/task-pin.js";
+import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import { createIssue } from "../issue-store.js";
-import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task-store.js";
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  nameUntitledTask,
+  readTask,
+  readTaskWorkspace,
+  updateTask,
+} from "../task-store.js";
 
 /**
  * A plan's pin is its reader's own: two members of one workspace read the
  * plan they share, and each reads only the pin they made, through the
  * store's public reads, over a real dialect. A pin made again keeps its first
  * instant, an archive leaves it standing, and it goes with its plan and its
- * account.
+ * account. And a plan's archive, which archives its coding agents with it
+ * and whose unarchive brings back those it archived and no other.
  *
  * Synthetic accounts, workspaces, and plans throughout.
  */
@@ -208,6 +222,44 @@ it.layer(getTestDB())("a plan's starting name", (it) => {
   );
 });
 
+it.layer(getTestDB())("an untitled plan's name", (it) => {
+  it.effect("names an untitled plan once, and never one named or renamed meanwhile", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId: named } = yield* openSharedTask;
+      const workspace = (yield* listedTask(dean, named)).workspaceId;
+      const untitled = yield* createTask(dean, { organizationId: workspace });
+      const renamed = yield* createTask(dean, { organizationId: workspace });
+      yield* updateTask(charles, renamed.id, { name: "Rate limits" });
+
+      assert.equal(yield* nameUntitledTask(charles, untitled.id, "Expire invitations"), true);
+      assert.equal(yield* nameUntitledTask(dean, untitled.id, "Send reminders"), false);
+      assert.equal(yield* nameUntitledTask(dean, named, "Send reminders"), false);
+      assert.equal(yield* nameUntitledTask(dean, renamed.id, "Send reminders"), false);
+
+      assert.equal((yield* listedTask(dean, untitled.id)).name, "Expire invitations");
+      assert.equal((yield* listedTask(dean, named)).name, SHARED_TASK.name);
+      assert.equal((yield* listedTask(dean, renamed.id)).name, "Rate limits");
+    }),
+  );
+
+  it.effect("leaves an archived plan, and one of a workspace the account is not in, untitled", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(owner);
+      const theirs = yield* createTask(owner, { organizationId });
+      const archived = yield* createTask(owner, { organizationId });
+      yield* updateTask(owner, archived.id, { archived: true });
+
+      assert.equal(yield* nameUntitledTask(outsider, theirs.id, "Expire invitations"), false);
+      assert.equal(yield* nameUntitledTask(owner, archived.id, "Expire invitations"), false);
+
+      assert.equal((yield* listedTask(owner, theirs.id)).name, "Untitled");
+      assert.equal((yield* listedTask(owner, archived.id)).name, "Untitled");
+    }),
+  );
+});
+
 it.layer(getTestDB())("a plan's starting text", (it) => {
   it.effect("a plan starts as the template, and one started without planning starts empty", () =>
     Effect.gen(function* () {
@@ -221,6 +273,38 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
       assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
       assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
     }),
+  );
+});
+
+it.layer(getTestDB())("a plan's brief", (it) => {
+  it.effect(
+    "is read back as written, and a plan started with none, or a blank one, reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const organizationId = yield* openWorkspace(owner);
+        const briefed = yield* createTask(owner, {
+          organizationId,
+          brief: "  Let any member invite a teammate, not only admins.\n",
+        });
+        const unbriefed = yield* createTask(owner, { organizationId });
+        const blank = yield* createTask(owner, { organizationId, brief: "   " });
+        const unplanned = yield* createTask(owner, {
+          organizationId,
+          planning: false,
+          brief: "Fix the typo in the invite email.",
+        });
+
+        const briefOf = (taskId: string) =>
+          Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.brief);
+        assert.equal(
+          yield* briefOf(briefed.id),
+          "Let any member invite a teammate, not only admins.",
+        );
+        assert.equal(yield* briefOf(unbriefed.id), undefined);
+        assert.equal(yield* briefOf(blank.id), undefined);
+        assert.equal(yield* briefOf(unplanned.id), "Fix the typo in the invite email.");
+      }),
   );
 });
 
@@ -295,5 +379,115 @@ it.layer(getTestDB())("a plan started from an issue", (it) => {
       assert.equal(listed.issueId, undefined);
       assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
     }),
+  );
+});
+
+it.layer(getTestDB())("a plan's workspace", (it) => {
+  it.effect(
+    "names the workspace the plan stands in to every member, follows a move, and names none to an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const stranger = yield* openAccount;
+        const workspace = Option.getOrUndefined(yield* readTask(dean, taskId))?.task.workspaceId;
+        assert.ok(workspace);
+
+        assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(workspace));
+        assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.some(workspace));
+        assert.deepEqual(yield* readTaskWorkspace(stranger, taskId), Option.none());
+
+        const elsewhere = yield* openWorkspace(dean);
+        yield* updateTask(dean, taskId, { organizationId: elsewhere });
+        assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
+        assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
+      }),
+  );
+});
+
+/** One of the task's coding agents, started by `userId`, standing unarchived. */
+const openTaskAgent = (userId: string, organizationId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    const conversationId = randomUUID();
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    yield* db.insert(codingAgent).values({
+      id,
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/api",
+      repositories: ["acme/api"],
+      idempotencyKey: randomUUID(),
+    });
+    return id;
+  });
+
+/** The agent's archive as the store reads it: when, and who it was by. */
+const archiveOf = (userId: string, agentId: string) =>
+  Effect.map(readCodingAgent(userId, agentId), (read) => {
+    const agent = Option.getOrThrow(read);
+    return { archivedAt: agent.archivedAt?.getTime(), archivedBy: agent.archivedBy };
+  });
+
+it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
+  it.effect(
+    "a plan's archive archives its standing agents with it as the member who archived it, again for one brought back on its own since, and its unarchive brings back only those",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
+        const working = yield* openTaskAgent(dean, workspace, taskId);
+        const putAway = yield* openTaskAgent(dean, workspace, taskId);
+        yield* archiveCodingAgent(charles, putAway, true);
+        const before = yield* archiveOf(dean, putAway);
+
+        const archived = Option.getOrThrow(yield* updateTask(charles, taskId, { archived: true }));
+        assert.deepEqual(yield* archiveOf(dean, working), {
+          archivedAt: archived.archivedAt,
+          archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: charles, withTask: true },
+        });
+        assert.deepEqual(yield* archiveOf(dean, putAway), before);
+
+        // An agent brought back on its own is taken in again by the archive asked again, under its stamp.
+        yield* archiveCodingAgent(dean, working, false);
+        yield* updateTask(charles, taskId, { archived: true });
+        assert.equal((yield* archiveOf(dean, working)).archivedAt, archived.archivedAt);
+
+        yield* updateTask(dean, taskId, { archived: false });
+        assert.deepEqual(yield* archiveOf(dean, working), {
+          archivedAt: undefined,
+          archivedBy: null,
+        });
+        assert.deepEqual(yield* archiveOf(dean, putAway), before);
+      }),
+  );
+
+  it.effect(
+    "an archive whose guard finds an agent at work under its conversation's lock is refused, and nothing is archived",
+    () =>
+      Effect.gen(function* () {
+        const { dean, taskId } = yield* openSharedTask;
+        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
+        const agentId = yield* openTaskAgent(dean, workspace, taskId);
+        const read: string[] = [];
+
+        const refused = yield* Effect.result(
+          updateTask(dean, taskId, { archived: true }, undefined, (agent) => {
+            read.push(agent.id);
+            return Effect.succeed(false);
+          }),
+        );
+
+        assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
+        assert.deepEqual(read, [agentId]);
+        assert.equal((yield* listedTask(dean, taskId)).archivedAt, undefined);
+        assert.equal((yield* archiveOf(dean, agentId)).archivedAt, undefined);
+      }),
   );
 });

@@ -1,4 +1,5 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
+import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { type TaskLinearIssue, taskLinearIssueSchema } from "@luke/features/linear-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
@@ -18,7 +19,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { organization } from "../schemas/auth.js";
 import { automation } from "../schemas/automation.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { codingAgent, type StoredArchive } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { issue } from "../schemas/issue.js";
@@ -70,7 +71,7 @@ export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServ
 /** The task is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
 export class TaskArchived extends Data.TaggedError("TaskArchived") {}
 
-/** A coding agent stands on the task that its delete was not told was stopped: one started while the delete stopped the others. */
+/** A coding agent stands on the task that its delete or its archive was not told was stopped: one started, or handed a message, while the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
 /** What a delete that stopped the task's agents first tells it. */
@@ -91,6 +92,22 @@ export interface TaskDeleteGuard<R> {
  * unchanged.
  */
 export type TaskMoveGuard<E, R> = (repository: string | null) => Effect.Effect<void, E, R>;
+
+/** One of the plan's agents as its archive reads it, under its conversation's lock. */
+export interface TaskArchivedAgent {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly createdAt: Date;
+}
+
+/**
+ * What an archive of a plan whose agents the caller stopped first runs
+ * under the plan's lock: whether each agent still stands stopped, read under
+ * its conversation's lock, so one handed a message since refuses the archive.
+ */
+export type TaskArchiveGuard<R> = (
+  agent: TaskArchivedAgent,
+) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
@@ -116,6 +133,8 @@ export interface StoredTask {
   readonly sectionWriters: readonly PlanSectionWriter[];
   /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
   readonly linearIssue: TaskLinearIssue | undefined;
+  /** The developer's own words about the task as they started it; nothing for a task started with none. */
+  readonly brief: string | undefined;
   /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
   readonly issue: StoredTaskIssue | undefined;
 }
@@ -142,7 +161,8 @@ export interface StoredTaskIssue {
  * the caller confirms is an issue of the workspace it starts in. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
- * starts empty rather than as the template.
+ * starts empty rather than as the template. A brief is the developer's own
+ * words about the task, kept as written; a blank one is none.
  */
 export interface NewTask {
   readonly organizationId: string;
@@ -151,6 +171,7 @@ export interface NewTask {
   readonly linearIssue?: TaskLinearIssue;
   readonly issueId?: string;
   readonly planning?: boolean;
+  readonly brief?: string;
 }
 
 /**
@@ -195,6 +216,7 @@ const TASK_COLUMNS = {
   document: task.document,
   conversationId: task.conversationId,
   linearIssue: task.linearIssue,
+  brief: task.brief,
 };
 
 const TaskSummaryRowSchema = Schema.Struct({
@@ -233,6 +255,7 @@ const TaskRowSchema = Schema.Struct({
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
   linearIssue: Schema.NullOr(taskLinearIssueSchema),
+  brief: Schema.NullOr(Schema.String),
 });
 
 type TaskRow = typeof TaskRowSchema.Type;
@@ -414,6 +437,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
       linearIssue: row.linearIssue ?? undefined,
+      brief: row.brief ?? undefined,
       issue:
         row.issueId === null
           ? undefined
@@ -472,6 +496,7 @@ const insertTask = SqlSchema.findOne({
     document: Schema.String,
     linearIssue: Schema.NullOr(taskLinearIssueSchema),
     issueId: Schema.NullOr(Schema.String),
+    brief: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: TaskRowSchema,
@@ -487,6 +512,7 @@ const insertTask = SqlSchema.findOne({
           document: write.document,
           linearIssue: write.linearIssue,
           issueId: write.issueId,
+          brief: write.brief,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -550,6 +576,19 @@ const findTask = SqlSchema.findOneOption({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db.select(TASK_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
+    ),
+});
+
+const findTaskWorkspace = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .limit(1),
     ),
 });
 
@@ -763,6 +802,30 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /**
+ * The name written only where the task still stands untitled and not
+ * archived, so the check and the write are one statement and a name a
+ * member gave the task meanwhile is never written over.
+ */
+const nameUntitled = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, name: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ userId, taskId, name }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ name })
+        .where(
+          and(
+            reachableTask(userId, taskId),
+            eq(task.name, UNTITLED_TASK_NAME),
+            isNull(task.archivedAt),
+          ),
+        )
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
  * The text an account's plan started as at `createdAt`, epoch milliseconds:
  * a copy of the account's template as it stood then, as its history reads,
  * or the template it holds now where it has no history. A note reads it to
@@ -791,6 +854,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
     const now = yield* DateTime.nowAsDate;
     const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
+    const brief = started.brief?.trim() ?? "";
     const row = yield* insertTask({
       userId,
       organizationId: started.organizationId,
@@ -799,6 +863,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       linearIssue: started.linearIssue ?? null,
       issueId: started.issueId ?? null,
+      brief: brief.length > 0 ? brief : null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -843,6 +908,21 @@ export function readTask(
 ): TaskStoreEffect<Option.Option<StoredTask>> {
   return Effect.flatMap(findTask({ userId, taskId }), (found) =>
     Effect.transposeOption(Option.map(found, (row) => storedTaskOf(userId, row))),
+  );
+}
+
+/**
+ * The workspace of a task the account reaches, as `readTask` would name it,
+ * in one statement rather than the whole task: what a GitHub read of the
+ * task's repository needs, once per agent where a delivery reads several.
+ */
+export function readTaskWorkspace(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findTaskWorkspace({ userId, taskId }),
+    Option.map((row) => row.organizationId),
   );
 }
 
@@ -990,6 +1070,76 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
 });
 
 /**
+ * The task's agents still standing unarchived, each with its conversation
+ * locked, the lock every write of its lines and turns takes, in the
+ * conversations' order, so two archives of one task never wait on each other.
+ */
+const lockStandingAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    conversationId: Schema.String,
+    createdAt: InstantColumnSchema,
+  }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: codingAgent.id,
+          conversationId: codingAgent.conversationId,
+          createdAt: codingAgent.createdAt,
+        })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
+        .orderBy(conversations.id)
+        .for("update", { of: conversations }),
+    ),
+});
+
+/**
+ * The task's standing agents archived with it, at the task's own stamp and
+ * as the member who archived it, once the guard, where one is handed, reads
+ * every one of them stopped under its conversation's lock.
+ */
+const archivedAgents = Effect.fnUntraced(function* <R>(
+  userId: string,
+  taskId: string,
+  archivedAt: Date,
+  guard: TaskArchiveGuard<R> | undefined,
+) {
+  const agents = yield* lockStandingAgents({ taskId });
+  if (agents.length === 0) return;
+  if (guard !== undefined) {
+    const stopped = yield* Effect.forEach(agents, guard);
+    if (stopped.includes(false)) return yield* new TaskAgentUnstopped();
+  }
+  const archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId, withTask: true };
+  const agentIds = agents.map(({ id }) => id);
+  yield* Database.use((db) =>
+    db
+      .update(codingAgent)
+      .set({ archivedAt, archivedBy })
+      .where(and(inArray(codingAgent.id, agentIds), isNull(codingAgent.archivedAt))),
+  );
+});
+
+/** The agents the task's archive at `archivedAt` archived with it brought back with it; one archived on its own stays archived. */
+const unarchivedAgents = (taskId: string, archivedAt: Date) =>
+  Database.use((db) =>
+    db
+      .update(codingAgent)
+      .set({ archivedAt: null, archivedBy: null })
+      .where(
+        and(
+          eq(codingAgent.taskId, taskId),
+          eq(codingAgent.archivedAt, archivedAt),
+          sql`(${codingAgent.archivedBy} ->> 'withTask') = 'true'`,
+        ),
+      ),
+  );
+
+/**
  * Changes the task, a new name with its document's heading, a repository or
  * none, pinned or not, archived or not, its workspace, and answers it as
  * changed, or nothing where the account reaches no such task. The changes
@@ -1002,13 +1152,25 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
  * is pinned again. An archived task is neither renamed nor given another
  * repository, read under the same lock, unless the same change brings it
  * back; its pin and its archive still change.
+ *
+ * A task's archive archives its coding agents with it, under the same stamp
+ * and as the member who archived the task (`archivedAgents`), and its
+ * unarchive brings back those agents and no other, so one archived on its
+ * own before stays archived. Where the caller hands `archiveGuard`, each
+ * agent is read under its conversation's lock and the whole change refused
+ * with `TaskAgentUnstopped`, nothing written, where any stands at work.
  */
-export function updateTask<E = never, R = never>(
+export function updateTask<E = never, R = never, RA = never>(
   userId: string,
   taskId: string,
   changes: TaskChanges,
   moveGuard?: TaskMoveGuard<E, R>,
-): Effect.Effect<Option.Option<Task>, TaskStoreFailure | TaskArchived | E, DatabaseServices | R> {
+  archiveGuard?: TaskArchiveGuard<RA>,
+): Effect.Effect<
+  Option.Option<Task>,
+  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | E,
+  DatabaseServices | R | RA
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1026,6 +1188,14 @@ export function updateTask<E = never, R = never>(
           );
         }
         const now = yield* DateTime.nowAsDate;
+        const standing = locked.value.archivedAt;
+        // An archive asked again takes in an agent brought back on its own since, under the standing stamp.
+        if (changes.archived === true) {
+          yield* archivedAgents(userId, taskId, standing ?? now, archiveGuard);
+        }
+        if (changes.archived === false && standing !== null) {
+          yield* unarchivedAgents(taskId, standing);
+        }
         if (changes.pinned !== undefined) {
           yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
         }
@@ -1055,6 +1225,23 @@ export function updateTask<E = never, R = never>(
       }),
     ),
   );
+}
+
+/**
+ * Names a task that still stands as `UNTITLED_TASK_NAME`, as its first
+ * coding agent's generated title does; false, and nothing written, where
+ * the task has a name of its own, is archived, or is no task the account
+ * reaches. A rename, like `updateTask`'s, is not a save, so the list's
+ * order and the document stand.
+ */
+export function nameUntitledTask(
+  userId: string,
+  taskId: string,
+  name: string,
+): TaskStoreEffect<boolean> {
+  const named = name.trim();
+  if (named.length === 0) return Effect.succeed(false);
+  return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
 }
 
 /**

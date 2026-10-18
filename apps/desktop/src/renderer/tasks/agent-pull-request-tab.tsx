@@ -33,6 +33,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { threadPreview } from "@luke/panel/tasks/changes-model";
 import {
   type ConversationFiltersControl,
@@ -43,8 +45,12 @@ import {
 } from "@luke/panel/tasks/conversation-filters";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { PullRequestLabels } from "@luke/panel/tasks/pull-request-labels";
+import { PullRequestStack } from "@luke/panel/tasks/pull-request-stack";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW, type PullRequestView } from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -53,6 +59,8 @@ import {
   Badge,
   Button,
   CopyIcon,
+  DETAIL_PAGE_INSET,
+  DetailPage,
   DisclosureChevron,
   EmptyState,
   ErrorState,
@@ -61,6 +69,7 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  PAGE_FRAME,
   ProviderMark,
   SKELETON_SHAPE,
   Skeleton,
@@ -91,11 +100,14 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
-import { AgentChangesTab, THREAD_PLACE, type ThreadPlace, useAgentRead } from "./agent-changes-tab";
+import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import {
+  AgentChangesTab,
+  type ChangesThreads,
+  THREAD_PLACE,
+  type ThreadPlace,
+  useAgentRead,
+} from "./agent-changes-tab";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import type { PendingReview } from "./line-comment";
@@ -114,7 +126,6 @@ import {
 } from "./pull-request-pickers";
 import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
-import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
@@ -123,7 +134,6 @@ import {
   type PullRequestWrites,
   usePullRequestWrites,
 } from "./pull-request-writes";
-import { RelativeTime } from "./relative-time";
 import {
   type GitHubPictureDrawer,
   GitHubPictureLink,
@@ -131,7 +141,6 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 import { useWorkingNow, workingTime } from "./working-time";
 
 /**
@@ -1563,28 +1572,32 @@ function ConversationView({
   const filters = useConversationFilters();
   const conversation = landed(parts.conversation)?.conversation;
   return (
-    <>
-      <ConversationFilterRow
-        control={filters}
-        hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Pull request conversation"
+      inset={DETAIL_PAGE_INSET.READING}
+      toolbar={
+        <ConversationFilterRow
+          control={filters}
+          hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+        />
+      }
+    >
+      <DescriptionPart
+        part={parts.pullRequest}
+        reactions={landed(parts.conversation)?.descriptionReactions}
+        subject={landed(parts.conversation)?.descriptionSubject}
+        picture={picture}
       />
-      <div className="pull-request-page">
-        <DescriptionPart
-          part={parts.pullRequest}
-          reactions={landed(parts.conversation)?.descriptionReactions}
-          subject={landed(parts.conversation)?.descriptionSubject}
-          picture={picture}
-        />
-        <ConversationPart
-          parts={parts}
-          filters={filters.filters}
-          url={url}
-          now={now}
-          picture={picture}
-        />
-        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
-      </div>
-    </>
+      <ConversationPart
+        parts={parts}
+        filters={filters.filters}
+        url={url}
+        now={now}
+        picture={picture}
+      />
+      {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
+    </DetailPage>
   );
 }
 
@@ -1701,6 +1714,19 @@ export function AgentPullRequestTab({
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
   const options = useReviewOptions(agentId, control.readReviewOptions);
+  // Note that Files changed is handed the same threads while the conversation
+  // and the minute stand, because a file a thread is on draws its notes anew
+  // for new ones.
+  const conversation = landed(parts.conversation);
+  const threadList = useMemo(() => reviewThreadsOf(conversation), [conversation]);
+  const drawThread = useCallback<ChangesThreads["draw"]>(
+    (thread, place) => <InlineThread thread={thread} place={place} now={now} picture={picture} />,
+    [now, picture],
+  );
+  const changesThreads = useMemo<ChangesThreads>(
+    () => ({ list: threadList, draw: drawThread, refresh: conversationRead.ask }),
+    [threadList, drawThread, conversationRead.ask],
+  );
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1760,13 +1786,17 @@ export function AgentPullRequestTab({
               aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
               hidden={view !== PULL_REQUEST_VIEW.CHECKS}
             >
-              <div className="pull-request-page">
+              <DetailPage
+                frame={PAGE_FRAME.TOOLBAR}
+                label="Pull request checks"
+                inset={DETAIL_PAGE_INSET.READING}
+              >
                 <ChecksPart
                   agentId={agentId}
                   parts={parts}
                   live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                 />
-              </div>
+              </DetailPage>
             </div>
           </>
         )}
@@ -1783,13 +1813,7 @@ export function AgentPullRequestTab({
             shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
             repository={repository}
             tree={tree}
-            threads={{
-              list: reviewThreadsOf(landed(parts.conversation)),
-              draw: (thread, place) => (
-                <InlineThread thread={thread} place={place} now={now} picture={picture} />
-              ),
-              refresh: ask.conversation,
-            }}
+            threads={changesThreads}
             lineComments={{ pending: pendingReview, onWritten: written }}
           />
         </div>

@@ -13,17 +13,17 @@ The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
 - **One saved plan per named task**, one free Markdown text started as a
-  copy of the account's template ("The template" below), written by the
-  plan's notetaker, which takes notes into it ("The notetaker" below), by
+  copy of the account's template ("The template" below), written by Luke
+  himself, who takes notes into it with `edit_plan` on a call or off one, by
   coding agents through the same notes, and by the developer, whose editor
   is the document itself ("Editing" below).
   Every save that changes the plan is kept as a revision under the writer
   who made it ("History" below); there is no stale-revision rejection, no
   approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
-  and the final review live in Luke's instructions, and Luke's
-  model never writes the document: it is handed the saved document
-  every turn, so Luke keeps talking while the notetaker writes.
+  and the final review live in Luke's instructions. Luke's model writes the
+  document itself, each save a task it starts and keeps talking past, and is
+  handed the saved document every turn.
   The tab decides nothing; it shows the saved document and the voice state,
   and saves only the developer's own edits of the text.
 
@@ -118,9 +118,9 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   task open it does nothing. The microphone and speaker mute chords answer
   while a call is in progress wherever the panel stands, on another task,
   in Settings, or on the new-task page.
-- Nothing polls. Every change to a task happens during its call, and the
-  notetaker's drafts reach the open task on the call's own socket as they
-  are written. The list and the open task are read when a panel shows the
+- Nothing polls. Luke's saves, on a call or after it, reach the open task
+  through the conversation's own follow, which reads the document again as
+  his turn writes the plan. The list and the open task are read when a panel shows the
   Tasks tab; the open task again when a task opens, and the list again when
   one starts or is deleted. Leaving the tab leaves the task and its call
   standing, and coming back reads everything again.
@@ -289,8 +289,9 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   effort; its chevron drops the searchable picker over the models the service
   offers, grouped by provider with the newest first, each under its provider's
   mark and the default checked, with the efforts the chosen model lists and
-  "Start with <model> · <effort>" pinned under the scrolling list, which the
-  service also keeps as the account's default. A task with no repository has Start unavailable, saying why on
+  "Start with <model> · <effort>" pinned under the scrolling list. What the
+  chevron picks is what the main part starts on while the plan's tab stays open, and
+  never the account's default, which only Settings changes. A task with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).
@@ -568,8 +569,9 @@ smaller standard one is the opt-in. The Start menu and an agent's chip offer
 the same choice as a Context row beside Effort, and the chip says the window
 after the effort only where it is the opted-in smaller one ("GPT-5.5 High
 272K"). The page
-reads the default as it opens, so a model chosen from Start's chevron, which
-the service keeps as the default too, shows there next. A first-time
+reads the default as it opens, and it is the one place the default changes:
+a model chosen from Start's chevron, an agent's chip, a draft, a fork, or by
+Luke or another agent runs that agent alone. A first-time
 account starts on Claude Opus 5.5 at high.
 
 ### Transcript
@@ -618,21 +620,23 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
   nothing said yet: "Nothing said yet — start a call and the transcript
   appears here."
 
-### The notetaker
+### Luke's notes
 
-A task's plan is written during a call by a notetaker beside it
-(`packages/service/src/tasks/plan-scribe.ts`), following GPT-Live's guidance to
-react to the transcript on a small model while speech goes on. It keeps both
-speakers' words from the call's sideband and Luke's replies as
-research notes. Once the developer has been quiet for about a second, it makes
-one `gpt-5.6-luna` call over the plan's saved text and what was said since
-its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
-the answer through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`). Its
-runs never overlap, so no run of its own races another, and a run that fails
-moves nothing forward.
+Luke writes a task's plan himself, with `edit_plan`
+(`packages/service/src/agents/brain-host/plan-edit.ts`, run as an eve task from
+`apps/luke/tools/edit_plan.ts`), on a call or with no call up, as the
+conversation and his research settle it. Each call answers with a receipt at
+once and the save's result reaches him later as the task's result, so he goes
+on speaking and researching while it lands; a note that missed is written
+again over the plan as the result hands it. His saves go through `saveNotes`
+(`packages/service/src/tasks/plan-notes.ts`) under the notetaker's actor, which
+the history shows as Luke. Only what reaches him reaches the plan: the voice
+delegates every decision, requirement, correction, and retraction, and the
+developer's words no ask carried are handed to him as one last ask as the call
+ends.
 
-The answer is notes, the way a person takes notes on a call, never the text
-written out again:
+A call's notes are taken the way a person takes notes on a call, never the
+text written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
@@ -646,8 +650,8 @@ split, merge, move, and drop sections, a move being a deletion and a
 replacement or an addition. The notes of one answer save together or not
 at all: one naming text or a heading the plan does not hold exactly
 once, or one that does not read under the schema, is reported, never guessed
-into another, and saves nothing of the answer, whose lines the next run is
-handed again over the plan as it then stands.
+into another, and saves nothing of the call, whose result hands the plan as it
+then stands.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into

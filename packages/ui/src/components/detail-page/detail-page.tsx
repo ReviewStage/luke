@@ -20,11 +20,25 @@ import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-fra
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header: the toolbar stands still above the columns, and the page is named
  * by the toolbar's title. Content that scrolls sideways stands across the
- * whole room (`PAGE_WIDTH.FULL`) rather than at the measure.
+ * whole room (`PAGE_WIDTH.FULL`) rather than at the measure. A page in a
+ * narrow column under rows that stand at a column's inset, as a side
+ * panel's tabs do (`TABS_INSET.READING`), stands its words with theirs
+ * (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A
+ * `List` laid straight into the content, or straight under one of its
+ * sections, reaches past the column by its rows' own inset, as on a
+ * collection's page, so its words line up with the title's.
  *
  * The secondary column is a complementary landmark named by its `label`.
  * The page names itself by its title and takes no class or style.
  */
+
+/** How far in from its sides the page stands its words: a page's inset, or a column's, as tabs read at the measure stand theirs. */
+export const DETAIL_PAGE_INSET = {
+  PAGE: "page",
+  READING: "reading",
+} as const;
+
+export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAGE_INSET];
 
 /** What stands beside the main content: facts about the thing, its people, its history. */
 export type DetailSecondary = {
@@ -41,10 +55,13 @@ function said(words: ReactNode): boolean {
 /** One thing's page: its heading over the main content and an optional `secondary` column. */
 export function DetailPage({
   secondary,
+  inset = DETAIL_PAGE_INSET.PAGE,
   children,
   ...heading
 }: PageHeading & {
   secondary?: DetailSecondary | undefined;
+  /** How far in from its sides the words stand; a page's inset where left out. */
+  inset?: DetailPageInset | undefined;
   /** The main content (sections, a document, a transcript). */
   children: ReactNode;
 }): React.JSX.Element {
@@ -55,6 +72,7 @@ export function DetailPage({
       className="luke-detail-page"
       data-frame={heading.frame ?? PAGE_FRAME.PAGE}
       data-width={heading.width ?? PAGE_WIDTH.MEASURE}
+      data-inset={inset}
       aria-labelledby={underToolbar ? undefined : titleId}
       aria-label={underToolbar ? heading.label : undefined}
     >

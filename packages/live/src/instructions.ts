@@ -2,15 +2,18 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
 
 /**
  * A task's call's backend is the brain, which holds the saved
- * document and reads the task's repository; a notetaker beside the call
- * writes the plan, so there is no save to delegate. The guide's Delegation
+ * document, reads the task's repository, and writes the plan itself; no
+ * notetaker reads the call beside it, so what the developer settles reaches
+ * the plan only through a delegation, and every decision, requirement,
+ * correction, and retraction is one. The guide's Delegation
  * section asks for concrete conditions, so the policy is the template's own
  * conditions with the brain's tools named: the voice is choosing
  * whether one call is needed, and a tool it cannot name is a capability it
  * will not reach for. Note that the backend keeps the question queue, so
  * every answer is a reason to delegate: it is what keeps the queue the voice
  * asks from current. Note that the call's start is no reason here, because
- * the service sets the backend exploring as the session starts, and a
+ * the service sets the backend exploring as a plan's first call starts, and
+ * takes up the work earlier calls left under way on a call back, and a
  * delegation before the developer's first words waits for them anyway. Note
  * that the goodbye is delegated as it starts rather than after, because the
  * backend's `end_call` then lands while the goodbye plays and the developer's
@@ -31,6 +34,7 @@ const CALL_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
 - The repository: run_in_repository, which runs shell commands in a checkout of the task's GitHub repository.
 - Research: search_web and read_web_page, which can search the Internet.
+- The plan: edit_plan, which writes what the call settles into the plan.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 - Coding agents: list_agents, read_agent, message_agent, start_agent, stop_agent, archive_agent, unarchive_agent, list_tasks, update_task, and list_models, which say how an agent working on this task or another task of the workspace is doing, pass the developer's instruction to one, start a new one on this task's plan, on a prompt in the developer's words, or on another task of the workspace, say which models one may run on, stop one the developer asks to stop, archive an idle one the developer asks to put away or bring one back, and rename, pin, archive, or bring back a task of the workspace the developer names.
 - The sidebar: create_section, delete_section, and move_task, which make and delete the developer's own sections of the workspace's sidebar and move a task into one or back under Tasks.
@@ -39,6 +43,7 @@ Backend tools:
 Delegate to the backend when:
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
+- The developer states a decision, a requirement, a constraint, a correction, or takes something back: pass it to the backend, which writes it into the plan; nothing reaches the plan otherwise.
 - The developer answers a question, or says they are unsure: pass the answer to the backend so it can queue what the answer unblocked.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 - The developer asks to see something drawn, or mentions something they drew on the board.
@@ -47,7 +52,7 @@ Delegate to the backend when:
 - The developer asks you to end the call, or clearly says they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"): say a one-line goodbye and delegate as you start it, so the backend can end the call. Do it every time, even right after another request or while a coding agent works; never answer "sure" or say goodbye without delegating. Never on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 Do not delegate to the backend when:
-- You can answer from the conversation or a still-current result, unless the developer is ending the call.
+- You can answer from the conversation or a still-current result, unless the developer is ending the call or settled something the plan has not been told.
 - You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
@@ -70,7 +75,7 @@ Do not guess the result while waiting.`;
  */
 const CALL_ROLE = `You are Luke, a senior engineer on the developer's team, helping them scope out a new engineering task into a plan an agent can build.
 Lead the conversation and never let it fall silent, but follow the developer when they want to take it their own way.
-A notetaker writes the plan live as you talk; you never write it yourself.`;
+Your backend writes the plan as the call settles it, so pass it everything the developer decides or corrects.`;
 
 /**
  * A task's call's one policy beyond the template, added because listening

@@ -411,6 +411,9 @@ importers:
         specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
+      '@sentry/cli':
+        specifier: 2.58.6
+        version: 2.58.6
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -487,6 +490,9 @@ importers:
         specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
+      '@sentry/cli':
+        specifier: 2.58.6
+        version: 2.58.6
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -538,6 +544,9 @@ importers:
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1)
+      '@vercel/functions':
+        specifier: 3.10.1
+        version: 3.10.1(ws@8.22.0)
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
@@ -752,6 +761,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@sentry/core':
+        specifier: 11.7.0
+        version: 11.7.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -774,6 +786,9 @@ importers:
         specifier: 'catalog:'
         version: 4.0.4
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -893,6 +908,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@pierre/diffs':
+        specifier: 1.5.2
+        version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
@@ -914,6 +932,12 @@ importers:
       rehype-raw:
         specifier: 7.0.0
         version: 7.0.0
+      streamdown:
+        specifier: 2.7.0
+        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
+      unicode-emoji-json:
+        specifier: 0.9.0
+        version: 0.9.0
     devDependencies:
       '@luke/gateway':
         specifier: workspace:*
@@ -930,6 +954,9 @@ importers:
       '@types/three':
         specifier: 0.186.0
         version: 0.186.0
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
@@ -4663,12 +4690,28 @@ packages:
       eve:
         optional: true
 
+  '@vercel/functions@3.10.1':
+    resolution: {integrity: sha512-Ca7peSyID6CW5a9Pyu6rDK2AC3n9hyJD0aTBuO74x9eL50Z+rgXIR0H0umI6j0gb9NMG7jvrx7DUhMGuuOFxsg==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-web-identity': '*'
+      ws: '>=8'
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-web-identity':
+        optional: true
+      ws:
+        optional: true
+
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
   '@vercel/oidc@4.0.0':
     resolution: {integrity: sha512-ko6ATeRUlHZMB5hLFdC7+/Q1dI2f3NX3gZHxtpALdkxurwjD5HFHGWYF+4o+4SF0E47jg6KzcHknmRpHcKgJ5A==}
+    engines: {node: '>= 20'}
+
+  '@vercel/oidc@4.0.1':
+    resolution: {integrity: sha512-l//xMmDTj2WR6EMtfA2BEF2oR7ViKCD1SCxqFKCn1/8wOZBxgxhxkegSGi90ICTc1rB50ZbKuPIslc8aJxAqew==}
     engines: {node: '>= 20'}
 
   '@vitejs/plugin-react@5.1.2':
@@ -10726,9 +10769,21 @@ snapshots:
       better-auth: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4)(next@16.3.1)(pg@8.23.0)(react-dom@19.2.8)(react@19.2.8)(vitest@5.0.0)
       eve: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
 
+  '@vercel/functions@3.10.1(ws@8.22.0)':
+    dependencies:
+      '@vercel/oidc': 4.0.1
+    optionalDependencies:
+      ws: 8.22.0
+
   '@vercel/oidc@3.2.0': {}
 
   '@vercel/oidc@4.0.0':
+    dependencies:
+      '@vercel/cli-config': 0.3.1
+      '@vercel/cli-exec': 1.0.1
+      jose: 5.10.0
+
+  '@vercel/oidc@4.0.1':
     dependencies:
       '@vercel/cli-config': 0.3.1
       '@vercel/cli-exec': 1.0.1

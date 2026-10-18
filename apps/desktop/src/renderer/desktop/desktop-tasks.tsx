@@ -6,17 +6,23 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import { FIND_PAGE, FindScope, PageFind } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { INBOX_COLUMNS, useInboxColumns } from "@luke/panel/tasks/inbox-columns";
+import { taskLinkPlace } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { CallBar } from "@luke/panel/tasks/tasks-parts";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import {
   OpenHereProvider,
   openPullRequestsHere,
   useOpenLink,
 } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { type TaskLooks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -36,12 +42,9 @@ import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luk
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { LinkWorkspaceProvider } from "../copy-link-item";
-import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
-import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
   firstChoice,
@@ -65,12 +68,9 @@ import {
   type TaskMentionsValue,
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
-import { taskLinkPlace } from "../tasks/task-menu-items";
-import { CallBar } from "../tasks/tasks-parts";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
@@ -228,11 +228,13 @@ function TaskInboxTab({
   const marks = useInboxReadMarks({
     act,
     workspaceId: task.workspaceId,
-    groups: [{ holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] }],
     // Note that a task's own Inbox offers no Mark all as read.
     onMarkedAll: () => undefined,
   });
-  const { groups } = marks;
+  // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
+  const groups = [
+    { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
+  ];
   const items = groups.flatMap((group) => group.items);
   const counts = inboxCounts(groups, tasks.me);
   const filter = {
@@ -621,7 +623,7 @@ function PlanDocument({
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = taskCards({
     agents,
-    workRows: workRowsOf(tasks.work.conversation, tasks.work.callLive),
+    workRows: workRowsOf(tasks.work.conversation),
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),

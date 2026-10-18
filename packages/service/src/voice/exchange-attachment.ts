@@ -1,7 +1,6 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
-import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
 import {
@@ -14,8 +13,9 @@ import { upstreamSideband } from "./live-sideband.js";
 /**
  * The hosted exchange as the voice service is offered it, one per signed-in
  * session: the conversation of the task the session is bound to resolved at
- * the session's start, the writer the function already holds, eve reached as the deployment for the calling account, and a notetaker
- * writing the plan as the call goes. This is the whole of what
+ * the session's start, the writer the function already holds, and eve
+ * reached as the deployment for the calling account; Luke writes the plan
+ * himself, through the brain's own tool. This is the whole of what
  * `VoiceServiceOptions.exchange` takes, kept apart from the function's
  * composition, which passes it composed over the deployment's seams
  * (`deployment-exchange.ts`).
@@ -32,8 +32,6 @@ interface ExchangeAttachmentDeps {
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
-  /** The model a task call's notetaker runs on, composed by the caller so no key enters here; nothing where the deployment has none. */
-  readonly scribeModel: () => LanguageModel | undefined;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
   readonly report: (message: string) => void;
@@ -74,20 +72,10 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
   > =>
     Effect.gen(function* () {
       const opened = yield* taskConversation(session.accountId, session.taskId);
-      const scribeModel = deps.scribeModel();
       const exchange = yield* hostedLiveExchange({
         accountId: session.accountId,
         liveSessionId: session.sessionId,
         conversation: { userId: opened.ownerId, conversationId: opened.conversationId },
-        ...(scribeModel === undefined
-          ? undefined
-          : {
-              scribe: {
-                taskId: session.taskId,
-                model: scribeModel,
-                ...(session.onPlanDraft ? { onDraft: session.onPlanDraft } : undefined),
-              },
-            }),
         writer: deps.writer,
         eve: deps.eve(session.accountId),
         createId: deps.createId,

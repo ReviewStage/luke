@@ -1350,7 +1350,8 @@ in the task's repository under the same checks; an eve that
 did not take it discards the agent again (`discardCodingAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
-Start that named a model writes it as the account's default.
+model a Start names runs that agent alone: only Settings' write
+(`PUT /api/account/preferences`) changes the account's default.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its
@@ -1837,9 +1838,10 @@ whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands, with
 nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
-restore above is the second. A call's notetaker
-(`src/tasks/plan-scribe.ts`) and a coding agent's `edit_plan`
-(`src/agents/coder-host/plan-edit.ts`) answer with notes
+restore above is the second. Luke's own `edit_plan`
+(`src/agents/brain-host/plan-edit.ts`, run as an eve task from
+`apps/luke/tools/edit_plan.ts`, on a call or off one) and a coding agent's
+`edit_plan` (`src/agents/coder-host/plan-edit.ts`) answer with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
@@ -2474,9 +2476,9 @@ and never re-sent, and a write that fails after the socket closed is
 reported. `src/voice/exchange-attachment.ts` is what the function passes:
 the task's conversation resolved at the session's start, under whichever
 member of its workspace opened it, the function's writer, eve reached as the
-deployment for the calling account, and the plan's
-notetaker (`src/tasks/plan-scribe.ts`), which runs only where the
-deployment holds the OpenAI key.
+deployment for the calling account. No notetaker stands beside the call:
+Luke writes the plan himself through his `edit_plan`, and a developer's
+words no ask carried are handed to him as one last ask as the call ends.
 
 eve is reached as the deployment acting for the one account the session
 resolved at its handshake, since the function holds no bearer of the

@@ -290,7 +290,7 @@ import {
   type WireRecord,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 
 /**
@@ -711,15 +711,17 @@ interface HostOperatorOptions {
   report: (message: string) => void;
 }
 
-/** The host refused a call, or answered a shape its method does not document: a defect of this build, worded by the router as the kind's refusal. */
+/**
+ * The host refused a call, or answered a shape its method does not document:
+ * a defect of this build, worded by the router as the kind's refusal. Note
+ * that only the shape is reported to Sentry, because a refusal is the host's
+ * own answer, and a handler that died behind one was reported where it died
+ * (`gatewayHost`).
+ */
 function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
-  return Effect.die(
-    new Error(
-      answer.ok
-        ? `${method} answered a shape this client cannot read`
-        : `${method} was refused: ${answer.error.message}`,
-    ),
-  );
+  if (answer.ok) return Effect.die(new Error(`${method} answered a shape this client cannot read`));
+  const refusal = new Error(`${method} was refused: ${answer.error.message}`);
+  return Effect.die(Object.assign(refusal, { [ErrorReporter.ignore]: true }));
 }
 
 /**
@@ -1416,6 +1418,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),
+          ...("brief" in request ? { brief: request.brief } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok

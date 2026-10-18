@@ -1,12 +1,12 @@
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
-import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
 
 /**

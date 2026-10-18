@@ -8,10 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnswerView,
-} from "@luke/features/coding-agent-view";
+import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -19,7 +16,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -27,6 +24,7 @@ import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -45,7 +43,6 @@ import {
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
-import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
 
@@ -333,7 +330,7 @@ test("while the task list is unread, Home stands in its own shape: New task's co
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
   assert.ok(page.querySelectorAll(".luke-list-row .luke-skeleton").length > 0, "rows of blocks");
   assert.doesNotMatch(page.textContent ?? "", /Welcome back|Nothing needs you/u);
-  assert.equal(page.querySelector("h1"), null);
+  assert.equal(page.querySelector("h1")?.textContent ?? "", "", "its title says nothing yet");
 });
 
 test("an account whose task list is unread is neither welcomed as new nor greeted back until the list says which it is", () => {
@@ -926,64 +923,13 @@ test("a recent task a teammate created wears their face before its time, and the
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
 });
 
-/** The models the composers' chips offer: Opus, and its fast version. */
-const MODELS: readonly CatalogModel[] = [
-  {
-    id: "anthropic/claude-opus-5.5",
-    name: "Claude Opus 5.5",
-    provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "high"],
-  },
-  {
-    id: "anthropic/claude-opus-5.5-fast",
-    name: "Claude Opus 5.5 (Fast)",
-    provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "high"],
-  },
-];
-
-/** How the account answers a model kept as its default: keeps it, refuses it, or holds the answer for the test to give. */
-const WRITE = { KEEP: "keep", REFUSE: "refuse", HOLD: "hold" } as const;
-
-/** A write of the default held unanswered, and its two answers. */
-interface HeldWrite {
-  readonly choice: ModelChoice;
-  readonly keep: () => void;
-  readonly refuse: () => void;
-}
-
 /**
  * Home with New task's dialog open over it, as ⌘N opens it, each start
- * written down, and the account's default as a store: read as it stands,
- * and written as `write` says. Escape in the dialog's words puts it away.
+ * written down. Escape in the dialog's words puts it away.
  */
-async function mountUnderDialog(write: (typeof WRITE)[keyof typeof WRITE] = WRITE.KEEP) {
+async function mountUnderDialog() {
   const started: Started[] = [];
-  const held: HeldWrite[] = [];
-  let stored = DEFAULT_CHOICE;
-  const refusal = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-  const newTask: TasksControl["newTask"] = {
-    ...newTaskControl(started),
-    models: MODELS,
-    readDefault: () => Promise.resolve({ choice: stored }),
-    writeDefault: (choice) => {
-      if (write === WRITE.REFUSE) return Promise.resolve(refusal);
-      if (write === WRITE.KEEP) {
-        stored = choice;
-        return Promise.resolve({ choice });
-      }
-      return new Promise((resolve) =>
-        held.push({
-          choice,
-          keep: () => {
-            stored = choice;
-            resolve({ choice });
-          },
-          refuse: () => resolve(refusal),
-        }),
-      );
-    },
-  };
+  const newTask = newTaskControl(started);
   const tasks = tasksControl({
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
@@ -1011,11 +957,9 @@ async function mountUnderDialog(write: (typeof WRITE)[keyof typeof WRITE] = WRIT
     document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]') ??
     assert.fail("the dialog stands");
   const home = () =>
-    container.querySelector<HTMLElement>(".home-start") ?? assert.fail("Home's composer stands");
+    container.querySelector<HTMLElement>(".home-composer") ?? assert.fail("Home's composer stands");
   return {
     started,
-    /** The writes of the default still unanswered, the first asked first. */
-    held,
     dialog,
     home,
     /** Puts the dialog away with nothing started, as Escape in its words does. */
@@ -1042,62 +986,4 @@ test("Plan turned on in the dialog over Home and the dialog put away, Home's com
     page.started.map(({ planning, agent }) => ({ planning, agent })),
     [{ planning: true, agent: undefined }],
   );
-});
-
-/** Turns Fast on the dialog's model chip, on or off, which asks for the model to be kept as the account's default. */
-async function pickFastInDialog(dialog: HTMLElement): Promise<void> {
-  const chip =
-    dialog.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
-    assert.fail("the dialog's model chip stands");
-  // The menu stays open after a turn of Fast, so a second turn finds it standing.
-  if (dialog.querySelector('[role="switch"]') === null) act(() => chip.click());
-  const fast =
-    dialog.querySelector<HTMLButtonElement>('[role="switch"]') ??
-    assert.fail("the menu offers Fast");
-  act(() => fast.click());
-  await settle();
-}
-
-test("a model picked as the default in the dialog over Home is the one Home's composer then starts its agent on", async () => {
-  const page = await mountUnderDialog();
-  await pickFastInDialog(page.dialog());
-  await page.closeDialog();
-
-  typeInComposer(page.home(), "Speed up the build");
-  pressInComposer(page.home(), "Enter");
-  await settle();
-
-  assert.equal(page.started[0]?.agent?.choice?.model, "anthropic/claude-opus-5.5-fast");
-});
-
-test("a model picked in the dialog over Home that the account's default refused leaves Home's composer on the default it read", async () => {
-  const page = await mountUnderDialog(WRITE.REFUSE);
-  await pickFastInDialog(page.dialog());
-  await page.closeDialog();
-
-  typeInComposer(page.home(), "Speed up the build");
-  pressInComposer(page.home(), "Enter");
-  await settle();
-
-  assert.deepEqual(page.started[0]?.agent?.choice, DEFAULT_CHOICE);
-});
-
-test("a pick in the dialog the account kept is the one Home's composer starts on, though a later pick answered first was refused", async () => {
-  const page = await mountUnderDialog(WRITE.HOLD);
-  await pickFastInDialog(page.dialog());
-  await pickFastInDialog(page.dialog());
-  const [first, second] = page.held;
-  assert.equal(first?.choice.model, "anthropic/claude-opus-5.5-fast", "Fast was asked first");
-  assert.equal(second?.choice.model, "anthropic/claude-opus-5.5", "Opus was asked after it");
-  act(() => second?.refuse());
-  await settle();
-  act(() => first?.keep());
-  await settle();
-  await page.closeDialog();
-
-  typeInComposer(page.home(), "Speed up the build");
-  pressInComposer(page.home(), "Enter");
-  await settle();
-
-  assert.equal(page.started[0]?.agent?.choice?.model, "anthropic/claude-opus-5.5-fast");
 });

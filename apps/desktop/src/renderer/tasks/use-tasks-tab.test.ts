@@ -30,6 +30,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -61,7 +62,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
-import { SIDE_PANEL_TAB } from "./use-side-panel";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,
@@ -819,6 +819,18 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
 
   act(() => tab.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+});
+
+test("a peek opened beside the Issues list shows the panel, though the plan open behind it holds no tab", () => {
+  window.localStorage.clear();
+  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  act(() => tab.control().issuesView.onOpen());
+  act(() => tab.control().issuesView.onPeek("issue-1"));
+  act(() => tab.control().sidePanel.onSetOpen(true));
+
+  assert.deepEqual(tab.control().sidePanel.strip, [], "no tab of the plan's");
+  assert.equal(tab.control().sidePanel.open, true);
+  assert.equal(tab.control().issuesView.peeked, "issue-1");
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {

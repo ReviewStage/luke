@@ -1,5 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { CampusScene } from "@luke/panel/factory-world/campus/campus-scene";
+import type {
+  FactorySceneHandle,
+  FactorySceneModule,
+  SceneHover,
+  StageSceneProps,
+} from "@luke/panel/factory-world/contract";
 import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
 import {
   PICK_KIND,
@@ -14,12 +21,7 @@ import { SpinnerRegion } from "@luke/panel/spinner";
 import { usePrefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { taskBlastRadiusOf } from "@luke/ui/factory-campus";
-import {
-  blastRadiusOf,
-  factoryWorldAsOf,
-  factoryWorldViewOf,
-  SIGNAL_COLOR,
-} from "@luke/ui/factory-world";
+import { blastRadiusOf, factoryWorldViewOf, SIGNAL_COLOR } from "@luke/ui/factory-world";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FactoryIcon } from "lucide-react";
 import {
@@ -34,15 +36,8 @@ import {
 } from "react";
 import { useSideBundles, WORLD_LOAD_FAILED, worldBundleAtom } from "../bundle-loader";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { CampusScene } from "./campus/campus-scene";
-import type {
-  FactorySceneHandle,
-  FactorySceneModule,
-  SceneHover,
-  StageSceneProps,
-} from "./contract";
 import type { WorldEntry } from "./registry";
-import { HomeButton, HoverLabel, namingOf, PipelineBar, Scrubber, WorldCard } from "./world-chrome";
+import { HomeButton, HoverLabel, namingOf, PipelineBar, WorldCard } from "./world-chrome";
 
 /**
  * world-page.tsx -- a Factory world or the campus in the board's place: the workspace's snapshot read, the scene it is drawn in, and the chrome every one shares over it.
@@ -50,14 +45,13 @@ import { HomeButton, HoverLabel, namingOf, PipelineBar, Scrubber, WorldCard } fr
  * Until the snapshot is read a ring stands where the world will; a read that
  * failed says so with Retry, and a workspace with no repository to draw is
  * the app's empty state, as the board says it holds nothing. Once read, the
- * scene is drawn over the view the scrubber's instant reads, and the chrome
- * over it. A world's scene is Three.js's: its bundle and the world's own are
+ * scene is drawn over the snapshot's view, and the chrome over it. A world's scene is Three.js's: its bundle and the world's own are
  * loaded and the world mounted in it. The campus's is SVG drawn by React in
  * the panel's own bundle (`campus/`), which loads no Three.js at all; the
  * page hands either the same state and hears the same hover, press, and
  * flight away from home, so the chrome serves both alike. What the
- * developer does here, choosing, hovering, switching a layer, winding the
- * clock, is the page's state and is handed to the world whole on each
+ * developer does here, choosing, hovering, switching a layer, is the page's
+ * state and is handed to the world whole on each
  * change. Esc steps back one thing at a time: from a selection or a camera
  * away from home to the establishing shot, and only from there out of
  * Factory (`backOut`).
@@ -258,22 +252,13 @@ function WorldStage({
   const [chosenLayer, setChosenLayer] = useState<WorldLayer | undefined>(undefined);
   const [previewLayer, setPreviewLayer] = useState<WorldLayer | undefined>(undefined);
   const layers = useMemo(() => layersShown(chosenLayer, previewLayer), [chosenLayer, previewLayer]);
-  const [instant, setInstant] = useState<number | undefined>(undefined);
   const [away, setAway] = useState(false);
   const homeTo = useRef<(() => void) | undefined>(undefined);
   const still = useMotionStill(root);
   const dark = useDarkAppearance();
   const taskNames = useTaskNames(tasks);
 
-  const live = useMemo(() => factoryWorldViewOf(snapshot), [snapshot]);
-  const asOf = useMemo(
-    () => (instant === undefined ? snapshot : factoryWorldAsOf(snapshot, instant)),
-    [snapshot, instant],
-  );
-  const view = useMemo(
-    () => (instant === undefined ? live : factoryWorldViewOf(asOf)),
-    [instant, live, asOf],
-  );
+  const view = useMemo(() => factoryWorldViewOf(snapshot), [snapshot]);
   const blast = useMemo(() => {
     if (selected === undefined) return NO_BLAST;
     const reach =
@@ -287,8 +272,8 @@ function WorldStage({
   const state = useMemo<WorldState>(
     () => ({
       view,
-      snapshot: asOf,
-      live: instant === undefined,
+      snapshot,
+      live: true,
       selected,
       hovered: hover?.target,
       blast,
@@ -296,7 +281,7 @@ function WorldStage({
       still,
       dark,
     }),
-    [view, asOf, instant, selected, hover?.target, blast, layers, still, dark],
+    [view, snapshot, selected, hover?.target, blast, layers, still, dark],
   );
 
   const home = useCallback(() => {
@@ -321,7 +306,8 @@ function WorldStage({
     // Note that the press settles what the pointer previewed, so leaving the count shows the press, not the preview.
     setPreviewLayer(undefined);
   }, []);
-  const hovered = hover === undefined ? undefined : namingOf(hover.target, view, asOf, taskNames);
+  const hovered =
+    hover === undefined ? undefined : namingOf(hover.target, view, snapshot, taskNames);
   const sceneProps: StageSceneProps = {
     state,
     shown: tasks.shown,
@@ -351,14 +337,13 @@ function WorldStage({
         <WorldCard
           target={selected}
           view={view}
-          world={asOf}
+          world={snapshot}
           blast={blast}
           tasks={tasks}
           taskNames={taskNames}
           onClose={() => setSelected(undefined)}
         />
       )}
-      <Scrubber live={live} instant={instant} onInstant={setInstant} />
     </div>
   );
 }

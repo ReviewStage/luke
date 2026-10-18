@@ -147,6 +147,9 @@ export default defineHook({
             if (Result.isFailure(starting)) return;
             if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
           }
+          // A fragment the store need hear nothing of is folded into the relay's state without
+          // admitting the session, whose reads would otherwise run for every one of them.
+          if (host.relaysQuietly(event, state)) return;
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
           yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());

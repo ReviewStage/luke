@@ -6,16 +6,20 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
-import { Effect, Layer, Option, Result } from "effect";
+import { Deferred, Effect, Exit, Layer, Option, Result, Scope } from "effect";
+import { SqlError, UnknownError } from "effect/sql/SqlError";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import type { WebAgentRun } from "../../run.js";
+import { stampedEveEvent } from "../../testing/eve-events.js";
 import { NO_GITHUB, openGithubUser } from "../../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
 } from "../../testing/integration-connect.js";
+import { recordingSentry, sentOfType } from "../../testing/sentry-transport.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
+import { memoryRelayState } from "../brain-host/relay.js";
 import { type CoderHost, coderHost } from "../coder-host/host.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { type EdgeKit, edgeKit } from "./edge.js";
@@ -129,4 +133,48 @@ test("a session over another account's conversation is handed no server under ei
 
   assert.equal(await handedTo(edge, AGENT_ROLE.CODER, crossed, agent.sessionId), null);
   assert.equal(await handedTo(edge, AGENT_ROLE.CODER_WORKER, crossed, mintSession()), null);
+});
+
+test("a child's task that fails on its own fiber after the hook answered is reported to Sentry once", async () => {
+  const { host } = await openRoot();
+  const sentry = recordingSentry();
+  const scope = await database.run(Scope.make());
+  const reporting = await database.run(Layer.buildWithScope(sentry.layer, scope));
+  // The root's runner as `runAgent` stands it, with Sentry's reporter among its services.
+  const reported: WebAgentRun = (effect) => run(Effect.provideContext(effect, reporting));
+  const tasked = await database.run(Deferred.make<void>());
+  const edge = edgeKit(reported, {
+    host,
+    skills: () => Effect.succeed([]),
+    childTasked: () =>
+      Effect.ensuring(
+        Effect.fail(
+          new SqlError({
+            reason: new UnknownError({
+              cause: new Error("the child's title could not be written"),
+              message: "The store refused the write",
+            }),
+          }),
+        ),
+        Deferred.succeed(tasked, undefined),
+      ),
+  });
+  const session: SessionContext["session"] = {
+    id: mintSession(),
+    auth: typedSeat("user-1", "conversation-1"),
+    turn: { id: "turn_1", sequence: 1 },
+  };
+  const received = stampedEveEvent(
+    { type: "message.received", data: { turnId: "turn_1", sequence: 1, message: "q" } },
+    NOW,
+  );
+
+  await edge.relayChildEvent(received, session, memoryRelayState());
+  await database.run(Deferred.await(tasked));
+  await database.run(Scope.close(scope, Exit.void));
+
+  const types = sentOfType(sentry.sent, "event").map(
+    (item) => item.payload.exception?.values.at(-1)?.type,
+  );
+  assert.deepEqual(types, ["effect/sql/SqlError"]);
 });

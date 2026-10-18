@@ -80,7 +80,7 @@ const DOCUMENT_BEFORE = new Set(["copy", "edit", "per", "to"]);
 
 /** AI Elements' Plan card, which draws the plan an agent is handed, and the two places that draw it. */
 const PLAN_CARD_FILES = [
-  "apps/desktop/src/renderer/ai-elements/plan.tsx",
+  "packages/panel/src/ai-elements/plan.tsx",
   "apps/desktop/src/renderer/tasks/agent-tab.tsx",
   "apps/desktop/src/renderer/tasks/replay-card.tsx",
 ];
@@ -348,7 +348,7 @@ export const CANARY = {
     ["EDIT_PLAN_TOOL", "packages/features/src/anywhere.ts"],
     ["MAX_PER_PLAN", "packages/features/src/anywhere.ts"],
     ["planet", "packages/features/src/anywhere.ts"],
-    ["PlanTitle", "apps/desktop/src/renderer/ai-elements/plan.tsx"],
+    ["PlanTitle", "packages/panel/src/ai-elements/plan.tsx"],
     ["PLAN_ROW", "apps/desktop/src/renderer/desktop/main-tabs.tsx"],
     ["planClosed", "packages/panel/src/tasks/use-main-tabs.ts"],
     ["useNewTaskPlanning", "apps/desktop/src/renderer/tasks/new-task-composer.tsx"],

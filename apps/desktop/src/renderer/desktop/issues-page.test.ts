@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import type { TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -17,6 +19,7 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "@luke/panel/plan-editor/contract";
+import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -196,6 +199,9 @@ let tasksArchived: TaskSummary[] = [];
 let newTasksFrom: (NewTaskIssue & { readonly agent?: boolean })[] = [];
 /** Every task opened, in order. */
 let tasksOpened: string[] = [];
+/** Every Luke link the page opened, and every GitHub page, in order. */
+let linksOpened: ReadLink[] = [];
+let githubOpened: string[] = [];
 /** The account signed in as the page is drawn. */
 let signedIn = READER;
 
@@ -220,6 +226,8 @@ beforeEach(() => {
   tasksArchived = [];
   newTasksFrom = [];
   tasksOpened = [];
+  linksOpened = [];
+  githubOpened = [];
   signedIn = READER;
   editors.length = 0;
   bundles = landed;
@@ -309,6 +317,9 @@ afterEach(() => {
   for (const sheet of document.head.querySelectorAll("style[data-laid-out]")) sheet.remove();
 });
 
+/** The window's side panel as the pages last drew it. */
+let panelNow: SidePanelControl | undefined;
+
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
@@ -327,6 +338,15 @@ function Pages({
   start?: IssuesPlace | undefined;
 }): React.JSX.Element {
   const [place, setPlace] = useState<IssuesPlace>(start);
+  const [peeked, setPeeked] = useState<string | undefined>(undefined);
+  // The window's own side panel, which the peek stands in, beside no task.
+  const sidePanel = useSidePanel(undefined, {
+    id: undefined,
+    holds: {},
+    bare: true,
+    drawsOwn: true,
+  });
+  panelNow = sidePanel;
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
@@ -335,6 +355,9 @@ function Pages({
     archived: tasksArchived,
     onNewTaskFrom: (from, agent) => newTasksFrom.push(agent === true ? { ...from, agent } : from),
     onSelect: (taskId) => tasksOpened.push(taskId),
+    onOpenLink: (link) => linksOpened.push(link),
+    repositories: { ...control.repositories, openGitHub: (url) => githubOpened.push(url) },
+    sidePanel,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -344,6 +367,8 @@ function Pages({
         setPlace(to);
       },
       onClose: () => (closed += 1),
+      peeked,
+      onPeek: setPeeked,
     },
   });
   return createElement(
@@ -2394,7 +2419,7 @@ test("Group by Priority in the List's View options heads its issues by priority,
 
 /** What the window's Issues page measures across: room for the peek beside a column of the board, or too little. */
 const ROOMY = 1280;
-const CRAMPED = 600;
+const CRAMPED = 500;
 
 /** The Issues page laid out `width` wide, as the window lays it; jsdom lays nothing out. */
 function layPagesAt(width: number): void {
@@ -2405,7 +2430,7 @@ function layPagesAt(width: number): void {
 
 /** The peek standing beside the board or list, if one does. */
 function peekOf(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>(".issue-peek-pane:not([data-leaving]) .issue-peek");
+  return page.querySelector<HTMLElement>(".side-panel:not([data-leaving]) .side-panel-content");
 }
 
 /** What a peek reads: its issue's title, and the identifiers of the cards or rows marked as the one it reads. */
@@ -2494,7 +2519,7 @@ test("while a peek stands the arrows move through the cards and the peek follows
   assert.equal(closed, 1, "the second Escape leaves the Issues page");
 });
 
-test("Close puts the peek away and hands the keyboard back to its card", async () => {
+test("the tab's × puts the peek away and hands the keyboard back to its card", async () => {
   standing = [issue(1, { title: "Fix login" })];
   const page = mount();
   await settle();
@@ -2502,8 +2527,10 @@ test("Close puts the peek away and hands the keyboard back to its card", async (
 
   act(() => cardOf(page, issue(1).id).click());
   await settle();
-  const close = peekOf(page)?.querySelector<HTMLButtonElement>("button[aria-label='Close']");
-  assert.ok(close, "the peek offers Close");
+  const close = page.querySelector<HTMLButtonElement>(
+    ".side-panel button[aria-label='Close ACME-1']",
+  );
+  assert.ok(close, "the peek's tab offers its ×");
   act(() => close.focus());
   act(() => close.click());
   await settle();
@@ -2530,7 +2557,8 @@ test("⌘-press and ⌘Return on a card, and Open as page from the peek, open th
   await settle();
   act(() => cardOf(page, issue(1).id).click());
   await settle();
-  act(() => button("Open as page").click());
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Open as page").click());
   await settle();
 
   assert.deepEqual(opened, [
@@ -2648,10 +2676,7 @@ test("Archive's question asked in a peek goes with the peek as it slides out, an
     await settle();
 
     assert.ok(asked, "Archive asked first");
-    assert.ok(
-      page.querySelector(".issue-peek-pane[data-leaving]"),
-      "the peek is still sliding out",
-    );
+    assert.ok(page.querySelector(".side-panel[data-leaving]"), "the peek is still sliding out");
     assert.ok(
       document.querySelector("[role=alertdialog], [role=dialog]") === null,
       "its question went with it",
@@ -2672,7 +2697,7 @@ test("as the peek opens and closes, the board's columns glide from where they st
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const narrowed = document.querySelector(".issue-peek-pane:not([data-leaving])") !== null;
+    const narrowed = document.querySelector(".side-panel:not([data-leaving])") !== null;
     const width = narrowed ? COLUMN.NARROW : COLUMN.WIDE;
     return new DOMRect(at < 0 ? 0 : at * width, 0, at < 0 ? 0 : width, 0);
   });
@@ -2800,4 +2825,201 @@ test("the peek's ⋯ offers Start agent… beside Start task…, as the issue's 
     },
   ]);
   assert.deepEqual(opened, [], "the board still stands");
+});
+
+/** A task's agents' summary holding the pull requests given, newest first, of `total` in all. */
+function withPullRequests(
+  listed: TaskSummary,
+  pullRequests: TaskPullRequestLine[],
+  total = pullRequests.length,
+): TaskSummary {
+  return {
+    ...listed,
+    agents: { total: 1, working: 0, agents: [], pullRequestTotal: total, pullRequests },
+  };
+}
+
+/** A pull request as the task list carries it. */
+function pullRequestLine(
+  number: number,
+  state: TaskPullRequestLine["state"],
+  patch: Partial<TaskPullRequestLine> = {},
+): TaskPullRequestLine {
+  return {
+    number,
+    title: `Change ${number}`,
+    state,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 1,
+    deletions: 1,
+    ...patch,
+  };
+}
+
+test("an issue's page draws each task's pull requests beside it as Factory does, each opening its agent's Pull request tab, or GitHub where no agent is named", async () => {
+  standing = [issue(1)];
+  tasksListed = [
+    withPullRequests(task("task-newer", "Fix login, again", issue(1).id, 2), [
+      pullRequestLine(42, PULL_REQUEST_STATE.OPEN, {
+        agentId: "6f1d2a10-2c1d-4c7a-9a55-5e3b6f1d2a10",
+      }),
+    ]),
+    withPullRequests(task("task-older", "Fix login", issue(1).id, 1), [
+      pullRequestLine(17, PULL_REQUEST_STATE.MERGED, {
+        url: "https://github.com/acme/web/pull/17",
+      }),
+    ]),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login, again", "#42", "Fix login", "#17"]);
+  const marks = [...page.querySelectorAll(".issue-work [data-pull-request-mark]")].map((mark) => [
+    mark.getAttribute("data-pull-request-state"),
+    mark.getAttribute("aria-label"),
+  ]);
+  assert.deepEqual(
+    marks.map(([state]) => state),
+    [PULL_REQUEST_STATE.OPEN, PULL_REQUEST_STATE.MERGED],
+  );
+  act(() => button("Open pull request #42, Change 42").click());
+  act(() => button("Open pull request #17, Change 17").click());
+
+  assert.deepEqual(linksOpened, [
+    {
+      workspace: "",
+      place: {
+        kind: LINK_PLACE.CHANGES,
+        planId: "task-newer",
+        agentId: "6f1d2a10-2c1d-4c7a-9a55-5e3b6f1d2a10",
+      },
+    },
+  ]);
+  assert.deepEqual(githubOpened, ["https://github.com/acme/web/pull/17"]);
+});
+
+test("a card draws the pull request that matters most of its issue's tasks after its priority, with how many more stand, and none where no pull request was opened", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    withPullRequests(
+      task("task-newer", "Fix login, again", issue(1).id, 2),
+      [
+        pullRequestLine(42, PULL_REQUEST_STATE.DRAFT),
+        pullRequestLine(41, PULL_REQUEST_STATE.CLOSED),
+      ],
+      3,
+    ),
+    withPullRequests(task("task-older", "Fix login", issue(1).id, 1), [
+      pullRequestLine(17, PULL_REQUEST_STATE.MERGED),
+    ]),
+    task("task-plain", "Fix logout", issue(2).id, 3),
+  ];
+  const page = mount();
+  await settle();
+
+  const drawn = (issueId: string) => {
+    const mark = cardOf(page, issueId).querySelector(".issue-card-pull-request");
+    return mark === null
+      ? undefined
+      : [mark.getAttribute("data-pull-request-state"), mark.textContent];
+  };
+  assert.deepEqual(drawn(issue(1).id), [PULL_REQUEST_STATE.DRAFT, "#42+3"]);
+  assert.equal(drawn(issue(2).id), undefined);
+});
+
+test("a card draws an older agent's open pull request over a newer one's merged one, as a task's sidebar mark does, and a merged one over a closed one", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    // The service lists a task's still-open pull requests first, whatever agent opened them.
+    withPullRequests(task("task-one", "Fix login", issue(1).id, 2), [
+      pullRequestLine(10, PULL_REQUEST_STATE.OPEN),
+      pullRequestLine(11, PULL_REQUEST_STATE.MERGED),
+    ]),
+    withPullRequests(task("task-newer", "Fix logout, again", issue(2).id, 3), [
+      pullRequestLine(21, PULL_REQUEST_STATE.CLOSED),
+    ]),
+    withPullRequests(task("task-older", "Fix logout", issue(2).id, 1), [
+      pullRequestLine(20, PULL_REQUEST_STATE.MERGED),
+    ]),
+  ];
+  const page = mount();
+  await settle();
+
+  const drawn = (issueId: string) => {
+    const mark = cardOf(page, issueId).querySelector(".issue-card-pull-request");
+    return [mark?.getAttribute("data-pull-request-state"), mark?.textContent];
+  };
+  assert.deepEqual(drawn(issue(1).id), [PULL_REQUEST_STATE.OPEN, "#10+1"]);
+  assert.deepEqual(drawn(issue(2).id), [PULL_REQUEST_STATE.MERGED, "#20+1"]);
+});
+
+test("an issue's page counts a task's pull requests the list did not carry, in a pill that opens the task", async () => {
+  standing = [issue(1)];
+  tasksListed = [
+    withPullRequests(
+      task("task-busy", "Fix login", issue(1).id, 1),
+      [
+        pullRequestLine(4, PULL_REQUEST_STATE.OPEN),
+        pullRequestLine(3, PULL_REQUEST_STATE.OPEN),
+        pullRequestLine(2, PULL_REQUEST_STATE.MERGED),
+      ],
+      5,
+    ),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login", "#4", "#3", "#2", "2 more"]);
+  act(() => button("Open Fix login for 2 more pull requests").click());
+  assert.deepEqual(tasksOpened, ["task-busy"]);
+});
+
+test("the peek stands in the window's own side panel: its row's tab for the issue, its width, and its Expand panel, which fills the page until Escape brings it back, and Escape again puts it away", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const pane = page.querySelector<HTMLElement>(".side-panel");
+  const tab = pane?.querySelector(".side-panel-bar [role=tab][aria-selected='true']")?.textContent;
+  const width = pane?.style.width;
+  act(() => button("Expand panel").click());
+  const filled = page.querySelector(".side-panel")?.getAttribute("data-full-screen");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  const back = page.querySelector(".side-panel")?.getAttribute("data-full-screen");
+  const stillPeeked = peeking(page).title;
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  assert.equal(tab, "ACME-1 Fix login");
+  assert.equal(width, "400px", "the side panel's own width");
+  assert.equal(filled, "true");
+  assert.equal(back, "false", "Escape brings it back beside the board first");
+  assert.equal(stillPeeked, "Fix login");
+  assert.ok(peekOf(page) === null, "then puts it away");
+  assert.equal(closed, 0);
+});
+
+test("Open as page from a peek filling the page brings the panel back from full screen, so no page after it draws one full screen", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  act(() => button("Expand panel").click());
+  const filled = panelNow?.fullScreen;
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Open as page").click());
+  await settle();
+
+  assert.equal(filled, true);
+  assert.equal(titleOf(page), "Fix login");
+  assert.equal(panelNow?.fullScreen, false);
 });

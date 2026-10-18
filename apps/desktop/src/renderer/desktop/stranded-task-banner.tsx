@@ -1,8 +1,8 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { TaskBanner } from "@luke/panel/desktop/task-banner";
+import { WorkspaceCard, WorkspaceRef } from "@luke/panel/desktop/workspace-ref";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
-import { TaskBanner } from "./task-banner";
-import { WorkspaceCard, WorkspaceRef } from "./workspace-ref";
 
 /**
  * stranded-task-banner.tsx -- the task-wide banner of a task whose repository its own workspace cannot reach and another of the account's can: which one, and Move to it.

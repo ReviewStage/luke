@@ -106,7 +106,6 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
     prompt: TASK,
     idempotencyKey: key ?? randomUUID(),
     choice: undefined,
-    rememberChoice: false,
   };
 }
 
@@ -196,7 +195,6 @@ it.layer(getTestDB())("an agent started on a plan from a Linear issue", (it) => 
     prompt: undefined,
     idempotencyKey: randomUUID(),
     choice: undefined,
-    rememberChoice: false,
   });
 
   it.effect(
@@ -246,7 +244,6 @@ it.layer(getTestDB())("an agent started on a plan from one of the workspace's is
     prompt: undefined,
     idempotencyKey: randomUUID(),
     choice: undefined,
-    rememberChoice: false,
   });
 
   it.effect(

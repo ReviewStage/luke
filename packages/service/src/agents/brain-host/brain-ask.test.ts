@@ -119,6 +119,7 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       }),
     // These asks are typed, so no voice session's asks are ever read back or told.
     spokenIn: () => Effect.succeed([]),
+    unendedSpoken: () => Effect.succeed([]),
     told: () => Effect.void,
   };
   function latestSession(userId: string, conversationId: string): string | undefined {

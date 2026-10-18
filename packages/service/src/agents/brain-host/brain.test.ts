@@ -16,9 +16,9 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { type PlanDocument, planDocumentSchema } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type PlanDocument, planDocumentSchema } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import {
   generateText,
@@ -66,6 +66,7 @@ import {
 import { readRecentMessages } from "./context.js";
 import type { AdmittedConversation } from "./conversation.js";
 import { type BrainHost, brainHost, type TurnStanding } from "./host.js";
+import { recordBrainPlanEdit } from "./plan-edit.js";
 import type { BrainHostSeams } from "./production.js";
 import { memoryRelayState, type RelayStateStore } from "./relay.js";
 
@@ -635,6 +636,69 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           assert.equal(text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
           assert.equal(text.includes(header), false);
         }
+      }),
+  );
+  it.effect(
+    "Luke's notes land in the plan his session was admitted for, as Luke in its history, and a conflict saves none of them",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, taskId, conversationId } = yield* savedTaskWithConversation();
+        yield* savePlanText(userId, taskId, SAVED_TEXT);
+        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
+        const standing = yield* admitted(host, session);
+        const body = Effect.map(readTask(userId, taskId), (found) => Option.getOrThrow(found));
+
+        const saved = yield* host.editPlan(
+          standing,
+          unparsedWire({
+            notes: [{ kind: "add", section: "Open questions", text: `- ${CORRECTION}` }],
+          }),
+        );
+        assert.deepEqual(saved, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
+        const after = yield* body;
+        assert.ok(after.task.document.body.includes(CORRECTION));
+        assert.equal(
+          after.sectionWriters.find((writer) => writer.section === "Open questions")?.actor,
+          PLAN_ACTOR.NOTETAKER,
+        );
+
+        // The first note lands and the second names what the plan does not hold: neither is saved.
+        const conflict = yield* host.editPlan(
+          standing,
+          unparsedWire({
+            notes: [
+              { kind: "add", section: "Assumptions", text: "- Invites expire after 7 days." },
+              { kind: "replace", find: "Only admins invite.", text: "Members invite." },
+            ],
+          }),
+        );
+        assert.equal(conflict.status, ACTION_RESULT_STATUS.REJECTED);
+        assert.equal("current" in conflict && conflict.current, after.task.document.body);
+        assert.equal((yield* body).task.document.body, after.task.document.body);
+      }),
+  );
+
+  it.effect(
+    "a plan edit bound to another account's plan saves nothing there, and notes that do not read are refused whole",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* savedTaskWithConversation();
+        yield* savePlanText(userId, taskId, SAVED_TEXT);
+        const stranger = yield* openUser;
+
+        const intruding = yield* recordBrainPlanEdit(
+          { userId: stranger, taskId },
+          unparsedWire({ notes: [{ kind: "add", section: "Open questions", text: "- Mine." }] }),
+        );
+        const unreadable = yield* recordBrainPlanEdit(
+          { userId, taskId },
+          unparsedWire({ notes: [{ kind: "add", section: "Open questions" }] }),
+        );
+
+        assert.equal(intruding.status, ACTION_RESULT_STATUS.REJECTED);
+        assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
+        const stored = Option.getOrThrow(yield* readTask(userId, taskId));
+        assert.equal(stored.task.document.body, SAVED_TEXT);
       }),
   );
 });

@@ -52,7 +52,14 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
-import { type EveReach, eveFor, stoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
+import {
+  type EveReach,
+  eveFor,
+  standsStopped,
+  stoppedForGood,
+  stopsForGood,
+  summaryOf,
+} from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -71,6 +78,7 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -135,7 +143,8 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  * `GET /api/plans/{id}` is the window opening a task, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
  * `DELETE` stops every coding agent of the task first, through the one Stop
- * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task. Each
+ * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task, as
+ * its archive stops them before it archives them with the task. Each
  * row of the list carries what the task's coding agents are doing and what
  * they published, in brief, where it has any (`packages/service/src/agents/task-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
@@ -272,11 +281,15 @@ const FILE_QUERY = {
 /** The query naming one picture of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
-/** A start or a change is a name and a repository's name at most, so a body past this is neither. */
+/** A change is a name and a repository's name at most, so a body past this is none. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
-/** A start is a change's few fields and, where it names one, an agent's Start beside them. */
-const MAXIMUM_TASK_START_BODY_BYTES = MAXIMUM_NAME_BODY_BYTES + MAXIMUM_START_BODY_BYTES;
+/** A brief at its bound with every character escaped. */
+const MAXIMUM_BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
+
+/** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
+const MAXIMUM_TASK_START_BODY_BYTES =
+  MAXIMUM_NAME_BODY_BYTES + MAXIMUM_BRIEF_BYTES + MAXIMUM_START_BODY_BYTES;
 
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
@@ -607,8 +620,13 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       ...(issue === undefined ? undefined : { linearIssue: issue }),
       ...(issueId === undefined ? undefined : { issueId }),
       ...(planning === undefined ? undefined : { planning }),
+      ...(started.success.brief === undefined ? undefined : { brief: started.success.brief }),
     }),
   );
+  yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+    source: SERVER_TASK_SOURCE.SIDEBAR,
+    has_issue: issue !== undefined || issueId !== undefined,
+  });
   const answer: TaskStartAnswer =
     agent === undefined
       ? { plan: task }
@@ -624,8 +642,19 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
  * move is confirmed in the workspace the task moves to, and a move confirms
  * the repository the row names under its lock, so one changed meanwhile is
  * the one confirmed.
+ *
+ * An archive stops every coding agent of the plan first, as a Stop and an
+ * agent's own archive stop one, then archives them with the plan under its
+ * lock (`updateTask`), each read again under its conversation's lock. An
+ * eve that refuses a Stop, an agent still coming up or with a message
+ * awaiting its turn, which no Stop can name yet, or one handed a message
+ * after it was stopped, leaves the plan and every agent standing and the
+ * archive refused as not ready, so it is asked again a moment later.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: TasksAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -643,6 +672,16 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       : Effect.succeed(organizationId);
   const repository =
     "repository" in changes ? yield* reachableRepository(workspace, changes.repository) : undefined;
+  const archiving = changes.archived === true;
+  if (archiving) {
+    const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+    // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
+    const ready = yield* Effect.forEach(agents, stopsForGood);
+    if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+    yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
+      discard: true,
+    });
+  }
   const task = yield* updateTask(
     userId,
     taskId,
@@ -655,11 +694,14 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       ...("archived" in changes ? { archived: changes.archived } : undefined),
     },
     organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+    archiving ? standsStopped : undefined,
   ).pipe(
     Effect.catch((failure) =>
       failure._tag === "MoveRefused"
         ? Effect.fail(failure.refusal)
-        : hostedStoreOrArchived(Effect.fail(failure)),
+        : failure._tag === "TaskAgentUnstopped"
+          ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
+          : hostedStoreOrArchived(Effect.fail(failure)),
     ),
   );
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -737,7 +779,9 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/taskEndpoint")(function* (
       plan: opened.value.task,
     } satisfies TaskAnswer);
   }
-  if (incoming.method === HTTP_METHOD.PATCH) return yield* updateEndpoint(userId, taskId);
+  if (incoming.method === HTTP_METHOD.PATCH) {
+    return yield* updateEndpoint(seams, writer, request, userId, taskId);
+  }
   return yield* deleteEndpoint(seams, writer, request, userId, taskId);
 });
 

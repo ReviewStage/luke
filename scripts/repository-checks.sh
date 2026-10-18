@@ -264,6 +264,19 @@ if [[ -n "$ui_foreign_tokens" ]]; then
         "$ui_foreign_tokens" >&2
     exit 1
 fi
+# Nor does it draw with an app's Tailwind theme, which each app maps to a role
+# of its own (the site's card is its surface, the desktop's its sidebar): no
+# theme colour utility, and no `-(--name)` shorthand, which reads a property
+# past the `var(` check above. A component draws with its own `luke-*` classes.
+ui_theme_utilities=$(grep -rnaP --include='*.css' --include='*.ts' --include='*.tsx' \
+    '[\w\]]-\(--|(?<![\w-])(bg|text|border|fill|stroke|ring|outline|divide|shadow)-(background|foreground|card|popover|muted|primary|secondary|accent|destructive|attention|complete|border|input|ring)\b' \
+    "$LUKE_REPO_ROOT/packages/ui/src" |
+    grep -vE '\.test\.tsx?:|:[0-9]+:\s*(\*|//|/\*)' || true)
+if [[ -n "$ui_theme_utilities" ]]; then
+    printf 'error: @luke/ui draws with an app'"'"'s Tailwind theme (draw with a luke-* class over the --luke-* tokens):\n%s\n' \
+        "$ui_theme_utilities" >&2
+    exit 1
+fi
 
 # `@luke/panel` is the panel every client mounts, the desktop's window and the
 # web's page alike, so it reaches neither shell: no preload global, no alias of

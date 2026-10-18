@@ -3,11 +3,15 @@ import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automat
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -15,10 +19,12 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  DetailPage,
   ErrorState,
   IconButton,
   List,
   ListRow,
+  PAGE_FRAME,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -47,15 +53,11 @@ import {
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
-import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
-import { RelativeTime } from "../tasks/relative-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 
@@ -148,14 +150,14 @@ function PersonSection({
 /** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
 function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="home-section">
+    <section className="home-section">
       <div className="person-section-head">
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
           <Skeleton width={SKELETON_SECTION} />
         </Text>
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -164,7 +166,7 @@ function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
     <SectionSkeleton>
       <SkeletonRegion label={label}>
-        <ul className="sidebar-tasks">
+        <List label={label}>
           {SKELETON_ROWS.map(({ name, context }) => (
             <ListRow
               key={name}
@@ -173,7 +175,7 @@ function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
               meta={<Skeleton width={context} />}
             />
           ))}
-        </ul>
+        </List>
       </SkeletonRegion>
     </SectionSkeleton>
   );
@@ -481,137 +483,138 @@ function PersonColumn({
     <PersonHeadSkeleton />
   );
   return (
-    <section className="automations-view" aria-label={name ?? PROFILE}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">
-            {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
-          </h1>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label={name ?? PROFILE}
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">
+              {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
+            </h1>
+          </div>
+          <PersonActions
+            tasks={tasks}
+            userId={userId}
+            person={person}
+            shared={shared}
+            onShowTasks={showTasks}
+          />
+        </header>
+      }
+    >
+      <div className="person-top">{head}</div>
+      {tasks.listFailed ? (
+        <div className="home-note">
+          <ErrorState onRetry={tasks.onRetryList}>
+            {`${you ? "Your" : "Their"} tasks could not be read.`}
+          </ErrorState>
         </div>
-        <PersonActions
-          tasks={tasks}
-          userId={userId}
-          person={person}
-          shared={shared}
-          onShowTasks={showTasks}
-        />
-      </header>
-      <div className="home-scroll scroll-fade-top">
-        <div className="home-column person-column">
-          {head}
-          {tasks.listFailed ? (
-            <div className="home-note">
-              <ErrorState onRetry={tasks.onRetryList}>
-                {`${you ? "Your" : "Their"} tasks could not be read.`}
-              </ErrorState>
-            </div>
-          ) : !tasks.listRead && personPageEmpty(page) ? (
-            <RowsSkeleton label={`Reading ${theirs} tasks…`} />
-          ) : null}
-          {page.working.length === 0 ? null : (
-            <PersonSection title="Working now" count={page.working.length}>
-              {page.working.map((each) => (
-                <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
-              ))}
-            </PersonSection>
-          )}
-          {waiting.length === 0 ? null : (
-            <PersonSection
-              title={you ? "Waiting on you" : "Waiting on their answer"}
-              count={waiting.length}
-            >
-              {waiting.map((listed) => (
-                <InboxItemRow
-                  key={listed.item.id}
-                  listed={listed}
-                  chosen={false}
-                  now={now}
-                  models={tasks.agents.models}
-                  readerId={tasks.me}
-                  context={holderName(listed.holder)}
-                  onChoose={openItem}
-                />
-              ))}
-            </PersonSection>
-          )}
-          {page.created.length === 0 ? null : (
-            <PersonSection title={you ? "Created by you" : "Created"} count={page.created.length}>
-              {page.created.slice(0, PERSON_TASKS_SHOWN).map((task) => (
-                <RecentRow
-                  key={task.id}
-                  task={task}
-                  pictures={tasks.repositories.pictures}
-                  now={now}
-                  face={false}
-                  onOpen={() => tasks.onSelect(task.id)}
-                />
-              ))}
-            </PersonSection>
-          )}
-          {page.created.length > PERSON_TASKS_SHOWN && shared ? (
-            <p className="person-section-foot">
-              <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
-            </p>
-          ) : null}
-          {page.agents.length === 0 ? null : (
-            <PersonSection title="Agents" count={page.agents.length}>
-              {page.agents.map((each) => (
-                <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
-              ))}
-            </PersonSection>
-          )}
-          {automations.length === 0 ? null : (
-            <PersonSection title="Automations" count={automations.length}>
-              {automations.map((automation) => (
-                <AutomationRow
-                  key={automation.id}
-                  automation={automation}
-                  onOpen={() =>
-                    tasks.automationsView.onOpen({
-                      kind: AUTOMATIONS_PAGE.EDIT,
-                      automationId: automation.id,
-                    })
-                  }
-                />
-              ))}
-            </PersonSection>
-          )}
-          {read.failed ? (
-            <div className="home-note">
-              <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
-            </div>
-          ) : waiting.length === 0 && read.reading ? (
-            <SectionSkeleton>
-              <InboxListSkeleton />
-            </SectionSkeleton>
-          ) : null}
-          {theirAutomations.failed ? (
-            <div className="home-note">
-              <ErrorState onRetry={theirAutomations.onRetry}>
-                {`${you ? "Your" : "Their"} automations could not be read.`}
-              </ErrorState>
-            </div>
-          ) : theirAutomations.reading ? (
-            <RowsSkeleton label={`Reading ${theirs} automations…`} />
-          ) : null}
-          {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
-          {unnamed ||
-          !tasks.listRead ||
-          read.failed ||
-          read.reading ||
-          theirAutomations.failed ||
-          theirAutomations.reading ? null : personPageEmpty(page) &&
-            waiting.length === 0 &&
-            automations.length === 0 ? (
-            <div className="home-note">
-              <Text tone={TEXT_TONE.MUTED}>
-                {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-              </Text>
-            </div>
-          ) : null}
+      ) : !tasks.listRead && personPageEmpty(page) ? (
+        <RowsSkeleton label={`Reading ${theirs} tasks…`} />
+      ) : null}
+      {page.working.length === 0 ? null : (
+        <PersonSection title="Working now" count={page.working.length}>
+          {page.working.map((each) => (
+            <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
+          ))}
+        </PersonSection>
+      )}
+      {waiting.length === 0 ? null : (
+        <PersonSection
+          title={you ? "Waiting on you" : "Waiting on their answer"}
+          count={waiting.length}
+        >
+          {waiting.map((listed) => (
+            <InboxItemRow
+              key={listed.item.id}
+              listed={listed}
+              chosen={false}
+              now={now}
+              models={tasks.agents.models}
+              readerId={tasks.me}
+              context={holderName(listed.holder)}
+              onChoose={openItem}
+            />
+          ))}
+        </PersonSection>
+      )}
+      {page.created.length === 0 ? null : (
+        <PersonSection title={you ? "Created by you" : "Created"} count={page.created.length}>
+          {page.created.slice(0, PERSON_TASKS_SHOWN).map((task) => (
+            <RecentRow
+              key={task.id}
+              task={task}
+              pictures={tasks.repositories.pictures}
+              now={now}
+              face={false}
+              onOpen={() => tasks.onSelect(task.id)}
+            />
+          ))}
+        </PersonSection>
+      )}
+      {page.created.length > PERSON_TASKS_SHOWN && shared ? (
+        <p className="person-section-foot">
+          <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
+        </p>
+      ) : null}
+      {page.agents.length === 0 ? null : (
+        <PersonSection title="Agents" count={page.agents.length}>
+          {page.agents.map((each) => (
+            <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
+          ))}
+        </PersonSection>
+      )}
+      {automations.length === 0 ? null : (
+        <PersonSection title="Automations" count={automations.length}>
+          {automations.map((automation) => (
+            <AutomationRow
+              key={automation.id}
+              automation={automation}
+              onOpen={() =>
+                tasks.automationsView.onOpen({
+                  kind: AUTOMATIONS_PAGE.EDIT,
+                  automationId: automation.id,
+                })
+              }
+            />
+          ))}
+        </PersonSection>
+      )}
+      {read.failed ? (
+        <div className="home-note">
+          <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
         </div>
-      </div>
-    </section>
+      ) : waiting.length === 0 && read.reading ? (
+        <SectionSkeleton>
+          <InboxListSkeleton />
+        </SectionSkeleton>
+      ) : null}
+      {theirAutomations.failed ? (
+        <div className="home-note">
+          <ErrorState onRetry={theirAutomations.onRetry}>
+            {`${you ? "Your" : "Their"} automations could not be read.`}
+          </ErrorState>
+        </div>
+      ) : theirAutomations.reading ? (
+        <RowsSkeleton label={`Reading ${theirs} automations…`} />
+      ) : null}
+      {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
+      {unnamed ||
+      !tasks.listRead ||
+      read.failed ||
+      read.reading ||
+      theirAutomations.failed ||
+      theirAutomations.reading ? null : personPageEmpty(page) &&
+        waiting.length === 0 &&
+        automations.length === 0 ? (
+        <div className="home-note">
+          <Text tone={TEXT_TONE.MUTED}>
+            {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
+          </Text>
+        </div>
+      ) : null}
+    </DetailPage>
   );
 }
 

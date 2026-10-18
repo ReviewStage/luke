@@ -7,12 +7,14 @@ import { ACT_KIND } from "@luke/host/acts";
 import { askAct, tellAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import type { AppPlatform } from "@luke/panel/app-platform";
+import { applySessionReplay } from "./session-replay";
 
 /**
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,
  * and the browser are main's, reached over the act channel; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; and a page is drawn from the `luke-page:` scheme main serves.
+ * entries; a page is drawn from the `luke-page:` scheme main serves; and
+ * the session recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge
  * is installed as safely as after.
  */
@@ -26,4 +28,5 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),
+  applySessionReplay,
 };

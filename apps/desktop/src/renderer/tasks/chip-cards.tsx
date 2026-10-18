@@ -3,6 +3,7 @@ import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { AutomationDirectory, useAutomation } from "@luke/panel/automation-directory";
 import { MemberDirectory, useMemberDirectory, usePerson } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -12,7 +13,6 @@ import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref";
 import { useMentionedReader } from "./mentioned-agent-card";
 import { PageCard } from "./page-card";
-import { RelativeTime } from "./relative-time";
 import { useTaskMentions } from "./task-mentions";
 
 /**

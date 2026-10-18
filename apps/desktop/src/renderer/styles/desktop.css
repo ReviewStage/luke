@@ -158,8 +158,6 @@ body,
 }
 
 .desktop-shell {
-  /* What a pinned header paints behind itself is the window's ground here. */
-  --surface-fill: var(--luke-color-ground);
   display: grid;
   height: 100%;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -1478,8 +1476,8 @@ ul.actor-stack {
 }
 
 .section-icon-choice svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .section-icon-choice:hover {
@@ -1802,11 +1800,14 @@ ul.actor-stack {
 /* Buttons --------------------------------------------------------------------- */
 
 /* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
-   glyph size. */
-.icon-button-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
+   glyph size; in the `base` layer, so a shared component holding one sizes
+   it as its own. */
+@layer base {
+  .icon-button-glyph {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    flex: 0 0 auto;
+  }
 }
 
 /* The file tree's Retry, beside the words saying why it is empty
@@ -1915,10 +1916,8 @@ ul.actor-stack {
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
    looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
-   from; its presses claimed back from the toolbar's drag strip it sits
-   over; and a repository's picture in the glyph slot, at a menu glyph's
-   size, because its own rule here would otherwise win over the shared
-   layer. */
+   from, and its presses claimed back from the toolbar's drag strip it sits
+   over. */
 .luke-menu {
   z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
@@ -1926,12 +1925,6 @@ ul.actor-stack {
 
 .luke-menu[data-layer="dialog"] {
   z-index: calc(var(--luke-z-dialog) + 1);
-}
-
-.luke-menu-item-glyph .repository-picture {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -1990,9 +1983,12 @@ ul.actor-stack {
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
-   fills, while it holds one. */
-:is(.automations-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
+   fills, while it holds one. The Inbox's list is the body inside its
+   `ScrollArea`, so it stands at least the area's height to give the state
+   the room. */
+.inbox-tasks-body:has(.luke-empty-state) {
   display: flex;
+  min-height: 100%;
   flex-direction: column;
 }
 
@@ -2285,7 +2281,7 @@ ul.actor-stack {
 
 .desktop-document .plan-body {
   color: var(--luke-color-text-body);
-  font-size: 15px;
+  font-size: var(--luke-type-reading-size);
   line-height: var(--luke-type-reading-leading);
 }
 
@@ -2832,17 +2828,12 @@ ul.actor-stack {
   user-select: text;
 }
 
+/* A tool's page, inside the `ScrollArea` that scrolls it and takes the focus. */
 .integration-tool-detail-body {
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
 }
 
 .integration-tool-hints {
@@ -3102,10 +3093,12 @@ ul.actor-stack {
 }
 
 /* Under the strip, its list's head and its item's bar are the tab's own bar,
-   as tall as every other tab's (`.file-view-bar`), rather than a top row. */
+   as tall as every other tab's (`.file-view-bar`) and on its ground, rather
+   than a top row. */
 .desktop-task-main .inbox-view .desktop-toolbar {
   min-height: var(--secondary-bar-height);
   padding-block: var(--luke-space-4);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
@@ -3120,11 +3113,8 @@ ul.actor-stack {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-.inbox-tasks-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
+.inbox-tasks-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
@@ -3185,6 +3175,57 @@ ul.actor-stack {
   height: 12px;
 }
 
+/* The pictures and pages an Inbox item carries, drawn small under its row's
+   preview where the view's menu shows them (`inbox-row-media.tsx`): each a
+   tile of a page's shape, a picture filling it and a page laid out four
+   times its width and scaled down to it, as a page's card draws its
+   preview; a quiet ground holds its place until it lands. */
+.inbox-row-media-tile {
+  position: relative;
+  display: inline-flex;
+  height: var(--inbox-row-media-height);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+
+  --inbox-row-media-height: 48px;
+}
+
+.inbox-row-media-tile[data-missing] svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.inbox-row-media-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inbox-row-media-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.inbox-row-media-tile[data-loaded="true"] .inbox-row-media-frame {
+  opacity: 1;
+}
+
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title at a document heading's size,
    then a muted line of its agent, when it asked, and where it stands, over a
@@ -3242,6 +3283,7 @@ ul.actor-stack {
    name and when on one line and its words under it, and a line down from
    the face to the next comment's, as an issue's timeline joins them. */
 .inbox-thread {
+  --inbox-face: 20px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3250,7 +3292,6 @@ ul.actor-stack {
 }
 
 .inbox-comment {
-  --inbox-face: 20px;
   position: relative;
   display: grid;
   grid-template-columns: var(--inbox-face) minmax(0, 1fr);
@@ -3278,7 +3319,7 @@ ul.actor-stack {
    down from the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
-  padding: 0 0 var(--luke-space-20) calc(20px + var(--luke-space-12));
+  padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -3438,118 +3479,6 @@ ul.actor-stack {
 
 .inbox-field-composer .agent-composer-input {
   padding: var(--luke-space-6) var(--luke-control-inset);
-}
-
-/* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
-   ticked in the complete green, and under a hairline a pill saying it could
-   not be done, filled in the danger tint once picked. Each pick wears its
-   number at its right, as a choice's options do. */
-.inbox-todo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-}
-
-.inbox-todo-step {
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  gap: var(--luke-space-12);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-weight: var(--luke-weight-medium);
-  text-align: left;
-}
-
-.inbox-todo-words {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.inbox-todo-number {
-  flex: none;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-regular);
-}
-
-.inbox-todo-box {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  box-sizing: border-box;
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
-  margin-top: calc(
-    (1lh - var(--luke-space-16)) /
-    2
-  ); /* off-scale: centres the box on the first line */
-  border: 1.5px solid var(--luke-color-text-subtle); /* off-scale: a checkbox's ring, as a choice's is */
-  border-radius: var(--luke-space-4);
-}
-
-.inbox-todo-step[aria-checked="true"] > .inbox-todo-box {
-  border-color: var(--luke-color-complete);
-  background: var(--luke-color-complete);
-}
-
-.inbox-todo-step[aria-checked="true"] > .inbox-todo-box::after {
-  width: var(--luke-space-8);
-  height: var(--luke-space-4);
-  margin-top: -2px; /* off-scale: lifts the tick to the box's centre */
-  border-bottom: 2px solid var(--luke-color-ground);
-  border-left: 2px solid var(--luke-color-ground);
-  transform: rotate(-45deg);
-  content: "";
-}
-
-.inbox-todo-acts {
-  display: flex;
-  padding-top: var(--luke-space-8);
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.inbox-todo-pill {
-  display: inline-flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-}
-
-.inbox-todo-pill svg {
-  display: none;
-  width: 12px;
-  height: 12px;
-}
-
-.inbox-todo-pill[aria-checked="true"] {
-  border-color: var(--luke-color-danger);
-  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
-  color: var(--luke-color-danger-text);
-}
-
-.inbox-todo-pill[aria-checked="true"] svg {
-  display: block;
-}
-
-.inbox-todo-step:disabled,
-.inbox-todo-pill:disabled {
-  opacity: 0.4;
 }
 
 /* A settled form's values, a field a line in the form's order: its name in
@@ -3953,8 +3882,7 @@ ul.actor-stack {
 .factory-world-pipeline,
 .factory-world-home,
 .factory-world-label,
-.factory-world-card,
-.factory-world-scrubber {
+.factory-world-card {
   position: absolute;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
@@ -4149,49 +4077,6 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-space-6);
-}
-
-/* The scrubber stands at the foot, its track the window the snapshot looks
-   back on, each merge a tick in the shipped colour. */
-.factory-world-scrubber {
-  bottom: var(--luke-space-12);
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-4) var(--luke-space-12);
-  transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
-}
-
-.factory-world-track {
-  position: relative;
-  width: min(520px, 40vw);
-  height: 28px;
-}
-
-.factory-world-ticks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.factory-world-tick {
-  position: absolute;
-  top: 4px;
-  left: calc(var(--at) * 100%);
-  width: 1px;
-  height: 8px;
-  background: var(--world-shipped);
-}
-
-.factory-world-track > input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  accent-color: var(--luke-color-accent);
 }
 
 /* Factory campus ------------------------------------------------------------ */
@@ -4480,9 +4365,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Automations ---------------------------------------------------------------- */
 
-/* A window-wide place beside the sidebar, as Factory is: its toolbar, then
-   each owner's automations in a Settings card, at the measure a plan is read
-   at and centred in the room beside the sidebar, as a plan is. */
+/* A window-wide place beside the sidebar, as Factory is: its toolbar over
+   its page. The list is a `CollectionPage` of each owner's automations in a
+   Settings card, and an automation's page its toolbar over its setup (a
+   `DetailPage`) and its Runs panel beside it. */
 .automations-view {
   display: flex;
   min-width: 0;
@@ -4491,34 +4377,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.automations-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
-}
-
-.automation-group,
-.automations-skeleton {
-  max-width: var(--luke-page-measure);
-  margin-inline: auto;
-}
-
 .automation-group + .automation-group {
   margin-top: var(--luke-space-24);
 }
 
-/* The suggested automations, at the list's measure, a group's gap below it,
-   their heading a short step above the cards and inset a hair, as a
-   settings section's is. */
+/* The suggested automations, a group's gap below the list, their heading a
+   short step above the cards and inset a hair, as a settings section's is. */
 .automation-suggestions {
   display: flex;
   width: 100%;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
   gap: var(--luke-space-8);
-  margin-inline: auto;
 }
 
 .automation-suggestions-head,
@@ -4576,9 +4445,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text-muted);
 }
 
-/* Who owns it, never in doubt: the workspace in the text's own ink beside
-   its photo, Personal in the muted one, set in the label role, in a column
-   of its own so the owners line up down the card. */
+/* Who owns it, never in doubt: the workspace's photo or the maker's
+   picture beside its name, in the metadata's own type, in a column of its
+   own so the owners line up down the card. */
 .automation-owner {
   display: inline-flex;
   width: 112px; /* off-scale */
@@ -4586,10 +4455,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   align-items: center;
   gap: var(--luke-space-6);
   overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
   white-space: nowrap;
 }
 
@@ -4599,8 +4464,24 @@ polygon.factory-campus-edge[data-edge="selected"] {
   text-overflow: ellipsis;
 }
 
-.automation-owner[data-owner="workspace"] {
-  color: var(--luke-color-text);
+/* When it runs next, in a column of its own set against the switch, wide
+   enough for a date and a time, so a short "Off" beside a long date never
+   moves the owners out of line; a failure's mark stands inside it, before
+   the words. */
+.automation-row-next {
+  display: inline-flex;
+  width: 144px; /* off-scale: "Next Nov 17, 10:30 PM" and a failure's mark */
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-6);
+  overflow: hidden;
+}
+
+.automation-row-when {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The suggested automations, each a card of its own in a grid that wraps
@@ -4651,7 +4532,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-bottom: var(--luke-space-6);
 }
 
-.automation-suggestion-glyph {
+/* What fires a suggestion, or an automation in the list, on a tile, so a
+   row and a suggestion read as the same kind of thing. */
+.automation-suggestion-glyph,
+.automation-row-glyph {
   display: grid;
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */
@@ -4756,9 +4640,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .automation-editor {
   display: flex;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
-  margin-inline: auto;
   gap: var(--luke-space-12);
 }
 
@@ -4820,18 +4702,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
 }
 
-/* An automation's page: its setup at the measure a plan is read at, centred
-   in the room between the sidebar and its runs, then its runs in a panel of
-   their own on the right, each scrolling by itself. */
+/* An automation's page: its setup, a `DetailPage` in the room between the
+   sidebar and its runs, then its runs in a panel of their own on the right,
+   each scrolling by itself. */
 .automation-editor-layout {
   position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
-}
-
-.automation-editor-layout > .automations-scroll {
-  min-width: 0;
 }
 
 /* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
@@ -4861,11 +4739,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
+}
+
+/* The panel's head and runs, inside the `ScrollArea` that scrolls them, at
+   least its height so an empty state or a failure fills the room. */
+.automation-runs-body {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-16);
 }
 
 /* Chat ----------------------------------------------------------------------- */
@@ -4895,11 +4779,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-.chat-rail-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The rail's places, inside the `ScrollArea` that scrolls them. */
+.chat-rail-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
@@ -4980,11 +4861,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   white-space: nowrap;
 }
 
-.chat-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The stream's body, inside the `ScrollArea` that scrolls it. */
+.chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
@@ -5658,13 +5536,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* Onboarding ----------------------------------------------------------------- */
 
 /* The sign-in's whole window: the plain ground under a drag strip, the column
-   sitting a little above the middle. */
+   sitting a little above the middle. It stands at least the height of the
+   `ScrollArea` it scrolls in, so a short window scrolls it rather than
+   cutting it. */
 .desktop-onboarding {
   display: flex;
-  height: 100%;
+  min-height: 100%;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
   padding-bottom: 8vh;
 }
 
@@ -6133,13 +6011,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* With every tab closed, the panel offers all that the "+" menu offers, as
    the same rows under the same headings, at the top of its well, in a column
    300px wide at most. A plan offering more than the well holds scrolls it,
-   the scroller spanning the panel so its bar stands at the panel's edge. */
+   in a `ScrollArea` spanning the panel so its bar stands at the panel's
+   edge; this is the column inside it. */
 .side-panel-no-tabs {
   display: flex;
-  min-height: 0;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
     max(var(--luke-space-16), calc((100% - 300px) / 2 + var(--luke-space-16))); /* off-scale */
@@ -6536,17 +6412,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* Every card the window hangs in a pill's place is drawn from `@luke/ui`'s
-   hover card parts (hover-card.css); what is the window's own is the size a
-   state glyph takes on its head and on the line under its name. */
-.luke-hover-card-glyph {
-  --state-glyph-size: 14px;
-}
-
-.luke-hover-card-sub {
-  --state-glyph-size: 12px;
-}
-
 /* A card's corner leading with a pull request's mark sets it inline, so the
    corner keeps the head's baseline. */
 .card-corner-mark {
@@ -6619,8 +6484,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.tab-button > .luke-inline-edit {
+/* The field stands at a name's width whatever the label was, its own
+   width the place's to say (`@luke/ui`'s InlineEdit). */
+.tab-rename {
+  display: grid;
   width: 24ch;
+  min-width: 0;
 }
 
 /* The ×, a row's compact mark, stands at the pill's end, out of the
@@ -6726,7 +6595,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    way down as a command palette stands, holding the searchable menu's own
    search row and rows, the filters under the field and the keys' hints at
    its foot. The highlight is cmdk's `data-selected`, which the arrows and
-   the pointer both move, so a hover draws nothing of its own. */
+   the pointer both move, so a hover draws nothing of its own. The results
+   are `@luke/ui`'s `ComboboxListBox`, filling the card between the filters
+   and the foot and scrolling inside itself, so nothing here scrolls. */
 .command-palette-backdrop {
   position: fixed;
   z-index: var(--luke-z-dialog);
@@ -6814,19 +6685,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--luke-space-6);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.command-palette-list:focus-visible {
-  outline: none; /* no ring: the highlighted row marks it */
 }
 
 /* The keys' hints along the card's foot, each chord a step louder than the
@@ -6964,11 +6822,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The home page (`desktop-home.tsx`): one column at a reading measure, a
-   little above the window's middle, its rows the sidebar's own, each with
-   its context, the plan or the repository, in the faint ink between its name
-   and its time. The column is the scroller, so a long Recent never pushes
-   the greeting off a short window for good. */
+/* The home page (`desktop-home.tsx`), a `DetailPage`: its sections a
+   little apart, their rows the Inbox's and Recent's own, each with its
+   context, the plan or the repository, in the faint ink between its name
+   and its time. */
 .home {
   display: flex;
   min-height: 0;
@@ -6976,37 +6833,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.home-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
+/* The box the arrow keys find Home's rows in lays nothing out, so the page
+   fills the room as it would alone. */
+.home-rows {
+  display: contents;
 }
 
-.home-column {
-  display: flex;
-  width: min(600px, 100%);
-  flex-direction: column;
-  gap: var(--luke-space-32);
-  margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
-}
-
-/* The greeting and New task's composer under it (`new-task-composer.tsx`),
-   closer to each other than the sections below them, the card as wide as
-   the column, as the rows' own fills are. */
-.home-start {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-16);
-}
-
-.home-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-16);
-  padding: 0 var(--row-inset);
+/* New task's composer (`new-task-composer.tsx`) at the top of the page's
+   content, the card as wide as the content, the sections a little under it. */
+.home-composer {
+  margin-bottom: var(--luke-space-32);
 }
 
 .home-section {
@@ -7015,20 +6851,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-4);
 }
 
+.home-section + .home-section {
+  margin-top: var(--luke-space-32);
+}
+
 .home-section-title {
   display: flex;
   align-items: baseline;
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
 
-/* A section's note, nothing waiting or a read refused, on its rows' inset. */
+/* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
-  margin: var(--luke-space-4) var(--row-inset);
+  margin: var(--luke-space-4) 0;
 }
 
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
@@ -7119,8 +6958,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .home-row-picture svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .home-row-picture .repository-picture {
@@ -7128,12 +6967,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: 16px;
 }
 
-/* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. It stands
-   that column under its toolbar, not Home's way down. */
-.person-column {
-  margin-top: 0;
-  gap: var(--luke-space-24);
+/* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
+   Home's sections, headed by their face at the page's size beside their
+   name and who they are here, and each block a section's gap under the
+   head. Show all stands close under the section it lists in full. */
+.person-top ~ * {
+  margin-top: var(--luke-space-24);
+}
+
+.person-top ~ .person-section-foot {
+  margin-top: var(--luke-space-4);
 }
 
 .person-head {
@@ -7141,7 +6984,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-12);
-  padding: 0 var(--row-inset);
 }
 
 /* Note that a long name or email wraps anywhere rather than run past the
@@ -7168,32 +7010,32 @@ polygon.factory-campus-edge[data-edge="selected"] {
   align-items: baseline;
   gap: var(--luke-space-6);
   margin-bottom: var(--luke-space-2);
-  padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
 }
 
 /* The way to the rest of their tasks, standing under the section's rows. */
 .person-section-foot {
-  margin: calc(-1 * var(--luke-space-20)) 0 0;
+  margin-bottom: 0;
 }
 
 /* A new account's welcome: Luke's face on a tile and a title, centred over
-   the composer, the column standing in the middle of the window. */
-.home-scroll-welcome {
-  display: flex;
-  flex-direction: column;
-}
-
-.home-scroll-welcome .home-column {
-  margin: auto;
-}
-
+   New task's composer, the card as wide as the page's measure. */
 .home-welcome {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--luke-space-12);
+  padding: var(--luke-page-inset);
   text-align: center;
+}
+
+.home-welcome .home-composer {
+  width: min(var(--luke-page-measure), 100%);
+  margin: var(--luke-space-8) 0 0;
+  text-align: start;
 }
 
 .home-welcome-face {
@@ -7284,6 +7126,29 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .new-task-composer .agent-composer {
   padding: 0;
+}
+
+/* Where the card is too narrow for one row, as in a narrow window zoomed
+   in, the foot wraps: its chips and its presses each stand on a line of
+   their own, the presses kept at the right. */
+.new-task-composer :is(.prompt-input-footer, .prompt-input-tools) {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-8);
+}
+
+.new-task-composer .agent-composer-actions {
+  margin-left: auto;
+}
+
+/* The foot's short chips stand whole, so the repository's name is what
+   gives way, ellipsized, where the card is narrow. */
+:is(
+  .new-task-plan-toggle,
+  .new-task-composer .linear-issue-chip,
+  .new-task-composer .agent-model-chip
+) {
+  display: flex;
+  flex-shrink: 0;
 }
 
 /* The Linear issue picked, over the words inside the card: drawn as a
@@ -7517,12 +7382,6 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   from {
     transform: translateY(var(--luke-space-12));
   }
-}
-
-/* A card's rows (`@luke/ui`'s HoverCardRow) draw an agent's mark at a menu
-   glyph's size, as its tab does. */
-.luke-hover-card-row-glyph {
-  --state-glyph-size: var(--luke-menu-glyph);
 }
 
 /* A server's line at a card's head (`server-card.tsx`), set as a card's

@@ -22,6 +22,8 @@ import {
 } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useWindowFocused } from "@luke/panel/call/use-window-focused";
+import { useSidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { FeedbackDialog } from "@luke/panel/feedback-dialog";
 import { GitHubConnectProvider } from "@luke/panel/github-connect";
 import { useKeyboardModality } from "@luke/panel/keyboard-modality";
 import { useLastSignIn } from "@luke/panel/last-sign-in";
@@ -29,7 +31,9 @@ import { prefetchMarkdownHtmlParser } from "@luke/panel/markdown-html-parser";
 import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { OpenPersonProvider } from "@luke/panel/person-door";
 import { shownSettingsView } from "@luke/panel/settings/pages";
+import { followSettingsLink, useSettingsWorkspace } from "@luke/panel/settings-link";
 import { type AgentPlace, useAgentEndToasts } from "@luke/panel/tasks/agent-end-toast";
 import { useChatToasts } from "@luke/panel/tasks/chat-toast";
 import { useInboxSettlingOwner } from "@luke/panel/tasks/inbox-settling";
@@ -40,10 +44,13 @@ import {
 } from "@luke/panel/tasks/repository-remedy";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "@luke/panel/toast";
+import { useUpdatedToast } from "@luke/panel/update-toast";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
+import { useCaptionPresentation } from "@luke/panel/use-caption-presentation";
 import { useSignIn } from "@luke/panel/use-sign-in";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "@luke/panel/use-voice-view";
 import { useWindowFullScreen } from "@luke/panel/window-full-screen";
+import { useWindowZoom } from "@luke/panel/window-zoom";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -79,19 +86,11 @@ import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
-import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { FeedbackDialog } from "./feedback-dialog";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
-import { OpenPersonProvider } from "./person-door";
-import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
-import { useUpdatedToast } from "./update-toast";
-import { useCaptionPresentation } from "./use-caption-presentation";
-import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -159,7 +158,7 @@ export function App(): React.JSX.Element {
   const run = state?.run;
   useEffect(() => {
     if (!sessionReplay || !run) return;
-    applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
+    appPlatform().applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
   const prefetchEditorBundle = usePrefetchEditorBundle();

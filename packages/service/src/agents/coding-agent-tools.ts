@@ -62,6 +62,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   agentWorkspace,
@@ -89,7 +90,7 @@ import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import { cancelledTurn, standsStopped, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   AGENT_LIST_INPUT,
@@ -294,6 +295,10 @@ export const UPDATE_TASK_REFUSAL = {
   ARCHIVED:
     "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
     "the same call with archived false, or leave it as it is.",
+  AGENTS_WORKING:
+    "Not archived: an agent on that task is still starting or working, and archiving the task " +
+    "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
+    "idle, or ask the developer, who can archive it and stop them.",
   NOT_REACHABLE:
     "Not changed: the GitHub installation connected to the workspace does not reach that " +
     "repository; name one it reaches, or null for none.",
@@ -508,7 +513,9 @@ const START_AGENT_INPUT = Schema.Struct({
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
       "The name of a new task to make and start the agent on, as the developer would name it in " +
         "the sidebar: made in your workspace, on the repository you work in, owned by the " +
-        "developer you work for, with an empty plan, so give a prompt with it. Never with a taskId.",
+        "developer you work for, with an empty plan, so give a prompt with it. Never with a taskId, " +
+        "and only for work unrelated to the task you work on, where the developer asked for a new " +
+        "task, or where you work on no task.",
     ),
   ),
   prompt: Schema.optionalKey(
@@ -717,7 +724,12 @@ export const START_AGENT_TOOL = {
     "which is made in your workspace on the repository you work in, for a separate piece of " +
     "work that should stand as a task of its own in the developer's sidebar; exactly as the " +
     "developer's Start button would: on the task's plan itself with no prompt, or on the prompt given in the plan's " +
-    "place, with the note after either. This one call carries everything the agent is told as " +
+    "place, with the note after either. Start it on the task you work on, taskId and newTask " +
+    "left out, for any part of that task's work, even one that runs apart from yours, so its " +
+    "branch, pull request, and transcript stand under that task; name another task or a new " +
+    "one only for work unrelated to it, or where the developer asked for that; where you work " +
+    "on no task, name one, or a new one, for any work. " +
+    "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
     "the repository's default branch, or the branch named, which must already be on GitHub. " +
@@ -1195,11 +1207,10 @@ const newTaskOf = (caller: AgentCaller, name: string) =>
     return Result.succeed(yield* newTaskReading(userId, workspace.value, made.id, made.name));
   });
 
-/** Takes away a task made for a start that failed; one an agent stands on after all, a retry's that raced it, is left. */
+/** Takes away a task made for a start that failed, answering whether it went; one an agent stands on after all, a retry's that raced it, is left. */
 const discardNewTask = (userId: string, taskId: string) =>
   deleteTask(userId, taskId, { stoppedAgentIds: new Set(), beforeDelete: () => Effect.void }).pipe(
     Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(false)),
-    Effect.asVoid,
   );
 
 /**
@@ -1564,7 +1575,7 @@ export function runStartAgent(
   const ownTask = callerTask(caller);
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
-  // An agent a coding agent starts hears who started it, and its choice is no member's new default.
+  // An agent a coding agent starts hears who started it.
   const byAgent = caller.kind === AGENT_CALLER.AGENT;
   const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   const userId = callerUserId(caller);
@@ -1605,13 +1616,23 @@ export function runStartAgent(
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
+        ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       // A new task stands only under the agent its own call made (see above).
-      if (made !== undefined && (Result.isFailure(started) || !started.success.created)) {
-        yield* discardNewTask(userId, made.id);
-        const standing = yield* startedBefore(call, true);
-        if (Option.isSome(standing)) return standing.value;
+      if (made !== undefined) {
+        const discarding = Result.isFailure(started) || !started.success.created;
+        // Counted once it is known to stand: never where the discard took it back, and still where an agent kept it.
+        const stands = discarding ? !(yield* discardNewTask(userId, made.id)) : true;
+        if (stands) {
+          yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+            source: SERVER_TASK_SOURCE.AGENT,
+            has_issue: false,
+          });
+        }
+        if (discarding) {
+          const standing = yield* startedBefore(call, true);
+          if (Option.isSome(standing)) return standing.value;
+        }
       }
       if (Result.isFailure(started)) {
         const refusal = started.failure;
@@ -1856,12 +1877,18 @@ export function runUpdateTask(
         ...(repository === undefined ? undefined : { repository: repository.success }),
       };
       const already = changesStand(read.value.task, asWritten);
-      const changed = yield* updateTask(userId, taskId, asWritten).pipe(
+      // Note that the task's agents are archived with it, so one still at work, read under its
+      // conversation's lock, refuses the archive rather than being stopped from here.
+      const guard = changes.archived === true ? standsStopped : undefined;
+      const changed = yield* updateTask(userId, taskId, asWritten, undefined, guard).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
         Effect.catchTag("TaskArchived", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
+        ),
+        Effect.catchTag("TaskAgentUnstopped", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.AGENTS_WORKING)),
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);

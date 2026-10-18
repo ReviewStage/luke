@@ -7,6 +7,8 @@ import {
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   IconButton,
   SKELETON_SHAPE,
@@ -20,11 +22,10 @@ import {
 } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { RelativeTime } from "../tasks/relative-time";
-import { Tooltip } from "../tooltip";
 import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
+import { IssueCardPullRequest } from "./issue-work";
 
 /**
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
@@ -226,6 +227,7 @@ function IssueCard({
         <span className="sidebar-task-line">
           <span className="issue-row-identifier">{identifier}</span>
           <PriorityMark priority={issue.priority} />
+          <IssueCardPullRequest issue={issue} />
           <RelativeTime className="sidebar-task-time" at={issue.updatedAt} now={now} />
         </span>
         <span className="sidebar-task-name issue-row-title issue-card-title">{issue.title}</span>

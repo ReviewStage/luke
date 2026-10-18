@@ -1,7 +1,10 @@
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { FindScope } from "@luke/panel/find-in-tab";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { Tooltip } from "@luke/panel/tooltip";
 import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
@@ -12,9 +15,6 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
-import { FindScope } from "../find-in-tab";
-import { Tooltip } from "../tooltip";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
@@ -239,7 +239,7 @@ export function PagePane({
           </Tooltip>
           <div className="file-view-actions">
             {page.version > 1 ? (
-              <>
+              <div className="page-view-versions">
                 <VersionStep
                   label="Earlier version"
                   to={version > 1 ? version - 1 : undefined}
@@ -261,7 +261,7 @@ export function PagePane({
                   icon={<ChevronRightIcon aria-hidden="true" />}
                   onStep={step}
                 />
-              </>
+              </div>
             ) : null}
             <Tooltip label={toggleLabel}>
               <IconButton

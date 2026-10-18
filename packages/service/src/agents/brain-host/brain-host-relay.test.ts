@@ -30,7 +30,13 @@ import { stampedEveEvent } from "../../testing/eve-events.js";
 import { spokenTurn } from "../../testing/eve-turns.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
-import { memoryRelayState, type RelayStanding, redactCredentials, StreamRelay } from "./relay.js";
+import {
+  foldedQuietly,
+  memoryRelayState,
+  type RelayStanding,
+  redactCredentials,
+  StreamRelay,
+} from "./relay.js";
 
 /**
  * The relay from eve's stream into the store writer, over the real
@@ -491,6 +497,104 @@ it.effect(
         answer?.parts.flatMap((part) => (isToolUIPart(part) ? [part.toolCallId] : [])),
         ["call-1"],
       );
+      assert.deepEqual(refusals, []);
+    }),
+);
+
+/** One typed turn whose answer streams a fragment at a time: its reasoning, a call's input it never makes, and its words, the first sentence over two fragments. */
+function streamedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
+  const step = { turnId, sequence, stepIndex: 0 };
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: "how far along?" } }),
+    stamped({ type: "step.started", data: { ...step, modelId: "m" } }),
+    stamped({ type: "reasoning.appended", data: { ...step, reasoningDelta: "Check the " } }),
+    stamped({ type: "reasoning.appended", data: { ...step, reasoningDelta: "mailer." } }),
+    stamped({
+      type: "action.input.appended",
+      data: {
+        ...step,
+        callId: "call-1",
+        toolName: RUN_IN_REPOSITORY_TOOL.name,
+        inputTextDelta: '{"command":',
+        inputTextOffset: 0,
+      },
+    }),
+    stamped({ type: "message.appended", data: { ...step, messageDelta: "Halfway through" } }),
+    stamped({ type: "message.appended", data: { ...step, messageDelta: " the mailer. Then" } }),
+    stamped({ type: "message.appended", data: { ...step, messageDelta: " the" } }),
+    stamped({
+      type: "message.completed",
+      data: {
+        ...step,
+        finishReason: "stop",
+        message: "Halfway through the mailer. Then the tests.",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { ...step, finishReason: "stop", usage: { inputTokens: 10, outputTokens: 3 } },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+/** The transcript a conversation's rows tell, by role, each message's parts by kind and words. */
+async function transcript(target: ConversationTarget) {
+  const { turnRows, messageRows } = await rows(target);
+  return {
+    turns: turnRows.map((turn) => turn.status),
+    messages: messageRows.map((row) => ({
+      role: row.role,
+      parts: row.parts.map((part) => (part.type === "text" ? `text:${part.text}` : part.type)),
+    })),
+  };
+}
+
+it.effect(
+  "a fragment the store need hear nothing of is folded into the relay's state alone, a sentence's last fragment is relayed with the fragments folded before it, and the hook's way leaves the transcript relaying every event leaves",
+  () =>
+    Effect.promise(async () => {
+      const events = streamedTurn("turn_0", 0);
+      const quiet = await conversation();
+      const standing = standingFor(quiet, BRAIN_HOST_TURN.TYPED);
+      const folded: string[] = [];
+      const drafts: string[][] = [];
+      // As the store hook relays: only what is not folded quietly reaches the relay and the store.
+      for (const event of events) {
+        if (foldedQuietly(event, standing.state)) {
+          folded.push(event.type);
+        } else {
+          await database.run(relay.handle(event, standing));
+        }
+        if (event.type === "message.appended") {
+          const { messages } = await transcript(quiet);
+          drafts.push(
+            messages
+              .filter((message) => message.role === MESSAGE_ROLE.ASSISTANT)
+              .flatMap((message) => message.parts.filter((part) => part.startsWith("text:"))),
+          );
+        }
+      }
+
+      assert.deepEqual(folded, [
+        "reasoning.appended",
+        "reasoning.appended",
+        "action.input.appended",
+        "message.appended",
+        "message.appended",
+      ]);
+      // Nothing told while the first sentence formed; told whole once it finished, the folded fragment in it.
+      assert.deepEqual(drafts, [
+        [],
+        ["text:Halfway through the mailer."],
+        ["text:Halfway through the mailer."],
+      ]);
+
+      const whole = await conversation();
+      await play(events, standingFor(whole, BRAIN_HOST_TURN.TYPED));
+      assert.deepEqual(await transcript(quiet), await transcript(whole));
+      assert.deepEqual(standing.state.get(), { turns: {} });
       assert.deepEqual(refusals, []);
     }),
 );

@@ -32,7 +32,15 @@ import {
 } from "@luke/host/app-state";
 import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import {
+  CLOSED_TAB_STRIP,
+  type ClosedTab,
+  NO_CLOSED_TABS,
+  withClosedTab,
+  withUndrawnPassed,
+} from "@luke/panel/tasks/closed-tabs";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import {
   MAIN_TAB,
@@ -40,6 +48,20 @@ import {
   type MainTabsControl,
   useMainTabs,
 } from "@luke/panel/tasks/use-main-tabs";
+import { usePanelArrivals } from "@luke/panel/tasks/use-panel-arrivals";
+import {
+  drawsChanges,
+  drawsMacTerminal,
+  drawsSubagent,
+  drawsTerminal,
+  inColumn,
+  type PinnedTab,
+  SIDE_PANEL_TAB,
+  type SidePanelControl,
+  type SidePanelTab,
+  type TaskHolds,
+  useSidePanel,
+} from "@luke/panel/tasks/use-side-panel";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
@@ -128,16 +150,8 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import type { FixtureChat, Staged } from "./chat-fixture";
-import {
-  CLOSED_TAB_STRIP,
-  type ClosedTab,
-  NO_CLOSED_TABS,
-  withClosedTab,
-  withUndrawnPassed,
-} from "./closed-tabs";
 import { agentTabLabel } from "./coding-agent-model";
 import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
@@ -152,26 +166,12 @@ import {
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastTask } from "./use-last-task";
-import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type HistorySpot,
   type PlanHistoryControl,
   type PlanHistorySource,
   usePlanHistory,
 } from "./use-plan-history";
-import {
-  drawsChanges,
-  drawsMacTerminal,
-  drawsSubagent,
-  drawsTerminal,
-  inColumn,
-  type PinnedTab,
-  SIDE_PANEL_TAB,
-  type SidePanelControl,
-  type SidePanelTab,
-  type TaskHolds,
-  useSidePanel,
-} from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
 import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";
@@ -440,6 +440,9 @@ export type IssuesPlace =
   | { readonly kind: typeof ISSUES_PAGE.LIST }
   | { readonly kind: typeof ISSUES_PAGE.ISSUE; readonly issueId: string };
 
+/** The side panel beside the Issues pages: no task's, its one tab the issue the list peeked, which the list draws. */
+const ISSUES_PANEL = { id: undefined, holds: {}, bare: true, drawsOwn: true } as const;
+
 /** The list, where the Issues pages open with none asked for. */
 const ISSUES_LIST: IssuesPlace = { kind: ISSUES_PAGE.LIST };
 
@@ -451,6 +454,13 @@ interface IssuesViewControl {
   /** Opens the page asked for, the list where none is. */
   readonly onOpen: (place?: IssuesPlace) => void;
   readonly onClose: () => void;
+  /**
+   * The issue the list last peeked, which the window's side panel draws
+   * beside it while the panel is open, as the Inbox's chosen item's task's
+   * panel stands beside the Inbox; none before one is peeked.
+   */
+  readonly peeked: string | undefined;
+  readonly onPeek: (issueId: string | undefined) => void;
 }
 
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
@@ -554,14 +564,13 @@ export interface TasksControl {
     reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
   };
   /**
-   * What Luke's brain wrote and ran on the open task's calls,
-   * whether its call still stands, the turn the page before the oldest drawn
+   * What Luke's brain wrote and ran on the open task's calls, the turn the
+   * page before the oldest drawn
    * is read before where an older one stands, and that read.
    */
   work: {
     /** The open task's conversation with the brain as an agent's transcript is read; none before the first read lands. */
     conversation: TasksView["conversation"];
-    callLive: boolean;
     onLoadEarlier: () => Promise<void>;
     /** Reads the brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
     readWorker: TranscriptReader;
@@ -706,8 +715,6 @@ export interface TasksControl {
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
-    /** Keeps the composer chip's pick as the account's default, as Start's menu does. */
-    writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
@@ -1082,6 +1089,8 @@ export function useTasksTab(input: {
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
   // The chat profile opens Chat at launch over its fixture.
+  // The issue the Issues list last peeked, held for the window's life so the panel's toggle shows it again.
+  const [issuePeek, setIssuePeek] = useState<string | undefined>(undefined);
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
       ? { kind: STAND_IN.CHAT, place: FOR_YOU }
@@ -1372,7 +1381,7 @@ export function useTasksTab(input: {
   });
   // A subagent's tab is held to the task's work as an agent's is to its agents.
   const workers = useMemo(
-    () => workerCallIds(workRowsOf(viewed.conversation, false)),
+    () => workerCallIds(workRowsOf(viewed.conversation)),
     [viewed.conversation],
   );
   // An agent Luke started, archived, or brought back in the call moves in
@@ -1477,23 +1486,39 @@ export function useTasksTab(input: {
     () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
     [inboxAgent],
   );
+  // The Issues list's panel is its peek's, which the list draws itself, beside no task.
+  const issuesStand = standIn?.kind === STAND_IN.ISSUES;
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
-    inboxView !== undefined
-      ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
-      : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
-        : { id: pageAgent, holds: NO_HOLDS },
-    inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
-    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
-    inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
-    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
+    issuesStand
+      ? ISSUES_PANEL
+      : inboxView !== undefined
+        ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
+        : pageAgents === undefined
+          ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
+          : { id: pageAgent, holds: NO_HOLDS },
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxAgents
+        : (pageAgents ?? mainTabs.openAgents),
+    !issuesStand && inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    !issuesStand && inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxPageIds
+        : pageAgents === undefined
+          ? pages
+          : NO_IDS,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by.
-    inboxView !== undefined
-      ? inboxAgent === undefined
-        ? undefined
-        : inboxAgents
-      : (pageAgents ?? agents.agentIds),
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxAgent === undefined
+          ? undefined
+          : inboxAgents
+        : (pageAgents ?? agents.agentIds),
   );
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
@@ -2906,7 +2931,6 @@ export function useTasksTab(input: {
     // A fixture's open task is drawn mid-call, as its status and transcript are.
     work: {
       conversation: tasks.conversation,
-      callLive: fixture === undefined ? live : reported.callTaskId === tasks.activeTaskId,
       onLoadEarlier: () => act(ACT_KIND.TASKS_CONVERSATION_EARLIER),
       readWorker,
       reveal:
@@ -3059,6 +3083,8 @@ export function useTasksTab(input: {
         setStandIn({ kind: STAND_IN.ISSUES, place });
       }),
       onClose: guard(() => setStandIn(undefined)),
+      peeked: issuePeek,
+      onPeek: setIssuePeek,
     },
     callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,
@@ -3140,7 +3166,6 @@ export function useTasksTab(input: {
       models: agents.models,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
-      writeDefault: agents.writeDefault,
       onClose: () => setNewTaskAsk(undefined),
       linearIssuesIn,
     },

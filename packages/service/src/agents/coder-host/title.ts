@@ -7,15 +7,18 @@ import {
   listTurnOpeners,
   turnsBefore,
 } from "@luke/database/models/message-reads";
+import { nameUntitledTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { firstMessageParts } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { generateText, isTextUIPart, type LanguageModel } from "ai";
+import { generateText, isTextUIPart, type LanguageModel, type ToolSet } from "ai";
 import { Effect, Option, type Schema } from "effect";
-import { MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
+import { SqlClient } from "effect/sql";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -53,6 +56,16 @@ import { CURSOR_START } from "./transcript.js";
  * planning worker, is named by the same call over the task it was handed alone, and its title
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
+ *
+ * A task its member left untitled is named by the same call over its
+ * conversation with Luke too, under the brain's tools
+ * (`brain-host/task-title.ts`), a note the brain wrote down for itself
+ * being no word of the developer's.
+ *
+ * A task still standing untitled, as one started from a prompt alone does,
+ * takes the title its first agent to be titled is given, and keeps it: a
+ * name a member or Luke gave the task, before or meanwhile, is never
+ * written over, and a later agent's title never renames it.
  */
 
 const AGENT_TITLE = {
@@ -90,7 +103,11 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     .trim()
     .slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)
     .trim();
-  return title.length === 0 ? Option.none() : Option.some(title);
+  // A task's own sentinel names nothing, so a task it would name stays open to the next title.
+  if (title.length === 0 || title.toLowerCase() === UNTITLED_TASK_NAME.toLowerCase()) {
+    return Option.none();
+  }
+  return Option.some(title);
 }
 
 /** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
@@ -124,9 +141,11 @@ function originWords(origin: StoredAutomationOrigin): string {
   return [...subject, origin.prompt.trim()].join("\n").slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** A row of the developer's own words: a user row no chat notice wrote. */
+/** A row of the developer's own words: a user row no chat notice wrote, and no note the brain wrote down for itself. */
 function saidByDeveloper(message: StoredUIMessage | undefined): boolean {
   if (message?.role !== MESSAGE_ROLE.USER) return false;
+  if ("author" in message.metadata && message.metadata.author === MESSAGE_AUTHOR.BRAIN)
+    return false;
   return !("channel" in message.metadata && message.metadata.channel === MESSAGE_CHANNEL.CHAT);
 }
 
@@ -175,6 +194,7 @@ function answerToDeveloper<
  */
 function turnsNoticed(
   target: ConversationTarget,
+  tools: ToolSet,
   records: readonly { readonly message: StoredUIMessage; readonly turnId?: string }[],
 ): Effect.Effect<ReadonlySet<string>, QueryError | Schema.SchemaError, DatabaseServices> {
   const turnIds = records.flatMap((record) =>
@@ -183,7 +203,7 @@ function turnsNoticed(
       : [],
   );
   return Effect.map(
-    listTurnOpeners(target.userId, target.conversationId, CODER_TOOL_SET, [...new Set(turnIds)]),
+    listTurnOpeners(target.userId, target.conversationId, tools, [...new Set(turnIds)]),
     (openers) =>
       new Set(
         (openers.ok ? openers.value : []).flatMap((opener) =>
@@ -200,30 +220,27 @@ function turnsNoticed(
  * followed it, and the agent's latest answer, each by its speaker, a
  * message with no words left out.
  */
-function agentExchange(
+function conversationExchange(
   target: ConversationTarget,
+  tools: ToolSet,
   origin: StoredAutomationOrigin | null,
 ): Effect.Effect<string, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, conversationId } = target;
-    const opening = yield* listMessagesPast(
-      userId,
-      conversationId,
-      CODER_TOOL_SET,
-      CURSOR_START,
-      1,
-    );
+    const opening = yield* listMessagesPast(userId, conversationId, tools, CURSOR_START, 1);
     const recent = yield* listRecentMessages(
       userId,
       conversationId,
-      CODER_TOOL_SET,
+      tools,
       AGENT_TITLE.RECENT_MESSAGES,
     );
     const first = opening.read.ok ? opening.read.value[0] : undefined;
     const newest = recent.ok ? recent.value : [];
     const said = newest.findLast((record) => saidByDeveloper(record.message));
-    const answered = answerToDeveloper(newest, yield* turnsNoticed(target, newest));
+    const answered = answerToDeveloper(newest, yield* turnsNoticed(target, tools, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
+    // An answer to no word of the developer's, as to a wake the brain took before anyone spoke, names nothing.
+    if (origin === null && opened === undefined && said === undefined) return "";
     return [
       {
         speaker: SPEAKER.DEVELOPER,
@@ -268,6 +285,54 @@ function generateAgentTitle(
 }
 
 /**
+ * The title generated from a conversation's first exchange, as one of its
+ * first `CODER.TITLE_TURNS` turns asks for it: an agent's under the coder's
+ * tools, or a task's under the brain's (`brain-host/task-title.ts`), its
+ * automation's origin in its opening's place where one started it. Nothing
+ * for a conversation past those turns, one with no words in it yet, and a
+ * call that answered nothing, so the next turn asks again.
+ */
+export function titleOfConversation(
+  model: LanguageModel,
+  target: ConversationTarget,
+  tools: ToolSet,
+  origin: StoredAutomationOrigin | null = null,
+): Effect.Effect<Option.Option<string>, QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.gen(function* () {
+    const ran = yield* turnsBefore(
+      target.userId,
+      target.conversationId,
+      CODER.TITLE_TURNS,
+      undefined,
+    );
+    if (ran.earlier) return Option.none();
+    const exchange = yield* conversationExchange(target, tools, origin);
+    if (exchange.length === 0) return Option.none();
+    return yield* generateAgentTitle(model, exchange);
+  });
+}
+
+/**
+ * The agent's title filled, and its task named with it where the task still
+ * stands untitled, in one transaction, so a rename that fails takes the
+ * title back with it and the next words or turn's end ask again. Note that
+ * a title the developer set meanwhile is theirs for the agent alone, so the
+ * fill that finds one names no task.
+ */
+function titledWithTask(
+  userId: string,
+  agent: CodingAgent,
+  title: string,
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
+  const written = Effect.gen(function* () {
+    const filled = yield* fillCodingAgentTitle(userId, agent.id, title);
+    if (!filled || agent.taskId === null) return;
+    yield* nameUntitledTask(userId, agent.taskId, title);
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
+}
+
+/**
  * A subagent's title generated from the task it was handed and filled on
  * its child conversation, for a child that has none yet: a title already
  * standing is never asked for again, and a call that fails leaves the child
@@ -295,7 +360,8 @@ export function titleSubagent(
  * already standing, the developer's own included, is never asked for
  * again, an agent past those turns is left on the model's name, and an
  * exchange with no words in it asks nothing. A call that answers nothing
- * writes nothing, so the next words or turn's end ask again.
+ * writes nothing, so the next words or turn's end ask again. The title
+ * written also names the agent's task where it still stands untitled.
  */
 export function titleCodingAgent(
   model: LanguageModel,
@@ -304,17 +370,8 @@ export function titleCodingAgent(
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     if (agent.title !== null) return;
-    const ran = yield* turnsBefore(
-      target.userId,
-      target.conversationId,
-      CODER.TITLE_TURNS,
-      undefined,
-    );
-    if (ran.earlier) return;
-    const exchange = yield* agentExchange(target, agent.automationOrigin);
-    if (exchange.length === 0) return;
-    const title = yield* generateAgentTitle(model, exchange);
+    const title = yield* titleOfConversation(model, target, CODER_TOOL_SET, agent.automationOrigin);
     if (Option.isNone(title)) return;
-    yield* fillCodingAgentTitle(target.userId, agent.id, title.value);
+    yield* titledWithTask(target.userId, agent, title.value);
   });
 }

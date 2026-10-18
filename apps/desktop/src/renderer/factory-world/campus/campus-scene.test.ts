@@ -7,6 +7,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { CampusScene } from "@luke/panel/factory-world/campus/campus-scene";
 import { PICK_KIND, WORLD_LAYER, type WorldState } from "@luke/panel/factory-world/world";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -33,7 +34,6 @@ import { tasksControl } from "#testing/tasks-control";
 import { sideBundles } from "../../bundle-loader";
 import type { TasksControl } from "../../tasks/use-tasks-tab";
 import { FactoryWorldPage } from "../world-page";
-import { CampusScene } from "./campus-scene";
 
 /**
  * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request, with no Three.js loaded; a press on a building opening its card and its door to the task; a layer chosen alone hiding the rest; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.

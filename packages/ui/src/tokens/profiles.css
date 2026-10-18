@@ -47,7 +47,9 @@
   --luke-type-dialog-leading: 20px;
   --luke-type-title-size: 22px;
   --luke-type-title-leading: 30px;
-  /* Long-form and code text read line after line, set looser than a control's words. */
+  /* Long-form text read line after line, a document's body, a step larger
+     than a control's words and set looser, as code is. */
+  --luke-type-reading-size: 15px;
   --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);
@@ -83,6 +85,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-composer-width: 620px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
@@ -98,6 +101,10 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How deep a scroller's edge dissolves where content runs past it
+     (`ScrollArea`'s fade); the window's has stood a step off the scale. */
+  --luke-scroll-fade: 26px;
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
@@ -162,7 +169,9 @@
   --luke-type-dialog-leading: 28px;
   --luke-type-title-size: 28px;
   --luke-type-title-leading: 36px;
-  /* Long-form and code text read line after line, set looser than a control's words. */
+  /* Long-form text read line after line, at the body's own size and set
+     looser, as code is. */
+  --luke-type-reading-size: var(--luke-type-body-size);
   --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);
@@ -188,6 +197,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-composer-width: 620px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
@@ -204,6 +214,9 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
+  --luke-scroll-fade: var(--luke-space-24);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is

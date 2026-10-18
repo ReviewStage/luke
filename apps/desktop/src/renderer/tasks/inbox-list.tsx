@@ -3,10 +3,22 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { useAutomation } from "@luke/panel/automation-directory";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import {
+  INBOX_COLUMNS,
+  type InboxColumnsShown,
+  type InboxRowPresses,
+  listHeadControl,
+} from "@luke/panel/tasks/inbox-columns";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -19,7 +31,10 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
+  List,
   ListRow,
+  SCROLL_FADE,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -38,6 +53,7 @@ import {
   memberActor,
   personActor,
 } from "@luke/ui/actor-model";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
@@ -46,6 +62,7 @@ import {
   ClockIcon,
   FactoryIcon,
   HourglassIcon,
+  ImagesIcon,
   InboxIcon,
   ListIcon,
   MailIcon,
@@ -54,11 +71,9 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useId, useLayoutEffect, useRef } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useInboxItemDrafted } from "../composer-drafts";
-import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -68,16 +83,8 @@ import {
   type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups";
-import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
-import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { providerOf } from "./coding-agent-model";
-import {
-  INBOX_COLUMNS,
-  type InboxColumnsShown,
-  type InboxRowPresses,
-  listHeadControl,
-} from "./inbox-columns";
 import {
   EVERYONES,
   holderKey,
@@ -100,15 +107,15 @@ import {
   type InboxStatusGroup,
   type InboxStatusGroupKind,
   type InboxWhose,
+  inboxMedia,
   inboxPreview,
   isUnread,
   NEEDS_YOU,
   needsReader,
   readersItem,
 } from "./inbox-model";
+import { RowMedia, type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
-import { RelativeTime } from "./relative-time";
-import { markReadItem } from "./task-menu-items";
 import { cardTitle } from "./tool-call-model";
 
 /**
@@ -147,8 +154,10 @@ import { cardTitle } from "./tool-call-model";
  * activity first or the open items waiting longest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
- * choice checked, and under them Mark all as read, which clears the dots
- * alone. Under the head stand the tabs that choose what the list
+ * choice checked; Media previews, off until first pressed and checked while
+ * each row shows the pictures and pages its item carries, drawn small under
+ * its preview (`inbox-row-media.tsx`); and under them Mark all as read,
+ * which clears the dots alone. Under the head stand the tabs that choose what the list
  * holds, each counting its own of whose items Whose lists: Needs you, the reader's own open items,
  * its count in the attention mark's orange while anything needs them;
  * Unread, anyone's; All open; and Everything, settled items too. Every
@@ -179,6 +188,9 @@ const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
 
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
+
+/** What the view's menu offers to show or hide the media under each row's preview with. */
+const MEDIA_PREVIEWS = "Media previews";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -382,7 +394,9 @@ export function ItemMark({
  * task, names it in a chip before the preview instead (`chip`), its glyph
  * and its name cut short, so the title keeps its whole line. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
- * the list hands down a workspace to write it under.
+ * the list hands down a workspace to write it under. Where the list hands
+ * down its media reads (`media`), the row shows the pictures and pages its
+ * item carries under its preview (`inbox-row-media.tsx`).
  */
 export function InboxItemRow({
   listed,
@@ -394,6 +408,7 @@ export function InboxItemRow({
   context,
   face = true,
   chip = false,
+  media,
   ref,
   onChoose,
   onMark,
@@ -411,6 +426,8 @@ export function InboxItemRow({
   face?: boolean;
   /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
   chip?: boolean;
+  /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
+  media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   onChoose: (listed: InboxListed) => void;
@@ -430,6 +447,7 @@ export function InboxItemRow({
   const preview = inboxPreview(item, (member) =>
     actorName(personActor(member, directory.members, reader, directory.former)),
   );
+  const carried = useMemo(() => inboxMedia(item), [item]);
   const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -479,6 +497,11 @@ export function InboxItemRow({
         description={preview}
         lead={
           chip ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) } : undefined
+        }
+        attachments={
+          media === undefined || carried.length === 0 ? undefined : (
+            <RowMedia itemId={item.id} changedAt={item.updatedAt} media={carried} reads={media} />
+          )
         }
         meta={
           <span className="home-row-meta">
@@ -725,7 +748,7 @@ function whoseEntries(
 /**
  * The head's button that drops the view's menu: Group by and Sort, each a
  * submenu with its choice checked; Whose, Everyone, Mine, or a teammate by
- * face and name; and Mark all as read at its foot.
+ * face and name; Media previews; and Mark all as read at its foot.
  */
 function ViewOptions({
   shown,
@@ -779,6 +802,14 @@ function ViewOptions({
       items: whoseEntries(choices.whose, choices.onWhose, reader, readerId),
     },
   ];
+  const looks: MenuEntry[] = [
+    {
+      label: MEDIA_PREVIEWS,
+      icon: <ImagesIcon />,
+      checked: choices.mediaPreviews,
+      onSelect: () => choices.onMediaPreviews(!choices.mediaPreviews),
+    },
+  ];
   const markAll: MenuEntry[] =
     readAll === undefined
       ? []
@@ -799,7 +830,7 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={[view, whose, markAll].filter((group) => group.length > 0)}
+          groups={[view, whose, looks, markAll].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -974,7 +1005,7 @@ export function InboxListSkeleton({
 }): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_ITEMS}>
-      <ul className="sidebar-tasks">
+      <List label={TAB_WORDS.INBOX}>
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
@@ -994,7 +1025,7 @@ export function InboxListSkeleton({
             metaAt={LIST_ROW_META.TITLE}
           />
         ))}
-      </ul>
+      </List>
     </SkeletonRegion>
   );
 }
@@ -1131,6 +1162,9 @@ export function InboxList({
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
+  // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
+  const mediaReads = useRowMediaReads();
+  const media = head.view?.choices.mediaPreviews === true ? mediaReads : undefined;
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -1153,6 +1187,7 @@ export function InboxList({
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
+      media={media}
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}
       onMark={onMark}
@@ -1200,39 +1235,41 @@ export function InboxList({
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} />
-      <div
+      <ScrollArea
         id={panel}
-        className="inbox-tasks-scroll scroll-fade-top"
         role="tabpanel"
         aria-labelledby={showTabId(tabs, head.show.show)}
+        fade={SCROLL_FADE.START}
       >
-        {view.grouping === INBOX_GROUPING.NONE ? (
-          <ul className="sidebar-tasks">{view.items.map(row)}</ul>
-        ) : view.grouping === INBOX_GROUPING.PERSON ? (
-          view.groups.map(personSection)
-        ) : view.grouping === INBOX_GROUPING.STATUS ? (
-          view.groups.map(statusSection)
-        ) : (
-          view.groups.map(({ holder, items }) => {
-            const key = holderKey(holder);
-            const folded = head.view?.folds.folded(key) ?? false;
-            return (
-              <div key={key} className="sidebar-repository">
-                <HolderHeader
-                  holder={holder}
-                  folded={folded}
-                  count={needingYou(items)}
-                  onToggle={() => head.view?.folds.toggle(key)}
-                />
-                {folded ? null : (
-                  <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
-                )}
-              </div>
-            );
-          })
-        )}
-        {note}
-      </div>
+        <div className="inbox-tasks-body">
+          {view.grouping === INBOX_GROUPING.NONE ? (
+            <ul className="sidebar-tasks">{view.items.map(row)}</ul>
+          ) : view.grouping === INBOX_GROUPING.PERSON ? (
+            view.groups.map(personSection)
+          ) : view.grouping === INBOX_GROUPING.STATUS ? (
+            view.groups.map(statusSection)
+          ) : (
+            view.groups.map(({ holder, items }) => {
+              const key = holderKey(holder);
+              const folded = head.view?.folds.folded(key) ?? false;
+              return (
+                <div key={key} className="sidebar-repository">
+                  <HolderHeader
+                    holder={holder}
+                    folded={folded}
+                    count={needingYou(items)}
+                    onToggle={() => head.view?.folds.toggle(key)}
+                  />
+                  {folded ? null : (
+                    <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
+                  )}
+                </div>
+              );
+            })
+          )}
+          {note}
+        </div>
+      </ScrollArea>
       {columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );

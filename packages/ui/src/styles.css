@@ -10,6 +10,7 @@
 @import "./components/visually-hidden.css";
 @import "./components/anchored-popover/anchored-popover.css";
 @import "./components/layout/layout.css";
+@import "./components/scroll-area/scroll-area.css";
 @import "./components/list-row/list-row.css";
 @import "./components/menu/menu.css";
 @import "./components/nav-item/nav-item.css";
@@ -24,6 +25,7 @@
 @import "./components/breadcrumbs/breadcrumbs.css";
 @import "./components/button/button.css";
 @import "./components/card/card.css";
+@import "./chart/chart.css";
 @import "./components/folding-button/folding-button.css";
 @import "./components/chip/chip.css";
 @import "./components/collection-page/collection-page.css";

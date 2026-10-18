@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { githubPageOf, OpenPersonProvider } from "@luke/panel/person-door";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
@@ -12,7 +13,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { ActorRef } from "./actor-ref";
-import { githubPageOf, OpenPersonProvider } from "./person-door";
 
 /**
  * A press on a person goes where the window can take it: a member's page,

@@ -79,6 +79,7 @@
     "./schemas/plan-revision": "./src/schemas/plan-revision.js",
     "./schemas/plan-template-revision": "./src/schemas/plan-template-revision.js",
     "./schemas/preferences": "./src/schemas/preferences.js",
+    "./schemas/preview-fork": "./src/schemas/preview-fork.js",
     "./schemas/repository-pin": "./src/schemas/repository-pin.js",
     "./schemas/task-section": "./src/schemas/task-section.js",
     "./schemas/sandbox-terminal-lease": "./src/schemas/sandbox-terminal-lease.js",

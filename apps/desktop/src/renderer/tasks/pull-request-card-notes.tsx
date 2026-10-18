@@ -1,5 +1,6 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   PULL_REQUEST_MOMENT,
@@ -11,7 +12,6 @@ import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref";
 import { LinesChanged } from "./agent-published";
-import { RelativeTime } from "./relative-time";
 
 /**
  * pull-request-card-notes.tsx -- what a pull request's link card says under its title, as the workspace's GitHub App answered it: where it stands and its size, who opened it and how long ago it moved, its branches, its labels, and how many comments and commits it holds.

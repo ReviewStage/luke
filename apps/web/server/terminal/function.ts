@@ -1,4 +1,5 @@
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
+import { standReported } from "@luke/service/observability/sentry";
 import { relayDependencies } from "@luke/service/terminal/production";
 import {
   standTerminalRelay,
@@ -15,13 +16,15 @@ import { runWeb } from "../runtime.js";
  * the `ws` server and every connection's fiber belong to one scope nothing
  * but a disposed runtime closes, which is what a Vercel function gets. An
  * instance whose runtime cannot be built stands none, and its server keeps
- * refusing every upgrade with 503.
+ * refusing every upgrade with 503; either way what ended the relay is
+ * reported to Sentry.
  */
 
 let standing: TerminalRelayServer | undefined;
 
 function standService(relay: TerminalRelayServer): void {
-  void runWeb(
+  void standReported(
+    runWeb,
     Effect.scoped(
       Effect.gen(function* () {
         const dependencies = yield* relayDependencies;
@@ -33,7 +36,7 @@ function standService(relay: TerminalRelayServer): void {
         return yield* Effect.never;
       }),
     ),
-  ).catch(() => undefined);
+  );
 }
 
 /** The one server of this function instance, with its service stood on first use. */

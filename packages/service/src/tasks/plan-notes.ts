@@ -34,8 +34,8 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
  * A plan is one Markdown text (`@luke/features/plan-document`). Its callers
- * are a task call's notetaker (`tasks/plan-scribe.ts`) and a coding
- * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
+ * are Luke's own `edit_plan` (`agents/brain-host/plan-edit.ts`) and a coding
+ * agent's (`coder-host/plan-edit.ts`), whose models answer with
  * notes (`@luke/features/plan-template`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as
@@ -73,9 +73,10 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  *
  * An archived task takes no new edit or restore of the developer's, read
  * under the same lock as the save, so an older desktop or an archive racing
- * the edit cannot write it. The notes of a call or a coding agent already
- * running when the task was archived still land, as revisions in its
- * history: the archive takes no new work, and loses none under way.
+ * the edit cannot write it. The notes of a call already running when the
+ * task was archived, or of a coding agent's turn its archive stopped that eve
+ * has yet to end, still land, as revisions in its history: the archive takes
+ * no new work, and loses none under way.
  */
 
 /** The account and task a task call writes, as the service bound them. */

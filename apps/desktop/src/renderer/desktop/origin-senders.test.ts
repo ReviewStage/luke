@@ -12,6 +12,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import type { SidePanelTab } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -22,7 +23,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import type { SidePanelTab } from "../tasks/use-side-panel";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**

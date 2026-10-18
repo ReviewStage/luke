@@ -4,11 +4,18 @@
  * Sentry's Effect guide (docs.sentry.io/platforms/javascript/guides/effect)
  * composes `Sentry.effectLayer`, which starts the SDK and registers its
  * `ErrorReporter`, with the tracer, the logger, and the metrics layer. The web
- * functions take all of it. An eve root's process is started by eve's own
+ * functions take all of it, with the process's uncaught-exception and
+ * unhandled-rejection handlers the Effect SDK leaves out, and send what they
+ * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
+ * an instance as soon as it has answered. An eve root's process is started by eve's own
  * instrumentation (`instrumentation/sentry.ts`, Sentry's eve guide), which
  * runs before the agent loads, so its runtime takes everything but the
  * start: a second `init` would replace the client eve's integration hangs
  * off.
+ *
+ * One error is not sent: an agent's tool call that failed and was answered
+ * to the model as the call's result, which the AI SDK integration would
+ * capture as unhandled; it stays a breadcrumb and an errored span.
  *
  * Note that the options are Sentry's defaults: its `dataCollection` is left
  * as the SDK ships it, which `PRIVACY.md` describes. A deployment without
@@ -17,6 +24,7 @@
  */
 
 import * as Sentry from "@sentry/effect";
+import { addBreadcrumb, type ErrorEvent } from "@sentry/effect/server";
 import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
 
 const SENTRY_ENVIRONMENT = {
@@ -31,6 +39,9 @@ const UNNAMED_DEPLOYMENT = "development";
 
 /** Sentry's level for an error a class annotated with Effect's `ErrorReporter.severity`; `error` for the rest, as `effectLayer`'s own reporter does. */
 const SEVERITY_LEVEL = { Fatal: "fatal", Warn: "warning" } as const;
+
+/** How a capture at a promise edge is marked: unhandled, since nothing past the edge was there to handle it. */
+const PROMISE_EDGE_MECHANISM = { type: "luke.promise_edge", handled: false } as const;
 
 /** A scheduled job Sentry's Crons watches, created from its first check-in rather than by hand. */
 export interface CronMonitor {
@@ -54,6 +65,50 @@ const TRACES_SAMPLE_RATE = 0.1;
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
 
+/** The mechanism the AI SDK's Sentry integration captures a failed tool call under, and the tag naming the tool. */
+const AI_TOOL_ERROR = {
+  MECHANISM: "auto.vercelai.channel",
+  TOOL_TAG: "vercel.ai.tool.name",
+  CALL_TAG: "vercel.ai.tool.callId",
+} as const;
+
+/**
+ * An error event that is an agent's tool call failing, which the AI SDK
+ * answered the model with as the call's result: the AI SDK integration
+ * captures every one as unhandled (`captureToolError`), though the agent
+ * reads it and carries on, so it is an outcome of the turn rather than an
+ * error of the app.
+ */
+function isAnsweredToolError(event: ErrorEvent): boolean {
+  return (
+    event.tags?.[AI_TOOL_ERROR.TOOL_TAG] !== undefined &&
+    (event.exception?.values ?? []).some(
+      (value) => value.mechanism?.type === AI_TOOL_ERROR.MECHANISM,
+    )
+  );
+}
+
+/**
+ * Sends every error event but a tool call's failure answered to the model,
+ * which is kept as a breadcrumb instead, so a real error later in the same
+ * request still shows what the agent's tools met before it. The tool call's
+ * span keeps its error status and message, so Agent Tracing still shows it.
+ */
+function dropAnsweredToolErrors(event: ErrorEvent): ErrorEvent | null {
+  if (!isAnsweredToolError(event)) return event;
+  const exception = event.exception?.values?.at(-1);
+  addBreadcrumb({
+    category: "ai.tool",
+    level: "warning",
+    message: `${String(event.tags?.[AI_TOOL_ERROR.TOOL_TAG])} failed: ${exception?.type ?? "Error"}: ${exception?.value ?? ""}`,
+    data: {
+      tool: event.tags?.[AI_TOOL_ERROR.TOOL_TAG],
+      toolCallId: event.tags?.[AI_TOOL_ERROR.CALL_TAG],
+    },
+  });
+  return null;
+}
+
 /**
  * The options every process starts Sentry with. The release is the SDK's
  * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, which is the release the
@@ -68,6 +123,7 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
+    beforeSend: dropAnsweredToolErrors,
   };
 }
 
@@ -83,10 +139,56 @@ export const sentryLogger: Logger.Logger<unknown, void> = Sentry.SentryEffectLog
 /**
  * Sentry started on `options`, with its `ErrorReporter` registered: a route
  * that fails, a cause handed to `ErrorReporter.report`, and an effect under
- * `Effect.withErrorReporting` are each captured.
+ * `Effect.withErrorReporting` are each captured, and so is an exception or a
+ * rejection nothing in the process caught.
+ *
+ * Note that the two process handlers are added here rather than in
+ * `sentryOptions`, because the Effect SDK's server `init` starts only its
+ * context-lines and linked-errors integrations, while an eve root starts
+ * `@sentry/node`'s full defaults from those same options, which already hold
+ * both handlers.
  */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
-  return Layer.merge(Sentry.effectLayer(options), sentryTelemetry);
+  const started = Sentry.effectLayer({
+    ...options,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration(),
+      Sentry.onUnhandledRejectionIntegration(),
+    ],
+  });
+  return Layer.merge(started, sentryTelemetry);
+}
+
+/** How long an instance is kept awake after an answer for Sentry to send what it queued. */
+const REQUEST_FLUSH_MS = 2_000;
+
+/** A web function's handler, as the platform calls it. */
+type WebFetch = (request: Request) => Promise<Response>;
+
+/**
+ * A web function's handler as Sentry watches it. What it throws, such as a
+ * runtime whose layer could not be built, is captured before it is thrown on
+ * to the platform. Once it has answered or thrown, what Sentry queued is sent,
+ * and that sending is handed to `keepAwake` (Vercel's `waitUntil`) rather
+ * than awaited, so the answer leaves at once and the instance is not frozen
+ * before the report does.
+ */
+export function sentryReportedFetch(
+  fetch: WebFetch,
+  keepAwake: (sending: Promise<boolean>) => void,
+): WebFetch {
+  return async (request) => {
+    try {
+      return await fetch(request);
+    } catch (failure) {
+      Sentry.captureException(failure, {
+        mechanism: { type: "auto.function.vercel", handled: false },
+      });
+      throw failure;
+    } finally {
+      keepAwake(Sentry.flush(REQUEST_FLUSH_MS));
+    }
+  };
 }
 
 /**
@@ -113,6 +215,30 @@ export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
   ),
   sentryTelemetry,
 );
+
+/**
+ * A service a promise edge stands for its instance's life, with no request
+ * whose answer could carry its failure, so nothing it ends on is discarded.
+ * Once the runner runs it, what ends it is reported through the runtime's
+ * `ErrorReporter`, which captures a failure and a defect and passes over an
+ * interruption. A runner that rejects without running it, as one whose
+ * runtime could not be built does, is captured at the promise. The promise
+ * settles either way, so the edge that stood the service carries on as it
+ * would have without it.
+ */
+export function standReported<E, R>(
+  run: (service: Effect.Effect<never, E, R>) => Promise<never>,
+  service: Effect.Effect<never, E, R>,
+): Promise<void> {
+  let ran = false;
+  const reported = Effect.suspend(() => {
+    ran = true;
+    return Effect.withErrorReporting(service);
+  });
+  return run(reported).catch((error) => {
+    if (!ran) Sentry.captureException(error, { mechanism: PROMISE_EDGE_MECHANISM });
+  });
+}
 
 /** How long a run waits for its closing check-in to leave before it returns anyway. */
 const CHECK_IN_FLUSH_MS = 2_000;
