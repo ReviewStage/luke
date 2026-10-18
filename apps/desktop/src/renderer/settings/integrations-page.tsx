@@ -33,6 +33,9 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ConfirmDialog,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
   ProviderMark,
   SearchField,
   SettingsSection,
@@ -53,7 +56,6 @@ import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
@@ -523,7 +525,7 @@ function IntegrationRow({
   }, [cancelSignIn, connection, name]);
 
   /** A rename ended: a new label asked of the service, and the integrations read again so every surface draws it. */
-  const renamed = ({ name: label }: NameEdit) => {
+  const renamed = ({ value: label }: InlineEditEnd) => {
     setEditing(false);
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
@@ -592,18 +594,18 @@ function IntegrationRow({
               <ProviderMark provider={provider} />
             </span>
           ),
-          label:
-            editing && account !== undefined ? (
-              <TaskNameField
-                name={integrationAccountLabel(account)}
-                className="settings-input"
-                label={`${name} account name`}
-                maxLength={INTEGRATION_LABEL_MAX}
-                onEnd={renamed}
-              />
-            ) : (
+          label: (
+            <InlineEdit
+              value={account === undefined ? name : integrationAccountLabel(account)}
+              label={`${name} account name`}
+              editing={editing && account !== undefined}
+              maxLength={INTEGRATION_LABEL_MAX}
+              look={INLINE_EDIT_LOOK.INPUT}
+              onEnd={renamed}
+            >
               <Highlighted text={name} tokens={tools.tokens} />
-            ),
+            </InlineEdit>
+          ),
           description:
             connected && tools.all.length > 0 ? (
               <ToolsLine name={name} panelId={panelId} tools={tools} />

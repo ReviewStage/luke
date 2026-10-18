@@ -394,13 +394,16 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A row's title, as its ListRow draws it. */
+const ROW_TITLE = ".luke-list-row-title";
+
 /**
  * What marks a row as needing the developer: `*` where it is drawn bold and
  * wears the dot read as "Needs you", nothing where it wears neither, and
  * `?` where it wears only one, so a half-drawn mark fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
-  const bold = row.dataset.unread === "true";
+  const bold = row.closest("li")?.dataset.unread === "true";
   const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
   if (bold && dot) return "*";
   return bold || dot ? "?" : "";
@@ -410,11 +413,9 @@ function needsYouMark(row: HTMLElement): string {
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll(".sidebar-repository-name, .sidebar-task")].map((node) => {
-    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-task")) {
-      return `# ${node.textContent}`;
-    }
-    const name = node.querySelector(".sidebar-task-name")?.textContent ?? "";
+  return [...list.querySelectorAll(".sidebar-repository-name, li > button")].map((node) => {
+    if (!(node instanceof HTMLButtonElement)) return `# ${node.textContent}`;
+    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -429,8 +430,8 @@ function wordsOf(element: Element | null | undefined): string | null {
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === title,
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find(
+    (each) => each.querySelector(ROW_TITLE)?.textContent === title,
   );
   assert.ok(row, `no row for ${title}`);
   return row;
@@ -482,6 +483,14 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** Opens the fold holding what a settled item offered, by pressing its line. */
+function openOffered(within: ParentNode): void {
+  const line =
+    within.querySelector<HTMLElement>("[data-inbox-offered] > summary") ??
+    assert.fail("what was offered is folded");
+  act(() => line.click());
+}
+
 test("a settled choice folds what its agent offered to one line saying who picked which, which still holds every option with the pick marked, then the developer's answer as their comment: their pick as a chip over their note, under a line saying when and that it reached the agent", async () => {
   const { page } = mount();
   await settle();
@@ -498,6 +507,7 @@ test("a settled choice folds what its agent offered to one line saying who picke
     offered.querySelector("summary")?.textContent,
     "2 options · you picked Retry 3 times over an hour",
   );
+  act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
     [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
@@ -527,16 +537,15 @@ test("a settled choice folds what its agent offered to one line saying who picke
   assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
 });
 
-/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+/** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
 function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
   return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
-    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
     return [
       each.querySelector(".inbox-option-label > :first-child")?.textContent,
-      badge?.textContent ?? null,
-      badge?.dataset.settled ?? null,
+      head.endsWith("Recommended") ? "Recommended" : null,
     ];
   });
 }
@@ -615,8 +624,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const { page } = mount();
   await settle();
   assert.deepEqual(optionHeads(page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "false"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
 
   act(() => root?.unmount());
@@ -629,8 +638,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const again = mount();
   await settle();
   assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", null, null],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", null],
+    ["Retry once", null],
   ]);
 });
 
@@ -643,10 +652,11 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
+  openOffered(page);
 
   assert.deepEqual(optionHeads(page, "li.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "true"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
   const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
   assert.equal(
@@ -666,6 +676,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
 
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
+  openOffered(pane);
   const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
   assert.equal(wordsOf(picked), "Charles Pan’s pick");
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
@@ -2517,7 +2528,7 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Bump the Node image?",
   );
 });
@@ -2639,7 +2650,7 @@ test("a link to an item newer than its task's last read waits for the read of it
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Page on-call too?",
   );
 });
@@ -2688,7 +2699,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Retry the flaky job?",
   );
 });

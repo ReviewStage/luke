@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   openAsksOf,
   postAsk,
 } from "@luke/database/models/chat-store";
@@ -97,7 +97,7 @@ import {
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import { brainToolDeclarations, tasksModelOutput } from "./brain.js";
-import { ChatPostTally, lukeOn, type PlannerChatCall, runPlannerPost } from "./chat.js";
+import { type BrainChatCall, ChatPostTally, lukeOn, runBrainPost } from "./chat.js";
 import {
   claimRuntimeSession,
   conversationReachableBy,
@@ -894,7 +894,7 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
   await chatOn(plan.userId);
   const agent = await agentOn(plan.userId, plan.taskId);
   const channel = Option.getOrThrow(
-    await database.run(ensurePlanChannel(plan.userId, plan.taskId)),
+    await database.run(ensureTaskChannel(plan.userId, plan.taskId)),
   );
   const { organizationId } = channel;
   const member = Option.getOrThrow(
@@ -964,7 +964,7 @@ test("a post interrupted before it lands holds none of the turn's count", async 
   const plan = await taskConversation();
   const tally = new ChatPostTally();
   let opened = false;
-  const call: PlannerChatCall = {
+  const call: BrainChatCall = {
     luke: {
       ...lukeOn(plan.userId, plan.taskId),
       repository: null,
@@ -986,7 +986,7 @@ test("a post interrupted before it lands holds none of the turn's count", async 
 
   await database.run(
     Effect.gen(function* () {
-      const posting = yield* Effect.forkChild(runPlannerPost(call, picture));
+      const posting = yield* Effect.forkChild(runBrainPost(call, picture));
       while (!opened) yield* Effect.yieldNow;
       yield* Fiber.interrupt(posting);
     }).pipe(Effect.provide(NO_GITHUB)),

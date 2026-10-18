@@ -5,7 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   history,
   postMessage,
   roster,
@@ -505,12 +505,12 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
         const session = yield* startSession(host, userId, conversationId);
-        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
         const person = Option.getOrThrow(
           yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
         );
         // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
-        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.PLANNER, planId });
+        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.LUKE, planId });
         yield* postMessage(userId, channel.organizationId, {
           authorMemberId: person.id,
           to: { channelId: channel.id },
@@ -526,7 +526,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), []);
         const off = (yield* host.standingContext(standing)).text;
-        assert.equal(off.includes("[chat since the last task call]"), false, off);
+        assert.equal(off.includes("[chat since the last call]"), false, off);
 
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), [
@@ -535,7 +535,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           CHAT_TOOL.RESOLVE,
         ]);
         const on = (yield* host.standingContext(standing)).text;
-        assert.ok(on.includes("[chat since the last task call]"), on);
+        assert.ok(on.includes("[chat since the last call]"), on);
       }),
   );
 
@@ -549,7 +549,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
 
         const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);
 
-        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
         const { organizationId } = channel;
         const person = Option.getOrThrow(
           yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
@@ -558,7 +558,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           yield* history(userId, organizationId, person.id, { channelId: channel.id }),
         );
         const luke = (yield* roster(userId, organizationId)).find(
-          (member) => member.kind === MEMBER_KIND.PLANNER && member.planId === planId,
+          (member) => member.kind === MEMBER_KIND.LUKE && member.planId === planId,
         );
         assert.ok(luke);
         assert.equal(luke.handle, "luke");
@@ -576,7 +576,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           clientKey: randomUUID(),
         });
         assert.ok(Result.isSuccess(answered));
-        const line = `[chat since the last task call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
+        const line = `[chat since the last call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
         // A turn that fails took nothing in, so the turn after it is handed the same line.
         const failed = yield* failedTurn(host, session, "turn_1", CORRECTION);
         assert.ok(failed.includes(line), failed);
@@ -585,7 +585,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         // A turn that completes took it in, so the turn after is handed nothing of it.
         yield* brainTurn(host, session, "turn_3", CORRECTION);
         const after = (yield* host.standingContext(yield* admitted(host, session))).text;
-        assert.equal(after.includes("[chat since the last task call]"), false, after);
+        assert.equal(after.includes("[chat since the last call]"), false, after);
       }),
   );
 
@@ -657,7 +657,7 @@ it.layer(getTestDB())("the planning model where the account's preferences cannot
           false,
         );
         const opened = (yield* host.standingContext(standing)).text;
-        assert.equal(opened.includes("[chat since the last task call]"), false, opened);
+        assert.equal(opened.includes("[chat since the last call]"), false, opened);
         // A repository read runs and answers in its own words, here that the plan names no repository.
         const read = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
         assert.ok(read.startsWith(SCRIPTED_NOT_READ_REPLY), read);

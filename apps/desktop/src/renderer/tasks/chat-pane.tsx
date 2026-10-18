@@ -98,7 +98,7 @@ export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): R
       </span>
     );
   }
-  const initial = kind === MEMBER_KIND.PLANNER ? "L" : (who.name.at(0)?.toUpperCase() ?? "?");
+  const initial = kind === MEMBER_KIND.LUKE ? "L" : (who.name.at(0)?.toUpperCase() ?? "?");
   return (
     <span className="chat-mark" data-kind={kind ?? "unknown"} data-size={size} aria-hidden="true">
       {initial}

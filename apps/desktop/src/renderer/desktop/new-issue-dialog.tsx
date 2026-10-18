@@ -6,10 +6,9 @@ import {
   type IssueStatus,
 } from "@luke/features/issue-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { DIALOG_SIZE, Dialog } from "@luke/ui";
-import { useId, useRef, useState } from "react";
+import { BUTTON_VARIANT, Button, DIALOG_SIZE, Dialog, ErrorState } from "@luke/ui";
+import { useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
-import { BusyLabel } from "../spinner";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 
 /**
@@ -52,7 +51,6 @@ function NewIssueCard({
   const [creating, setCreating] = useState(false);
   const [refused, setRefused] = useState(false);
   const field = useRef<HTMLInputElement>(null);
-  const titleId = useId();
   const canCreate = !creating && title.trim() !== "";
 
   const create = () => {
@@ -72,17 +70,30 @@ function NewIssueCard({
   return (
     <Dialog
       size={DIALOG_SIZE.WIDE}
-      labelledBy={titleId}
+      title="New issue"
       busy={creating}
       initialFocus={field}
       onDismiss={close}
+      actions={
+        <>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={creating} onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+            disabled={title.trim() === ""}
+            busy={creating}
+            busyLabel="Creating"
+            onClick={create}
+          >
+            Create issue
+            <Shortcut chord={CREATE_CHORD} />
+          </Button>
+        </>
+      }
     >
       <div className="new-issue ph-no-capture">
-        <div className="new-plan-head">
-          <h2 id={titleId} className="confirm-dialog-title">
-            New issue
-          </h2>
-        </div>
         <input
           ref={field}
           type="text"
@@ -105,29 +116,7 @@ function NewIssueCard({
           <StatusMenu status={status} disabled={creating} onPick={setStatus} />
           <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
         </div>
-        {refused ? (
-          <p className="error-message" role="alert">
-            {UNFILED_LINE}
-          </p>
-        ) : null}
-        <div className="confirm-dialog-actions">
-          <button type="button" className="toolbar-button" disabled={creating} onClick={close}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-            aria-busy={creating}
-            disabled={!canCreate}
-            onClick={create}
-          >
-            <BusyLabel busy={creating} label="Creating">
-              Create issue
-            </BusyLabel>
-            <Shortcut chord={CREATE_CHORD} />
-          </button>
-        </div>
+        {refused ? <ErrorState>{UNFILED_LINE}</ErrorState> : null}
       </div>
     </Dialog>
   );

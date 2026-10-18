@@ -6,6 +6,7 @@ import {
   type CollectionState,
   EllipsisIcon,
   IconButton,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
   PAGE_FRAME,
@@ -83,7 +84,7 @@ function Plans({ state }: { state: CollectionState }): React.JSX.Element {
             title={plan.name}
             description={plan.detail}
             meta={plan.when}
-            current={open === plan.id}
+            current={open === plan.id ? LIST_ROW_CURRENT.ITEM : undefined}
             onPress={() => setOpen(plan.id)}
             actions={<IconButton icon={<EllipsisIcon />} label={`More for ${plan.name}`} />}
           />

@@ -1,6 +1,7 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+import { BUTTON_TYPE, BUTTON_VARIANT, Button } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { ReadFailed, SettingsGroup } from "./settings-group";
@@ -126,9 +127,15 @@ function MacRepositoryRow({
           disabled={busy}
           onChange={(event) => setCommand(event.target.value)}
         />
-        <button type="submit" className="primary-button" disabled={busy || !changed}>
+        <Button
+          type={BUTTON_TYPE.SUBMIT}
+          variant={BUTTON_VARIANT.PRIMARY}
+          busy={busy}
+          busyLabel="Saving"
+          disabled={!changed}
+        >
           Save
-        </button>
+        </Button>
       </form>
       {rejection === undefined ? null : (
         <p className="error-message" role="alert">

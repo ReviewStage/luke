@@ -12,6 +12,7 @@
 @import "./components/layout/layout.css";
 @import "./components/list-row/list-row.css";
 @import "./components/menu/menu.css";
+@import "./components/popover-panel/popover-panel.css";
 @import "./components/text/text.css";
 @import "./components/text-button/text-button.css";
 @import "./components/attachment-chip/attachment-chip.css";
@@ -26,14 +27,17 @@
 @import "./components/collection-page/collection-page.css";
 @import "./components/combobox/combobox.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
+@import "./components/data-table/data-table.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/dialog/dialog.css";
+@import "./components/disclosure/disclosure.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
 @import "./components/form-field/form-field.css";
 @import "./components/form-section/form-section.css";
 @import "./components/hover-card/hover-card.css";
 @import "./components/inline-edit/inline-edit.css";
+@import "./components/pagination/pagination.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";

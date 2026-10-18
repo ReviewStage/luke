@@ -27,7 +27,7 @@
 }
 
 .settings-card > .settings-row {
-  min-height: var(--settings-row-height);
+  min-height: var(--luke-settings-row-min-height);
   padding: var(--luke-space-12) var(--luke-space-16);
 }
 
@@ -39,7 +39,7 @@
    failed and its Retry, or the rows on their way. */
 .settings-card-line {
   display: flex;
-  min-height: var(--settings-row-height);
+  min-height: var(--luke-settings-row-min-height);
   align-items: center;
   gap: var(--luke-space-8);
   margin: 0;
@@ -455,18 +455,14 @@
 }
 
 /* Settings › Workspace's first row (`.workspace-identity`, its refusal
-   standing under it as API keys' does): the workspace's name, renamed in
-   place on the name's own line, the field's words where the name's stood
-   and the field standing in the label's 18px line, so the row keeps its height. */
-.workspace-name-input {
+   standing under it as API keys' does) and an integration account's row
+   (`.integration-row`): the name, renamed in place on the name's own line,
+   the field's words where the name's stood and the field standing in the
+   label's 18px line, so the row keeps its height. */
+:is(.workspace-identity, .integration-row) .luke-inline-edit {
   display: block;
-  height: 24px;
+  width: 100%;
   margin: -3px 0 -3px -9px;
-  padding: 0 var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  letter-spacing: 0;
 }
 
 /* Settings › Workspace › Members (`.workspace-member`, a role change's
@@ -550,7 +546,7 @@
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
 .shortcut-field[aria-pressed="true"] {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: -1px;
 }
 

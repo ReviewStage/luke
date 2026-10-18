@@ -21,7 +21,15 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { ProviderMark, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  ProviderMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -151,9 +159,9 @@ function TranscriptLink({
   const openLink = useOpenLink();
   if (href === undefined || !opensAsLink(href)) {
     return (
-      <span className="text-link-inert" title={href}>
-        {children}
-      </span>
+      <Tooltip label={href}>
+        <span className="text-link-inert">{children}</span>
+      </Tooltip>
     );
   }
   return (
@@ -1029,17 +1037,13 @@ function TurnFold({
   children: ReactNode;
 }): ReactNode {
   return (
-    <Fold className="transcript-fold" defaultOpen={open} data-turn-fold="">
-      <FoldSummary
-        className="transcript-fold-line"
-        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
-      >
-        <FoldChevron />
+    <Disclosure defaultOpen={open} data-turn-fold="">
+      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
         {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
-      </FoldSummary>
-      <FoldBody className="turn-fold-body">{children}</FoldBody>
-    </Fold>
+      </DisclosureSummary>
+      <DisclosureBody>{children}</DisclosureBody>
+    </Disclosure>
   );
 }
 

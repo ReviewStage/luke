@@ -70,8 +70,8 @@ export interface ChatAskAnswer {
   readonly reply: ChatReply;
 }
 
-/** What Luke is called wherever a plan's planner speaks. */
-const PLANNER_NAME = "Luke";
+/** What Luke is called wherever a task's Luke speaks. */
+const LUKE_NAME = "Luke";
 
 /** The order the rail lists channels in, by kind: `#general`, the plans', then the topics. */
 const CHANNEL_ORDER = {
@@ -162,15 +162,15 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its title, a plan's planner as Luke, a person by their handle, the reader by their own name. */
+/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their handle, the reader by their own name. */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
   const handle = member?.handle ?? "unknown";
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const planName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
   const name =
-    member?.kind === MEMBER_KIND.PLANNER
-      ? PLANNER_NAME
+    member?.kind === MEMBER_KIND.LUKE
+      ? LUKE_NAME
       : member?.kind === MEMBER_KIND.AGENT
         ? (agent?.title ?? handle)
         : memberId === chat.self && names.selfName !== undefined

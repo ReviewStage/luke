@@ -209,7 +209,7 @@ async function agentOn(userId: string, planId: string): Promise<StartedAgent> {
 }
 
 /** An agent started by the account in the workspace on no task, as an automation's run starts one, its session recorded. */
-async function planlessAgentOn(userId: string, workspaceId: string): Promise<StartedAgent> {
+async function tasklessAgentOn(userId: string, workspaceId: string): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
@@ -452,24 +452,24 @@ async function openWorkspaces() {
 
   const elsewhere = await database.run(openWorkspace(carol));
   await database.run(joinWorkspace(elsewhere, alice));
-  const elsewherePlan = await database.run(
+  const elsewhereTask = await database.run(
     createTask(carol, {
       organizationId: elsewhere,
       name: "Elsewhere",
       repository: RELAY_FULL_NAME,
     }),
   );
-  const otherWorkspaces = await agentOn(carol, elsewherePlan.id);
+  const otherWorkspaces = await agentOn(carol, elsewhereTask.id);
 
   const stranger = await database.createUser();
-  const strangersPlan = await database.run(
+  const strangersTask = await database.run(
     startTask(stranger, { name: "Stranger's plan", repository: RELAY_FULL_NAME }),
   );
-  const strangers = await agentOn(stranger, strangersPlan.id);
+  const strangers = await agentOn(stranger, strangersTask.id);
   return {
     workspaceId,
     elsewhere,
-    plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewherePlan.id },
+    plans: { invitations: invitations.id, billing: billing.id, elsewhere: elsewhereTask.id },
     agents: { caller, teammates, archived, otherWorkspaces, strangers },
   };
 }
@@ -1146,7 +1146,7 @@ test("start_agent from another agent refuses, in words the model acts on and sta
     ),
   );
   await refused({ from: { agentId: teammates.id } }, R.ARCHIVED);
-  const sweeper = await planlessAgentOn(teammates.userId, workspaceId);
+  const sweeper = await tasklessAgentOn(teammates.userId, workspaceId);
   await saidTurnOn(sweeper, "Swept.");
   await refused({ from: { agentId: sweeper.id } }, R.SOURCE_NO_TASK);
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
@@ -1366,7 +1366,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
   // An agent on no task is offered the tool too, and names the task it starts on.
-  const sweeper = await planlessAgentOn(caller.userId, workspaceId);
+  const sweeper = await tasklessAgentOn(caller.userId, workspaceId);
   const fromNoTask = await peerCaller(hostOf(true), sweeper, eve.services);
   assert.deepEqual(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none"), {
     status: ACTION_RESULT_STATUS.REJECTED,

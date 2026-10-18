@@ -28,6 +28,7 @@ import {
 import { useAct } from "../act";
 import { PictureBlock } from "../picture-block";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { useAddToPlan } from "./add-to-plan";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer";
 
@@ -287,26 +288,27 @@ function SetTile({
     ? { flex: "0 0 auto", width: `${String(Math.round(ratio * SET_ROW_PX.MANY))}px` }
     : { flexGrow: ratio, flexBasis: `${String(Math.round(ratio * SET_ROW_PX.FEW))}px` };
   return (
-    <button
-      type="button"
-      className="picture-set-tile"
-      style={shape}
-      aria-label={`Enlarge ${words}`}
-      title={many ? words : undefined}
-      onClick={onOpen}
-    >
-      <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
-        {shown.picture === undefined ? (
-          <TileFace state={undefined} words={words} />
-        ) : (
-          <TilePicture door={door} picture={shown.picture} words={words} />
+    <Tooltip label={many ? words : undefined}>
+      <button
+        type="button"
+        className="picture-set-tile"
+        style={shape}
+        aria-label={`Enlarge ${words}`}
+        onClick={onOpen}
+      >
+        <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
+          {shown.picture === undefined ? (
+            <TileFace state={undefined} words={words} />
+          ) : (
+            <TilePicture door={door} picture={shown.picture} words={words} />
+          )}
+          {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
+        </span>
+        {many || shown.caption === "" ? null : (
+          <span className="picture-set-caption">{shown.caption}</span>
         )}
-        {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-      </span>
-      {many || shown.caption === "" ? null : (
-        <span className="picture-set-caption">{shown.caption}</span>
-      )}
-    </button>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -413,24 +415,28 @@ function CallChip({
   const state = usePicture(door.owner, called.picture.id, door.read);
   if (state.kind !== PICTURE_STATE.READY) {
     return (
-      <li className="attached-file call-picture" data-state={state.kind} title={called.name}>
-        <span className="attached-file-face">
-          <TileFace state={state} words={called.name} />
-        </span>
-      </li>
+      <Tooltip label={called.name}>
+        <li className="attached-file call-picture" data-state={state.kind}>
+          <span className="attached-file-face">
+            <TileFace state={state} words={called.name} />
+          </span>
+        </li>
+      </Tooltip>
     );
   }
   return (
-    <li className="attached-file call-picture" title={called.name}>
-      <button
-        type="button"
-        className="attached-file-face"
-        aria-label={`Open ${called.name}`}
-        onClick={onOpen}
-      >
-        <img src={state.url} alt={called.name} />
-      </button>
-    </li>
+    <Tooltip label={called.name}>
+      <li className="attached-file call-picture">
+        <button
+          type="button"
+          className="attached-file-face"
+          aria-label={`Open ${called.name}`}
+          onClick={onOpen}
+        >
+          <img src={state.url} alt={called.name} />
+        </button>
+      </li>
+    </Tooltip>
   );
 }
 
@@ -471,19 +477,19 @@ export function CallPictures({
             onOpen={() => open(kept, each.picture.id)}
           />
         ) : (
-          <li
+          <Tooltip
             // Note that a picture's place among its call's is its identity: an answer never reorders.
             key={index}
-            className="attached-file call-picture"
-            data-state={each.omitted}
-            title={`${each.name}: ${NOT_KEPT}, ${sizeWords(each.byteCount)}`}
+            label={`${each.name}: ${NOT_KEPT}, ${sizeWords(each.byteCount)}`}
           >
-            <span className="attached-file-face">
-              <ImageOffIcon aria-hidden="true" />
-              <span className="attached-file-name">{NOT_KEPT}</span>
-              <span className="attached-file-size">{sizeWords(each.byteCount)}</span>
-            </span>
-          </li>
+            <li className="attached-file call-picture" data-state={each.omitted}>
+              <span className="attached-file-face">
+                <ImageOffIcon aria-hidden="true" />
+                <span className="attached-file-name">{NOT_KEPT}</span>
+                <span className="attached-file-size">{sizeWords(each.byteCount)}</span>
+              </span>
+            </li>
+          </Tooltip>
         ),
       )}
       {viewer}

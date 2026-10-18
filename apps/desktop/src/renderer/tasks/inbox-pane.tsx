@@ -24,11 +24,18 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
   BackIcon,
+  Badge,
   ChevronRightIcon,
+  DISCLOSURE_BODY,
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  FormField,
   GAP,
   LAYOUT_ELEMENT,
   Stack,
@@ -37,6 +44,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextField,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
@@ -472,8 +480,8 @@ function Blocks({
 /**
  * An option's head: its label, what is said of it beside the label, and,
  * where the agent recommended it, a badge at the option's top right, so it
- * stands in one place however the label wraps. The badge is filled with
- * the accent while the item waits and steps back to the quiet badge once
+ * stands in one place however the label wraps. The badge wears the
+ * working tone while the item waits and steps back to the quiet badge once
  * it is settled, when the recommendation is history rather than a call to
  * act. It is drawn inside the option alone, so wherever an option is drawn
  * it wears it.
@@ -498,9 +506,7 @@ function OptionHead({
         {children}
       </span>
       {recommended ? (
-        <span className="inbox-recommended" data-settled={String(settled)}>
-          Recommended
-        </span>
+        <Badge tone={settled ? BADGE_TONE.NEUTRAL : BADGE_TONE.WORKING}>Recommended</Badge>
       ) : null}
     </span>
   );
@@ -561,8 +567,13 @@ function FieldName({ field }: { field: InboxField }): React.JSX.Element {
   );
 }
 
+/** What a field says under its control where it must be filled. */
+function requiredWords(field: InboxField): string | undefined {
+  return field.required === true ? "Required" : undefined;
+}
+
 /** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
-function FormField({
+function InboxFormField({
   field,
   draft,
   disabled,
@@ -578,27 +589,42 @@ function FormField({
     onDraft(withValue(draft, field.label, next));
   switch (field.type) {
     case INBOX_FIELD.TEXT:
-    case INBOX_FIELD.NUMBER: {
-      const number = field.type === INBOX_FIELD.NUMBER;
       return (
-        <label className="inbox-field" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          <input
-            className="settings-input inbox-field-input"
-            type={number ? "number" : "text"}
-            maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-            value={value === undefined ? "" : String(value)}
-            disabled={disabled}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              if (typed === "") return set(undefined);
-              const parsed = event.currentTarget.valueAsNumber;
-              set(number ? (Number.isFinite(parsed) ? parsed : undefined) : typed);
-            }}
-          />
-        </label>
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <TextField
+                field={control}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(typed) => set(typed === "" ? undefined : typed)}
+              />
+            )}
+          </FormField>
+        </div>
       );
-    }
+    case INBOX_FIELD.NUMBER:
+      return (
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <input
+                id={control.id}
+                aria-describedby={control["aria-describedby"]}
+                className="settings-input inbox-field-input"
+                type="number"
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(event) => {
+                  const parsed = event.currentTarget.valueAsNumber;
+                  set(Number.isFinite(parsed) ? parsed : undefined);
+                }}
+              />
+            )}
+          </FormField>
+        </div>
+      );
     case INBOX_FIELD.SELECT:
       return (
         <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
@@ -639,7 +665,7 @@ export function FormFields({
   return (
     <Stack gap={GAP.CONTROL}>
       {form.fields.map((field) => (
-        <FormField
+        <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
@@ -766,13 +792,14 @@ function Offered({ item }: { item: InboxItem }): React.JSX.Element | null {
       ? `${optionsWords(options.length)} offered`
       : `${optionsWords(options.length)} · ${who} picked ${picked.join(", ")}`;
   return (
-    <details className="inbox-offered" data-inbox-offered="">
-      <summary>
-        <ChevronRightIcon />
+    <Disclosure data-inbox-offered="">
+      <DisclosureSummary>
         <span>{summary}</span>
-      </summary>
-      <Proposal item={item} />
-    </details>
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
+        <Proposal item={item} />
+      </DisclosureBody>
+    </Disclosure>
   );
 }
 
