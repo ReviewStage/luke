@@ -15,24 +15,35 @@ import {
   HOUR_MS,
   uuidOf,
 } from "@luke/ui/testing";
-import { type InstancedMesh, Matrix4, type Object3D, PerspectiveCamera, Scene } from "three";
+import {
+  type InstancedMesh,
+  Matrix4,
+  Mesh,
+  type Object3D,
+  PerspectiveCamera,
+  Points,
+  Scene,
+} from "three";
 import { test } from "vitest";
 import {
   PICK_KIND,
   type PickKind,
   type PickTarget,
   type WorldHost,
+  type WorldInstance,
   type WorldLayers,
   type WorldState,
 } from "../../world";
 import { world } from "./index";
 
 /**
- * station.test.ts -- the Orbital Station as picking sees it, with no WebGL: every zone, agent, shipped pull request, planned issue and defect it draws is there to pick, each layer switched off takes what it names out of reach, the station follows the zones as they change, and a still frame is the same on every redraw.
+ * station.test.ts -- the Orbital Station as picking and the renderer see it, with no WebGL: every zone, agent, shipped pull request, planned issue and defect it draws is there to pick, each layer switched off takes what it names out of reach, the station follows its zones and their dependencies as they change, a still frame is the same on every redraw, and its idle traffic keeps its own pace through hovers and scrubs.
  *
  * The host is a stand-in that keeps what the world registers, and asks of
  * it what the scene host's picking would: whether the object stands shown,
  * and, for an instanced mesh, which of its drawn instances stand for what.
+ * Where a signal is drawn but not picked, the conduits and the streaks of
+ * light, the test reads the scene the renderer would draw.
  */
 
 /** A repository of a core everything depends on, a domain between, a surface at the edge, and its scripts. */
@@ -253,4 +264,134 @@ test("held still, the crew stands in the same place on every redraw, and in ever
   assert.equal(before.length, AGENTS.length);
   assert.deepEqual(placesOf(first.registrations), before);
   assert.deepEqual(placesOf(created(WORLD, { still: true }).registrations), before);
+});
+
+/** Steps `instance` through `seconds` of motion at thirty frames a second from `from`, calling `between` before each frame; answers where it stopped. */
+function run(
+  instance: WorldInstance,
+  from: number,
+  seconds: number,
+  between: (at: number) => void = () => undefined,
+): number {
+  let at = from;
+  for (; at < from + seconds; at += 1 / 30) {
+    between(at);
+    instance.frame?.(1 / 30, at);
+  }
+  return at;
+}
+
+/** Each dependency the conduits join, as the paths of the zone depending and the zone depended on. */
+function conduitsDrawn(scene: Scene, zones: readonly { path: string }[]): string[][] {
+  const pairs = new Map<number, Set<number>>();
+  scene.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    if (!object.geometry.hasAttribute("aFrom") || !object.geometry.hasAttribute("aTo")) return;
+    const from = object.geometry.getAttribute("aFrom");
+    const to = object.geometry.getAttribute("aTo");
+    for (let vertex = 0; vertex < from.count; vertex += 1) {
+      const joined = pairs.get(from.getX(vertex)) ?? new Set<number>();
+      joined.add(to.getX(vertex));
+      pairs.set(from.getX(vertex), joined);
+    }
+  });
+  return [...pairs]
+    .flatMap(([from, tos]) =>
+      [...tos].map((to) => [zones[from]?.path ?? "", zones[to]?.path ?? ""]),
+    )
+    .sort((left, right) => left.join().localeCompare(right.join()));
+}
+
+/** How many points of light the scene draws: every point within a cloud's range not shrunk to nothing. */
+function pointsLit(scene: Scene): number {
+  let lit = 0;
+  scene.traverse((object) => {
+    if (!(object instanceof Points) || !shown(object)) return;
+    const size = object.geometry.getAttribute("size");
+    if (size === undefined) return;
+    const end = Math.min(
+      size.count,
+      object.geometry.drawRange.start + object.geometry.drawRange.count,
+    );
+    for (let point = object.geometry.drawRange.start; point < end; point += 1) {
+      if (size.getX(point) > 0) lit += 1;
+    }
+  });
+  return lit;
+}
+
+test("the conduits follow the dependencies: one dropped while the zones stand as they were is no longer drawn", () => {
+  const { host } = stubHost();
+  const instance = world.create(host);
+  instance.update(stateOf(WORLD));
+  const before = conduitsDrawn(host.scene, factoryWorldViewOf(WORLD).zones);
+  assert.ok(before.some(([from, to]) => from === "apps/desktop" && to === "packages/core"));
+
+  // Note that the desktop still reaches the core through the service, so every zone stands where it stood.
+  const loosened = factoryWorldOf({
+    ...WORLD,
+    zones: ZONES.map((zone) =>
+      zone.path === "apps/desktop"
+        ? { ...zone, dependsOn: ["packages/service", "packages/voice"] }
+        : zone,
+    ),
+  });
+  instance.update(stateOf(loosened));
+
+  const after = conduitsDrawn(host.scene, factoryWorldViewOf(loosened).zones);
+  assert.ok(!after.some(([from, to]) => from === "apps/desktop" && to === "packages/core"));
+  assert.ok(after.some(([from, to]) => from === "apps/desktop" && to === "packages/service"));
+});
+
+test("a planned ship sends its blueprint down while the developer's pointer moves over the station", () => {
+  const planned = factoryWorldOf({
+    zones: ZONES,
+    planned: [
+      factoryPlannedOf(31, { zonePaths: ["apps/desktop"], priority: LINEAR_PRIORITY.URGENT }),
+    ],
+  });
+  const { host } = stubHost();
+  const instance = world.create(host);
+  instance.update(stateOf(planned));
+  const resting = pointsLit(host.scene);
+  let brightest = resting;
+
+  run(instance, 0, 10, (at) => {
+    // Note that the pointer crosses a new zone every quarter second, and each crossing redraws the world.
+    if (Math.round(at * 30) % 8 === 0) {
+      const zone = ZONES[Math.round(at * 4) % ZONES.length]?.path ?? "apps/web";
+      instance.update(stateOf(planned, { hovered: { kind: PICK_KIND.ZONE, id: zone } }));
+    }
+    brightest = Math.max(brightest, pointsLit(host.scene));
+  });
+
+  assert.ok(brightest > resting, "a blueprint's streak of light was drawn");
+});
+
+test("back at now after a scrub, the cargo pods launch again from the oldest merge", () => {
+  const merges = [
+    factoryShippedOf(51, FACTORY_NOW - 30 * HOUR_MS, { areas: [areaOf("apps/web/src", 10)] }),
+    factoryShippedOf(52, FACTORY_NOW - 20 * HOUR_MS, { areas: [areaOf("apps/desktop/src", 10)] }),
+    factoryShippedOf(53, FACTORY_NOW - 2 * HOUR_MS, {
+      areas: [areaOf("packages/service/src", 10)],
+    }),
+  ];
+  const shipped = factoryWorldOf({ zones: ZONES, shipped: merges });
+  const { host, registrations } = stubHost();
+  const instance = world.create(host);
+  /** How many things stand to be picked for each merge: its light, and its pod while one flies. */
+  const picksOf = () =>
+    merges.map(
+      (merged) => pickable(registrations).filter((target) => target.id === merged.url).length,
+    );
+  instance.update(stateOf(shipped));
+  const stopped = run(instance, 0, 0.6);
+  assert.deepEqual(picksOf(), [2, 1, 1]);
+
+  instance.update(stateOf(shipped, { live: false }));
+  assert.deepEqual(picksOf(), [1, 1, 1]);
+  instance.update(stateOf(shipped));
+  run(instance, stopped, 0.6);
+
+  assert.deepEqual(picksOf(), [2, 1, 1]);
 });

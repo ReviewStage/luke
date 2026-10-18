@@ -1560,7 +1560,7 @@ function conduitsOf(
   return tubes.length === 0 ? undefined : merged(tubes);
 }
 
-/** Whether two views would build the same station: the same zones, in the same layers, rings, places and sizes. */
+/** Whether two views would build the same station: the same zones, in the same layers, places and sizes, joined by the same conduits. */
 export function sameStation(left: readonly ZoneView[], right: readonly ZoneView[]): boolean {
   return (
     left.length === right.length &&
@@ -1573,7 +1573,9 @@ export function sameStation(left: readonly ZoneView[], right: readonly ZoneView[
         zone.transitiveDependents === other.transitiveDependents &&
         zone.footprint === other.footprint &&
         zone.x === other.x &&
-        zone.y === other.y
+        zone.y === other.y &&
+        zone.dependsOn.length === other.dependsOn.length &&
+        zone.dependsOn.every((path, at) => other.dependsOn[at] === path)
       );
     })
   );

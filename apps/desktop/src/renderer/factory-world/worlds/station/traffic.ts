@@ -66,6 +66,8 @@ const LIGHTS_PER_MERGE = 4;
 const MAX_LIGHTS = FACTORY_WORLD_BOUNDS.MAX_SHIPPED * LIGHTS_PER_MERGE;
 const MAX_PODS = 28;
 const POD_TRAIL = 26;
+/** Seconds before the first pod launches. */
+const FIRST_POD = 0.4;
 /** Seconds between two pods while the scrubber rests at now. */
 const POD_EVERY = 1.7;
 const MAX_SHIPS = FACTORY_WORLD_BOUNDS.MAX_PLANNED;
@@ -236,7 +238,7 @@ export class Pods {
   readonly #tint = new Color();
   readonly #reentry = new Color(1, 0.45, 0.15);
   #cursor = 0;
-  #wait = 0.4;
+  #wait = FIRST_POD;
 
   constructor(
     signal: typeof SIGNAL_COLOR,
@@ -283,8 +285,11 @@ export class Pods {
     return pod === undefined ? undefined : { kind: PICK_KIND.SHIPPED, id: pod.entry.url };
   }
 
+  /** Lands every pod, and starts the next launches over from the oldest merge. */
   clear(): void {
     this.#pods.length = 0;
+    this.#cursor = 0;
+    this.#wait = FIRST_POD;
     this.#write();
   }
 
@@ -574,6 +579,8 @@ void main() {
     chosen: readonly PickTarget[],
   ): void {
     const above = new Map<ZoneBody, number>();
+    // Note that a ship keeps its countdown to its next blueprint across redraws, or a hover would postpone it forever.
+    const waiting = new Map(this.#ships.map((ship) => [ship.issue.identifier, ship.next]));
     this.#ships = planned.slice(0, MAX_SHIPS).map((issue, index) => {
       const targets = issue.zonePaths.flatMap((path) => bodies.get(path) ?? []);
       const first = targets[0];
@@ -591,7 +598,7 @@ void main() {
         scale: PRIORITY_SCALE[priority],
         phase: ((hashOf(issue.identifier) % 1000) / 1000) * TAU,
         every: PRIORITY_EVERY[priority],
-        next: 1 + (hashOf(issue.identifier) % 600) / 100,
+        next: waiting.get(issue.identifier) ?? 1 + (hashOf(issue.identifier) % 600) / 100,
         at: v3(),
         hologram: v3(),
       };
