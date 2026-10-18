@@ -15,9 +15,11 @@ import { Tooltip } from "../tooltip";
  * The main part starts one on the account's default model and effort, and
  * says which on hover: "Opus 5.5 High Fast". The chevron drops
  * the shared model menu (`../tasks/model-menu.tsx`), the default
- * checked; what the menu chooses is what the main part then starts on, for
- * as long as the button stands (it is drawn afresh for each task), and is
- * never kept as the account's default, which only Settings changes. The models and the default are read as the
+ * checked; what the menu chooses is what the main part then starts on while
+ * the plan's tab stays open (the button is drawn afresh for each task and
+ * each return to its plan, so a pick never outlives the Start it was made
+ * for by much), and is never kept as the account's default, which only
+ * Settings changes. The models and the default are read as the
  * button mounts and again as the menu opens, so the menu shows the catalog
  * as it stands and the default as Settings last wrote it. A
  * task with no repository has nothing for an agent to check out, so Start
@@ -80,7 +82,9 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     setOpen(false);
     if (unavailable || start.busy) return;
     // Note that only a pick names its choice; with none the service runs the default as it holds it.
-    start.onPress(picked === undefined ? undefined : chosen);
+    // A pick the catalog no longer settles is sent as picked, so the service refuses it rather than
+    // the agent quietly running on the default.
+    start.onPress(picked === undefined ? undefined : (chosen ?? picked));
   };
 
   const hint =

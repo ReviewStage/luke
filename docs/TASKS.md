@@ -290,7 +290,7 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   offers, grouped by provider with the newest first, each under its provider's
   mark and the default checked, with the efforts the chosen model lists and
   "Start with <model> · <effort>" pinned under the scrolling list. What the
-  chevron picks is what the main part starts on while the task is open, and
+  chevron picks is what the main part starts on while the plan's tab stays open, and
   never the account's default, which only Settings changes. A task with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
