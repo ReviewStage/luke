@@ -5,6 +5,7 @@ import {
   PRODUCT_EVENT_PROPERTY,
   PRODUCT_EXPERIMENT,
   PRODUCT_SETTING_VALUE,
+  productEventBuildFromWire,
   productEventFromWire,
 } from "./product-events.js";
 
@@ -69,4 +70,22 @@ test("an experiment's switch is counted by its key and on or off, and by nothing
     }),
     undefined,
   );
+});
+
+test("a batch's build is read as strictly as an event's, and is never a reason to refuse the batch", () => {
+  assert.deepEqual(
+    productEventBuildFromWire({ events: [], build: { app_version: "0.18.0", packaged: true } }),
+    { app_version: "0.18.0", packaged: true },
+  );
+  // A version that is not `x.y.z` and a flag that is not a boolean are left
+  // off rather than forwarded.
+  assert.deepEqual(
+    productEventBuildFromWire({
+      events: [],
+      build: { app_version: "/Users/me/luke", packaged: "yes", email: "me@luke.test" },
+    }),
+    {},
+  );
+  // Builds 0.7 to 0.17 send no build at all.
+  assert.deepEqual(productEventBuildFromWire({ events: [] }), {});
 });

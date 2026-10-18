@@ -29,6 +29,12 @@ export interface SessionReplayBootstrap {
    */
   appVersion: string;
   /**
+   * Whether this build runs from a packaged bundle rather than a development
+   * checkout, registered beside the version so a recording can be told apart
+   * the way the counted events are.
+   */
+  packaged: boolean;
+  /**
    * The account's opaque id, absent while signed out. It is the same id the
    * hosted endpoints resolve a bearer token to, so a recording lands on the
    * person the counted events already belong to — which is also what makes

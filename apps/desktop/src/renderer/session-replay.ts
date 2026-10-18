@@ -161,10 +161,11 @@ function scrubbedProperties(properties: Properties): Properties {
 }
 
 /**
- * The project the recording is filed under, fixed at build time. A build packaged without one records nothing —
- * the same kill switch the site's own counting has, so a local run or an
- * unconfigured build measures nothing rather than measuring into a stranger's
- * project.
+ * The project the recording is filed under, fixed at build time, and baked
+ * only into a Developer ID release build (`scripts/package-config.mjs`'s
+ * `replayProjectKeyDefine`). A build without one records nothing — the same
+ * kill switch the site's own counting has, so a local run or an unconfigured
+ * build measures nothing rather than measuring into production's project.
  */
 declare const PACKAGED_POSTHOG_PROJECT_API_KEY: string | undefined;
 
@@ -456,12 +457,15 @@ function optIn(posthog: PostHog): void {
  * Which build these came from, registered on every start rather than once at
  * init: stopping calls `reset`, which clears the registered properties along
  * with the person, so a recording resumed afterwards would otherwise say
- * nothing about the version it came from.
+ * nothing about the version it came from. `app_version` and `packaged` are
+ * the names the counted events are stamped with, so one filter separates
+ * both.
  */
 function registerBuild(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
   posthog.register({
     app_name: "desktop",
     app_version: bootstrap.appVersion,
+    packaged: bootstrap.packaged,
     platform: navigator.platform,
   });
 }

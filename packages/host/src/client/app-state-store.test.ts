@@ -178,6 +178,7 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.deepEqual(sessionReplayBootstrap(app.snapshot()), {
     permitted: true,
     appVersion: "1.2.3",
+    packaged: true,
     accountId: "person",
   });
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });

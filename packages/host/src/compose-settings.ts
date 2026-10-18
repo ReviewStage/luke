@@ -148,6 +148,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
+      packaged: identity.packaged,
       sends: runMode.sendsNetwork,
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
       refreshAccount: () => linked((links) => links.refreshAccount()),

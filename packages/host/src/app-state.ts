@@ -298,6 +298,7 @@ export function sessionReplayBootstrap(
   return {
     permitted: state.sessionReplay.permitted && !state.sessionReplay.halted,
     appVersion: state.run.appVersion,
+    packaged: state.run.packaged,
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
   };
 }

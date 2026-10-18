@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
-import { signingModeDefine } from "./package-config.mjs";
+import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -387,10 +387,11 @@ const rendererBuild = build({
     "process.env.IS_PREACT": '"false"',
     // The analytics project the screen recorder files into, from the
     // packaging environment rather than source, where secret scanners
-    // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
-    // kill switch the site's own counting has, so a local run or an
-    // unconfigured build cannot record into a stranger's project.
-    PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
+    // cannot tell a published project key from a real secret, and only for a
+    // Developer ID release build. A build without one records nothing at
+    // all — the same kill switch the site's own counting has, so a local run
+    // or an unconfigured build cannot record into production's project.
+    ...replayProjectKeyDefine(process.env),
     DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   },
 });
