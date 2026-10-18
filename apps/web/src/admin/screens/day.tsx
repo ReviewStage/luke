@@ -2,21 +2,21 @@ import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-
 import {
   BADGE_TONE,
   Badge,
-  GAP,
+  EmptyState,
   Inline,
-  Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  UserIcon,
 } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
-import { SectionHeading, StatCard } from "../charts/stat-card";
+import { SectionHeading, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
 import { BackLink } from "../chrome/back-link";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
-import { HideAdminsToggle, RefreshFailureNotice } from "../chrome/controls";
+import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
 import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
@@ -33,20 +33,16 @@ const TABLE_CELL = "px-5 py-3";
 const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
   (await response.json()) as AdminDayDetail;
 
-/** One day's own sections, under the heading the address already names. */
-function daySkeletonShapes(day: string): readonly SkeletonShape[] {
-  return [
-    {
-      kind: SKELETON_SHAPE.MASTHEAD,
-      title: formatDayHeading(day),
-      lines: [{ box: "h-5", bone: "h-3.5 w-56" }],
-    },
-    { kind: SKELETON_SHAPE.HEADING, label: "Hosted tier · this day" },
-    { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
-    { kind: SKELETON_SHAPE.HEADING, label: "Accounts active this day" },
-    { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
-  ];
-}
+/** What the day's page says it is, under the heading the address already names. */
+const DAY_DESCRIPTION = "One UTC day of hosted-tier calls";
+
+/** One day's own sections. */
+const DAY_SHAPES: readonly SkeletonShape[] = [
+  { kind: SKELETON_SHAPE.HEADING, label: "Hosted tier · this day" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
+  { kind: SKELETON_SHAPE.HEADING, label: "Accounts active this day" },
+  { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
+];
 
 /**
  * The day's accounts, busiest first as the endpoint orders them. The shared
@@ -63,11 +59,7 @@ function DayAccountsTable({
   onOpen: (id: string) => void;
 }): React.JSX.Element {
   if (accounts.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
-        <Text tone={TEXT_TONE.MUTED}>No hosted-tier calls recorded on this day.</Text>
-      </div>
-    );
+    return <EmptyState icon={<UserIcon />}>No hosted-tier calls recorded on this day.</EmptyState>;
   }
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -171,12 +163,13 @@ export function DayScreen({
     case "loading":
       return frame(
         <PageSkeleton
-          title="Day"
+          title={formatDayHeading(day)}
+          description={DAY_DESCRIPTION}
           account={account}
           onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
           back={{ tab: "dashboard", label: "Dashboard", onBack }}
-          shapes={daySkeletonShapes(day)}
+          shapes={DAY_SHAPES}
         />,
       );
     case "signed-out":
@@ -185,13 +178,7 @@ export function DayScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(
-        <AdminErrorCard
-          detail={adminReadFailure(state, DAY_ERROR)}
-          refreshing={refreshing}
-          onRetry={reload}
-        />,
-      );
+      return frame(<AdminErrorCard detail={adminReadFailure(state, DAY_ERROR)} onRetry={reload} />);
     case "ready": {
       const detail = state.value;
       const stillFilling = partialDayKey([{ day: detail.day }], detail.generatedAt) !== undefined;
@@ -199,48 +186,28 @@ export function DayScreen({
 
       return frame(
         <AdminPage
-          title="Day"
+          title={formatDayHeading(detail.day)}
+          description={`${DAY_DESCRIPTION}${stillFilling ? " — still filling" : ""}`}
           account={account}
           onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
         >
-          <RefreshFailureNotice
-            failure={state.refreshFailure}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-
-          <div
-            className="transition-opacity duration-150 data-[busy=true]:opacity-50"
-            data-busy={refreshing}
-            aria-busy={refreshing}
-          >
+          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <BackLink tab="dashboard" label="Dashboard" onBack={onBack} />
-
-            <div className="mt-6">
-              <Stack gap={GAP.TIGHT}>
-                <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
-                  {formatDayHeading(detail.day)}
-                </Text>
-                <Text tone={TEXT_TONE.MUTED}>
-                  One UTC day of hosted-tier calls{stillFilling ? " — still filling" : ""}
-                </Text>
-              </Stack>
-            </div>
 
             <SectionHeading>Hosted tier · this day</SectionHeading>
             {/* Note that each card shares the row from nothing up but never
             shrinks below its own figure, so the pair stacks once a figure
             needs the room rather than overflowing its card. */}
-            <div className="flex flex-wrap gap-3">
-              <div className="flex-1">
+            <div className={STAT_ROW}>
+              <div className={STAT_CELL}>
                 <StatCard
                   label="Active accounts"
                   value={formatNumber(detail.totals.accounts)}
                   hint={soFar}
                 />
               </div>
-              <div className="flex-1">
+              <div className={STAT_CELL}>
                 <StatCard
                   label="Hosted calls"
                   value={formatNumber(detail.totals.calls)}
@@ -261,7 +228,7 @@ export function DayScreen({
                 totalAccounts={detail.totals.accounts}
               />
             ) : null}
-          </div>
+          </Refreshing>
         </AdminPage>,
       );
     }

@@ -1,4 +1,15 @@
-import { BADGE_TONE, Badge, Inline, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  EmptyState,
+  IconButton,
+  Inline,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  UserIcon,
+} from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
   ACCOUNTS_SORT_KEY,
@@ -90,7 +101,6 @@ function AccountsHeader({
 function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
   return (
     <svg
-      className="size-4 shrink-0"
       viewBox="0 0 16 16"
       fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
@@ -144,11 +154,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
   const onSort = sortable ? toggleSort : undefined;
 
   if (rows.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
-        <Text tone={TEXT_TONE.MUTED}>{emptyText}</Text>
-      </div>
-    );
+    return <EmptyState icon={<UserIcon />}>{emptyText}</EmptyState>;
   }
   const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
@@ -213,19 +219,15 @@ export function AccountsTable<Row extends AccountsTableRow>({
               >
                 {favorite ? (
                   <td className="w-0 py-3 pr-0 pl-5">
-                    <button
-                      type="button"
-                      className="-my-2 -ml-3 flex size-11 cursor-pointer items-center justify-center text-muted-foreground opacity-60 transition-opacity duration-150 outline-offset-2 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
-                      data-favorite={favorite.starred(row)}
-                      aria-pressed={favorite.starred(row)}
-                      aria-label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+                    <IconButton
+                      icon={<StarIcon filled={favorite.starred(row)} />}
+                      label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+                      pressed={favorite.starred(row)}
                       onClick={(event) => {
                         event.stopPropagation();
                         favorite.onToggle(row.id, !favorite.starred(row));
                       }}
-                    >
-                      <StarIcon filled={favorite.starred(row)} />
-                    </button>
+                    />
                   </td>
                 ) : null}
                 <td className={TABLE_CELL}>

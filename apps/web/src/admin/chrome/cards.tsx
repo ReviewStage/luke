@@ -1,15 +1,19 @@
-import {
-  SOCIAL_PROVIDER,
-  SOCIAL_PROVIDER_LABEL,
-  type SocialProvider,
-} from "@luke/features/sign-in-provider";
-import { ProviderMark } from "@luke/ui";
-import { AUTH_BUTTON } from "@luke/ui/auth-surface";
+import type { SocialProvider } from "@luke/features/sign-in-provider";
+import { AuthPage, BUTTON_VARIANT, Button, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { useState } from "react";
 import { LukeMark } from "../../SiteChrome";
+import { ProviderChoices, SIGN_IN_FAILURE } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 import { SIGN_IN_CHOSEN } from "../prefs";
-import { PLAIN_BUTTON } from "./controls";
+
+/** Luke's mark at the head of the gate's cards. */
+function AdminMark(): React.JSX.Element {
+  return (
+    <span className="inline-flex w-13">
+      <LukeMark className="h-auto w-full" />
+    </span>
+  );
+}
 
 export function SignInCard(): React.JSX.Element {
   const [pending, setPending] = useState<SocialProvider>();
@@ -32,63 +36,31 @@ export function SignInCard(): React.JSX.Element {
   };
 
   return (
-    <main className="grid min-h-screen place-items-center p-6">
-      <section className="w-full max-w-[390px] rounded-lg border border-border bg-card px-8 py-12 text-center shadow-[0_24px_80px_rgba(0,0,0,0.42)]">
-        <div className="inline-flex w-13" aria-hidden="true">
-          <LukeMark className="h-auto w-full" />
-        </div>
-        <h1 className="mt-4 mb-2 text-[1.75rem] leading-[1.15] font-semibold">Luke admin</h1>
-        <div className="mt-8 mb-4 grid gap-3">
-          <button
-            type="button"
-            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
-            disabled={pending !== undefined}
-            onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
-          >
-            <ProviderMark provider={SOCIAL_PROVIDER.GOOGLE} className="size-[15px] shrink-0" />
-            {pending === SOCIAL_PROVIDER.GOOGLE
-              ? "Opening…"
-              : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE]}`}
-          </button>
-          <button
-            type="button"
-            className={`${AUTH_BUTTON} inline-flex items-center justify-center gap-2.5`}
-            disabled={pending !== undefined}
-            onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
-          >
-            <ProviderMark provider={SOCIAL_PROVIDER.GITHUB} className="size-[15px] shrink-0" />
-            {pending === SOCIAL_PROVIDER.GITHUB
-              ? "Opening…"
-              : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}
-          </button>
-        </div>
-        {failed ? (
-          <p className="m-0 text-attention" role="alert">
-            Sign-in could not start. Try again.
-          </p>
-        ) : null}
-      </section>
-    </main>
+    <AuthPage mark={<AdminMark />} title="Luke admin" error={failed ? SIGN_IN_FAILURE : undefined}>
+      <ProviderChoices pending={pending} onPress={(provider) => void begin(provider)} />
+    </AuthPage>
   );
 }
 
+/**
+ * A card standing alone on the page: `title`, what it means, and the one act
+ * that leads on from it.
+ */
 export function Centered({
   title,
-  children,
+  description,
+  action,
 }: {
   title: string;
-  children: React.ReactNode;
+  description: React.ReactNode;
+  action: { label: string; onPress: () => void };
 }): React.JSX.Element {
   return (
-    <main className="grid min-h-screen place-items-center p-6">
-      <section className="w-full max-w-[420px] rounded-lg border border-border bg-card px-8 py-12 text-center">
-        <div className="mx-auto inline-flex w-11" aria-hidden="true">
-          <LukeMark className="h-auto w-full" />
-        </div>
-        <h1 className="mt-4 mb-2 text-2xl font-semibold">{title}</h1>
-        <div className="text-muted-foreground">{children}</div>
-      </section>
-    </main>
+    <AuthPage mark={<AdminMark />} title={title} description={description}>
+      <Button variant={BUTTON_VARIANT.OUTLINE} onClick={action.onPress}>
+        {action.label}
+      </Button>
+    </AuthPage>
   );
 }
 
@@ -101,36 +73,35 @@ export function ForbiddenCard({
   onSignOut: () => void;
 }): React.JSX.Element {
   return (
-    <Centered title="Not authorized">
-      {email ? `${email} does not` : "This account does not"} have the{" "}
-      <code className="font-mono">admin</code> role. It is set in the database.
-      <div className="mt-6">
-        <button type="button" className={PLAIN_BUTTON} onClick={onSignOut}>
-          Sign out
-        </button>
-      </div>
-    </Centered>
+    <Centered
+      title="Not authorized"
+      description={
+        <>
+          {email ? `${email} does not` : "This account does not"} have the{" "}
+          <code className="font-mono">admin</code> role. It is set in the database.
+        </>
+      }
+      action={{ label: "Sign out", onPress: onSignOut }}
+    />
   );
 }
 
-/** The failed read's own card, with the retry every screen offers on it. */
+/**
+ * The failed read's own region, with the Retry every screen offers on it.
+ * The region is the page's `main`, as a loaded page's own root is.
+ */
 export function AdminErrorCard({
   detail,
-  refreshing,
   onRetry,
 }: {
   detail: string;
-  refreshing: boolean;
   onRetry: () => void;
 }): React.JSX.Element {
   return (
-    <Centered title="Could not load">
-      {detail}
-      <div className="mt-6">
-        <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
-          {refreshing ? "Trying…" : "Try again"}
-        </button>
-      </div>
-    </Centered>
+    <main className="flex min-h-0 flex-1 flex-col">
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+        {detail}
+      </ErrorState>
+    </main>
   );
 }

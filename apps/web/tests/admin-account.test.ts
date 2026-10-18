@@ -141,8 +141,8 @@ function press(target: Element, init: MouseEventInit = {}): boolean {
 test("a loaded account names itself, marks an admin in words, and says how it signs in", async () => {
   const { page } = await openAccount(answer(detail()));
 
-  expect(headings(page, "h1")).toEqual(["Account", "Ada Lovelace"]);
-  expect(page.textContent).toContain("Ada LovelaceAdmin");
+  expect(headings(page, "h1")).toEqual(["Ada Lovelace"]);
+  expect(page.textContent).toContain("ada@example.testAdmin");
   expect(page.textContent).toContain("ada@example.test");
   expect(page.textContent).toContain("Joined Jan 5, 2026 · signs in with GitHub, Google");
 });

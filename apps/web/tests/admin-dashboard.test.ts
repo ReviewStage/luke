@@ -11,7 +11,9 @@ import type { AdminRead } from "../src/admin/use-admin-read";
  * own headings, loading or loaded, and reads every metric and every health
  * check in words: each card's figure under its name, each integration's
  * state beside it, the database's reachability with its probe time, and the
- * analytics processor as a link only where the deployment names one.
+ * analytics processor as a link only where the deployment names one. A
+ * failed read, first or refreshing, says so with Retry, and the header's
+ * window and hide-admins controls hand their choice up.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
@@ -64,8 +66,11 @@ function metrics(overrides: Partial<AdminMetrics> = {}): AdminMetrics {
   };
 }
 
-function ready(value: AdminMetrics): AdminRead<AdminMetrics> {
-  return { status: "ready", value, question: "", refreshFailure: undefined };
+function ready(
+  value: AdminMetrics,
+  refreshFailure: string | undefined = undefined,
+): AdminRead<AdminMetrics> {
+  return { status: "ready", value, question: "", refreshFailure };
 }
 
 let root: Root | undefined;
@@ -75,7 +80,8 @@ afterEach(() => {
   root = undefined;
 });
 
-function render(state: AdminRead<AdminMetrics>): HTMLElement {
+/** The dashboard in `state`, recording what its controls hand up into `heard`. */
+function render(state: AdminRead<AdminMetrics>, heard: string[] = []): HTMLElement {
   const container = document.createElement("div");
   document.body.replaceChildren(container);
   root = createRoot(container);
@@ -85,14 +91,14 @@ function render(state: AdminRead<AdminMetrics>): HTMLElement {
         read: {
           state,
           refreshing: false,
-          reload: () => undefined,
+          reload: () => heard.push("reload"),
           withdraw: async () => undefined,
           revise: () => undefined,
         },
         hideAdmins: false,
-        onHideAdminsChange: () => undefined,
+        onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
         windowDays: 7,
-        onWindowDaysChange: () => undefined,
+        onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
         account: undefined,
         onSignOut: async () => undefined,
         onOpenAccount: () => undefined,
@@ -175,4 +181,56 @@ test("reliability links the analytics processor only where the deployment names 
       (anchor) => anchor.textContent === "the analytics processor",
     ),
   ).toBe(false);
+});
+
+/** The button whose words are `words`. */
+function button(page: HTMLElement, words: string): HTMLButtonElement {
+  const found = Array.from(page.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent === words,
+  );
+  if (found === undefined) throw new Error(`no button reading ${words}`);
+  return found;
+}
+
+test("a refresh that failed says so over the answer still shown, and Retry reads again", () => {
+  const heard: string[] = [];
+  const page = render(ready(metrics(), "The metrics endpoint did not answer."), heard);
+
+  expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+    "Refresh failed. Still showing the earlier answer. The metrics endpoint did not answer.",
+  );
+  expect(cardOf(page, "Total accounts")).toBe("Total accounts1,234");
+  act(() => button(page, "Retry").click());
+  expect(heard).toEqual(["reload"]);
+});
+
+test("a first read that failed says why in place of the page, and Retry reads again", () => {
+  const heard: string[] = [];
+  const page = render({ status: "error", detail: "The metrics endpoint did not answer." }, heard);
+
+  expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+    "The metrics endpoint did not answer.",
+  );
+  act(() => button(page, "Retry").click());
+  expect(heard).toEqual(["reload"]);
+});
+
+test("the window is one of three radios, and the hide-admins box hands its choice up", () => {
+  const heard: string[] = [];
+  const page = render(ready(metrics()), heard);
+  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
+  const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
+
+  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d", "90d"]);
+  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual([
+    "true",
+    "false",
+    "false",
+  ]);
+  act(() => button(page, "90d").click());
+  const hide = Array.from(page.querySelectorAll("label")).find(
+    (label) => label.textContent === "Hide admins",
+  );
+  act(() => hide?.querySelector("input")?.click());
+  expect(heard).toEqual(["window 90", "hide true"]);
 });

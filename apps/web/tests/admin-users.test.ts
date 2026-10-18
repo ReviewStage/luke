@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { AdminUserList, AdminUserListRow } from "@luke/service/admin/admin-users";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/service/admin/http";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -214,4 +215,24 @@ test("a miss among a truncated roster's loaded rows still says search reads ever
   expect(page.textContent).toContain(
     "Only the 2 most recently active accounts are listed. Search reads every account.",
   );
+});
+
+test("a search is held to the service's own bound, however much is pasted", async () => {
+  const page = await openUsers(roster());
+
+  type(searchBox(page), "a".repeat(ADMIN_USERS_SEARCH_MAX_LENGTH + 20));
+
+  expect(searchBox(page).value).toHaveLength(ADMIN_USERS_SEARCH_MAX_LENGTH);
+});
+
+test("clearing the search lists every account again and takes it out of the address", async () => {
+  const page = await openUsers(roster());
+  type(searchBox(page), "grace");
+
+  const clear = page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]');
+  act(() => clear?.click());
+
+  expect(searchBox(page).value).toBe("");
+  expect(window.location.search).toBe("");
+  expect(accounts(page)).toHaveLength(2);
 });
