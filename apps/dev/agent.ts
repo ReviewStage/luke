@@ -24,8 +24,8 @@ export default defineAgent({
   build: { externalDependencies: [...AGENT_EXTERNAL_DEPENDENCIES] },
   compaction: { thresholdPercent: CODER.COMPACTION_THRESHOLD_SHARE },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
-  // Note that a finished or failed run's history is kept under Vercel's retention (7 days on Pro;
-  // eve offers only `0` or the plan's default), so a session that died mid-turn can still be
+  // Note that a finished or failed run's history is kept for the team plan's Workflow retention
+  // period (eve offers only `0` or that default), so a session that died mid-turn can still be
   // read in the Workflow dashboard. This is for diagnosing those deaths and may go back to `0`,
   // deleting the history at once, once their cause is known: Luke reads every transcript from
   // its own store, written while the run is live, and never reads this history back.

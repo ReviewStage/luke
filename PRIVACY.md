@@ -1157,10 +1157,11 @@ only when you press Send.
   included. When a session of Luke's ends, Vercel deletes that history at
   once, though the session's ids, status, and times may stay as long as
   Vercel's own retention. This holds for a session started on or after
-  13 October 2026. A coding agent's session, for now, keeps its history under
-  Vercel's own retention (7 days after it ends) so that we can find out why a
-  session stopped partway, and so does a session of Luke's started before
-  then and the session of a worker either one hands work to.
+  13 October 2026. For now, a coding agent's session keeps its history after
+  it ends for our hosting plan's Workflow retention period, so that we can
+  find out why a session stopped partway, and Vercel deletes it after that.
+  A session of Luke's started before then, and the session of a worker
+  either one hands work to, keeps its history under Vercel's own retention.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
