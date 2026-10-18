@@ -760,7 +760,11 @@ names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
 uploads the function bundles' source maps when the build holds
 `SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
-the deployment's commit. Alert rules are set in Sentry, not here: a Slack
+the deployment's commit. The eve roots' builds do the same after `eve build`:
+each root's `nitro.config.ts` has Nitro write hidden maps when the build holds
+the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
+uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
+from the output. Alert rules are set in Sentry, not here: a Slack
 `#alerts` message on more than ten events in five minutes, and an email to
 the issue's owners on a high-priority issue.
 
