@@ -60,6 +60,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
   [PULL_REQUEST_ACTION.COMMENT]: "Comment",
+  [PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT]: "Comment on lines",
+  [PULL_REQUEST_ACTION.DISCARD_REVIEW]: "Discard review",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -92,7 +94,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
 }
 
 /** What the line under the bar says of the last change, where GitHub did not take it. */
-const WRITE_NOTE = {
+export const WRITE_NOTE = {
   SIGN_IN: "sign-in",
   WORDS: "words",
 } as const;

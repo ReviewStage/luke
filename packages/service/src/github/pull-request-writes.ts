@@ -481,7 +481,7 @@ const REVIEW_THREAD_MUTATION = `mutation($review: ID!, ${THREAD_VARIABLES}) {
 }`;
 
 /** A line comment's place and words as its document's variables: one line where no start is named. */
-function threadVariables(comment: LineComment): Readonly<Record<string, string | number>> {
+function threadVariables(comment: LineComment) {
   return {
     path: comment.path,
     body: comment.body,

@@ -90,6 +90,7 @@ import {
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { useFileViewSettings } from "./file-view-settings";
+import type { PendingReview } from "./line-comment";
 import { blockedWords, MergeActions } from "./merge-box";
 import {
   type PullRequestComment,
@@ -478,6 +479,7 @@ function PullRequestBar({
   published,
   writes,
   review,
+  pending,
   reading,
   onRefresh,
 }: {
@@ -485,6 +487,8 @@ function PullRequestBar({
   writes: PullRequestWrites;
   /** The review's own change, apart from the pill's, so each says its own answer where it was pressed. */
   review: PullRequestWrites;
+  /** The member's own pending review, which the Review panel publishes or discards. */
+  pending: PendingReview;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
@@ -497,7 +501,7 @@ function PullRequestBar({
           <div className="file-view-actions">
             {published.state === PULL_REQUEST_STATE.OPEN ||
             published.state === PULL_REQUEST_STATE.DRAFT ? (
-              <PullRequestReview writes={review} />
+              <PullRequestReview writes={review} pending={pending} />
             ) : null}
             <Tooltip label="Open on GitHub">
               <IconButton
@@ -1645,6 +1649,8 @@ export function AgentPullRequestTab({
   const written = refresh;
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  // The member's own pending review, read beside the conversation, which names what Review and a comment on lines offer.
+  const pendingReview = landed(parts.conversation)?.pendingReview;
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
@@ -1655,6 +1661,7 @@ export function AgentPullRequestTab({
           published={bar}
           writes={writes}
           review={review}
+          pending={pendingReview}
           reading={reading}
           onRefresh={refresh}
         />
@@ -1728,6 +1735,7 @@ export function AgentPullRequestTab({
               ),
               refresh: ask.conversation,
             }}
+            lineComments={{ pending: pendingReview, onWritten: written }}
           />
         </div>
       </div>

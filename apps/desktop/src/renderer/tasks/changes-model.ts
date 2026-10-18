@@ -528,3 +528,77 @@ export function startsCollapsed(file: CodingAgentChangedFile): boolean {
     LOCKFILE_NAMES.has(file.path.split("/").at(-1) ?? "")
   );
 }
+
+/** The lines a comment is on, as GitHub takes them: its last line and the side it counts on, and, for more than one, its first and that one's side. */
+export interface CommentLines {
+  readonly line: number;
+  readonly side: DiffSide;
+  readonly startLine?: number;
+  readonly startSide?: DiffSide;
+}
+
+/** A selection's side as GitHub's: the old side's lines on the left, the new side's on the right. */
+const GITHUB_SIDE = {
+  [DIFF_SELECTION_SIDE.DELETIONS]: DIFF_SIDE.LEFT,
+  [DIFF_SELECTION_SIDE.ADDITIONS]: DIFF_SIDE.RIGHT,
+} as const satisfies Record<DiffSelection["side"], DiffSide>;
+
+/** Where a picked line stands among a file's hunks: which hunk, and which of its rows; none where no row stands for it. */
+function rowAt(
+  hunks: readonly DiffHunk[],
+  side: DiffSelection["side"],
+  line: number,
+): { readonly hunk: number; readonly row: number } | undefined {
+  for (const [hunk, { rows }] of hunks.entries()) {
+    const row = rows.findIndex((each) =>
+      side === DIFF_SELECTION_SIDE.DELETIONS
+        ? each.kind !== DIFF_ROW.ADDED && each.oldLine === line
+        : each.newLine === line,
+    );
+    if (row !== -1) return { hunk, row };
+  }
+  return undefined;
+}
+
+/**
+ * The lines a comment picked in a file's diff is on, as GitHub takes them,
+ * in the order the diff draws them, however the pick was dragged; one line
+ * where both ends are the same row. None where GitHub would take no comment
+ * there: a file that draws no hunks of its own, binary, too large, or an
+ * image drawn in their place, a line no row of the diff stands for, or a
+ * range whose ends stand in two hunks, which GitHub refuses.
+ */
+export function commentLines(
+  file: CodingAgentChangedFile,
+  picked: DiffSelection,
+): CommentLines | undefined {
+  if (fileNotice(file) !== undefined || file.patch === null) return undefined;
+  const hunks = patchHunks(file.patch) ?? [];
+  const from = rowAt(hunks, picked.side, picked.start);
+  const to = rowAt(hunks, picked.endSide, picked.end);
+  if (from === undefined || to === undefined || from.hunk !== to.hunk) return undefined;
+  const [first, last] =
+    from.row <= to.row
+      ? [
+          { line: picked.start, side: picked.side },
+          { line: picked.end, side: picked.endSide },
+        ]
+      : [
+          { line: picked.end, side: picked.endSide },
+          { line: picked.start, side: picked.side },
+        ];
+  const end = { line: last.line, side: GITHUB_SIDE[last.side] };
+  return from.row === to.row
+    ? end
+    : { ...end, startLine: first.line, startSide: GITHUB_SIDE[first.side] };
+}
+
+/** The lines a comment is on, as its composer names them: "line 12", or "lines 10–12" with each side's mark where the two ends count on different sides. */
+export function commentLinesLabel(lines: CommentLines): string {
+  const mark = (line: number, side: DiffSide) =>
+    lines.startSide === undefined || lines.startSide === lines.side
+      ? `${line}`
+      : `${side === DIFF_SIDE.LEFT ? "L" : "R"}${line}`;
+  if (lines.startLine === undefined) return `line ${lines.line}`;
+  return `lines ${mark(lines.startLine, lines.startSide ?? lines.side)}–${mark(lines.line, lines.side)}`;
+}

@@ -666,9 +666,9 @@ const otherAccount = (token: string | null | undefined) =>
 const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
 
 /** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
-/** The same, the pull request a draft while `draft` says it is. */
+/** The same, the pull request a draft while `draft` says it is, its head the commit given, GitHub's short fixture one unless told. */
 const publishedPullRequestDrafted =
-  (draft: () => boolean): RepositoryScript =>
+  (draft: () => boolean, headSha: string = PUBLISHED.headSha): RepositoryScript =>
   (sent) => {
     const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
     const pull = `${repository}/pulls/${PUBLISHED.number}`;
@@ -693,7 +693,7 @@ const publishedPullRequestDrafted =
           body: "Invitations expire.",
           body_html: "<p>Invitations expire.</p>",
           base: { ref: "main" },
-          head: { ref: PUBLISHED.branch, sha: PUBLISHED.headSha },
+          head: { ref: PUBLISHED.branch, sha: headSha },
           created_at: "2026-10-15T09:00:00Z",
           mergeable_state: "clean",
           user: null,
@@ -2136,13 +2136,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
     "the changes name the head their files were read at, which a line comment is anchored to",
     () =>
       Effect.gen(function* () {
-        const headed: RepositoryScript = async (sent) => {
-          const answered = await publishedPullRequest(sent);
-          const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
-          if (answered === undefined || new URL(sent.url).pathname !== pull) return answered;
-          const read: Record<string, unknown> = await answered.json();
-          return Response.json({ ...read, head: { ref: PUBLISHED.branch, sha: LINE_HEAD } });
-        };
+        const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
         const { owner, agent, ask } = yield* published({ repository: headed });
 
         const changes = readAnswer(
