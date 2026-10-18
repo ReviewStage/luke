@@ -633,20 +633,25 @@ function answeredCall(
   return { ...namedCall(kind, input, output, undefined), subject: stringAt(named, field) ?? "" };
 }
 
-/** The tools that keep the member's sidebar sections or archive a task, whose accepted call changes the sidebar. */
+/** How a task's change is said on its row: archived or unarchived where it named its archive, which is what such a call is for, and updated otherwise. */
+function taskUpdateKind(input: WireValue | undefined): CallKind {
+  const archived = isRecord(input) ? input.archived : undefined;
+  if (archived === true) return CALL_KIND.ARCHIVE_TASK;
+  return archived === false ? CALL_KIND.UNARCHIVE_TASK : CALL_KIND.UPDATE_TASK;
+}
+
+/** The tools that keep the member's sidebar sections or change a task, whose accepted call changes the sidebar. */
 const SECTION_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.CREATE_SECTION,
   AGENT_TOOL.DELETE_SECTION,
   AGENT_TOOL.MOVE_TASK,
-  AGENT_TOOL.ARCHIVE_TASK,
-  AGENT_TOOL.UNARCHIVE_TASK,
+  AGENT_TOOL.UPDATE_TASK,
 ]);
 
 /**
  * Whether an answered call changed what the sidebar draws, so the window
  * reads the tasks again: a start that made a new task, or a section made,
- * deleted, or a task moved, archived, or brought back, each only once it
- * was accepted.
+ * deleted, or a task moved or changed, each only once it was accepted.
  */
 export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
   if (!isRecord(output)) return false;
@@ -737,10 +742,8 @@ function tasksToolView(
       return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
     case AGENT_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
-    case AGENT_TOOL.ARCHIVE_TASK:
-      return answeredCall(CALL_KIND.ARCHIVE_TASK, input, output, "task", "name");
-    case AGENT_TOOL.UNARCHIVE_TASK:
-      return answeredCall(CALL_KIND.UNARCHIVE_TASK, input, output, "task", "name");
+    case AGENT_TOOL.UPDATE_TASK:
+      return answeredCall(taskUpdateKind(input), input, output, "task", "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -900,7 +903,7 @@ function startedAgent(call: TargetedCall): ToolTarget | undefined {
   return { kind: TOOL_TARGET.AGENT, agent };
 }
 
-/** The task an archive or an unarchive answered, which its row opens as the sidebar opens it. */
+/** The task a change answered, which its row opens as the sidebar opens it. */
 function answeredTask(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.task : undefined;
   const task = stringAt(answer, "id");
@@ -958,8 +961,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.START_AGENT, startedAgent],
   [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
-  [AGENT_TOOL.ARCHIVE_TASK, answeredTask],
-  [AGENT_TOOL.UNARCHIVE_TASK, answeredTask],
+  [AGENT_TOOL.UPDATE_TASK, answeredTask],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],

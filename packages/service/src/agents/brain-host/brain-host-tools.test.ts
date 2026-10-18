@@ -90,8 +90,6 @@ import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
   ARCHIVE_AGENT_REFUSAL,
   ARCHIVE_AGENT_TOOL,
-  ARCHIVE_TASK_REFUSAL,
-  ARCHIVE_TASK_TOOL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
@@ -100,7 +98,8 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
-  UNARCHIVE_TASK_TOOL,
+  UPDATE_TASK_REFUSAL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
@@ -825,24 +824,27 @@ test("Luke archives a teammate's task of the call's workspace for the member on 
     Option.getOrThrow(await database.run(readTask(teammate, done.id))).task.archivedAt;
   const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
 
-  const archived = await call(ARCHIVE_TASK_TOOL.name, { taskId: done.id });
+  const archived = await call(UPDATE_TASK_TOOL.name, { taskId: done.id, archived: true });
   assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
-  assert.deepEqual([archived.archived, archived.already], [true, false]);
-  assert.ok((await archivedAt()) !== undefined);
-  const back = await call(UNARCHIVE_TASK_TOOL.name, { taskId: done.id }, "call-2");
   assert.deepEqual(
-    [back.status, back.archived, back.already],
+    [isRecord(archived.task) && archived.task.archived, archived.already],
+    [true, false],
+  );
+  assert.ok((await archivedAt()) !== undefined);
+  const back = await call(UPDATE_TASK_TOOL.name, { taskId: done.id, archived: false }, "call-2");
+  assert.deepEqual(
+    [back.status, isRecord(back.task) && back.task.archived, back.already],
     [ACTION_RESULT_STATUS.ACCEPTED, false, false],
   );
   assert.equal(await archivedAt(), undefined);
 
   assert.deepEqual(
-    await call(ARCHIVE_TASK_TOOL.name, { taskId: task.taskId }, "call-3"),
-    rejected(ARCHIVE_TASK_REFUSAL.OWN_TASK),
+    await call(UPDATE_TASK_TOOL.name, { taskId: task.taskId, archived: true }, "call-3"),
+    rejected(UPDATE_TASK_REFUSAL.OWN_TASK),
   );
   assert.deepEqual(
-    await call(ARCHIVE_TASK_TOOL.name, { taskId: stranger.taskId }, "call-4"),
-    rejected(ARCHIVE_TASK_REFUSAL.NO_TASK),
+    await call(UPDATE_TASK_TOOL.name, { taskId: stranger.taskId, archived: true }, "call-4"),
+    rejected(UPDATE_TASK_REFUSAL.NO_TASK),
   );
   assert.equal(
     Option.getOrThrow(await database.run(readTask(opener, task.taskId))).task.archivedAt,

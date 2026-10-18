@@ -590,6 +590,7 @@ const CALL_ICON = {
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.ARCHIVE_TASK]: ArchiveIcon,
   [CALL_KIND.UNARCHIVE_TASK]: ArchiveRestoreIcon,
+  [CALL_KIND.UPDATE_TASK]: FilePenIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,

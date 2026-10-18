@@ -27,6 +27,7 @@ import {
   listTasks,
   readTask,
   type StoredTask,
+  type TaskChanges,
   updateTask,
 } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
@@ -42,6 +43,7 @@ import {
   type CodingAgentStartFrom,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
@@ -172,6 +174,17 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * agent never archives itself, and an unarchive brings back only the
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice.
+ * A task's change takes the one path the member's own task menu does
+ * (`tasks-app.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
+ * the caller acts for: a new name, a repository confirmed through the
+ * workspace's installation or none, that member's own pin, or an archive,
+ * on any task of the caller's workspace, a teammate's among them. An archive
+ * is made as the menu makes it, without asking and without stopping the
+ * task's agents, so an agent still at work on it finishes the turn it is on
+ * and takes no message after, and it records neither who archived the task
+ * nor why, since a task's archive stamps only when it stands from. The
+ * caller never archives the task it works on itself, and a change already
+ * standing answers as done.
  * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
  * row's stamp, which `list_agents` then reads as cancelled. The agent stays
@@ -266,17 +279,27 @@ export const ARCHIVE_AGENT_REFUSAL = {
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
 } as const;
 
-/** Why a task's archive or unarchive changed nothing, in words the model can act on. */
-export const ARCHIVE_TASK_REFUSAL = {
+/** Why a task's change changed nothing, in words the model can act on. */
+export const UPDATE_TASK_REFUSAL = {
   UNREADABLE:
-    `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered; ` +
-    `${AGENT_TOOL.LIST_TASKS} with includeArchived lists the archived ones.`,
+    `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
+    `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
+    "repository as owner/name or null, archived, or pinned.",
   OWN_TASK:
     "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
-    "done, and the developer archives it.",
+    "done, and the developer archives it. Its other changes are yours to make without archived.",
   NO_TASK:
-    "Not run: no task of your workspace has that id, so it is none you can archive or bring back; " +
+    "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
+  ARCHIVED:
+    "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
+    "the same call with archived false, or leave it as it is.",
+  NOT_REACHABLE:
+    "Not changed: the GitHub installation connected to the workspace does not reach that " +
+    "repository; name one it reaches, or null for none.",
+  GITHUB_UNANSWERED:
+    "Not changed: GitHub did not answer whether the workspace reaches that repository. The call " +
+    "may be made again.",
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -576,16 +599,47 @@ const ARCHIVE_AGENT_INPUT = Schema.Struct({
 
 const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
 
-/** A task's archive or unarchive names the task alone: its archive stamps when it stands from and keeps no reason. */
-const ARCHIVE_TASK_INPUT = Schema.Struct({
+/**
+ * A task's change names the task and at least one of what the member's own
+ * menu changes of it: its name, its repository, its archive, and the
+ * member's own pin. Note that an archive keeps no reason, since a task's
+ * archive stamps only when it stands from.
+ */
+const UPDATE_TASK_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
     `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it, or a ` +
       "mention of it names.",
   ),
+  name: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
+      "Its new name, as the sidebar shows it, which its plan's heading follows.",
+    ),
+  ),
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
+        "installation must reach; null for none.",
+    ),
+  ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to archive it, as the Archive task menu does, false to bring an archived one back.",
+    ),
+  ),
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to pin it in the sidebar of the developer you work for, false to unpin it; their pin " +
+        "alone, no other member's.",
+    ),
+  ),
 });
 
-const readTaskRef = Schema.decodeUnknownResult(ARCHIVE_TASK_INPUT);
+const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /** A start as a call carries it: one Luke made under the tool's earlier words names its prompt `task`. */
 const START_AGENT_CALL = Schema.Struct({
@@ -721,30 +775,23 @@ export const UNARCHIVE_AGENT_TOOL = {
   inputSchema: READ_AGENT_INPUT,
 } as const;
 
-export const ARCHIVE_TASK_TOOL = {
-  name: AGENT_TOOL.ARCHIVE_TASK,
+export const UPDATE_TASK_TOOL = {
+  name: AGENT_TOOL.UPDATE_TASK,
   description:
-    "Archive a task of your workspace by its id, as the developer's Archive task would, on " +
-    "behalf of the developer you work for: it leaves the sidebar and every list but the " +
-    "archived ones, its plan takes no edit, and its agents take no message and start no new " +
-    "turn, while everything on it is kept and any member can unarchive it. Like the menu, it " +
-    "asks no one and stops no agent: one still working on it finishes the turn it is on. " +
-    "Archive a task whose work is done, such as one whose pull requests merged, or one the " +
-    "developer asked you to clean up; never a teammate's task still in use unless the developer " +
-    "asked for it. The task you work on yourself is refused. Answers `accepted`, also for a task " +
-    "already archived, or `rejected` and why. Then say which tasks you archived.",
-  inputSchema: ARCHIVE_TASK_INPUT,
-} as const;
-
-export const UNARCHIVE_TASK_TOOL = {
-  name: AGENT_TOOL.UNARCHIVE_TASK,
-  description:
-    "Bring an archived task of your workspace back by its id, as the developer's Unarchive " +
-    "would: it stands in the sidebar and the lists again, its plan takes edits, and its agents " +
-    "take messages, everything on it as it was. Unarchive one archived by mistake, or one the " +
-    `developer asks for, found with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers ` +
-    "`accepted`, also for a task not archived, or `rejected` and why.",
-  inputSchema: ARCHIVE_TASK_INPUT,
+    "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
+    "of the developer you work for: rename it, set or clear its repository, pin or unpin it in " +
+    "their sidebar, or archive it or bring it back; name at least one change, and several go in " +
+    "one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
+    "takes no edit, and its agents take no message and start no new turn, while everything on it " +
+    "is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
+    "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
+    "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
+    "never a teammate's task still in use unless the developer asked for it. The task you work on " +
+    "yourself is never archived, though its other changes are yours to make. Find an archived " +
+    `task with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers \`accepted\` with the task as ` +
+    "it now stands, `already` true where every change named already stood, or `rejected` and " +
+    "why. Then say which tasks you changed and how.",
+  inputSchema: UPDATE_TASK_INPUT,
 } as const;
 
 export const STOP_AGENT_TOOL = {
@@ -795,7 +842,7 @@ const LIST_TASKS_INPUT = Schema.Struct({
     describeWire(
       Schema.Boolean,
       "true to list the archived tasks too, each marked archived, such as to find one to " +
-        `bring back with ${AGENT_TOOL.UNARCHIVE_TASK}; leave it out for the open tasks alone.`,
+        `bring back with ${AGENT_TOOL.UPDATE_TASK}; leave it out for the open tasks alone.`,
     ),
   ),
   nameContains: Schema.optionalKey(
@@ -1709,13 +1756,8 @@ export function runUnarchiveAgent(
   );
 }
 
-/** A task's archive or unarchive as the model reads it: the task with its mention, whether it now stands archived, and whether it already stood so before the call. */
-const taskArchiveAnswer = (
-  userId: string,
-  task: StoredTask["task"],
-  archived: boolean,
-  already: boolean,
-) =>
+/** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
+const taskUpdateAnswer = (userId: string, task: StoredTask["task"], already: boolean) =>
   Effect.map(
     workspaceStepOf(userId, task.workspaceId),
     (step): WireRecord => ({
@@ -1723,22 +1765,71 @@ const taskArchiveAnswer = (
       task: {
         id: task.id,
         name: task.name,
+        repository: task.repository,
+        archived: task.archivedAt !== undefined,
+        pinned: task.pinnedAt !== undefined,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       },
-      archived,
       already,
     }),
   );
 
+/** Whether every change named already stands on the task as its member reads it. */
+function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+  return (
+    (changes.name === undefined || changes.name === task.name) &&
+    (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.archived === undefined || changes.archived === (task.archivedAt !== undefined)) &&
+    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined))
+  );
+}
+
+/** A repository's refusal in the model's words: one the installation does not reach, GitHub not answering, or else the service down. */
+function repositoryRefusalWords(refusal: HostedRefusal): string {
+  if (refusal.error === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE) {
+    return UPDATE_TASK_REFUSAL.NOT_REACHABLE;
+  }
+  return refusal.error === HOSTED_API_ERROR.GITHUB_UNANSWERED
+    ? UPDATE_TASK_REFUSAL.GITHUB_UNANSWERED
+    : CODING_AGENT_TOOL_REFUSAL.STORE;
+}
+
+/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
+const reachedRepository = (workspaceId: string, repository: string | null) =>
+  repository === null
+    ? Effect.succeed(Result.succeed<string | null, string>(null))
+    : Effect.map(Effect.result(workspaceRepository(workspaceId, repository)), (reached) =>
+        Result.isSuccess(reached)
+          ? Result.succeed<string | null, string>(reached.success.fullName)
+          : Result.fail(repositoryRefusalWords(reached.failure)),
+      );
+
 /**
- * A task of the caller's workspace archived or brought back as the member's
- * own menu does it (`updateTask`, which `tasks-app.ts`'s PATCH runs), for the
- * member the caller acts for, or why not. Note that the task is read first,
- * on that member's standing, both to hold it to the caller's workspace and to
- * tell an archive already standing, which the store keeps as it stood.
+ * One call of `update_task`: a task of the caller's workspace changed as the
+ * member's own menu changes it (`updateTask`, which `tasks-app.ts`'s PATCH
+ * runs), for the member the caller acts for, its repository confirmed first
+ * as the PATCH confirms one, or why not. Note that the task is read first, on
+ * that member's standing, both to hold it to the caller's workspace and to
+ * tell a change already standing, which the store keeps as it stood; and
+ * that the caller never archives the task it works on.
  */
-const taskArchived = (caller: AgentCaller, taskId: string, archived: boolean) =>
-  orStoreRefusal(
+export function runUpdateTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readTaskUpdate(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { taskId, ...changes } = asked.success;
+  if (Object.keys(changes).length === 0) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { caller } = call;
+  if (changes.archived === true && taskId === callerTask(caller)) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.OWN_TASK));
+  }
+  return orStoreRefusal(
     Effect.gen(function* () {
       const userId = callerUserId(caller);
       const workspace = yield* callerWorkspace(caller);
@@ -1748,44 +1839,30 @@ const taskArchived = (caller: AgentCaller, taskId: string, archived: boolean) =>
         Option.isNone(read) ||
         read.value.task.workspaceId !== workspace.value
       ) {
-        return agentToolRejected(ARCHIVE_TASK_REFUSAL.NO_TASK);
+        return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
-      const already = (read.value.task.archivedAt !== undefined) === archived;
-      const changed = yield* updateTask(userId, taskId, { archived }).pipe(
-        // An archive alone renames nothing, so the store's refusal of an archived task's rename is never met.
-        Effect.catchTag("TaskArchived", (refused) => Effect.die(refused)),
+      const already = changesStand(read.value.task, changes);
+      const repository =
+        changes.repository === undefined
+          ? undefined
+          : yield* reachedRepository(workspace.value, changes.repository);
+      if (repository !== undefined && Result.isFailure(repository)) {
+        return agentToolRejected(repository.failure);
+      }
+      const changed = yield* updateTask(userId, taskId, {
+        ...changes,
+        ...(repository === undefined ? undefined : { repository: repository.success }),
+      }).pipe(
+        Effect.map((task) => Result.succeed<Option.Option<StoredTask["task"]>, string>(task)),
+        Effect.catchTag("TaskArchived", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
+        ),
       );
-      if (Option.isNone(changed)) return agentToolRejected(ARCHIVE_TASK_REFUSAL.NO_TASK);
-      return yield* taskArchiveAnswer(userId, changed.value, archived, already);
+      if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
+      if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
+      return yield* taskUpdateAnswer(userId, changed.success.value, already);
     }),
   );
-
-/** One call of `archive_task`: a task of the caller's workspace archived for the caller's member, as the Archive task menu archives it, or why it was not. */
-export function runArchiveTask(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readTaskRef(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.UNREADABLE));
-  }
-  const { taskId } = asked.success;
-  if (taskId === callerTask(call.caller)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.OWN_TASK));
-  }
-  return taskArchived(call.caller, taskId, true);
-}
-
-/** One call of `unarchive_task`: an archived task of the caller's workspace brought back, as a member's Unarchive brings it. */
-export function runUnarchiveTask(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readTaskRef(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.UNREADABLE));
-  }
-  return taskArchived(call.caller, asked.success.taskId, false);
 }
 
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */

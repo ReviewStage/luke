@@ -528,38 +528,48 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
   });
 });
 
-test("a task's archive and unarchive name the task their answer names and open it, while one still out or refused names none and opens nothing", () => {
-  const call = (tool: string, output?: WireRecord) => ({
-    tool,
+test("a task's change says it archived, unarchived, or updated the task its answer names, by what it asked, and opens it, while one still out or refused names none and opens nothing", () => {
+  const call = (input: WireRecord, output?: WireRecord) => ({
+    tool: "update_task",
     callId: "call-1",
-    input: { taskId: "task-2" },
+    input: { taskId: "task-2", ...input },
     output,
   });
-  const answer = (archived: boolean) => ({
+  const answer = {
     status: "accepted",
     task: {
       id: "task-2",
       name: "Seat billing",
       mention: "[@Seat billing](https://tryluke.dev/acme/plan/task-2)",
     },
-    archived,
     already: false,
-  });
+  };
   const opened = { kind: TOOL_TARGET.TASK, task: "task-2" };
+  const line = (input: WireRecord, output?: WireRecord) => {
+    const view = toolCallView(call(input, output));
+    return [view.kind, callLine(view.kind, view.subject, undefined).verb, view.subject];
+  };
 
-  const archived = toolCallView(call("archive_task", answer(true)));
-  assert.deepEqual([archived.kind, archived.subject], [CALL_KIND.ARCHIVE_TASK, "Seat billing"]);
-  assert.equal(callLine(archived.kind, archived.subject, undefined).verb, "Archived the task");
-  assert.deepEqual(toolTarget(call("archive_task", answer(true))), opened);
-  const back = toolCallView(call("unarchive_task", answer(false)));
-  assert.deepEqual([back.kind, back.subject], [CALL_KIND.UNARCHIVE_TASK, "Seat billing"]);
-  assert.equal(callLine(back.kind, back.subject, undefined).verb, "Unarchived the task");
-  assert.deepEqual(toolTarget(call("unarchive_task", answer(false))), opened);
+  assert.deepEqual(line({ archived: true }, answer), [
+    CALL_KIND.ARCHIVE_TASK,
+    "Archived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ archived: false }, answer), [
+    CALL_KIND.UNARCHIVE_TASK,
+    "Unarchived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ name: "Seat billing", pinned: true }, answer), [
+    CALL_KIND.UPDATE_TASK,
+    "Updated the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(toolTarget(call({ archived: true }, answer)), opened);
 
-  const out = toolCallView(call("archive_task"));
-  assert.deepEqual([out.kind, out.subject], [CALL_KIND.ARCHIVE_TASK, ""]);
-  assert.equal(toolTarget(call("archive_task")), undefined);
-  const refused = call("archive_task", { status: "rejected", reason: "Not archived." });
+  assert.deepEqual(line({ archived: true }), [CALL_KIND.ARCHIVE_TASK, "Archived the task", ""]);
+  assert.equal(toolTarget(call({ archived: true })), undefined);
+  const refused = call({ archived: true }, { status: "rejected", reason: "Not archived." });
   assert.equal(toolCallView(refused).subject, "");
   assert.equal(toolTarget(refused), undefined);
 });
