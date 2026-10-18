@@ -1694,7 +1694,7 @@ function rowDrafted(page: HTMLElement, title: string): boolean {
   return rowNamed(page, title).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
 
-test("an item whose box holds unsent words wears the Draft pencil on its row while another item is chosen, as a sidebar task's row does, and none while it is the one chosen, whose box shows them", async () => {
+test("an item whose box holds unsent words wears the Draft pencil on its row while another item is chosen, as a sidebar task's row does, and none while its box stands beside the list; with the list standing alone, the chosen item's row wears it too", async () => {
   const { page } = mount();
   await settle();
   typeInComposer(itemPane(page), "Use 90% instead");
@@ -1712,6 +1712,10 @@ test("an item whose box holds unsent words wears the Draft pencil on its row whi
   await settle();
   assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
   assert.equal(rowDrafted(page, "Alert at 80%?"), false);
+  layOut(page, 800);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the list standing alone hides its box");
 });
 
 /** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */

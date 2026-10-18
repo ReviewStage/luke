@@ -268,9 +268,10 @@ export function ItemMark({
  * unread, wears the blue dot in a gutter before its tile, its title in the
  * unread weight and its preview in the body's ink; the gutter stands on
  * every row, so the tiles line up whether a row wears a dot or not. Where
- * an answer or a message waits unsent in the item's box and the item is not
- * the one chosen, whose box shows its own words, the row wears the Draft
- * pencil before its marks, as a sidebar task's row does (`draft-mark.tsx`).
+ * an answer or a message waits unsent in the item's box and that box is not
+ * the one standing beside the list, which shows its own words, the row wears
+ * the Draft pencil before its marks, as a sidebar task's row does
+ * (`draft-mark.tsx`).
  * Where the list hands down `onMark`, the row offers to mark it read or unread:
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
@@ -286,6 +287,7 @@ export function ItemMark({
 export function InboxItemRow({
   listed,
   chosen,
+  open = chosen,
   now,
   models,
   readerId,
@@ -297,6 +299,8 @@ export function InboxItemRow({
 }: {
   listed: InboxListed;
   chosen: boolean;
+  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked: the chosen item's unless said, and none while the list stands alone. */
+  open?: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
@@ -316,7 +320,7 @@ export function InboxItemRow({
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
   const needsYou = needsReader(item, reader);
-  const drafted = useInboxItemDrafted(item) && !chosen;
+  const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
@@ -815,6 +819,7 @@ export function InboxList({
       key={listed.item.id}
       listed={listed}
       chosen={listed.item.id === chosen}
+      open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
       now={now}
       models={models}
       readerId={readerId}
