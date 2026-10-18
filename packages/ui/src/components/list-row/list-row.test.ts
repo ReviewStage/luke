@@ -604,6 +604,37 @@ test("a row whose acts come in on hover fades its title only while it is cut sho
   expect(beside.querySelector(".luke-list-row-title")?.hasAttribute("data-end")).toBe(false);
 });
 
+test("a title renamed longer or shorter is measured again, though its box keeps its width", async () => {
+  const resized = standInResizeObserver();
+  // Note that the box stands 200px wide whatever its words, as a row whose width its list sets does.
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return (this.textContent ?? "").length * 8;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const shell = (title: string) =>
+    createElement(List, {
+      label: "Shells",
+      children: createElement(ListRow, {
+        title,
+        onPress: () => undefined,
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
+        actions: createElement(IconButton, { icon: glyph(), label: "End" }),
+      }),
+    });
+  const container = draw(shell("zsh"));
+  const root = roots.at(-1);
+  const overflow = () =>
+    container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
+  act(() => resized());
+  expect(overflow()).toBe("false");
+  await act(async () => root?.render(shell("Long-running build and test process")));
+  expect(overflow()).toBe("true");
+  await act(async () => root?.render(shell("zsh")));
+  expect(overflow()).toBe("false");
+});
+
 /** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */
 const ROW_WIDTH = 300;
 
