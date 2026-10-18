@@ -2502,8 +2502,7 @@ ul.actor-stack {
    (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
    the muted voice of the words it follows, lit like any other on hover, and
    tighter at its sides, since it stands beside words rather than in a
-   toolbar. A failed row that is itself the button draws the retry's glyph
-   and word in its own colour (`.retry-label`), its hover lighting both. */
+   toolbar. */
 .quiet-button {
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-muted);
@@ -2532,14 +2531,6 @@ ul.actor-stack {
   height: 13px;
 }
 
-.retry-label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-4);
-  margin-left: var(--luke-space-4);
-  font-weight: 600;
-}
-
 /* A failure's line (`failure-note.tsx`): its words, then the press that
    mends it inside a hairline, since it is the act the line is there for,
    with Cancel or Retry quiet beside it. The press keeps the words' size and
@@ -2561,13 +2552,6 @@ ul.actor-stack {
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
-}
-
-.retry-label svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  align-self: center;
 }
 
 /* Chips ----------------------------------------------------------------------- */
