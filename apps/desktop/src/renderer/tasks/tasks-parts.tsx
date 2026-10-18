@@ -68,16 +68,19 @@ function CallStatusLines({
         <span className="call-backend">
           <ThinkingDots />
           {brain === undefined ? null : (
-            <Tooltip label={titled ? brain.action : undefined}>
-              <span className="call-backend-part" data-part="planner">
-                {BRAIN_NAME} ·{" "}
-                {brain.action === undefined ? (
-                  BRAIN_THINKING
-                ) : (
-                  <span className="call-backend-action">{brain.action}</span>
-                )}
-              </span>
-            </Tooltip>
+            // Note that this keeps the system's title, because the floating call window is too short for a pill.
+            <span
+              className="call-backend-part"
+              data-part="planner"
+              title={titled ? brain.action : undefined}
+            >
+              {BRAIN_NAME} ·{" "}
+              {brain.action === undefined ? (
+                BRAIN_THINKING
+              ) : (
+                <span className="call-backend-action">{brain.action}</span>
+              )}
+            </span>
           )}
           {notes ? (
             <span className="call-backend-part" data-part="notes">
