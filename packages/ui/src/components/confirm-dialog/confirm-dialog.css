@@ -1,17 +1,9 @@
-/* confirm-dialog.css -- the question's title, what the act takes with it,
-   its refusal, and the answers at its foot, inside the shared dialog's card.
-   The body (and a field and its refusal, where one is written) is the part
-   that gives way and scrolls, so its title and its answers stay on screen
+/* confirm-dialog.css -- what the act takes with it and its refusal, between
+   the shared dialog's title and its answers. The body is the part that
+   gives way and scrolls, so the title and the answers stay on screen
    however short the window is. */
 
 @layer components {
-  .luke-confirm-dialog-title {
-    margin: 0;
-    font-size: var(--luke-type-dialog-size);
-    line-height: var(--luke-type-dialog-leading);
-    font-weight: var(--luke-weight-semibold);
-  }
-
   .luke-confirm-dialog-body {
     min-height: 0;
     margin: 0;
@@ -28,18 +20,5 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     overflow-wrap: anywhere;
-  }
-
-  .luke-confirm-dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--luke-dialog-action-gap);
-    margin-top: var(--luke-space-12);
-  }
-
-  /* The answers hold a common width, so a short verb is not a smaller target
-     than Cancel beside it. */
-  .luke-confirm-dialog-actions > .luke-button {
-    min-width: var(--luke-dialog-action-width);
   }
 }
