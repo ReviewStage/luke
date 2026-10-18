@@ -2072,8 +2072,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4);
-  margin: var(--space-6) 0 var(--space-2);
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
 }
 
@@ -2086,14 +2086,14 @@
 .pull-request-reviewers {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 /* A picker's press, as small as the words beside it. */
 .icon-button.pull-request-picker {
   width: 22px;
   height: 22px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .icon-button.pull-request-picker > svg {
@@ -2106,7 +2106,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--luke-color-border);
   border-radius: 999px;
   background: var(--label-dot, transparent);
 }
