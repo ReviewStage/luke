@@ -14,8 +14,8 @@ import { useAppState } from "../use-app-state";
  * narrow for its word draws its glyph alone and still names it.
  */
 
-/** What the pill's hint says: why everything is failing, and that nothing needs doing. */
-const OFFLINE_HINT = "This Mac is offline. Luke catches up on his own once it's back online.";
+/** What the pill's hint says: why reads are failing, and that nothing needs doing. */
+const OFFLINE_HINT = "You're offline. Luke will catch up as soon as you reconnect.";
 
 /** The offline pill, or nothing while the Mac is online. */
 export function OfflineMark(): React.JSX.Element | null {
