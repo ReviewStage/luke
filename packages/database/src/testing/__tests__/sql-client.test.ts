@@ -47,35 +47,43 @@ test(
 );
 
 /**
- * A fresh copy of the module, so no earlier opening has dumped already, whose
- * first call of `method` on a PGlite that is ready rejects; `failed` names
- * that PGlite. Note that we pass over the calls PGlite makes of its own while
- * it starts, because it dumps its own data directory then.
+ * Rejects the first call of `method` on a PGlite that is ready and answers
+ * which PGlite that was. Note that we pass over the calls PGlite makes of its
+ * own while it starts, because it dumps its own data directory then.
  */
-async function failingOnce(method: "dumpDataDir" | "query") {
-  vi.resetModules();
-  const fresh = await import("../sql-client.js");
-  const seen: { failed?: PGlite } = {};
-  const original = PGlite.prototype[method] as (...args: unknown[]) => Promise<unknown>;
-  vi.spyOn(PGlite.prototype, method).mockImplementation(function (
-    this: PGlite,
-    ...args: unknown[]
-  ) {
-    if (seen.failed !== undefined || !this.ready) return original.apply(this, args);
-    seen.failed = this;
-    return Promise.reject(new Error(`${method} refused`));
-  } as never);
-  return { fresh, seen };
+function failingOnce(method: "dumpDataDir" | "query"): () => PGlite | undefined {
+  let failed: PGlite | undefined;
+  const refuse = (client: PGlite) => {
+    if (failed !== undefined || !client.ready) return false;
+    failed = client;
+    return true;
+  };
+  const refusal = () => Promise.reject(new Error(`${method} refused`));
+  if (method === "dumpDataDir") {
+    const dump = PGlite.prototype.dumpDataDir;
+    vi.spyOn(PGlite.prototype, "dumpDataDir").mockImplementation(function (this: PGlite, ...args) {
+      return refuse(this) ? refusal() : dump.apply(this, args);
+    });
+  } else {
+    const query = PGlite.prototype.query;
+    vi.spyOn(PGlite.prototype, "query").mockImplementation(function (this: PGlite, ...args) {
+      return refuse(this) ? refusal() : query.apply(this, args);
+    });
+  }
+  return () => failed;
 }
 
 for (const method of ["query", "dumpDataDir"] as const) {
   test(
     `a first opening whose ${method} fails is closed, and a later opening migrates afresh`,
     async (t) => {
-      const { fresh, seen } = await failingOnce(method);
+      // Note that we load a module of the test's own, so no earlier opening has dumped already.
+      vi.resetModules();
+      const fresh = await import("../sql-client.js");
+      const failed = failingOnce(method);
 
       await assert.rejects(fresh.openMigratedPglite());
-      assert.equal(seen.failed?.closed, true);
+      assert.equal(failed()?.closed, true);
 
       const client = await fresh.openMigratedPglite();
       t.onTestFinished(() => client.close());
