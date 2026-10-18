@@ -6,10 +6,10 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReadResponse,
-  type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import {
+  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
   IconButton,
@@ -45,13 +45,12 @@ import {
   inboxMissing,
   inboxReply,
   pickedWords,
-  pressesOf,
 } from "./inbox-model";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
 /**
- * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its own presses at its foot, and writing a message on a settled one's thread.
+ * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its one Send at its foot, and writing a message on a settled one's thread.
  *
  * The box is the agent composer's card (`ai-elements/prompt-input.tsx`)
  * around the agent composer's field (`composer-field.tsx`), and takes what
@@ -73,15 +72,15 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * is taken, and files dropped on the card are, each drawn as a chip above
  * the words with its way off; a file that cannot come says why under the
  * card. Files stand for the developer's own words where they wrote none,
- * and while they are read the answer waits for them. An approval, a
- * task, and an item asking nothing are answered by the presses in the
- * foot, the one that holds back and the one that goes ahead, so Enter
- * there sends nothing. Unlike the agent's box, the field never takes the
+ * and while they are read the answer waits for them. Every item is sent
+ * by the one Send at the foot's right, its pick made in the question above;
+ * a note's reads "Got it" while the box holds nothing, and "Send" once it
+ * does. Unlike the agent's box, the field never takes the
  * caret as an item opens, because K and J step the list while the caret
  * is elsewhere.
  *
  * A card whose agent need not hear back says whether its answer will
- * message the agent: a bare press does not, and a typed note or an attached
+ * message the agent: a bare answer does not, and a typed note or an attached
  * file does. Why an answer did not go, a file did not come, or a dictation
  * left nothing, is said under the card.
  *
@@ -110,7 +109,7 @@ const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /**
  * What the box says on an item whose agent need not hear back: a bare
- * press, Done or Got it, is kept for the agent to read, and a typed note is
+ * answer, Done or Got it, is kept for the agent to read, and a typed note is
  * sent to it as a message, so the line says which the answer will be.
  */
 const QUIET_LINE = {
@@ -172,42 +171,43 @@ function openQuietLine(
   return item.needsReply ? undefined : { line: quietLine(draft), wanting: false };
 }
 
-/** The presses that send a card, in the box's footer: its response's where it is answered by a press, Send for the rest. */
-function SendPresses({
+/** What a note's Send says while no word is written, the nod that answers it, and once one is. */
+const NOTE_SEND = {
+  NOD: "Got it",
+  WORDS: "Send",
+} as const;
+
+/**
+ * The Send that ends every open item's box: the round send of words, a
+ * choice, a form, an approval, and a to-do, held while the answer lacks
+ * something, since its Enter says what; a note's, which it always takes,
+ * in words, "Got it" while the box holds nothing and "Send" once it does.
+ */
+function AnswerSend({
   item,
   draft,
   sending,
   reading,
-  onAnswer,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   sending: boolean;
   /** Whether files handed to the box are still being read, which the answer waits for. */
   reading: boolean;
-  onAnswer: (press?: InboxReplyKind) => void;
 }): React.JSX.Element {
   const held = sending || reading;
-  const presses = pressesOf(item.response);
-  if (presses !== undefined) {
-    const { back, ahead } = presses;
+  if (item.response.type === INBOX_RESPONSE.NONE) {
+    const said = draft.note.trim() === "" && draft.attachments.length === 0;
     return (
-      <div className="inbox-presses">
-        {back === undefined ? null : (
-          <Button disabled={held} onClick={() => onAnswer(back.reply)}>
-            {back.label}
-          </Button>
-        )}
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          busy={sending}
-          busyLabel="Sending"
-          disabled={held}
-          onClick={() => onAnswer(ahead.reply)}
-        >
-          {ahead.label}
-        </Button>
-      </div>
+      <Button
+        type={BUTTON_TYPE.SUBMIT}
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={sending}
+        busyLabel="Sending"
+        disabled={held}
+      >
+        {said ? NOTE_SEND.NOD : NOTE_SEND.WORDS}
+      </Button>
     );
   }
   return (
@@ -274,7 +274,8 @@ function AnswerCard({
   latest.current = item;
   // Note that a settled item's box writes a message on its thread, which no response shapes.
   const answering = item.status === INBOX_STATUS.OPEN;
-  const byPress = answering && pressesOf(item.response) !== undefined;
+  // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end.
+  const namedSend = answering && item.response.type === INBOX_RESPONSE.NONE;
   const placeholder = answering ? placeholderOf(item.response) : messagePlaceholder(agentName);
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
@@ -304,9 +305,9 @@ function AnswerCard({
     control.notes.get(item.id) ??
     refusal ??
     (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
-  const answer = (press?: InboxReplyKind) => {
+  const answer = () => {
     setRefusal(undefined);
-    control.onAnswer(item, draft, press);
+    control.onAnswer(item, draft);
   };
   // A send of an answer that lacks something goes nowhere: it says what, and takes the keyboard there.
   const send = () => {
@@ -374,11 +375,10 @@ function AnswerCard({
       {takes ? (
         <PromptInput
           className="inbox-answer"
-          data-presses={byPress ? "" : undefined}
+          data-named-send={namedSend ? "" : undefined}
           data-messages={answering ? undefined : ""}
-          // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => {
-            if (byPress || reading > 0) return;
+            if (reading > 0) return;
             if (answering) send();
             else message();
           }}
@@ -467,13 +467,7 @@ function AnswerCard({
                 <div className="inbox-answer-actions">
                   <DictateButton dictation={dictation} disabled={sending || module === undefined} />
                   {answering ? (
-                    <SendPresses
-                      item={item}
-                      draft={draft}
-                      sending={sending}
-                      reading={reading > 0}
-                      onAnswer={answer}
-                    />
+                    <AnswerSend item={item} draft={draft} sending={sending} reading={reading > 0} />
                   ) : (
                     <Tooltip label={SEND_MESSAGE}>
                       <PromptInputSubmit

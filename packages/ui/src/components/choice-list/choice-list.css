@@ -16,6 +16,16 @@
     list-style: none;
   }
 
+  /* Rows side by side share the width, each as tall as the tallest. */
+  .luke-choice-list[data-flow="across"] {
+    flex-direction: row;
+  }
+
+  .luke-choice-list[data-flow="across"] > .luke-choice {
+    flex: 1 1 0;
+    align-items: flex-start;
+  }
+
   .luke-choice {
     display: flex;
     align-items: center;
@@ -138,11 +148,25 @@
     background: var(--luke-color-accent);
   }
 
+  /* A toned row fills its checked control with what picking it means,
+     its dot or tick in the ground's ink, which reads on either fill. */
+  [aria-checked="true"][data-tone="complete"] > .luke-choice-control {
+    --luke-choice-ink: var(--luke-color-ground);
+    border-color: var(--luke-color-complete);
+    background: var(--luke-color-complete);
+  }
+
+  [aria-checked="true"][data-tone="danger"] > .luke-choice-control {
+    --luke-choice-ink: var(--luke-color-ground);
+    border-color: var(--luke-color-danger);
+    background: var(--luke-color-danger);
+  }
+
   [aria-checked="true"] > .luke-choice-control[data-shape="radio"]::after {
     width: var(--luke-space-6);
     height: var(--luke-space-6);
     border-radius: 50%;
-    background: var(--luke-color-on-accent);
+    background: var(--luke-choice-ink, var(--luke-color-on-accent));
     content: "";
   }
 
@@ -150,8 +174,8 @@
     width: var(--luke-space-8);
     height: var(--luke-space-4);
     margin-top: -2px;
-    border-bottom: 2px solid var(--luke-color-on-accent);
-    border-left: 2px solid var(--luke-color-on-accent);
+    border-bottom: 2px solid var(--luke-choice-ink, var(--luke-color-on-accent));
+    border-left: 2px solid var(--luke-choice-ink, var(--luke-color-on-accent));
     transform: rotate(-45deg);
     content: "";
   }

@@ -685,6 +685,14 @@ function checkedOptions(pane: HTMLElement): (string | null | undefined)[] {
     .map((option) => option.querySelector(".luke-choice-label")?.textContent);
 }
 
+/** The open item's Send, at its box's foot. */
+function answerSend(pane: HTMLElement): HTMLButtonElement {
+  return (
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
+    assert.fail("no Send")
+  );
+}
+
 /** What the box's quiet line says, or nothing where it says nothing. */
 function quietWords(pane: HTMLElement): string | null {
   return pane.querySelector("[data-inbox-quiet]")?.textContent ?? null;
@@ -860,6 +868,170 @@ test("Enter in a form's field sends the form once its required fields are filled
     sent.map(({ reply, values }) => ({ reply, values })),
     [{ reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Severity", value: "High" }] }],
   );
+});
+
+/** The open item's only item in the Inbox: an item of the agent's asking `response`, the rest of the list as it stands. */
+function onlyAsking(response: InboxItem["response"], extra: Partial<InboxItem> = {}): InboxItem {
+  const asking = { ...THRESHOLD, response, ...extra };
+  inboxes.set(BILLING.id, [asking, RETRY]);
+  return asking;
+}
+
+/** The words of every button at the open item's box's foot, the Send among them. */
+function footPresses(pane: HTMLElement): (string | null)[] {
+  return [...pane.querySelectorAll<HTMLButtonElement>(".inbox-answer-actions button")].map(
+    (button) => button.getAttribute("aria-label") ?? button.textContent,
+  );
+}
+
+test("an approval is decided in its question, Approve and Decline two cards picked as a choice of two, each numbered, its mark green or red once picked; its box ends in the one Send, Enter going to the cards until one is picked and then sending it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.APPROVAL });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.deepEqual(
+    openOptions(pane).map((card) => [
+      card.querySelector(".luke-choice-label")?.textContent,
+      card.getAttribute("aria-keyshortcuts"),
+      card.dataset.tone,
+    ]),
+    [
+      ["Approve", "1", "complete"],
+      ["Decline", "2", "danger"],
+    ],
+  );
+  assert.deepEqual(
+    footPresses(pane),
+    ["Dictate", "Send to agent"],
+    "Decline and Approve left the foot",
+  );
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.equal(document.activeElement, openOptions(pane)[0]);
+  assert.equal(quietWords(pane), "Approve or decline");
+
+  pressKey("2", document.activeElement ?? document.body);
+  assert.deepEqual(checkedOptions(pane), ["Decline"]);
+  assert.equal(quietWords(pane), null);
+  keyOn(openOptions(pane)[1] ?? assert.fail("no Decline"), "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply }) => reply),
+    [INBOX_REPLY.DECLINED],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Decline"], "Enter left the pick standing");
+});
+
+test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.TODO }, { title: "Add POSTMARK_SERVER_TOKEN to Vercel" });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const [step, pill] = openOptions(pane);
+  assert.ok(step && pill, "the card holds two picks");
+  assert.equal(
+    step.querySelector(".inbox-todo-words")?.textContent,
+    "Add POSTMARK_SERVER_TOKEN to Vercel",
+  );
+  assert.equal(pill.textContent, "Couldn't do it2");
+  assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");
+
+  act(() => step.click());
+  assert.equal(step.getAttribute("aria-checked"), "true");
+  act(() => step.focus());
+  keyOn(step, "ArrowDown");
+  assert.equal(pill.getAttribute("aria-checked"), "true", "the arrow picks as it moves");
+  assert.equal(document.activeElement, pill);
+  pressKey("1", pill);
+  assert.equal(step.getAttribute("aria-checked"), "true");
+  assert.equal(document.activeElement, step);
+  act(() => step.click());
+  assert.equal(step.getAttribute("aria-checked"), "false", "a press on the pick takes it back");
+  keyOn(step, "Enter");
+  assert.equal(quietWords(pane), "Tick it, or say you couldn't");
+  assert.equal(step.getAttribute("aria-checked"), "false", "Enter ticks nothing");
+
+  act(() => step.click());
+  typeInComposer(pane, "Added it under Production.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, note }) => ({ reply, note })),
+    [{ reply: INBOX_REPLY.DONE, note: "Added it under Production." }],
+  );
+});
+
+test("a note's Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.NONE });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.deepEqual(footPresses(pane), ["Dictate", "Got it"]);
+  assert.equal(answerSend(pane).textContent, "Got it");
+  typeInComposer(pane, "Looks right");
+  assert.equal(answerSend(pane).textContent, "Send");
+  act(() => composerEditor(pane).editor?.commands.clearContent(true));
+  assert.equal(answerSend(pane).textContent, "Got it");
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, note }) => ({ reply, note })),
+    [{ reply: INBOX_REPLY.ACKNOWLEDGED, note: undefined }],
+  );
+});
+
+test("a settled approval or to-do still folds what it offered to one line, and its answer's chip reads the decision, Approve or Couldn't do it", async () => {
+  const settled = (
+    id: string,
+    title: string,
+    response: InboxItem["response"],
+    reply: InboxItem["answer"],
+  ) => ({
+    ...item(id, title, 6_000),
+    response,
+    status: INBOX_STATUS.ANSWERED,
+    settledAt: 6_000,
+    answeredBy: READER,
+    answer: reply,
+  });
+  inboxes.set(BILLING.id, [
+    settled(
+      "a1b2c3d4-0000-4000-8000-000000000031",
+      "Run the migration?",
+      { type: INBOX_RESPONSE.APPROVAL },
+      { reply: INBOX_REPLY.APPROVED },
+    ),
+    settled(
+      "a1b2c3d4-0000-4000-8000-000000000032",
+      "Add the token",
+      { type: INBOX_RESPONSE.TODO },
+      { reply: INBOX_REPLY.NOT_DONE },
+    ),
+  ]);
+  const { page } = mount();
+  await settle();
+  const read = (title: string) => {
+    act(() => rowNamed(page, title).click());
+    const pane = itemPane(page);
+    return [
+      pane.querySelector("details[data-inbox-offered] summary")?.textContent,
+      pane.querySelector("[data-inbox-pick]")?.textContent,
+    ];
+  };
+  assert.deepEqual(read("Run the migration?"), ["2 options · you picked Approve", "Approve"]);
+  assert.deepEqual(read("Add the token"), [
+    "2 options · you picked Couldn't do it",
+    "Couldn't do it",
+  ]);
 });
 
 test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge", async () => {
@@ -2259,7 +2431,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
 });
 
-test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
+test("an item that needs no reply says a bare answer won't message the agent, and that a note typed in its box will", async () => {
   const todo: InboxItem = {
     ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
     response: { type: INBOX_RESPONSE.TODO },
@@ -2341,7 +2513,7 @@ test("an answered item that asked to be heard back, carried without its answer, 
   assert.match(answerHead(page) ?? "", /· Sent to /u);
 });
 
-test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
+test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare answer", async () => {
   const todo = (id: string, title: string): InboxItem => ({
     ...item(id, title, 6_000),
     response: { type: INBOX_RESPONSE.TODO },
@@ -2372,19 +2544,19 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
       return bridge.act(request);
     },
   });
-  const press = (name: string) =>
-    [...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items button")].find(
-      (button) => button.textContent === name,
-    );
+  const doneAndSend = async () => {
+    act(() => openOptions(itemPane(page))[0]?.click());
+    await act(async () => answerSend(itemPane(page)).click());
+  };
 
   act(() => rowNamed(page, "Add the secret").click());
-  await act(async () => press("Done")?.click());
+  await doneAndSend();
   await settle();
   assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
 
   act(() => rowNamed(page, "Turn on the flag").click());
   typeInComposer(page.querySelector(".inbox-view-items") ?? page, "On preview too.");
-  await act(async () => press("Done")?.click());
+  await doneAndSend();
   await settle();
   assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
 });
