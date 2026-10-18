@@ -90,7 +90,7 @@ const SPINE_START = 6.4;
 const SPOTS_PER_ZONE = 40;
 
 /** What a zone is built as. */
-export const ZONE_SHAPE = {
+const ZONE_SHAPE = {
   SPHERE: "sphere",
   REACTOR: "reactor",
   GIMBAL: "gimbal",
@@ -100,7 +100,7 @@ export const ZONE_SHAPE = {
   SEGMENT: "segment",
 } as const;
 
-export type ZoneShape = (typeof ZONE_SHAPE)[keyof typeof ZONE_SHAPE];
+type ZoneShape = (typeof ZONE_SHAPE)[keyof typeof ZONE_SHAPE];
 
 /** How an outer ring segment is dressed, chosen by its path. */
 const SEGMENT_DRESS = {
@@ -141,7 +141,7 @@ const LAYER_ACCENT = {
 } as const;
 
 /** A point on a zone's hull, and the hull's outward normal there. */
-export interface HullPoint {
+interface HullPoint {
   readonly point: Vector3;
   readonly normal: Vector3;
 }
