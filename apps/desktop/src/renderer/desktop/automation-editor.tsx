@@ -70,10 +70,12 @@ import {
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
+  CHIP_WIDTH,
   Chip,
   ChipName,
   ConfirmDialog,
   EllipsisIcon,
+  ErrorState,
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
@@ -297,6 +299,7 @@ function OwnerRow({
   const parse = optionValue(owners);
   return (
     <PickerRow
+      width={CHIP_WIDTH.MIN_FIELD}
       label="Owner"
       detail={
         owner === AUTOMATION_SCOPE.WORKSPACE
@@ -439,16 +442,6 @@ function OwnServersRow({
   );
 }
 
-/** What stops a save, said under the row it belongs to once a save was pressed. */
-function Problem({ problem }: { problem: string | undefined }): React.JSX.Element | null {
-  if (problem === undefined) return null;
-  return (
-    <p className="error-message automation-form-problem" role="alert">
-      {problem}
-    </p>
-  );
-}
-
 /** The parse a picker of `options` reads its picked id back with: the option of that value, or none. */
 function optionValue<Value extends string>(
   options: readonly { value: Value; label: string }[],
@@ -499,6 +492,7 @@ function ScheduleRows({
   return (
     <>
       <SelectRow
+        width={CHIP_WIDTH.MIN_FIELD}
         label="Repeats"
         detail={nextRunsText(draft)}
         value={schedule.kind}
@@ -533,6 +527,7 @@ function ScheduleRows({
             <>
               {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
                 <Picker
+                  width={CHIP_WIDTH.MIN_FIELD}
                   label="Day"
                   value={String(schedule.weekday)}
                   valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
@@ -543,6 +538,7 @@ function ScheduleRows({
               ) : null}
               {schedule.kind === SCHEDULE_KIND.HOURLY ? (
                 <Picker
+                  width={CHIP_WIDTH.MIN_FIELD}
                   label="Minutes past the hour"
                   value={String(schedule.minute)}
                   valueLabel={hourlyLabel(schedule.minute)}
@@ -575,6 +571,7 @@ function ScheduleRows({
         </SettingsRow>
       )}
       <PickerRow
+        width={CHIP_WIDTH.MIN_FIELD}
         label="Time zone"
         value={timezone}
         valueLabel={zoneLabel(timezone)}
@@ -877,6 +874,7 @@ function CodeReviewGroup({
         onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
       />
       <SelectRow
+        width={CHIP_WIDTH.MIN_FIELD}
         label="Most findings"
         detail="Per review, most severe first."
         value={settings.mostFindings}
@@ -1106,6 +1104,7 @@ function ModelPicker({
       <Chip
         ref={trigger}
         look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.MIN_FIELD}
         chevron
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -1172,6 +1171,7 @@ function ModelRow({
             readModels={choices.readModels}
             usage={undefined}
             look={CHIP_LOOK.FIELD}
+            width={CHIP_WIDTH.MIN_FIELD}
           />
         ) : choices.defaultFailed ? (
           <ModelPicker
@@ -1248,6 +1248,7 @@ function AgentRow({
   ];
   return (
     <PickerRow
+      width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
       detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
@@ -1326,6 +1327,7 @@ function RunsGroup({
             <RepositoryChip
               key={repositories.scope}
               place={CHIP_PLACE.FIELD}
+              width={CHIP_WIDTH.MIN_FIELD}
               describedBy={control["aria-describedby"]}
               invalid={control["aria-invalid"]}
               value={draft.repository}
@@ -1336,6 +1338,7 @@ function RunsGroup({
         }
       </SettingsRow>
       <SelectRow
+        width={CHIP_WIDTH.MIN_FIELD}
         label="Runs land in"
         value={draft.target}
         options={TARGETS}
@@ -1432,6 +1435,7 @@ function EditorForm({
       ) : null}
       <SettingsSection title="Trigger">
         <SelectRow
+          width={CHIP_WIDTH.MIN_FIELD}
           label="Type"
           detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
           value={draft.triggerKind}
@@ -1454,6 +1458,7 @@ function EditorForm({
         ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
           <>
             <SelectRow
+              width={CHIP_WIDTH.MIN_FIELD}
               label="Event"
               detail="Heard through the workspace's GitHub App."
               value={draft.githubEvent}
@@ -1489,10 +1494,14 @@ function EditorForm({
           rows={5}
           placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
+          invalid={problems[DRAFT_FIELD.PROMPT] !== undefined}
           onEscape={() => prompt.current?.blur()}
           onChange={(text) => onDraft({ prompt: text })}
         />
-        <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
+        {/* What stops a save, said under the prompt once a save was pressed. */}
+        {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
+          <ErrorState>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
+        )}
       </SettingsSection>
       <RunsGroup
         draft={draft}

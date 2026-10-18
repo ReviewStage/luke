@@ -440,6 +440,11 @@ function waiting(tab: HTMLElement): string[] {
     .map((each) => each.textContent ?? "");
 }
 
+/** What the bar says of where the pull request stands: its first control's words. */
+function standing(tab: HTMLElement): string | undefined {
+  return tab.querySelector(".pull-request-bar")?.firstElementChild?.textContent ?? undefined;
+}
+
 /** The words of every element the selector names, in order. */
 function words(container: HTMLElement, selector: string): string[] {
   return [...container.querySelectorAll(selector)].map((each) => each.textContent ?? "");
@@ -461,7 +466,7 @@ function threadLabels(thread: HTMLElement): string[] {
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
   const tab = await draw(controlAnswering());
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   assert.equal(
@@ -474,9 +479,10 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "blocked",
   );
   const opener =
-    tab.querySelector(".pull-request-people .actor-ref") ?? assert.fail("who opened it is named");
+    tab.querySelector(".pull-request-people [data-actor-ref]") ??
+    assert.fail("who opened it is named");
   assert.deepEqual(
-    [opener.querySelector(".actor-ref-name")?.textContent, opener.getAttribute("data-kind")],
+    [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
     "Luke's own App's bot opened it, an App's bot on GitHub like any other",
   );
@@ -905,7 +911,7 @@ function filterNote(tab: HTMLElement, name: string): string {
 function drawnEntries(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll(".pull-request-entry")].map(
     (entry) =>
-      `${entry.querySelector(".changes-comment-head .actor-ref-name")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
+      `${entry.querySelector(".changes-comment-head .luke-inline-ref-label")?.textContent} ${entry.querySelectorAll(".pull-request-thread").length}`,
   );
 }
 
@@ -1039,7 +1045,7 @@ test("where the filters leave nothing of the conversation, it says no comment ma
   );
 });
 
-test("opened on its files, as the Changes chip opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
+test("opened on its files, as a link to its changes opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
   const approved = { login: "alexr", bot: false };
   const tab = await draw(
     controlAnswering({
@@ -1176,7 +1182,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
       PULL_REQUEST_STATE.OPEN,
     ),
   );
-  assert.match(tab.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
+  assert.equal(standing(tab), "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",
@@ -1196,7 +1202,7 @@ test("where what the agent published is not read, the bar still says where the p
     pullRequests: new Map(),
   };
   const tab = await draw(control);
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   const github =
     tab.querySelector<HTMLButtonElement>('.pull-request-bar [aria-label="Open on GitHub"]') ??
     assert.fail("the bar opens the pull request on GitHub");
@@ -1232,7 +1238,7 @@ test("the bar, the title, and the files' count stand from what Luke holds before
     tab.querySelector<HTMLElement>(`[aria-label="${title}"]`) ??
     assert.fail(`the ${title} section stands`);
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
@@ -1427,7 +1433,9 @@ test("the bar wears what was published of the checks only for the pull request t
     }),
   };
   const tab = await draw(control);
-  const mark = tab.querySelector(".pull-request-state [aria-label]") ?? assert.fail("a mark");
+  const mark =
+    tab.querySelector(".pull-request-bar")?.firstElementChild?.querySelector("[aria-label]") ??
+    assert.fail("a mark");
   assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
   assert.doesNotMatch(
     mark.getAttribute("aria-label") ?? "",
@@ -1436,12 +1444,15 @@ test("the bar wears what was published of the checks only for the pull request t
   );
 });
 
+/** The bar's pill, its first control, as a press; nothing where it is no press. */
+function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
+  const first = tab.querySelector(".pull-request-bar")?.firstElementChild;
+  return first instanceof HTMLButtonElement ? first : undefined;
+}
+
 /** The bar's pill, as a press. */
 function pill(tab: HTMLElement): HTMLButtonElement {
-  return (
-    tab.querySelector<HTMLButtonElement>("button.pull-request-state") ??
-    assert.fail("the pill is a press that opens what may be done")
-  );
+  return pillPress(tab) ?? assert.fail("the pill is a press that opens what may be done");
 }
 
 /** Opens the pill's menu and presses its item of the words given. */
@@ -1524,8 +1535,8 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
-  assert.equal(merged.querySelector("button.pull-request-state"), null);
-  assert.match(merged.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
+  assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
+  assert.equal(standing(merged), "Merged");
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {

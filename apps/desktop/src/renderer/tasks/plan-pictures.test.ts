@@ -189,7 +189,7 @@ test("a picture from outside Luke is a link to it, and nothing is read for it", 
   const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".text-link")?.textContent, "SSO flow");
+  assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
   assert.deepEqual(asked, []);
 });
 
@@ -251,9 +251,9 @@ test("a version draws the picture it struck and the one it wrote in, each in its
 
 test("another plan's picture is drawn as itself, with no press that would open nothing", async () => {
   const planId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
-  const otherPlanId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
+  const otherTaskId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
   standHost(new Set([MOCK]), []);
-  const body = `## Approach\n\n![Copied mock](${picture(otherPlanId, MOCK)})`;
+  const body = `## Approach\n\n![Copied mock](${picture(otherTaskId, MOCK)})`;
 
   const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
 

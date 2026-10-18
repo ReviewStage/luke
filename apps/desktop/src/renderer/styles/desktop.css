@@ -748,62 +748,13 @@ button.sidebar-section-head-name:hover {
   pointer-events: none;
 }
 
-/* What the view filters by, under the Tasks head, each chip drawn as the
-   palette's chosen filter is, with the × that lifts it. */
+/* What the view filters by, under the Tasks head: a row of `@luke/ui`'s
+   removable filter chips (`sidebar-task-view.tsx`). */
 .sidebar-view-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-6) var(--luke-space-6);
-}
-
-.sidebar-view-chip {
-  display: inline-flex;
-  min-width: 0;
-  height: 22px; /* off-scale: a chip a row's half-step shorter than the palette's */
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border-selected);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-view-chip-words {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-view-chip > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.sidebar-view-chip button {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--luke-radius-full);
-  background: none;
-  color: var(--luke-color-text-muted);
-}
-
-.sidebar-view-chip button:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.sidebar-view-chip button svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* A section's name over its rows, in the headings' voice: the sidebar's
@@ -1040,44 +991,6 @@ button.sidebar-section-head-name:hover {
 
 .actor-picture[data-loaded="false"] {
   visibility: hidden;
-}
-
-/* An actor named in a line: its mark and its name as one target, in the
-   line's own ink, rising to the primary on hover as the crumb's presses do.
-   The hover fill bleeds by a ring of its own colour rather than padding, so
-   the words around it keep their spacing. Its name sits on the baseline of
-   the words around it. */
-.actor-ref {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-  white-space: nowrap;
-}
-
-/* Note that the name alone is baseline-aligned, so the ref takes its
-   baseline from the name rather than the mark, and stands at least the
-   16px mark's height, so the mark stays centred on it. */
-.actor-ref-name {
-  min-width: 0;
-  align-self: baseline;
-  padding-block: max(0px, calc((16px - 1lh) / 2));
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.actor-ref:hover {
-  background: var(--luke-color-fill-hover);
-  box-shadow: 0 0 0 3px var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A line that names an actor: its words and the actor in one row centred on
@@ -1438,7 +1351,7 @@ ul.actor-stack {
    where it always is and nothing moves. They are the row's siblings, since
    a button holds no button, laid over its end. */
 .sidebar-task-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -1452,37 +1365,6 @@ ul.actor-stack {
   gap: var(--luke-space-2);
   font-size: var(--luke-type-body-size);
   opacity: 0;
-}
-
-/* Note that Pin and Archive draw no ground under the pointer, as the
-   repository header's glyphs do not, because the row under them is already
-   lit by the hover: only the glyph itself brightens. */
-.sidebar-task-mark {
-  display: inline-flex;
-  width: var(--sidebar-plan-mark);
-  height: var(--sidebar-plan-mark);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-task-mark:hover:not(:disabled) {
-  color: var(--luke-color-text);
-}
-
-.sidebar-task-mark:disabled {
-  opacity: 0.45;
-}
-
-.sidebar-task-mark svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 .sidebar-task-item:hover > .sidebar-task-marks,
@@ -1973,30 +1855,6 @@ ul.actor-stack {
   opacity: 1;
 }
 
-/* The header's glyph buttons brighten without a fill, as a tab's × does,
-   because the row under them is already lit by the hover. */
-.sidebar-repository-action {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-repository-action:hover,
-.sidebar-repository-action[aria-expanded="true"] {
-  color: var(--luke-color-text);
-}
-
-.sidebar-repository-action svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
    slot sizes it, and its corners are rounded and edged so a logo drawn on
    white does not bleed into the ground around it. */
@@ -2169,6 +2027,82 @@ ul.actor-stack {
   }
 
   .sidebar-update-word {
+    display: none;
+  }
+}
+
+/* The Mac offline (`offline-mark.tsx`), a pill of the release's shape in the
+   attention orange: a state to know of rather than a press, so it has no
+   hover. It fades in on the pair every arriving element rides and goes at
+   once, as the release's pill does. A narrow foot draws its glyph alone, as
+   it draws the release's, and so does a foot the release's pill stands in
+   too, so the account's name keeps a name's room beside the two. Folded, it
+   stands in the title bar beside New task as a round its glyph alone, one
+   button wide, and the toolbar's clearance grows by that button, so nothing
+   the toolbar draws starts beneath it. Over the sign-in, where nothing
+   else stands in the title bar, it keeps its word. Over a drag region, it
+   takes the pointer back so its hint can show. */
+.offline-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  align-self: center;
+  gap: var(--luke-space-4);
+  height: 24px;
+  padding: 0 var(--luke-space-8);
+  border-radius: 999px;
+  background: var(--luke-color-attention-tint);
+  color: var(--luke-color-attention);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
+  -webkit-app-region: no-drag;
+}
+
+.offline-mark svg {
+  width: 13px;
+  height: 13px;
+}
+
+.desktop-shell .title-bar-controls .offline-mark {
+  width: var(--control-height);
+  height: var(--control-height);
+  justify-content: center;
+  padding: 0;
+}
+
+.desktop-shell .title-bar-controls .offline-mark-word {
+  display: none;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"][data-offline="true"] {
+  --sidebar-toggle-clearance: calc(
+    var(--title-bar-left) +
+    3 *
+    var(--control-height) +
+    var(--control-gap)
+  );
+}
+
+.sidebar-account-row:has(.sidebar-update) .offline-mark {
+  aspect-ratio: 1;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar-account-row:has(.sidebar-update) .offline-mark-word {
+  display: none;
+}
+
+@container sidebar-foot (width < 220px) {
+  .offline-mark {
+    aspect-ratio: 1;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .offline-mark-word {
     display: none;
   }
 }
@@ -2492,17 +2426,6 @@ ul.actor-stack {
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
-}
-
-/* Chips ----------------------------------------------------------------------- */
-
-/* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
-   `@luke/ui/styles.css`. What stays here is the window's own: the marks it
-   holds a size under the control's glyph. */
-.luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -3409,7 +3332,7 @@ ul.actor-stack {
 /* Too narrow for both of the backend's parts: the notetaker's goes while
    Luke's stands, so what Luke is doing keeps the line. */
 @container call-bar (max-width: 479px) {
-  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+  .call-backend-part[data-part="brain"] ~ [data-part="notes"] {
     display: none;
   }
 }
@@ -4422,10 +4345,6 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
-}
-
-.inbox-comment-name .actor-ref > .actor-mark {
-  display: none;
 }
 
 .inbox-comment-when {
@@ -5463,21 +5382,12 @@ button.integration-tool-head:hover,
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
-   value, an event's or a zone's, rather than cut it short; the time stands
-   at that same width beside them. Where the window leaves the form narrow,
-   beside the sidebar and the runs, a picker gives way to the room rather
-   than run past its card. */
+   value, an event's or a zone's, rather than cut it short (its chip's
+   `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
+   Where the window leaves the form narrow, beside the sidebar and the runs,
+   a picker gives way to the room rather than run past its card. */
 .automation-form .settings-picker {
   max-width: 100%;
-}
-
-.automation-form .repository-chip > .luke-chip,
-.automation-form .settings-picker > .luke-chip,
-.automation-form .agent-model-chip .luke-chip,
-.automation-form .automation-model-picker > .luke-chip,
-.automation-form .agent-servers > .luke-chip {
-  width: auto;
-  min-width: min(200px, 100%);
 }
 
 /* A schedule's cron or time, or a review's rules file, at a picker's width beside them. */
@@ -5633,9 +5543,9 @@ button.integration-tool-head:hover,
   font-weight: var(--luke-weight-semibold);
 }
 
-/* The plan's own Chat tab fills its column as an agent's tab does, the
+/* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
-.desktop-plan-chat {
+.desktop-task-chat {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -6275,55 +6185,6 @@ button.integration-tool-head:hover,
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }
 
-/* A Settings page has no top bar: the page names itself at the head of its
-   column (`SettingsPage`), so the title-bar row above it is only the
-   window's drag strip, and the page fills the room under the strip and
-   scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
-   row scrolled up dissolves into the strip rather than being sliced off. */
-.settings-page > .luke-settings-page {
-  flex: 1 1 0;
-}
-
-/* The page's sections are the width its rows answer (`@container settings`
-   in `settings.css`) rather than the window's: the column beside the page
-   list is as narrow at a wide nav as a small window makes it. */
-.settings-page .luke-settings-page-sections {
-  container: settings / inline-size;
-}
-
-/* A page whose reads are out draws nothing under its name until every one
-   has answered, then the whole page at once, so nothing grows into place. */
-.settings-page:has(.settings-reading) .luke-settings-page-sections {
-  visibility: hidden;
-}
-
-/* A page that holds an empty state gives it the room under the page's
-   name, which the state stands in the middle of, at the page's measure. */
-.settings-page > .luke-settings-page:has(.luke-empty-state),
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
-  flex: 1 0 auto;
-}
-
-.settings-page .luke-settings-page-sections:has(> .luke-empty-state) {
-  flex: 1 0 auto;
-}
-
-/* A quiet act ends the line flush with the card's edge, its words rather than
-   its hover's pill standing in the column. Note that the actions take the
-   margin rather than the button, because a button wider than its container
-   by its own negative margin would be held to it and cut short. */
-.settings-page .luke-settings-page-actions {
-  margin-right: calc(-1 * var(--luke-control-inset));
-}
-
 /* Version history ------------------------------------------------------------ */
 
 /* The versions, newest first, one row each, the row whose version is drawn
@@ -6423,7 +6284,7 @@ button.integration-tool-head:hover,
    sidebar plan's Pin and Archive are: the row's sibling, since a button
    holds no button, laid over its first line. */
 .version-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -6980,7 +6841,7 @@ button.integration-tool-head:hover,
 }
 
 .task-summary-archived-agent {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -8407,12 +8268,6 @@ button.integration-tool-head:hover,
 :is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-:is(.new-issue, .new-task) .repository-chip > .luke-chip,
-:is(.new-issue, .new-task) .settings-picker > .luke-chip {
-  width: auto;
-  max-width: 100%;
 }
 
 .dialog-name-field {

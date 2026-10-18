@@ -118,7 +118,7 @@ test("an agent whose harness is not known yet stands on an empty box, named by t
 
   assert.equal(waiting.childElementCount, 0, "the box draws no glyph");
   assert.ok(known.classList.contains("harness-mark"), "a known harness wears its mark");
-  assert.equal(view.querySelector(".actor-ref-name")?.textContent, "Fix auth flow");
+  assert.equal(view.querySelector(".luke-inline-ref-label")?.textContent, "Fix auth flow");
 });
 
 test("an actor with a page is a press that opens it, and a person's name is words in the line", () => {
@@ -131,7 +131,7 @@ test("an actor with a page is a press that opens it, and a person's name is word
       createElement(ActorRef, { actor: { ...DANA, you: true }, sentence: true, possessive: true }),
     ),
   );
-  const [agent, person] = [...view.querySelectorAll<HTMLElement>(".actor-ref")];
+  const [agent, person] = [...view.querySelectorAll<HTMLElement>("[data-actor-ref]")];
 
   assert.equal(agent?.tagName, "BUTTON");
   act(() => agent?.click());
@@ -155,7 +155,7 @@ test("a facepile draws its first few and counts the rest only where its words do
 /** The words of the card an actor named in a line hangs once the pointer rests on its name. */
 function cardOf(actor: Actor): Element {
   const view = draw(createElement(ActorRef, { actor }));
-  const named = view.querySelector(".actor-ref") ?? assert.fail("the actor is named");
+  const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
   act(() => {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -206,7 +206,7 @@ test("someone on GitHub hangs a card saying who they are there and that a person
     person.querySelector(".luke-hover-card-corner")?.textContent,
     "Not in this workspace",
   );
-  assert.equal(document.querySelector('.actor-ref[data-kind="github"]')?.tagName, "SPAN");
+  assert.equal(document.querySelector('[data-actor-ref][data-kind="github"]')?.tagName, "SPAN");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -218,7 +218,10 @@ test("someone on GitHub hangs a card saying who they are there and that a person
   assert.equal(bot.querySelector(".luke-hover-card-name .actor-bot")?.textContent, "bot");
   assert.equal(bot.querySelector(".luke-hover-card-sub")?.textContent, "GitHub app");
   assert.equal(bot.querySelector(".luke-hover-card-corner"), null);
-  assert.equal(document.querySelector(".actor-ref-name")?.textContent, "devin-ai-integration");
+  assert.equal(
+    document.querySelector(".luke-inline-ref-label")?.textContent,
+    "devin-ai-integration",
+  );
 });
 
 test("a picture GitHub serves is asked for at twice the size its disc is drawn", () => {
@@ -270,10 +273,10 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
       createElement(ActorRef, { actor: { kind: ACTOR_KIND.LUKE } }),
     ),
   );
-  const [bot, person, luke] = [...view.querySelectorAll<HTMLElement>(".actor-ref")];
+  const [bot, person, luke] = [...view.querySelectorAll<HTMLElement>("[data-actor-ref]")];
 
   assert.equal(bot?.querySelector("img")?.getAttribute("src"), `${avatar}&s=32`);
-  assert.equal(bot?.querySelector(".actor-ref-name")?.textContent, "dependabot");
+  assert.equal(bot?.querySelector(".luke-inline-ref-label")?.textContent, "dependabot");
   assert.equal(bot?.querySelector(".actor-bot")?.textContent, "bot");
   assert.equal(person?.querySelector(".actor-bot"), null, "a person wears no badge");
   assert.equal(luke?.querySelector(".actor-bot"), null, "Luke reads as Luke");
@@ -353,7 +356,7 @@ test("a member who left keeps their own face, their picture or else their letter
 
   assert.equal(withPicture?.querySelector("img")?.getAttribute("src"), picture);
   assert.equal(withLetter?.querySelector(".actor-face")?.textContent, "L");
-  assert.equal(view.querySelector(".actor-ref")?.textContent, "LLee Park (former member)");
+  assert.equal(view.querySelector("[data-actor-ref]")?.textContent, "LLee Park (former member)");
 });
 
 test("a facepile of faces with cards names a member who left as one to a screen reader, as their grayed face cannot", () => {

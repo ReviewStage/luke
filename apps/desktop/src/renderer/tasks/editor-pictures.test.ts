@@ -16,7 +16,7 @@ import { DOCUMENT_TASK } from "#testing/document-task";
 import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
@@ -37,7 +37,7 @@ const PLAN: Task = {
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
 };
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -103,7 +103,7 @@ function drawn(node: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(PlanMentions, { value: PAGE, children: node })));
+  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
   return container;
 }
 

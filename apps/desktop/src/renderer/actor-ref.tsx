@@ -16,6 +16,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  INLINE_REF_LOOK,
   WingFace,
 } from "@luke/ui";
 import {
@@ -33,6 +34,7 @@ import {
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
+import { InlineRef } from "./inline-ref";
 import { useActorDoor } from "./person-door";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { RelativeTime } from "./tasks/relative-time";
@@ -274,34 +276,6 @@ export function ActorMark({
       aria-hidden="true"
     >
       <Face actor={actor} size={size} />
-    </span>
-  );
-}
-
-/**
- * A face that is no actor's, drawn as a person's is: its picture on a circle
- * once it loads, and the first letter of its name on the hue read off `id`
- * until then and where it fails or there is none. For a picker whose options
- * have faces, such as the avatars Luke appears as on video, so its rows and
- * chip read as the window's other faces do. Hidden from a screen reader, as
- * every mark is, since its name stands beside it.
- */
-export function PictureMark({
-  id,
-  name,
-  pictureUrl,
-  size = ACTOR_SIZE.INLINE,
-}: {
-  /** What the hue is read off: the option's own token. */
-  id: string;
-  /** Whose letter stands until the picture loads. */
-  name: string;
-  pictureUrl: string | undefined;
-  size?: ActorSize;
-}): React.JSX.Element {
-  return (
-    <span className="actor-mark" data-kind={ACTOR_KIND.PERSON} data-size={size} aria-hidden="true">
-      <PersonDisc id={id} name={name} pictureUrl={pictureUrl} size={size} />
     </span>
   );
 }
@@ -559,7 +533,8 @@ export function actorCard(actor: Actor): ReactNode {
  * automation's page; a person, someone who left, and a GitHub account open
  * their own (`useActorDoor`); otherwise its press is the line's own. With
  * `faceOnly` the mark stands alone, its name said to a screen reader and in
- * its card, for a line too short to hold the name.
+ * its card, for a line too short to hold the name; with `nameOnly` the name
+ * stands alone, where the actor's face already stands beside the line.
  */
 export function ActorRef({
   actor,
@@ -568,6 +543,7 @@ export function ActorRef({
   sentence = false,
   possessive = false,
   faceOnly = false,
+  nameOnly = false,
 }: {
   actor: Actor;
   card?: ReactNode;
@@ -578,31 +554,26 @@ export function ActorRef({
   possessive?: boolean;
   /** Whether the mark stands without its name, which only a screen reader hears. */
   faceOnly?: boolean;
+  /** Whether the name stands without its mark, whose face the line already draws. */
+  nameOnly?: boolean;
 }): React.JSX.Element {
-  const name = actorName(actor, { sentence, possessive });
   // A person's own door, their page or GitHub's, where the place hands none.
   const door = useActorDoor(actor);
   const open = onOpen ?? door;
-  const inner = (
-    <>
-      <ActorMark actor={actor} />
-      <span className={faceOnly ? "visually-hidden" : "actor-ref-name"}>{name}</span>
-      {faceOnly ? null : <BotBadge actor={actor} />}
-      <LeftWords actor={actor} />
-    </>
-  );
   return (
-    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor)}>
-      {open === undefined ? (
-        <span className="actor-ref" data-kind={actor.kind}>
-          {inner}
-        </span>
-      ) : (
-        <button type="button" className="actor-ref" data-kind={actor.kind} onClick={open}>
-          {inner}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.WASH}
+      glyph={nameOnly ? undefined : <ActorMark actor={actor} />}
+      label={actorName(actor, { sentence, possessive })}
+      labelHidden={faceOnly}
+      state={githubBot(actor) ? <BotBadge actor={actor} /> : undefined}
+      heard={leftWithFace(actor) ? LEFT_WORDS : undefined}
+      onPress={open === undefined ? undefined : () => open()}
+      hintLabel={actorName(actor)}
+      card={card ?? actorCard(actor)}
+      data-actor-ref=""
+      data-kind={actor.kind}
+    />
   );
 }
 

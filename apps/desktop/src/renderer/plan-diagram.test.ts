@@ -110,7 +110,7 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
 }
 
 /** A plan whose text holds `fence` under a heading. */
-function planWith(fence: string): Task {
+function taskWith(fence: string): Task {
   return { ...DOCUMENT_TASK, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
 }
 
@@ -158,7 +158,7 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
   const code = "sequenceDiagram\n  Admin->>Service: Invite";
 
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
@@ -169,7 +169,7 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
   const code = "flowchart LR\n  Invite --> Join";
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   act(() => toggle(page).click());
@@ -186,7 +186,7 @@ test("Show code puts the fence's code in the picture's place, and Show diagram b
 
 test("a fence the diagram bundle refuses says it could not be drawn, over its code", async () => {
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(UNPARSED)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(UNPARSED)), live: false }),
   );
 
   assert.deepEqual(pictures(page), []);
@@ -200,7 +200,7 @@ test("a fence the diagram bundle refuses says it could not be drawn, over its co
 test("the diagram is drawn again in the window's new appearance when it flips", async () => {
   const code = "flowchart TD\n  Accept --> Member";
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   appearance.dark = true;
@@ -216,7 +216,7 @@ test("a fence in another language, and a Mermaid fence where the words are not a
   const code = "flowchart LR\n  Caption --> Code";
   const shell = "```sh\npnpm install\n```";
 
-  const page = await drawn(createElement(PlanBody, { task: planWith(shell), live: false }));
+  const page = await drawn(createElement(PlanBody, { task: taskWith(shell), live: false }));
   const caption = await drawn(createElement(MarkdownMessage, { words: mermaidFence(code) }));
 
   assert.equal(page.querySelector(".plan-diagram"), null);

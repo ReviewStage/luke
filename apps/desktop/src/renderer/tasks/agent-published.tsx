@@ -6,7 +6,7 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CHIP_LOOK, Chip, ChipName, CopyIcon, ProviderMark, useMenu } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
-import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
+import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -16,7 +16,7 @@ import {
   pullRequestNumberLabel,
   pullRequestStateWord,
 } from "./coding-agent-model";
-import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
+import { PULL_REQUEST_TONE, PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
 
 /**
  * agent-published.tsx -- what an agent published, on its tab: the pull request or branch chip at the box's foot, and the pull request's row at a finished transcript's end.
@@ -37,20 +37,17 @@ import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
  * and removed, and where the pull request stands only where that changes what the developer would
  * do; a press of it opens the pull request. Nothing here is drawn before
  * the service has said what stands, so a tab on an agent still reading the
- * repository wears nothing yet. Beside the pull request's chip stands a
- * Changes chip, which opens the pull request's files and their diffs in
- * the side panel (`agent-changes-tab.tsx`). A composer too narrow for
- * their words draws each chip's mark alone, its hint and label still
- * naming it (tasks.css). Each chip is `@luke/ui`'s pill, in a box of the
- * composer's own that tints it in the pull request's colour.
+ * repository wears nothing yet. A composer too narrow for its words draws
+ * the chip's mark alone, its hint and label still naming it. The chip is
+ * `@luke/ui`'s pill, the pull request's in the tone of where it stands and
+ * a branch's name in the code face, in a box of the composer's own that its
+ * ⋯ finds it by.
  */
 
 /** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
 export interface PublishedDoors {
   openGitHub: (url: string) => void;
   copy: (words: string, label: string) => void;
-  /** Opens the agent's changes in a tab of the side panel's own; none where the view stands in no panel. */
-  openChanges?: (() => void) | undefined;
   /** Opens the agent's pull request in a tab of the side panel's own; none where the view stands in no panel. */
   openPullRequest?: (() => void) | undefined;
 }
@@ -106,7 +103,7 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
   return (
     <>
       <GitBranchIcon aria-hidden="true" />
-      <ChipName>{published.branch}</ChipName>
+      <ChipName mono>{published.branch}</ChipName>
     </>
   );
 }
@@ -115,9 +112,12 @@ function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer 
 export function PublishedChip({
   published,
   doors,
+  narrow = false,
 }: {
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
+  /** Whether the composer is too narrow for the chip's words, so it draws its mark alone. */
+  narrow?: boolean;
 }): ReactNode {
   const menu = useMenu(true);
   const url = published === undefined ? undefined : publishedUrl(published);
@@ -129,15 +129,12 @@ export function PublishedChip({
   const inPanel = pullRequest === null ? undefined : doors.openPullRequest;
   return (
     <>
-      <span
-        className="agent-published-chip"
-        data-pull-request-state={pullRequest?.state}
-        data-branch={pullRequest === null ? "" : undefined}
-        data-menu-open={String(menu.open !== undefined)}
-      >
+      <span className="agent-published-chip">
         <Tooltip label={inPanel === undefined ? `Open ${opens} on GitHub` : `Show ${opens}`}>
           <Chip
             look={CHIP_LOOK.PILL}
+            tone={pullRequest === null ? undefined : PULL_REQUEST_TONE[pullRequest.state]}
+            iconOnly={narrow}
             aria-label={label}
             onClick={() => {
               menu.close(false);
@@ -159,30 +156,6 @@ export function PublishedChip({
         />
       )}
     </>
-  );
-}
-
-/** The chip that opens the pull request's changes in the side panel, worn beside its own chip; nothing before a pull request stands or where no panel takes the tab. */
-export function ChangesChip({
-  published,
-  doors,
-}: {
-  published: CodingAgentPullRequestAnswer | undefined;
-  doors: PublishedDoors;
-}): ReactNode {
-  const { openChanges } = doors;
-  if (published === undefined || published.pullRequest === null || openChanges === undefined) {
-    return null;
-  }
-  return (
-    <span className="agent-changes-chip">
-      <Tooltip label="Show changes">
-        <Chip look={CHIP_LOOK.PILL} aria-label="Show changes" onClick={openChanges}>
-          <FileDiffIcon aria-hidden="true" />
-          <ChipName>Changes</ChipName>
-        </Chip>
-      </Tooltip>
-    </span>
   );
 }
 

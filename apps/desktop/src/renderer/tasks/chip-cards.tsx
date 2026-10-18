@@ -11,8 +11,8 @@ import { MemberDirectory, useMemberDirectory, usePerson } from "../member-direct
 import { useAppState, useExperiment } from "../use-app-state";
 import { useMentionedReader } from "./mentioned-agent-card";
 import { PageCard } from "./page-card";
-import { usePlanMentions } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
+import { useTaskMentions } from "./task-mentions";
 import { useMinute } from "./task-time";
 
 /**
@@ -72,7 +72,7 @@ const WAITING_WORDS = "Waiting for an answer";
  * neither, or no heading spells the anchor.
  */
 function useSectionHeading(taskId: string, anchor: string): string | undefined {
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const opened = useAppState()?.tasks?.document.task;
   const text =
     page?.taskId === taskId

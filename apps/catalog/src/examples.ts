@@ -24,6 +24,7 @@ import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
+import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
@@ -42,6 +43,7 @@ import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
+import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -87,7 +89,9 @@ export const EXAMPLES: readonly Example[] = [
   FORM_SECTION_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
+  INLINE_REFS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  TEXT_LINKS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,

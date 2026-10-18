@@ -46,9 +46,9 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import { useMemberDirectory } from "../member-directory";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
-import { NO_TASK } from "./plan-mentions";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
+import { NO_TASK } from "./task-mentions";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
@@ -901,7 +901,7 @@ const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
 const NO_MEMBERS: readonly WorkspaceMember[] = [];
 
-/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
   readonly taskId: string;
   readonly taskName: string;

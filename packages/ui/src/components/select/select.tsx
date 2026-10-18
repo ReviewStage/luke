@@ -1,5 +1,4 @@
-import { CHIP_LOOK, ChipName } from "../chip/chip.js";
-import { ChipFrame } from "../chip/chip-frame.js";
+import { CHIP_LOOK, CHIP_WIDTH, Chip, ChipName } from "../chip/chip.js";
 import { dropBelowStart, MENU_ALIGN, Menu, useMenu } from "../menu/menu.js";
 
 /**
@@ -39,11 +38,11 @@ export const SELECT_WIDTH = {
 
 export type SelectWidth = (typeof SELECT_WIDTH)[keyof typeof SELECT_WIDTH];
 
-/** The class each width wears beside the chip's own. */
-const WIDTH_CLASS = {
-  [SELECT_WIDTH.FIT]: undefined,
-  [SELECT_WIDTH.FIELD]: "luke-select-field",
-} as const satisfies Record<SelectWidth, string | undefined>;
+/** The chip's width for each of the field's. */
+const CHIP_WIDTH_OF = {
+  [SELECT_WIDTH.FIT]: CHIP_WIDTH.AUTO,
+  [SELECT_WIDTH.FIELD]: CHIP_WIDTH.FIELD,
+} as const;
 
 /** One value the field may take: the value, its words, and a glyph where values carry one. */
 export interface SelectOption<Value extends string> {
@@ -99,10 +98,10 @@ export function Select<Value extends string>(
   return (
     <>
       {/* Note that a menu's trigger hangs it from the trailing edge unless handed another place. */}
-      <ChipFrame
+      <Chip
         {...appAttributes}
         {...menu.trigger(align === SELECT_ALIGN.START ? dropBelowStart : undefined)}
-        className={WIDTH_CLASS[width]}
+        width={CHIP_WIDTH_OF[width]}
         look={CHIP_LOOK.FIELD}
         chevron
         aria-label={`${label}: ${words}`}
@@ -112,7 +111,7 @@ export function Select<Value extends string>(
       >
         {chosen?.icon}
         <ChipName>{words}</ChipName>
-      </ChipFrame>
+      </Chip>
       {menu.drawn === undefined ? null : (
         <Menu
           label={label}

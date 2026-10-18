@@ -3,13 +3,13 @@
  * section itself.
  */
 
+import { TEXT_VARIANT, TextLink } from "@luke/ui";
 import { type AdminTab, plainLeftClick, tabHref } from "../routing";
 
 /**
  * The way back from a page under a section to the section itself: a real
  * anchor, so a modified click still opens the section where the browser
- * would, and a plain one moves in place. It stands in the body role's size
- * and the muted ink, lifting to the text's own under the pointer.
+ * would, and a plain one moves in place. A quiet link in the body role.
  */
 export function BackLink({
   tab,
@@ -21,16 +21,18 @@ export function BackLink({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <a
-      href={tabHref(tab)}
-      className="mt-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
-      onClick={(event) => {
-        if (!plainLeftClick(event)) return;
-        event.preventDefault();
-        onBack();
-      }}
-    >
-      <span aria-hidden="true">←</span> {label}
-    </a>
+    <div className="mt-8">
+      <TextLink
+        href={tabHref(tab)}
+        variant={TEXT_VARIANT.BODY}
+        onClick={(event) => {
+          if (!plainLeftClick(event)) return;
+          event.preventDefault();
+          onBack();
+        }}
+      >
+        <span aria-hidden="true">←</span> {label}
+      </TextLink>
+    </div>
   );
 }
