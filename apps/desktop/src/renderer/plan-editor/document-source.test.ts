@@ -286,3 +286,17 @@ test("a list mixing bullets and task items opens editable, untouched byte for by
   editor.chain().setTextSelection(end).insertContent(" again").run();
   assert.deepEqual(changedLines(text, handedOver()), ["-- [x] test", "+- [x] test again"]);
 });
+
+test("a tight list switching between bullets and task items is handed over untouched byte for byte, and stays tight around an edit", () => {
+  const text = "- one\n- [x] two\n- three\n- [ ] four\n";
+  const { editor, handedOver } = opened(text);
+
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "two") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.equal(handedOver(), text.replace("two", "two again"));
+});

@@ -36,6 +36,9 @@ const FOOTNOTE = /\[\^[^\]\s]+\]/u;
 /** What separates a re-printed block from the next. */
 const BLOCK_GAP = "\n\n";
 
+/** The blocks a bullet list opens as, a run of plain items or of task items (`tokenSources`). */
+const LIST_BLOCKS = new Set(["bulletList", "taskList"]);
+
 /** The locked block a source the editor cannot draw faithfully opens as. */
 export const RawBlock = Node.create({
   name: "rawBlock",
@@ -173,6 +176,12 @@ export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: He
     if (held.sources.get(node) === undefined && block.trim() === "") return;
     if (index === doc.childCount - 1) {
       out += block.trimEnd() + held.ending;
+      return;
+    }
+    // Note that a run of a list goes on into the next run with no blank line
+    // laid between them, so a tight list stays tight; a kept run keeps its own.
+    if (LIST_BLOCKS.has(node.type.name) && LIST_BLOCKS.has(doc.child(index + 1).type.name)) {
+      out += held.sources.has(node) ? block : `${block.trimEnd()}\n`;
       return;
     }
     // Note that the text's last block kept its source without the blank line after it, which a block laid in after it needs.
