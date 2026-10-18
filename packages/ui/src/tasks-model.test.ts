@@ -120,7 +120,7 @@ test("a plan started from a Linear issue is named by its title, cut to a name's 
 });
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {
-  const plan = {
+  const task = {
     id: INVITES,
     workspaceId: "workspace-personal",
     name: "Teammate invitations",
@@ -130,27 +130,27 @@ test("a pin dragged here stands at its new place until the list carries it, and 
     pinnedAt: 3,
     pinPosition: "a0",
   };
-  const listed = _view({ tasks: [plan] });
+  const listed = _view({ tasks: [task] });
   const dragged = new Map([[INVITES, { position: "a1", answered: false }]]);
 
   assert.equal(positionedView(listed, dragged).tasks[0]?.pinPosition, "a1");
   assert.equal(unsettledPinPositions(dragged, listed).size, 1);
   assert.equal(
-    unsettledPinPositions(dragged, _view({ tasks: [{ ...plan, pinPosition: "a1" }] })).size,
+    unsettledPinPositions(dragged, _view({ tasks: [{ ...task, pinPosition: "a1" }] })).size,
     0,
   );
-  const { pinnedAt: _pinnedAt, pinPosition: _pinPosition, ...unpinned } = plan;
+  const { pinnedAt: _pinnedAt, pinPosition: _pinPosition, ...unpinned } = task;
   assert.equal(unsettledPinPositions(dragged, _view({ tasks: [unpinned] })).size, 0);
   // Once answered, a view placing the pin elsewhere is a later drag on another Mac, which it follows.
   const answered = new Map([[INVITES, { position: "a1", answered: true }]]);
   assert.equal(
-    unsettledPinPositions(answered, _view({ tasks: [{ ...plan, pinPosition: "a2" }] })).size,
+    unsettledPinPositions(answered, _view({ tasks: [{ ...task, pinPosition: "a2" }] })).size,
     0,
   );
 });
 
 test("an unpin given here takes the pin's place with it, so a pin made again stands on top", () => {
-  const plan = {
+  const task = {
     id: INVITES,
     workspaceId: "workspace-personal",
     name: "Teammate invitations",
@@ -161,7 +161,7 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
     pinPosition: "a0",
   };
   const unpinned = markedView(
-    _view({ tasks: [plan] }),
+    _view({ tasks: [task] }),
     new Map([[INVITES, pendingMark(TASK_MARK.UNPIN, 4)]]),
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);

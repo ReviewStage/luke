@@ -143,15 +143,15 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
     description: "Pick an issue and plan it at once.",
   };
   const userId = await database.createUser();
-  const plan = await database.run(startTask(userId, { name: issue.title, linearIssue: issue }));
+  const task = await database.run(startTask(userId, { name: issue.title, linearIssue: issue }));
   const plain = await database.run(startTask(userId, { name: TASK_NAME }));
-  const targetOf = async (planId: string) => ({
+  const targetOf = async (taskId: string) => ({
     userId,
-    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, planId)))
+    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, taskId)))
       .conversationId,
   });
 
-  const started = await standingContextOf(await targetOf(plan.id));
+  const started = await standingContextOf(await targetOf(task.id));
   const other = await standingContextOf(await targetOf(plain.id));
 
   assert.ok(started.includes(`[linear issue the task was started from]\n${JSON.stringify(issue)}`));
