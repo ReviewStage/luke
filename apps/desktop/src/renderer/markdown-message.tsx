@@ -1,3 +1,4 @@
+import { PROSE_CLASS } from "@luke/ui";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
@@ -738,7 +739,7 @@ export function MarkdownMessage({
   return (
     <div
       className={
-        className === undefined ? "markdown luke-prose" : `markdown luke-prose ${className}`
+        className === undefined ? `markdown ${PROSE_CLASS}` : `markdown ${PROSE_CLASS} ${className}`
       }
     >
       <FenceEdit.Provider value={edit}>

@@ -1,5 +1,6 @@
 import {
   CHIP_LOOK,
+  CHIP_SIZE,
   CHIP_TONE,
   CHIP_WIDTH,
   Chip,
@@ -17,7 +18,8 @@ import { CatalogSection } from "../section";
 /**
  * chips.tsx -- each chip look at rest, with a mark and a chevron, with its
  * menu open, unavailable, and with a long name in a narrow column; a row of
- * filters, one pressed at a time; each tone; each width; a chip drawn as
+ * filters, one pressed at a time; a row of compact counts, one pressed and
+ * one busy; each tone; each width; a chip drawn as
  * its mark alone; a name in the code face; and a removable filter.
  */
 
@@ -38,6 +40,23 @@ function FilterRow(): React.JSX.Element {
           {each}
         </Chip>
       ))}
+    </Inline>
+  );
+}
+
+/** A row of compact counts, a pull request's reactions: the reader's own pressed, and one whose change is out. */
+function CompactRow(): React.JSX.Element {
+  return (
+    <Inline gap={GAP.TIGHT}>
+      <Chip look={CHIP_LOOK.FILTER} size={CHIP_SIZE.COMPACT} aria-pressed>
+        👍 12
+      </Chip>
+      <Chip look={CHIP_LOOK.FILTER} size={CHIP_SIZE.COMPACT} aria-pressed={false}>
+        🚀 1
+      </Chip>
+      <Chip look={CHIP_LOOK.FILTER} size={CHIP_SIZE.COMPACT} aria-pressed={false} busy disabled>
+        👀 2
+      </Chip>
     </Inline>
   );
 }
@@ -86,6 +105,9 @@ function Chips(): React.JSX.Element {
       ))}
       <CatalogSection id="chips-filter-row" title="Filter row">
         <FilterRow />
+      </CatalogSection>
+      <CatalogSection id="chips-compact" title="Compact counts">
+        <CompactRow />
       </CatalogSection>
       <CatalogSection id="chips-tones" title="Tones">
         <Inline>

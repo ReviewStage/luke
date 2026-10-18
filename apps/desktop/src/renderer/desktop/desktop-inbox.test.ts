@@ -1016,7 +1016,7 @@ test("an approval is decided in its question, Approve and Decline two cards pick
   assert.deepEqual(answeredPicks(page), ["Decline"], "Enter left the pick standing");
 });
 
-test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
+test("a to-do is a card of two picks in its question: its step, the item's title, over a Couldn't do it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
   onlyAsking({ type: INBOX_RESPONSE.TODO }, { title: "Add POSTMARK_SERVER_TOKEN to Vercel" });
   const { page } = mount();
   await settle();
@@ -1024,10 +1024,7 @@ test("a to-do is a task card in its question: a checkbox beside its step, the it
   const pane = itemPane(page);
   const [step, pill] = openOptions(pane);
   assert.ok(step && pill, "the card holds two picks");
-  assert.equal(
-    step.querySelector(".inbox-todo-words")?.textContent,
-    "Add POSTMARK_SERVER_TOKEN to Vercel",
-  );
+  assert.equal(step.textContent, "Add POSTMARK_SERVER_TOKEN to Vercel1");
   assert.equal(pill.textContent, "Couldn't do it2");
   assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
   assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");

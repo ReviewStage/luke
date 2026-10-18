@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { CHIP_LOOK, Chip, ChipName } from "./chip.js";
+import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
 
 /**
  * chip.test.ts -- a row of filter chips announces the one pressed, and a
  * press moves it there; a chip drawn as its mark alone keeps its words as
- * its name; and a removable chip's × alone is a press, which lifts it.
+ * its name; a removable chip's × alone is a press, which lifts it; and a
+ * compact count says it is busy while the change it made is out.
  */
 
 declare global {
@@ -116,4 +117,42 @@ test("a removable chip is no press of its own, and its × named for what it does
   assert.ok(document.body.textContent?.includes("Created by me"));
   act(() => buttons[0]?.click());
   assert.equal(document.body.textContent, "");
+});
+
+/** A reaction's count as a compact filter whose press gives the reader's own and waits until it is answered. */
+function Reaction(): React.JSX.Element {
+  const [mine, setMine] = useState(false);
+  const [out, setOut] = useState(false);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      Chip,
+      {
+        look: CHIP_LOOK.FILTER,
+        size: CHIP_SIZE.COMPACT,
+        "aria-pressed": mine,
+        busy: out,
+        disabled: out,
+        onClick: () => {
+          setMine(!mine);
+          setOut(true);
+        },
+      },
+      mine ? "👍2" : "👍1",
+    ),
+    createElement("button", { type: "button", onClick: () => setOut(false) }, "Answer"),
+  );
+}
+
+test("a compact chip pressed says it is busy until its change is answered, then stands pressed", () => {
+  render(createElement(Reaction));
+  const reaction = chip("👍1");
+  assert.equal(reaction.getAttribute("aria-busy"), null);
+  act(() => reaction.click());
+  assert.equal(reaction.getAttribute("aria-busy"), "true");
+  assert.equal(reaction.disabled, true);
+  act(() => chip("Answer").click());
+  assert.equal(reaction.getAttribute("aria-busy"), null);
+  assert.deepEqual(pressed(), ["👍2"]);
 });

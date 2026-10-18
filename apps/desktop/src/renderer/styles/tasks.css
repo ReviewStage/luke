@@ -97,7 +97,7 @@
    tints a selection, in the writer's own accent. */
 .plan-body .markdown-selection {
   margin-top: 0;
-  border-radius: 2px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 32%, transparent);
   color: inherit;
 }
@@ -976,7 +976,7 @@
   display: flex;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 .checkpoint-live > svg {
@@ -1505,7 +1505,7 @@
    list (diff-view/index.ts draws it across the file's width). */
 .diff-list-notice {
   margin: 0;
-  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-40);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -1929,7 +1929,7 @@
   min-width: 16px;
   margin-inline-start: var(--luke-space-4);
   padding: 0 var(--luke-space-4);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
   font-size: var(--luke-type-caption-size);
@@ -2404,7 +2404,7 @@
   margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .line-comment-note {
@@ -2528,8 +2528,9 @@
 }
 
 /* The reactions under a description or a comment, as GitHub draws them:
-   a row of pills, each its emoji and how many gave it, the reader's own lit
-   in the accent. */
+   a row of pills, each its emoji and how many gave it, the reader's own lit.
+   A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
+   may not is a count drawn here in the same look, lit as a pressed one is. */
 .pull-request-reactions {
   display: flex;
   flex-wrap: wrap;
@@ -2561,35 +2562,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A pill that gives or takes back the reader's own is a press: it fills on
-   hover, waits dimmed while any change is out, and the one whose change is
-   out pulses until GitHub answers. */
-button.pull-request-reaction {
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.pull-request-reaction:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-}
-
-button.pull-request-reaction:disabled {
-  opacity: 0.6;
-}
-
-.pull-request-reaction[aria-busy="true"] {
-  animation: pull-request-reaction-wait 1.2s ease-in-out infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-@keyframes pull-request-reaction-wait {
-  50% {
-    opacity: 0.35;
-  }
-}
-
 /* Add reaction's row of GitHub's eight, hung from its button: one compact
    line of the app's icon buttons, each wearing its emoji at the dialog's
    type size, wrapping where a narrow panel leaves less room than eight. */
@@ -2610,8 +2582,8 @@ button.pull-request-reaction:disabled {
 }
 
 .pull-request-reaction[data-mine="true"] {
-  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  border-color: var(--luke-color-border-selected);
+  background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
 }
 
@@ -2759,7 +2731,7 @@ button.pull-request-reaction:disabled {
 }
 
 .file-note-words {
-  padding: 0 var(--luke-space-12) var(--luke-space-8) 38px;
+  padding: 0 var(--luke-space-12) var(--luke-space-8) var(--luke-space-40);
   overflow-wrap: anywhere;
 }
 
@@ -4518,21 +4490,6 @@ ol.transcript-list {
   background: var(--luke-color-sidebar);
 }
 
-/* Note that the arrow, the words' first line, and the presses share one
-   centre, the presses' own, so chips that wrap to a second line leave the
-   arrow on the first rather than centred between the two. */
-.continued-composer .luke-banner-row {
-  align-items: flex-start;
-}
-
-.continued-composer .luke-banner-glyph {
-  height: var(--luke-control-height);
-}
-
-.continued-composer .luke-banner-words {
-  padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
-}
-
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action
@@ -5029,7 +4986,7 @@ ol.transcript-list {
   width: 8px;
   height: 8px;
   flex: none;
-  border-radius: 2px;
+  border-radius: var(--luke-radius-6);
   background: var(--context-part);
 }
 

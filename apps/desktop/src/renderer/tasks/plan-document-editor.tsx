@@ -7,7 +7,7 @@ import {
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
-import { Button } from "@luke/ui";
+import { Button, PROSE_CLASS } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -774,7 +774,7 @@ export function PlanDocumentEditor({
     placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
-    className: "markdown luke-prose plan-unit",
+    className: `markdown ${PROSE_CLASS} plan-unit`,
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,

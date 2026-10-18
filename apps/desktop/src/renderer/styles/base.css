@@ -16,12 +16,12 @@
      the window's own: whose voice is live, the code's and the terminal's
      inks, a file icon's. */
 
-  /* Whose voice is live, so a glance says who is talking. Your turn is green,
-     which is nowhere else on the surface and so belongs to you alone; Luke
-     answers in the blue the rest of the surface already uses for something
-     live and in progress, which is what a reply is. Both the meter and the face
-     read from here, so the two can never disagree about who has the turn. */
-  --voice-developer: #7fe0ac;
+  /* Whose voice is live, so a glance says who is talking. Your turn is the
+     palette's green; Luke answers in the blue the rest of the surface already
+     uses for something live and in progress, which is what a reply is. The
+     face reads from here, and the captions and the notices name you in the
+     same green. */
+  --voice-developer: var(--luke-color-complete);
   --voice-luke: var(--luke-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
@@ -124,9 +124,6 @@
   /* How a scroller the app moves itself, a tab strip bringing a tab into
      view, gets there: a glide, held still where the durations are. */
   --scroll-glide: smooth;
-
-  /* The darkest fill, opaque, for what nothing behind may show through. */
-  --surface-fill: #000;
   --scroll-fade: 26px;
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
@@ -139,7 +136,6 @@
    `nativeTheme.themeSource`) on the frame it changes, without a re-render. */
 @media (prefers-color-scheme: light) {
   :root {
-    --voice-developer: #17784a;
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
@@ -180,8 +176,6 @@
     --file-icon-purple: #a631be;
     --file-icon-pink: #d32a61;
     --file-icon-mauve: #594c5b;
-
-    --surface-fill: #fff;
   }
 }
 
@@ -651,7 +645,7 @@ body,
 }
 
 .voice-caption[data-tone="developer"] .voice-caption-speaker {
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 /* Two lines at most, clipped rather than scrolled by hand: the renderer keeps
