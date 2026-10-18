@@ -85,6 +85,7 @@ import {
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
+  reactOnPullRequest,
   replyToReviewThread,
   setAutoMerge,
   setLabelled,
@@ -97,6 +98,7 @@ import {
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
+  GRAPHQL_REACTION_OF,
   imageCommits,
   type PullRequestReadFailure,
   pullRequestByNumber,
@@ -106,6 +108,7 @@ import {
   pullRequestFiles,
   pullRequestOverview,
   pullRequestReviewOptions,
+  viewerReactionsOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -176,6 +179,7 @@ import {
 import {
   type MemberPullRequest,
   memberPullRequestWrite,
+  memberReadToken,
   writeAnswerOf,
 } from "./pull-request-write.js";
 
@@ -969,6 +973,8 @@ type OverviewRead<A> = (
   token: Redacted.Redacted,
   agent: CodingAgent,
   pullRequest: CodingAgentPullRequest,
+  /** The member reading, whose own reads mark what is theirs. */
+  userId: string,
 ) => Effect.Effect<A | null, PullRequestReadFailure, AgentsServices>;
 
 /**
@@ -992,7 +998,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    return yield* read(token, agent, pullRequest);
+    return yield* read(token, agent, pullRequest, userId);
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -1007,6 +1013,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
       }
     }),
   );
+  // Note that a part may carry what is the reader's own, such as the reactions they gave, which every hosted answer's `private, no-store` keeps from anyone else.
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
 });
 
@@ -1079,17 +1086,30 @@ const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewCheck
   },
 );
 
+/** Which reactions the member gave on the pull request, read on their own token; none where they hold none GitHub takes. */
+const memberReactions = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(undefined) : viewerReactionsOf(token, repository, number),
+  );
+
 /**
  * GET reads the agent's pull request's conversation: its comments, its
  * reviews and their threads, and where each reviewer stands by their
- * reviews, its people named against the workspace's members.
+ * reviews, its people named against the workspace's members; and, read
+ * beside it on the member's own token, which reactions are theirs.
  */
 const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewConversationEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
-      namedOverviewConversation(agent, pullRequest.number, read),
+  return yield* overviewPart(seams, published, (token, agent, pullRequest, userId) =>
+    Effect.flatMap(
+      pullRequestConversation(
+        token,
+        agent.repository,
+        pullRequest,
+        memberReactions(userId, agent.repository, pullRequest.number),
+      ),
+      (read) => namedOverviewConversation(agent, pullRequest.number, read),
     ),
   );
 });
@@ -1143,6 +1163,13 @@ function writeOf(
         request.threadId,
         request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD,
       );
+    case PULL_REQUEST_ACTION.ADD_REACTION:
+    case PULL_REQUEST_ACTION.REMOVE_REACTION:
+      return reactOnPullRequest(token, id, {
+        subject: request.subject,
+        content: GRAPHQL_REACTION_OF[request.content],
+        add: request.action === PULL_REQUEST_ACTION.ADD_REACTION,
+      });
   }
 }
 
