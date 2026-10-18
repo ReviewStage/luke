@@ -1,4 +1,10 @@
-import { CastleIcon, FlaskConicalIcon, type LucideIcon, SatelliteIcon } from "lucide-react";
+import {
+  CastleIcon,
+  FlaskConicalIcon,
+  type LucideIcon,
+  SatelliteIcon,
+  TrainFrontIcon,
+} from "lucide-react";
 import type { WorldModule } from "./world";
 
 /**
@@ -40,6 +46,12 @@ const FACTORY_WORLDS = [
     name: "Orbital Station",
     icon: SatelliteIcon,
     load: () => import("./worlds/station/index"),
+  },
+  {
+    key: "railway",
+    name: "Model Railway",
+    icon: TrainFrontIcon,
+    load: () => import("./worlds/railway/index"),
   },
 ] as const satisfies readonly WorldEntry[];
 
