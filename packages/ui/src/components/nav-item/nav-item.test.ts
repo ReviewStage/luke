@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { useMenu } from "../menu/menu.js";
 import {
   NAV_COUNT_SHOWN,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -66,6 +67,25 @@ test("a count of none is left out", () => {
   );
 
   expect(button(container).textContent).toBe("Inbox");
+});
+
+test("a count is muted unless it is drawn in the accent's blue", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(NavItem, { count: { value: 2, noun: "tasks" }, children: "acme/web" }),
+      createElement(NavItem, {
+        count: { value: 3, noun: "waiting on you", tone: NAV_COUNT_TONE.ACCENT },
+        children: "Inbox",
+      }),
+    ),
+  );
+
+  const tones = [...container.querySelectorAll<HTMLElement>(".luke-nav-item-count")].map(
+    (each) => each.dataset.tone,
+  );
+  expect(tones).toEqual([NAV_COUNT_TONE.MUTED, NAV_COUNT_TONE.ACCENT]);
 });
 
 test("the place shown is announced as the page, a search's find as the location", () => {
