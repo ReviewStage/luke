@@ -2,7 +2,7 @@
 
 import { act, cloneElement, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import { LIST_ROW_CURRENT, LIST_ROW_META, List, ListRow, type ListRowHint } from "./list-row.js";
 
@@ -17,7 +17,11 @@ import { LIST_ROW_CURRENT, LIST_ROW_META, List, ListRow, type ListRowHint } from
  * current as the page beside the list is announced so, and the app's hint
  * hung from a row's press raises its words for the press. A row whose
  * metadata stands on its title's line reads it after the title and before
- * the line under it. Synthetic members.
+ * the line under it. A row swiped right rests open on its act's button
+ * after a short swipe and does the act on a long one's release, by pointer
+ * or by a trackpad's wheel; a cancelled pointer, a swipe whose act changed
+ * under it, a swipe left, and a press up or down never act. Synthetic
+ * members.
  */
 
 declare global {
@@ -36,6 +40,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 /** Draws `element` into a container in the document and hands the container back. */
@@ -323,4 +328,331 @@ test("the app's hint hung from a row's press raises its words while the press ho
   expect(container.querySelector("output")?.textContent).toBe("Review the release");
   press(row);
   expect(heard).toEqual(["open"]);
+});
+
+/** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */
+const ROW_WIDTH = 300;
+
+/** A row offering one swipe, its act's words `label`, each act counted in `acted`; and the row's press, counted in `opened`. */
+function SwipedRow({
+  label,
+  acted,
+  opened,
+}: {
+  label: string;
+  acted: string[];
+  opened: string[];
+}): React.JSX.Element {
+  return createElement(List, {
+    label: "Inbox",
+    children: createElement(ListRow, {
+      title: "Alert at 80%?",
+      onPress: () => opened.push("open"),
+      actions: createElement(IconButton, {
+        icon: glyph(),
+        label: "Mark as read",
+        onClick: () => acted.push("hover mark"),
+      }),
+      swipe: { label, icon: glyph(), onAct: () => acted.push(label) },
+    }),
+  });
+}
+
+/** A swiped row drawn, its item measured `ROW_WIDTH` wide and its pointer captured as the window would; and how to draw it again with another act. */
+function swiped(label = "Read") {
+  const acted: string[] = [];
+  const opened: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (words: string) =>
+    act(() => root.render(createElement(SwipedRow, { label: words, acted, opened })));
+  draw(label);
+  const item = container.querySelector<HTMLLIElement>("li") ?? expect.fail("the row stands");
+  vi.spyOn(item, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: ROW_WIDTH, height: 56 }),
+  );
+  Object.assign(item, { setPointerCapture: () => undefined });
+  const press =
+    item.querySelector<HTMLElement>("button.luke-list-row-main") ?? expect.fail("press");
+  return { container, item, press, acted, opened, redraw: draw };
+}
+
+/** A pointer event of the first pointer at `x`, `y`. */
+function pointer(type: string, x: number, y = 10): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/** A press on `target` dragged right by each of `steps` in turn, from x 10, left held down. */
+function drag(target: HTMLElement, ...steps: number[]): void {
+  act(() => {
+    target.dispatchEvent(pointer("pointerdown", 10));
+  });
+  for (const step of steps) {
+    act(() => {
+      target.dispatchEvent(pointer("pointermove", 10 + step));
+    });
+  }
+}
+
+/** The click a pointer's release makes, a press's first, which a keyboard's click is not. */
+function pointerClick(): MouseEvent {
+  return new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 });
+}
+
+/** The pointer let go at `dx` right of where it pressed, and the click its release makes on `target`. */
+function release(target: HTMLElement, dx: number): void {
+  act(() => {
+    target.dispatchEvent(pointer("pointerup", 10 + dx));
+    target.dispatchEvent(pointerClick());
+  });
+}
+
+/** Where a swiped row stands, how far it is out, and whether it is armed. */
+function standing(item: HTMLElement): [string | undefined, string, boolean] {
+  return [
+    item.dataset.swipe,
+    item.style.getPropertyValue("--luke-list-row-swipe"),
+    item.dataset.armed === "true",
+  ];
+}
+
+test("a short swipe right leaves the row open on its act's button, which a click presses once, closing the row; the release opens nothing", () => {
+  const { item, press, acted, opened } = swiped();
+  drag(press, 10, 40);
+  expect(standing(item)).toEqual(["moving", "40px", false]);
+  release(press, 40);
+  expect(standing(item)).toEqual(["open", "72px", false]);
+  expect([acted, opened]).toEqual([[], []]);
+  const button =
+    item.querySelector<HTMLButtonElement>("button[data-swipe-act]") ?? expect.fail("button");
+  expect(button.textContent).toBe("Read");
+  act(() => {
+    button.dispatchEvent(pointer("pointerdown", 30));
+    button.click();
+  });
+  expect([acted, opened]).toEqual([["Read"], []]);
+  expect(standing(item)).toEqual(["rest", "0px", false]);
+});
+
+test("a long swipe, past 60% of the row, arms it and acts on release with no click; pulled back under that line first, it rests open instead", () => {
+  const long = swiped();
+  drag(long.press, 20, 120, 200);
+  expect(standing(long.item)).toEqual(["moving", "200px", true]);
+  release(long.press, 200);
+  expect([long.acted, long.opened]).toEqual([["Read"], []]);
+  expect(standing(long.item)).toEqual(["rest", "0px", false]);
+
+  const back = swiped();
+  drag(back.press, 20, 200, 120);
+  expect(standing(back.item)).toEqual(["moving", "120px", false]);
+  release(back.press, 120);
+  expect([back.acted, back.opened]).toEqual([[], []]);
+  expect(standing(back.item)).toEqual(["open", "72px", false]);
+});
+
+test("a swipe let go short of 24px, swiped left, or pressed up or down closes without acting, and a press that never moved is a click on the row", () => {
+  const short = swiped();
+  drag(short.press, 10, 20);
+  release(short.press, 20);
+  expect(standing(short.item)).toEqual(["rest", "0px", false]);
+
+  const left = swiped();
+  drag(left.press, -10, -80);
+  expect(standing(left.item)).toEqual(["moving", "0px", false]);
+  release(left.press, -80);
+  expect(standing(left.item)).toEqual(["rest", "0px", false]);
+
+  const down = swiped();
+  act(() => {
+    down.press.dispatchEvent(pointer("pointerdown", 10, 10));
+    down.press.dispatchEvent(pointer("pointermove", 16, 60));
+    down.press.dispatchEvent(pointer("pointermove", 100, 60));
+  });
+  expect(standing(down.item)).toEqual(["rest", "0px", false]);
+
+  const still = swiped();
+  act(() => {
+    still.press.dispatchEvent(pointer("pointerdown", 10));
+  });
+  release(still.press, 0);
+  expect([short.acted, left.acted, down.acted, still.acted]).toEqual([[], [], [], []]);
+  expect(still.opened).toEqual(["open"]);
+});
+
+test("a pointer the system takes away never acts, however far it swiped, and the row closes", () => {
+  const { item, press, acted } = swiped();
+  drag(press, 20, 250);
+  act(() => {
+    press.dispatchEvent(pointer("pointercancel", 260));
+  });
+  expect(standing(item)).toEqual(["rest", "0px", false]);
+  release(press, 260);
+  expect(acted).toEqual([]);
+});
+
+test("a row redrawn with another act mid-swipe does nothing on release, and an open row whose act changes closes", () => {
+  const moving = swiped("Read");
+  drag(moving.press, 20, 250);
+  moving.redraw("Unread");
+  release(moving.press, 250);
+  expect(moving.acted).toEqual([]);
+  expect(standing(moving.item)).toEqual(["rest", "0px", false]);
+
+  const open = swiped("Read");
+  drag(open.press, 10, 40);
+  release(open.press, 40);
+  expect(standing(open.item)[0]).toBe("open");
+  open.redraw("Unread");
+  expect(standing(open.item)).toEqual(["rest", "0px", false]);
+});
+
+test("an open row closes on a press anywhere else, or on a click on the row itself, which opens nothing", () => {
+  const elsewhere = swiped();
+  drag(elsewhere.press, 10, 40);
+  release(elsewhere.press, 40);
+  act(() => {
+    document.body.dispatchEvent(pointer("pointerdown", 400));
+  });
+  expect(standing(elsewhere.item)).toEqual(["rest", "0px", false]);
+
+  const itself = swiped();
+  drag(itself.press, 10, 40);
+  release(itself.press, 40);
+  act(() => {
+    itself.press.dispatchEvent(pointer("pointerdown", 10));
+  });
+  release(itself.press, 0);
+  expect(standing(itself.item)).toEqual(["rest", "0px", false]);
+  expect([itself.acted, itself.opened]).toEqual([[], []]);
+});
+
+/** A trackpad over the window's frames: its wheel turned on an item, answering whether the event was kept from the list, and the frames asked for run at a time given, as the window draws one. */
+function trackpad() {
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  const frameAt = (time: number) =>
+    act(() => {
+      for (const frame of frames.splice(0)) frame(time);
+    });
+  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0): boolean => {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY });
+    act(() => {
+      item.dispatchEvent(event);
+    });
+    return event.defaultPrevented;
+  };
+  return { frameAt, wheel };
+}
+
+test("a trackpad's two-finger swipe moves the row by its sideways wheel and is let go once the wheel rests: a short one rests open, a long one acts; a wheel up or down is the list's", () => {
+  const { frameAt, wheel } = trackpad();
+  const short = swiped();
+  wheel(short.item, 0, 30);
+  expect(standing(short.item)).toEqual(["rest", "0px", false]);
+  wheel(short.item, -20);
+  wheel(short.item, -20);
+  expect(standing(short.item)).toEqual(["moving", "40px", false]);
+  frameAt(1_000);
+  frameAt(1_100);
+  expect(standing(short.item)[0]).toBe("moving");
+  frameAt(1_140);
+  expect(standing(short.item)).toEqual(["open", "72px", false]);
+
+  const long = swiped();
+  wheel(long.item, -120);
+  frameAt(2_000);
+  wheel(long.item, -100);
+  expect(standing(long.item)).toEqual(["moving", "220px", true]);
+  frameAt(2_100);
+  frameAt(2_200);
+  expect(long.acted).toEqual([]);
+  frameAt(2_240);
+  expect(long.acted).toEqual(["Read"]);
+  expect(standing(long.item)).toEqual(["rest", "0px", false]);
+});
+
+test("a row that offers no swipe draws none and hears a press as a click", () => {
+  const container = draw(createElement(Members));
+  expect(container.querySelector("li[data-swipe], [data-swipe-act]")).toBeNull();
+});
+
+test("an open row's own acts take their click, the row's swipe doing nothing", () => {
+  const { item, press, acted, opened } = swiped();
+  drag(press, 10, 40);
+  release(press, 40);
+  const mark =
+    item.querySelector<HTMLButtonElement>(".luke-list-row-actions button") ?? expect.fail("act");
+  act(() => {
+    mark.dispatchEvent(pointer("pointerdown", 250));
+    mark.dispatchEvent(pointer("pointerup", 250));
+    mark.dispatchEvent(pointerClick());
+  });
+  expect([acted, opened]).toEqual([["hover mark"], []]);
+});
+
+test("a trackpad's swipe a press interrupts, on the row or anywhere else, does nothing once its wheel rests", () => {
+  const { frameAt, wheel } = trackpad();
+  const elsewhere = swiped();
+  wheel(elsewhere.item, -220);
+  act(() => {
+    document.body.dispatchEvent(pointer("pointerdown", 400));
+  });
+  expect(standing(elsewhere.item)).toEqual(["rest", "0px", false]);
+  const onRow = swiped();
+  wheel(onRow.item, -220);
+  act(() => {
+    onRow.press.dispatchEvent(pointer("pointerdown", 10));
+  });
+  frameAt(1_000);
+  frameAt(1_200);
+  frameAt(1_400);
+  expect([elsewhere.acted, onRow.acted]).toEqual([[], []]);
+});
+
+test("a wheel more up or down than sideways is the list's to scroll while a trackpad's swipe is under way, and leaves the row where it stands", () => {
+  const { wheel } = trackpad();
+  const { item } = swiped();
+  expect(wheel(item, -40)).toBe(true);
+  expect(wheel(item, 0, 40)).toBe(false);
+  expect(wheel(item, -5, 30)).toBe(false);
+  expect(standing(item)).toEqual(["moving", "40px", false]);
+});
+
+test("a pointer's swipe interrupted by a press or a wheel elsewhere does nothing when it is let go, and opens nothing", () => {
+  for (const interrupt of ["pointerdown", "wheel"] as const) {
+    const { item, press, acted, opened } = swiped();
+    drag(press, 20, 200);
+    expect(standing(item)).toEqual(["moving", "200px", true]);
+    act(() => {
+      document.body.dispatchEvent(
+        interrupt === "wheel"
+          ? new WheelEvent("wheel", { bubbles: true, deltaX: 0, deltaY: 30 })
+          : new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              clientX: 400,
+              pointerId: 2,
+            }),
+      );
+    });
+    expect(standing(item)).toEqual(["rest", "0px", false]);
+    release(press, 200);
+    expect([acted, opened]).toEqual([[], []]);
+  }
+});
+
+test("a pointer's swipe interrupted and let go off the row leaves no click to swallow, so the keyboard still opens the row", () => {
+  const { item, press, acted, opened } = swiped();
+  drag(press, 20, 200);
+  act(() => {
+    document.body.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX: 0, deltaY: 30 }));
+    document.body.dispatchEvent(pointer("pointerup", 500));
+  });
+  expect(standing(item)).toEqual(["rest", "0px", false]);
+  // Note that a keyboard's click comes with no press before it, and a detail of 0.
+  act(() => press.click());
+  expect([acted, opened]).toEqual([[], ["open"]]);
 });
