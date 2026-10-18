@@ -6,8 +6,10 @@ import {
   BREADCRUMBS_VARIANT,
   Breadcrumbs,
   ConfirmDialog,
+  DetailPage,
   EllipsisIcon,
   IconButton,
+  PAGE_FRAME,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -241,16 +243,21 @@ export function IssueDetail({
   );
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
-    <section className="automations-view" aria-label={identifier}>
-      <DetailToolbar
-        issueId={issue.id}
-        identifier={identifier}
-        onBack={onBack}
-        onArchive={archiving.ask}
-      />
-      {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
-      <div className="desktop-document">
-        <div className="plan-document-scroll scroll-fade">
+    <>
+      <DetailPage
+        frame={PAGE_FRAME.TOOLBAR}
+        label={identifier}
+        toolbar={
+          <DetailToolbar
+            issueId={issue.id}
+            identifier={identifier}
+            onBack={onBack}
+            onArchive={archiving.ask}
+          />
+        }
+      >
+        {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
+        <div className="desktop-document issue-document">
           <article className="plan-body">
             <IssueTitle issue={issue} onChange={onChange} />
             <IssueByline issue={issue} />
@@ -267,9 +274,9 @@ export function IssueDetail({
             />
           </article>
         </div>
-      </div>
+      </DetailPage>
       <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
-    </section>
+    </>
   );
 }
 
@@ -282,31 +289,29 @@ export function IssueDetail({
  */
 export function IssueDetailSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
-    <div className="desktop-document">
-      <div className="plan-document-scroll scroll-fade">
-        <SkeletonRegion label={label}>
-          <div className="plan-body">
-            <div className="markdown task-title">
-              <div className="markdown-heading task-title-text" data-level="1">
-                <Skeleton width={SKELETON_TITLE} />
-              </div>
-            </div>
-            <div className="issue-byline">
-              <Skeleton width={SKELETON_BYLINE} />
-            </div>
-            <div className="issue-properties">
-              {SKELETON_CHIPS.map((width) => (
-                <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
-              ))}
-            </div>
-            <div>
-              {SKELETON_DESCRIPTION.map((width) => (
-                <Skeleton key={width} width={width} />
-              ))}
+    <div className="desktop-document issue-document">
+      <SkeletonRegion label={label}>
+        <div className="plan-body">
+          <div className="markdown task-title">
+            <div className="markdown-heading task-title-text" data-level="1">
+              <Skeleton width={SKELETON_TITLE} />
             </div>
           </div>
-        </SkeletonRegion>
-      </div>
+          <div className="issue-byline">
+            <Skeleton width={SKELETON_BYLINE} />
+          </div>
+          <div className="issue-properties">
+            {SKELETON_CHIPS.map((width) => (
+              <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
+            ))}
+          </div>
+          <div>
+            {SKELETON_DESCRIPTION.map((width) => (
+              <Skeleton key={width} width={width} />
+            ))}
+          </div>
+        </div>
+      </SkeletonRegion>
     </div>
   );
 }
