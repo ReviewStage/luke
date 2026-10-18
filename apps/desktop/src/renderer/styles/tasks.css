@@ -4061,20 +4061,6 @@ ol.transcript-list {
   max-width: 100%;
 }
 
-.skill-menu .task-compose-menu-name {
-  flex: none;
-}
-
-.skill-menu-description {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The foot's right: the model chip, the context ring, the microphone, and
    the round Send or Stop.
    It may narrow, so a long model name is cut short before the presses are. */

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { useDisclosure } from "../../use-disclosure.js";
+import { SwitchMark } from "../switch/switch.js";
 
 /**
  * menu.tsx -- a drop-down menu hung at a point in the window: a thing's ⋯, its right-click, and an account's row all open one.
@@ -24,6 +25,11 @@ import { useDisclosure } from "../../use-disclosure.js";
  * as the desktop composer's chips hang theirs, is `AnchoredPopover`. A
  * shortcut an item takes is the app's: it hands the words it prints as the
  * item's `hint`.
+ *
+ * An item stands outside a menu too, among a searchable menu's pinned rows,
+ * whose keys stay in the menu's field (`SteeredMenuItem`): a button the
+ * field names while it holds the one highlight the arrows and the pointer
+ * both move, which a press never takes focus to.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -46,6 +52,14 @@ type MenuGrow = (typeof MENU_GROW)[keyof typeof MENU_GROW];
 const MENU_MARGIN = 8;
 /** The menu's own padding around its items, `--luke-menu-inset`, which a submenu rises by so its first item is level with its opener. */
 const MENU_INSET = 4;
+/** How a setting in a menu says whether it is on: a check at its end while it is, or a switch. */
+export const MENU_ITEM_MARK = {
+  CHECK: "check",
+  SWITCH: "switch",
+} as const;
+
+export type MenuItemMark = (typeof MENU_ITEM_MARK)[keyof typeof MENU_ITEM_MARK];
+
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
 /** The items the menu's keys move between: every one that applies now, a setting's as an action's. */
@@ -73,7 +87,26 @@ export interface MenuAction {
   /** Drawn dimmed and not chosen: the action does not apply now. */
   disabled?: boolean;
   /** A setting rather than an action: whether it is on, a check at the item's end saying so. */
-  checked?: boolean;
+  checked?: boolean | undefined;
+  /** How a setting says whether it is on: a check (where none is said) or a switch. */
+  mark?: MenuItemMark | undefined;
+  /** Whether choosing it opens a list beside it rather than acting, which a chevron at its end says. */
+  opens?: boolean | undefined;
+}
+
+/**
+ * An item of a list whose keys stay in a field rather than moving focus, as
+ * a searchable menu's pinned rows are: a button, or a switch for a setting,
+ * that the field names while it holds the list's one highlight.
+ */
+export interface SteeredMenuItem {
+  /** Its id, which the field names while it holds the highlight. */
+  id: string;
+  highlighted: boolean;
+  /** The pointer moved over it, which is the highlight's to answer. */
+  onHover: () => void;
+  /** Whether the list it opens stands beside it now, for an item that `opens` one. */
+  expanded?: boolean | undefined;
 }
 
 /** An item that opens a menu of its own beside it rather than acting. */
@@ -262,8 +295,30 @@ function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** What an item prints at its end: a setting's check while it is on, its hint, or nothing. */
+/** What an item prints at its end: its hint, and after it a setting's switch, the chevron of a list it opens, or a setting's check while it is on. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
+  const hint =
+    action.hint === undefined ? null : <span className="luke-menu-item-hint">{action.hint}</span>;
+  if (action.mark === MENU_ITEM_MARK.SWITCH && action.checked !== undefined) {
+    return (
+      <>
+        {hint}
+        <span className="luke-menu-item-switch">
+          <SwitchMark checked={action.checked} />
+        </span>
+      </>
+    );
+  }
+  if (action.opens === true) {
+    return (
+      <>
+        {hint}
+        <span className="luke-menu-item-end">
+          <ChevronRightIcon />
+        </span>
+      </>
+    );
+  }
   if (action.checked === true) {
     return (
       <span className="luke-menu-item-end">
@@ -271,8 +326,7 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
       </span>
     );
   }
-  if (action.hint === undefined) return null;
-  return <span className="luke-menu-item-hint">{action.hint}</span>;
+  return hint;
 }
 
 /**
@@ -283,9 +337,12 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
 export function MenuItem({
   action,
   onChoose,
+  steered,
 }: {
   action: MenuAction;
   onChoose: () => void;
+  /** Where it stands among a field's pinned rows rather than in a menu. */
+  steered?: SteeredMenuItem | undefined;
 }): React.JSX.Element {
   const label = <span className="luke-menu-item-label">{action.label}</span>;
   const body = (
@@ -304,6 +361,17 @@ export function MenuItem({
   );
   // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
   const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
+  if (steered !== undefined) {
+    return (
+      <SteeredItem
+        action={action}
+        steered={steered}
+        heard={heard}
+        onChoose={onChoose}
+        body={body}
+      />
+    );
+  }
   // A setting in a menu says whether it is on as a menu's check does.
   if (action.checked !== undefined) {
     return (
@@ -333,6 +401,61 @@ export function MenuItem({
       data-detail={action.detail === undefined ? undefined : "true"}
       disabled={action.disabled}
       onClick={onChoose}
+    >
+      {body}
+    </button>
+  );
+}
+
+/**
+ * An item among a field's pinned rows: a button, or a switch for a setting,
+ * that keeps a press from taking focus out of the field, and that is dimmed
+ * rather than disabled where it does not apply now, so it still hears the
+ * pointer that asks why.
+ */
+function SteeredItem({
+  action,
+  steered,
+  heard,
+  onChoose,
+  body,
+}: {
+  action: MenuAction;
+  steered: SteeredMenuItem;
+  heard: string | undefined;
+  onChoose: () => void;
+  body: React.ReactNode;
+}): React.JSX.Element {
+  const off = action.disabled === true;
+  const opens = action.opens === true;
+  const shared = {
+    type: "button",
+    id: steered.id,
+    "aria-label": heard,
+    "aria-disabled": off ? "true" : undefined,
+    tabIndex: -1,
+    className: "luke-menu-item",
+    "data-steered": "true",
+    "data-highlighted": steered.highlighted ? "true" : undefined,
+    "data-danger": action.danger ? "true" : undefined,
+    "data-detail": action.detail === undefined ? undefined : "true",
+    onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+    onMouseMove: off ? undefined : steered.onHover,
+    onClick: off ? undefined : onChoose,
+  } as const;
+  // A setting is a switch for the keyboard and the reader, whatever its end draws.
+  if (action.checked !== undefined) {
+    return (
+      <button {...shared} role="switch" aria-checked={action.checked}>
+        {body}
+      </button>
+    );
+  }
+  return (
+    <button
+      {...shared}
+      aria-haspopup={opens ? "listbox" : undefined}
+      aria-expanded={opens ? steered.expanded === true : undefined}
     >
       {body}
     </button>

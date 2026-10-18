@@ -218,11 +218,9 @@ export function ModelMenu(props: {
       value={read?.base}
       note={
         models === undefined ? (
-          <div className="task-compose-menu-note">
-            <Spinner label="Loading models" />
-          </div>
+          <Spinner label="Loading models" />
         ) : models.length === 0 ? (
-          <p className="task-compose-menu-note">{MENU_NOTE.NONE}</p>
+          MENU_NOTE.NONE
         ) : undefined
       }
       noMatch={MENU_NOTE.NO_MATCH}

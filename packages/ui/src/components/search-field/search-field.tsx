@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
+import type { ComboboxField } from "../combobox/use-combobox-field.js";
 
 /**
  * search-field.tsx -- a search: a magnifier, the query its caller holds, and at its end a tally, a chord, or a clear.
@@ -24,7 +25,22 @@ import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
  * its candidates. Note that an Escape the caller answers is kept from the
  * surface behind the field even mid-composition, because that surface's own
  * Escape (a dialog's, a pane's) would close it out from under the field.
+ * A search that steers a list under it while the caret stays in it, as a
+ * searchable menu's does, hands over its combobox (`useComboboxField`)
+ * instead, whose names the field wears and whose handler hears its keys.
+ *
+ * It stands as a well of its own, or as the head row of a menu it filters:
+ * no edge but a hairline under it, and no ring, since the caret is always
+ * in it while the menu stands.
  */
+
+/** How a search stands: a well among other controls, or a menu's head row. */
+export const SEARCH_FIELD_LOOK = {
+  WELL: "well",
+  MENU: "menu",
+} as const;
+
+export type SearchFieldLook = (typeof SEARCH_FIELD_LOOK)[keyof typeof SEARCH_FIELD_LOOK];
 
 /** How many results a query found, and which is current, where one is. */
 export interface SearchTally {
@@ -69,6 +85,8 @@ export function SearchField({
   onEnter,
   onShiftEnter,
   onEscape,
+  look = SEARCH_FIELD_LOOK.WELL,
+  combobox,
   ref,
 }: SearchEnd & {
   /** The accessible name, which the magnifier says to a sighted reader. */
@@ -90,6 +108,9 @@ export function SearchField({
   onShiftEnter?: (() => void) | undefined;
   /** What an Escape does, pressed while no input method is composing. */
   onEscape?: (() => void) | undefined;
+  look?: SearchFieldLook | undefined;
+  /** The list the field steers, whose names it wears and whose handler hears its keys in its own callbacks' place. */
+  combobox?: ComboboxField | undefined;
   /** The field itself, for a caller that moves the caret. */
   ref?: Ref<HTMLInputElement | null> | undefined;
 }): React.JSX.Element {
@@ -102,6 +123,10 @@ export function SearchField({
   const empty = value.length === 0;
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (combobox !== undefined) {
+      combobox.onKeyDown(event);
+      return;
+    }
     if (event.key === "Escape" && onEscape !== undefined) event.stopPropagation();
     if (composing(event)) return;
     if (event.key === "Escape") onEscape?.();
@@ -113,13 +138,14 @@ export function SearchField({
   };
 
   return (
-    <label className="luke-search-field">
+    <label className="luke-search-field" data-look={look}>
       <SearchIcon />
       <input
         ref={field}
         id={id}
         className="luke-search-field-input"
         type="text"
+        {...combobox?.field}
         aria-label={label}
         aria-keyshortcuts={keyShortcuts}
         placeholder={placeholder}
