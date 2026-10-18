@@ -786,7 +786,7 @@ async function chatTabMounted(ownChannel: boolean) {
   return { container, root };
 }
 
-test("a task's Chat tab shows its plan channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+test("a task's Chat tab shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-plan-chat[aria-label="Chat"]');
@@ -800,7 +800,7 @@ test("a task's Chat tab shows its plan channel at reading size, its composer pos
   const none = await chatTabMounted(false);
   assert.match(
     none.container.querySelector("section.desktop-plan-chat")?.textContent ?? "",
-    /Nothing is posted in this plan's channel yet\./u,
+    /Nothing is posted in this task's channel yet\./u,
   );
   act(() => none.root.unmount());
   none.container.remove();

@@ -61,7 +61,7 @@ function render(retention: AdminMetrics["retention"]): HTMLElement {
 
 /** Every element whose own words are `text`, in reading order. */
 function cellsReading(page: HTMLElement, text: string): HTMLElement[] {
-  return Array.from(page.querySelectorAll<HTMLElement>("div")).filter(
+  return Array.from(page.querySelectorAll<HTMLElement>("div, span")).filter(
     (element) => element.childElementCount === 0 && element.textContent === text,
   );
 }
