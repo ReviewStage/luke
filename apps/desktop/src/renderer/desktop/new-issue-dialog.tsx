@@ -88,7 +88,7 @@ function NewIssueCard({
             onClick={create}
           >
             Create issue
-            <Shortcut chord={CREATE_CHORD} />
+            <Shortcut chord={CREATE_CHORD} className="button-chord" />
           </Button>
         </>
       }

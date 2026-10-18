@@ -121,6 +121,17 @@ What the barrel holds (`src/index.ts`):
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
 
+### Folding in a narrow container
+
+A container short of room folds the controls in it with one inherited custom
+property, set from its own container query, and owns nothing inside them;
+each control answers it with a style query of its own:
+
+| `--luke-fold` | What answers it |
+| --- | --- |
+| `folded` | A `FoldingButton`'s words, and a `SplitButton` main part's, fold away, leaving the glyph and the name; a `SearchField`'s tally is said rather than drawn |
+| `bare` | A `SplitButton` is its main part's glyph alone, at the control's corner, with no chevron |
+
 ## Adding a component
 
 A component lands whole in one change:

@@ -226,7 +226,9 @@ function Hint({
     <TooltipPill
       {...placed}
       label={drawn.label}
-      shortcut={chord === undefined ? undefined : <Shortcut chord={chord} />}
+      shortcut={
+        chord === undefined ? undefined : <Shortcut chord={chord} className="tooltip-chord" />
+      }
     />
   );
 }

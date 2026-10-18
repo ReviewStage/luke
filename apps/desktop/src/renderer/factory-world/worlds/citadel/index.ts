@@ -3,7 +3,7 @@ import {
   type FactoryDefect,
   type FactoryPlanned,
 } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type AgentView, ZONE_LAYER, type ZoneView } from "@luke/ui/factory-world";
+import { type AgentView, agentDrawnUnder, ZONE_LAYER, type ZoneView } from "@luke/ui/factory-world";
 import {
   CylinderGeometry,
   InstancedMesh,
@@ -165,6 +165,7 @@ export const world: WorldModule = {
     let town: Town | undefined;
     let agents: readonly AgentView[] = [];
     let building: boolean | undefined;
+    let defectsShown: boolean | undefined;
     let dark: boolean | undefined;
     let blast: ReadonlyMap<string, number> = new Map();
     let rippleFrom = 0;
@@ -277,11 +278,18 @@ export const world: WorldModule = {
           landscape.dress(state.dark);
           decor.light(state.dark);
         }
-        if (rebuilt || layers.building !== building || !sameAgents(agents, view.agents)) {
+        // Note that a failed mason stands under Defects as well as Building (`agentDrawnUnder`), so either switching raises them again.
+        if (
+          rebuilt ||
+          layers.building !== building ||
+          layers.defects !== defectsShown ||
+          !sameAgents(agents, view.agents)
+        ) {
           agents = view.agents;
           building = layers.building;
+          defectsShown = layers.defects;
           masons.raise(
-            view.agents.filter((agent) => layers.building || agent.state === AGENT_STATE.FAILED),
+            view.agents.filter((agent) => agentDrawnUnder(agent, layers)),
             current.byPath,
             current.gates,
           );

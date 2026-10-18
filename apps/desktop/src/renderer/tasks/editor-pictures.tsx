@@ -21,6 +21,7 @@ import type {
   PlanEditorPictures,
 } from "../plan-editor/contract";
 import { Spinner } from "../spinner";
+import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -212,7 +213,7 @@ interface ToolsLayout {
 function useToolsLayout(column: HTMLElement): ToolsLayout {
   const [layout, setLayout] = useState<ToolsLayout>({ worded: true, above: true });
   useLayoutEffect(() => {
-    const scroller = column.closest<HTMLElement>(".plan-document-scroll");
+    const scroller = column.closest<HTMLElement>(`.${DOCUMENT_SCROLL_CLASS}`);
     const measure = () => {
       const box = column.getBoundingClientRect();
       if (box.width <= 0) return;

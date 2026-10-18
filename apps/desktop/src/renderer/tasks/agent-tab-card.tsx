@@ -151,7 +151,7 @@ function headCorner(
   if (pullRequest === undefined) return standing;
   return (
     <>
-      <PullRequestMark pullRequest={pullRequest} />
+      <PullRequestMark pullRequest={pullRequest} className="card-corner-mark" />
       {pullRequestNumberLabel(pullRequest)}
       {standing === undefined ? null : ENDED_SEPARATOR}
       {standing}

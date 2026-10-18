@@ -6,10 +6,8 @@ import {
   BREADCRUMBS_VARIANT,
   Breadcrumbs,
   ConfirmDialog,
-  DetailPage,
   EllipsisIcon,
   IconButton,
-  PAGE_FRAME,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -17,12 +15,12 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
-import { useRef } from "react";
-import { ActorRef } from "../actor-ref";
+import { type ReactNode, useRef } from "react";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { usePerson } from "../member-directory";
+import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
@@ -45,7 +43,10 @@ import type { IssueChange } from "./use-issues";
  * answers, so what stands is what was kept; a change the service refused
  * leaves the issue as it stood and says so in a toast the page raises.
  * Archiving asks first, and once it lands the page goes back to the list,
- * which no longer holds the issue.
+ * which no longer holds the issue. The issue is a document, drawn as a
+ * plan is (`../tasks/document-frame.tsx`): it scrolls in the plan's own
+ * column, at its measure and inset, its title, byline, and text in the
+ * plan's type, so a plan and an issue stand alike.
  */
 
 /** How wide the placeholder title and the line under it stand, as shares of their lines. */
@@ -197,7 +198,7 @@ function IssueTitle({
 
 /**
  * Who filed the issue and when, and when it last changed, under its title,
- * in a task's own words (`task-actions.tsx`'s menu foot): "Created by
+ * in the line every document draws there (`DocumentByline`): "Created by
  * [Charles] Charles Pan · 3d ago" and "Last edited · 2h ago", the times
  * moving on with the window's minute. An issue whose creator's account is
  * gone says only when it was created, and one unchanged since it was filed
@@ -207,24 +208,44 @@ function IssueByline({ issue }: { issue: Issue }): React.JSX.Element {
   const now = useMinute();
   const creator = usePerson(issue.creator ?? undefined);
   return (
-    <p className="issue-byline">
-      <span className="actor-line">
-        {issue.creator === null ? "Created" : "Created by "}
-        {issue.creator === null ? null : <ActorRef actor={creator} sentence />}
-        {" · "}
-        <RelativeTime at={issue.createdAt} now={now} ago />
-      </span>
-      {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
-      {issue.updatedAt <= issue.createdAt ? null : (
-        <>
-          {" "}
-          <span className="actor-line">
+    <DocumentByline
+      creator={issue.creator === null ? undefined : creator}
+      createdAt={issue.createdAt}
+      now={now}
+      edited={
+        issue.updatedAt <= issue.createdAt ? undefined : (
+          <>
             {"Last edited · "}
             <RelativeTime at={issue.updatedAt} now={now} ago />
-          </span>
-        </>
-      )}
-    </p>
+          </>
+        )
+      }
+    />
+  );
+}
+
+/**
+ * An issue's page: its toolbar over its document, which scrolls in the
+ * column every document of the window does (`DocumentScroll`), so the
+ * issue, and its blocks while it is read, stand at a plan's measure and
+ * inset rather than in a page frame of their own.
+ */
+export function IssueDocumentPage({
+  label,
+  toolbar,
+  children,
+}: {
+  label: string;
+  toolbar: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <section className="issue-page" aria-label={label}>
+      {toolbar}
+      <div className="desktop-document">
+        <DocumentScroll>{children}</DocumentScroll>
+      </div>
+    </section>
   );
 }
 
@@ -251,8 +272,7 @@ export function IssueDetail({
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
     <>
-      <DetailPage
-        frame={PAGE_FRAME.TOOLBAR}
+      <IssueDocumentPage
         label={identifier}
         toolbar={
           <DetailToolbar
@@ -263,63 +283,58 @@ export function IssueDetail({
           />
         }
       >
-        {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
-        <div className="desktop-document issue-document">
-          <article className="plan-body">
-            <IssueTitle issue={issue} onChange={onChange} />
-            <IssueByline issue={issue} />
-            <div className="issue-properties">
-              <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
-              <PriorityMenu
-                priority={issue.priority}
-                onPick={(priority) => void onChange({ priority })}
-              />
-            </div>
-            <IssueWorkRow issue={issue} />
-            <IssueDescription
-              description={issue.description}
-              onSave={(description) => onChange({ description })}
+        <article className="plan-body">
+          <IssueTitle issue={issue} onChange={onChange} />
+          <IssueByline issue={issue} />
+          <div className="issue-properties">
+            <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
+            <PriorityMenu
+              priority={issue.priority}
+              onPick={(priority) => void onChange({ priority })}
             />
-          </article>
-        </div>
-      </DetailPage>
+          </div>
+          <IssueWorkRow issue={issue} />
+          <IssueDescription
+            description={issue.description}
+            onSave={(description) => onChange({ description })}
+          />
+        </article>
+      </IssueDocumentPage>
       <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
     </>
   );
 }
 
 /**
- * One issue's page while its issue is first read, opened from a link or a
- * notification before the list holds it: the page's own document, a block
+ * One issue's document while its issue is first read, opened from a link or a
+ * notification before the list holds it, for `IssueDocumentPage`: a block
  * where the title will stand in its heading's type, one for the line under
  * it, the two chips' boxes, and a few lines of description, so the issue
  * lands where the blocks stood. The region says what is being read.
  */
 export function IssueDetailSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
-    <div className="desktop-document issue-document">
-      <SkeletonRegion label={label}>
-        <div className="plan-body">
-          <div className="markdown task-title">
-            <div className="markdown-heading task-title-text" data-level="1">
-              <Skeleton width={SKELETON_TITLE} />
-            </div>
-          </div>
-          <div className="issue-byline">
-            <Skeleton width={SKELETON_BYLINE} />
-          </div>
-          <div className="issue-properties">
-            {SKELETON_CHIPS.map((width) => (
-              <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
-            ))}
-          </div>
-          <div>
-            {SKELETON_DESCRIPTION.map((width) => (
-              <Skeleton key={width} width={width} />
-            ))}
+    <SkeletonRegion label={label}>
+      <div className="plan-body">
+        <div className="markdown task-title">
+          <div className="markdown-heading task-title-text" data-level="1">
+            <Skeleton width={SKELETON_TITLE} />
           </div>
         </div>
-      </SkeletonRegion>
-    </div>
+        <div className="plan-byline">
+          <Skeleton width={SKELETON_BYLINE} />
+        </div>
+        <div className="issue-properties">
+          {SKELETON_CHIPS.map((width) => (
+            <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
+          ))}
+        </div>
+        <div>
+          {SKELETON_DESCRIPTION.map((width) => (
+            <Skeleton key={width} width={width} />
+          ))}
+        </div>
+      </div>
+    </SkeletonRegion>
   );
 }

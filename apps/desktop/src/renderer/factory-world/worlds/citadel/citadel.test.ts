@@ -295,6 +295,22 @@ test("each layer switched off hides what it names, and nothing else; a failed ag
   }
 });
 
+test("with one layer drawn alone, a failed agent stands under Defects and not under Planned, on the same world with no defect reported", () => {
+  const quiet = { ...SNAPSHOT, defects: [] };
+  const alone = (layer: keyof WorldLayers): WorldLayers => ({
+    planned: layer === "planned",
+    building: layer === "building",
+    shipped: layer === "shipped",
+    defects: layer === "defects",
+  });
+  const { instance, registrations } = drawn(stateOf(quiet, { layers: alone("planned") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), []);
+  instance.update(stateOf(quiet, { layers: alone("defects") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), [uuidOf(4)]);
+  instance.update(stateOf(quiet, { layers: alone("shipped") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), []);
+});
+
 test("a layer switched back on draws what it hid again, on the same world", () => {
   const { instance, registrations } = drawn(
     stateOf(SNAPSHOT, { layers: { ...ALL_LAYERS, shipped: false, planned: false } }),
