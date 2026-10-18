@@ -1491,6 +1491,41 @@ test("what is typed while a save is out stands, unsaved, once the save lands", a
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
 });
 
+test("with no workspace listed because the workspaces could not be read, the list and a linked automation say so, and Retry reads them again", async () => {
+  let retries = 0;
+  const unread = (place: AutomationsPlace) =>
+    tasksControl({
+      workspace: undefined,
+      workspacesFailed: true,
+      onRetryWorkspaces: () => {
+        retries += 1;
+      },
+      automationsView: { open: true, place, onOpen: () => undefined, onClose: () => undefined },
+    });
+  const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
+  await settle();
+  assert.match(page.textContent ?? "", /The workspaces could not be read\./u);
+  assert.equal(page.querySelector(".automations-scroll [role=status]"), null);
+  act(() => button("Retry").click());
+  assert.equal(retries, 1);
+
+  // The read Retry asked for lands, listing the workspace, whose automations are then read.
+  render(tasksControl({ workspace: WORKSPACE }));
+  await settle();
+  assert.deepEqual(listed, [WORKSPACE.id]);
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.ok(rows(page).length > 0, "the workspace's automations are drawn");
+
+  act(() => root?.unmount());
+  root = undefined;
+  const linked = mount(unread({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id }));
+  await settle();
+  assert.match(linked.textContent ?? "", /The workspaces could not be read\./u);
+  assert.doesNotMatch(linked.textContent ?? "", /Reading the automation/u);
+  act(() => button("Retry").click());
+  assert.equal(retries, 2);
+});
+
 test("an automation's page whose list could not be read says so with Retry, rather than calling it gone", async () => {
   lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });

@@ -157,8 +157,8 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
-/** The Code tab as the task's page draws it over the code the task holds, as markup. */
-function codeTab(shownCode: readonly never[] | undefined): HTMLElement {
+/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
   const markup = renderToStaticMarkup(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -169,6 +169,7 @@ function codeTab(shownCode: readonly never[] | undefined): HTMLElement {
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
         sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
         shownCode,
+        workFailed,
       }),
     }),
   );
@@ -190,6 +191,47 @@ test("the Code tab waits while the task's code is unread, and says there is none
   const none = tab(codeTab([]));
   assert.match(none.textContent ?? "", /No code yet\./u);
   assert.equal(none.querySelector("[role=status]"), null);
+});
+
+test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+  let retries = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+          shownCode: undefined,
+          workFailed: true,
+          onRetryWork: () => {
+            retries += 1;
+          },
+        }),
+      }),
+    ),
+  );
+  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  assert.match(tab?.textContent ?? "", /The code could not be read\./u);
+  assert.equal(tab?.querySelector("[role=status]"), null, "the tab no longer waits");
+  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retries, 1);
+  act(() => root.unmount());
+  container.remove();
+
+  // Code already held stays drawn through a read that did not land.
+  const held = codeTab([], true).querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  assert.match(held?.textContent ?? "", /No code yet\./u);
+  assert.doesNotMatch(held?.textContent ?? "", /could not be read/u);
 });
 
 test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
