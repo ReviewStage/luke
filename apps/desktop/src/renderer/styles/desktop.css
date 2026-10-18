@@ -875,6 +875,13 @@ button.sidebar-section-head-name:hover {
   vertical-align: middle;
 }
 
+/* Note that a glyph fills the share its state glyph is given, the working
+   mark included, which the window otherwise draws at a fixed size. */
+:is(.actor-mark, .chat-mark) .state-glyph > :is(svg, img) {
+  width: 100%;
+  height: 100%;
+}
+
 /* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
 .actor-mark:is(
   [data-kind="luke"],
