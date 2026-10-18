@@ -1,8 +1,8 @@
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import type { BundleImporter } from "@luke/panel/bundle-loader";
 import { sessionRecorderLoaded } from "@luke/panel/session-recorder/contract";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
-import type { BundleImporter } from "./bundle-loader";
 
 /**
  * Recording the shape of what Luke's own panel draws, and none of its words.

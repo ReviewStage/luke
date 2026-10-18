@@ -117,8 +117,8 @@ const SCOPED_AFTER = {
   // The plan's tools, offered to an agent handed its plan.
   tools: ["apps/dev/host.ts", "apps/dev/tools/edit_plan.ts", "apps/dev/tools/show_page.ts"],
   // The plan editor's own `@`, and the words it shows in an empty plan.
-  mentions: ["apps/desktop/src/renderer/plan-editor/"],
-  placeholder: ["apps/desktop/src/renderer/plan-editor/"],
+  mentions: ["packages/panel/src/plan-editor/", "apps/desktop/src/renderer/plan-editor/"],
+  placeholder: ["packages/panel/src/plan-editor/", "apps/desktop/src/renderer/plan-editor/"],
   // The document the brain eval saves, and the words it looks for in it.
   saved: ["apps/luke/evals/brain-host.eval.ts"],
   words: ["apps/luke/evals/brain-host.eval.ts"],

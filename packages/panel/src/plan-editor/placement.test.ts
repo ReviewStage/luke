@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  PLACEMENT_END,
-  type PlanEditorHandle,
-  type PlanEditorPlacement,
-} from "@luke/panel/plan-editor/contract";
 import { afterEach, beforeEach, test } from "vitest";
-import { installEditorLayout } from "#testing/composer";
-import { mountPlanEditor } from "./plan-editor";
+import { installEditorLayout } from "../testing/composer.js";
+import { PLACEMENT_END, type PlanEditorHandle, type PlanEditorPlacement } from "./contract.js";
+import { mountPlanEditor } from "./plan-editor.js";
 
 /**
  * placement.test.ts -- where the plan editor's caret stands as it opens and

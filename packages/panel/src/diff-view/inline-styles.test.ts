@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { Element } from "hast";
 import { test } from "vitest";
-import { toHtml } from "./inline-styles";
+import { toHtml } from "./inline-styles.js";
 
 /**
  * inline-styles.test.ts -- the HTML a diff is written as carries no `style` the

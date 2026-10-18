@@ -2,6 +2,11 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  QUIET_COMPOSER,
+} from "@luke/panel/testing/composer";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -10,7 +15,6 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { SentWords, SkillFiles } from "./skill-chip";

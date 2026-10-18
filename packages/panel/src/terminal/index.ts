@@ -1,6 +1,6 @@
-import type { TerminalModule } from "@luke/panel/terminal/contract";
+import type { TerminalModule } from "./contract.js";
 import "./index.css";
-import { mountTerminal } from "./terminal-surface";
+import { mountTerminal } from "./terminal-surface.js";
 
 /**
  * index.ts -- the terminal bundle: xterm.js and its addons, and their stylesheet, imported by a Terminal tab to mount (`./contract.ts`).

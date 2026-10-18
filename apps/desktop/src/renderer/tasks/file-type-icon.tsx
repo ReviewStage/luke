@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useSideBundles } from "@luke/panel/bundle-loader";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileIcon } from "lucide-react";
-import { useSideBundles } from "../bundle-loader";
 
 /**
  * file-type-icon.tsx -- a file's type as the file tree draws it: Pierre's coloured icon for its name, a blank page until the tree's bundle has loaded.

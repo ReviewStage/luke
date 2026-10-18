@@ -6,6 +6,7 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { usePrefetchEditorBundle, useSideBundles } from "@luke/panel/bundle-loader";
 import {
   type EditorDiagram,
   type MentionNode,
@@ -27,7 +28,6 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { DiagramPreview } from "../plan-diagram";
 import { RetryButton } from "../retry-button";
 import { useEditorPictures } from "./editor-pictures";

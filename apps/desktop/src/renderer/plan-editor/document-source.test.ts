@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  documentManager,
+  documentMarkdown,
+  documentOpened,
+  documentTook,
+  sourcesOf,
+} from "@luke/panel/plan-editor/document-source";
+import { markdownExtensions } from "@luke/panel/plan-editor/plan-editor";
 import { Editor } from "@tiptap/core";
 import { Selection } from "@tiptap/pm/state";
 import { diffLines } from "diff";
@@ -8,14 +16,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { MarkdownMessage } from "../markdown-message";
-import {
-  documentManager,
-  documentMarkdown,
-  documentOpened,
-  documentTook,
-  sourcesOf,
-} from "./document-source";
-import { markdownExtensions } from "./plan-editor";
 
 /**
  * A whole plan in the editor keeps every block's exact source but the ones

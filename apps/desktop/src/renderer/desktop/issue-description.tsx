@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
 import { planSections } from "@luke/features/plan-document";
+import { usePrefetchEditorBundle, useSideBundles } from "@luke/panel/bundle-loader";
 import {
   type EditorDiagram,
   PLACEMENT_END,
@@ -12,7 +13,6 @@ import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { MarkdownMessage } from "../markdown-message";
 import { DiagramPreview } from "../plan-diagram";
 import { RetryButton } from "../retry-button";

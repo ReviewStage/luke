@@ -3,9 +3,11 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import type { SideBundles } from "@luke/panel/bundle-loader";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { useConfirmDialog } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
@@ -20,8 +22,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
-import type { SideBundles } from "./bundle-loader";
 import { MarkdownMessage } from "./markdown-message";
 import { PlanBody } from "./tasks/plan-body";
 import { HISTORY_READ } from "./tasks/use-plan-history";

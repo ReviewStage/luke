@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TerminalHandle } from "@luke/panel/terminal/contract";
 import { afterEach, beforeEach, test } from "vitest";
-import { terminal } from "./index";
+import type { TerminalHandle } from "./contract.js";
+import { terminal } from "./index.js";
 
 /**
  * The terminal bundle, through the one door a Terminal tab mounts it by

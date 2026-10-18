@@ -10,6 +10,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  QUIET_COMPOSER,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -18,7 +23,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { layContainersAt, shown } from "#testing/container-width";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";

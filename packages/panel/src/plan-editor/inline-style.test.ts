@@ -2,9 +2,9 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "vitest";
-import { installEditorLayout } from "#testing/composer";
-import { mountComposer } from "./composer-editor";
-import { mountPlanEditor } from "./plan-editor";
+import { installEditorLayout } from "../testing/composer.js";
+import { mountComposer } from "./composer-editor.js";
+import { mountPlanEditor } from "./plan-editor.js";
 
 /**
  * inline-style.test.ts -- neither editor of the bundle writes a `<style>`
