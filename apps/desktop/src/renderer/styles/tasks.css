@@ -4296,16 +4296,6 @@ button.skill-chip:hover,
   -webkit-line-clamp: 3;
 }
 
-.composer-quote .composer-quote-remove {
-  width: 20px;
-  height: 20px;
-}
-
-.composer-quote .composer-quote-remove svg {
-  width: 12px;
-  height: 12px;
-}
-
 /* Reply over words selected in an agent's message: one press on the menus'
    surface, centred over the selection, or under it where the window's top
    leaves no room. It moves with `translate`, since the surface's own
