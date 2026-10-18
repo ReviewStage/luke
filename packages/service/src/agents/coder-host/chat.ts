@@ -250,7 +250,7 @@ type ChatSelf = Exclude<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.H
 /** The agent a read is made for: the account whose standing reaches the chat, the plan the agent is on, none for a planless agent, and the member it speaks as. */
 export interface ChatReader {
   readonly userId: string;
-  readonly planId: string | null;
+  readonly taskId: string | null;
   readonly self: ChatSelf;
 }
 
@@ -384,7 +384,7 @@ function atHandle(handle: string): string {
  */
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
-    if (agent.planId !== null) return yield* ensureTaskChannel(agent.userId, agent.planId);
+    if (agent.taskId !== null) return yield* ensureTaskChannel(agent.userId, agent.taskId);
     // Only a coding agent is planless; a plan's Luke always stands on its plan.
     if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
     const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
@@ -404,7 +404,7 @@ function seatOf(
   agent: ChatReader,
 ): Effect.Effect<Option.Option<ChatSeat>, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const { userId, planId: taskId } = agent;
+    const { userId, taskId } = agent;
     const home = yield* homeOf(agent);
     if (Option.isNone(home)) return Option.none();
     const { organizationId } = home.value;
@@ -437,7 +437,7 @@ function channelName(
 /** The order a read lists channels in by kind, after the agent's own plan channel: the general one, other plans', topics, then DMs. */
 const CHANNEL_ORDER = {
   [CHANNEL_KIND.GENERAL]: 0,
-  [CHANNEL_KIND.PLAN]: 1,
+  [CHANNEL_KIND.TASK]: 1,
   [CHANNEL_KIND.TOPIC]: 2,
   [CHANNEL_KIND.DM]: 3,
 } as const satisfies Record<ChannelKind, number>;
@@ -487,7 +487,7 @@ function dmWith(
       userId,
       seat.organizationId,
       handle,
-      agent.planId ?? undefined,
+      agent.taskId ?? undefined,
     );
     if (Option.isNone(named)) return Result.fail(CHAT_TOOL_REFUSAL.NO_MEMBER);
     if (named.value.id === seat.self.id) return Result.fail(CHAT_TOOL_REFUSAL.TO_SELF);

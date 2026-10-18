@@ -70,7 +70,7 @@ const groupsByCreator = (
   nameOf: (summary: TaskSummary) => string,
 ): readonly CreatorGroup[] =>
   creatorGroups(tasks.map(taskRow), order, readerId, (row) =>
-    row.kind === TASK_ROW.TASK ? nameOf(row.plan) : "",
+    row.kind === TASK_ROW.TASK ? nameOf(row.task) : "",
   );
 
 test("a repository group lists its tasks newest updated first, the time each row shows", () => {
@@ -230,7 +230,7 @@ test("ordered by name, two tasks of one name stand by their later activity, the 
     },
   };
   const [group] = groupsByRepository([edited, worked], TASK_ORDER.NAME);
-  expect(group?.rows.map((row) => (row.kind === TASK_ROW.TASK ? row.plan.createdAt : 0))).toEqual([
+  expect(group?.rows.map((row) => (row.kind === TASK_ROW.TASK ? row.task.createdAt : 0))).toEqual([
     2, 1,
   ]);
 });

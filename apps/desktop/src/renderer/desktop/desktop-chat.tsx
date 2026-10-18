@@ -190,7 +190,7 @@ export function TaskChatTab({
   const listed = tasks.tasks;
   const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
   const channel = read?.answer.channels.find(
-    (each) => each.kind === CHANNEL_KIND.PLAN && each.planId === taskId,
+    (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
   );
   if (read === undefined || channel === undefined) {
     return (

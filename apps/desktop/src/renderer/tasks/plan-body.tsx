@@ -996,7 +996,7 @@ export function PlanBody({
     );
   return (
     <PlanPictures
-      planId={task.id}
+      taskId={task.id}
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >

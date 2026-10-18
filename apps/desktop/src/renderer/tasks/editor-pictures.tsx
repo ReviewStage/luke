@@ -279,7 +279,7 @@ function KeptPicture({
   const named = planAttachmentOf(picture.src);
   const state = usePicture(named?.taskId ?? "", named?.attachmentId ?? "", door.read);
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
-  const own = named?.taskId === door.planId;
+  const own = named?.taskId === door.taskId;
   const tools: PictureTool[] = [
     {
       label: TOOL.ALT,
@@ -382,7 +382,7 @@ export function useEditorPictures(
       keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace),
+        planAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },

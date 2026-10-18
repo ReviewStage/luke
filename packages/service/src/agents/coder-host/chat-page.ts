@@ -59,7 +59,7 @@ function memberOnWire(row: ChatMemberRow): ChatMember {
     handle: row.handle,
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.planId === null ? undefined : { planId: row.planId }),
+    ...(row.taskId === null ? undefined : { planId: row.taskId }),
     left: row.leftAt !== null,
   };
 }
@@ -74,7 +74,7 @@ function channelOnWire(row: ChatChannelRow): ChatChannel {
     id: row.id,
     kind: row.kind,
     ...(row.name === null ? undefined : { name: row.name }),
-    ...(row.planId === null ? undefined : { planId: row.planId }),
+    ...(row.taskId === null ? undefined : { planId: row.taskId }),
     ...pair,
     archived: row.archivedAt !== null,
   };

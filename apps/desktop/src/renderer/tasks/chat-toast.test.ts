@@ -22,7 +22,7 @@ import { useChatToasts } from "./chat-toast";
 interface Waiting {
   readonly messageId: string;
   readonly workspaceId: string;
-  readonly planId: string | null;
+  readonly taskId: string | null;
   readonly words: string;
   readonly detail: string;
 }
@@ -79,19 +79,19 @@ test("a message's toast stands while Chat shows another workspace, and goes once
     waiting?.({
       messageId: "m-1",
       workspaceId: "workspace-beta",
-      planId: null,
+      taskId: null,
       words: "@agent-2 mentioned you",
       detail: "Chat",
     }),
   );
   assert.deepEqual(standing(), ["@agent-2 mentioned you"]);
-  rerender?.({ workspaceId: "workspace-acme", planId: null });
+  rerender?.({ workspaceId: "workspace-acme", taskId: null });
   assert.deepEqual(
     standing(),
     ["@agent-2 mentioned you"],
     "Chat on Acme leaves Beta's message told",
   );
-  rerender?.({ workspaceId: "workspace-beta", planId: null });
+  rerender?.({ workspaceId: "workspace-beta", taskId: null });
   assert.deepEqual(standing(), []);
 });
 
@@ -101,21 +101,21 @@ test("a task's Chat tab withdraws only what waits in its plan's channel", () => 
     waiting?.({
       messageId: "m-plan",
       workspaceId: "workspace-acme",
-      planId: "plan-invites",
+      taskId: "plan-invites",
       words: "@agent-2 asked you",
       detail: "Teammate invitations",
     });
     waiting?.({
       messageId: "m-dm",
       workspaceId: "workspace-acme",
-      planId: null,
+      taskId: null,
       words: "@agent-3 messaged you",
       detail: "Chat",
     });
   });
-  rerender?.({ workspaceId: "workspace-acme", planId: "plan-billing" });
+  rerender?.({ workspaceId: "workspace-acme", taskId: "plan-billing" });
   const otherTab = standing();
-  rerender?.({ workspaceId: "workspace-acme", planId: "plan-invites" });
+  rerender?.({ workspaceId: "workspace-acme", taskId: "plan-invites" });
 
   assert.deepEqual(otherTab, ["@agent-2 asked you", "@agent-3 messaged you"]);
   assert.deepEqual(standing(), ["@agent-3 messaged you"]);
@@ -123,12 +123,12 @@ test("a task's Chat tab withdraws only what waits in its plan's channel", () => 
 
 test("a message's toast leaves by itself once the news's hold runs out, and its View opens the Chat of the workspace it waits in", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  mount({ workspaceId: "workspace-acme", planId: null });
+  mount({ workspaceId: "workspace-acme", taskId: null });
   act(() =>
     waiting?.({
       messageId: "m-1",
       workspaceId: "workspace-beta",
-      planId: null,
+      taskId: null,
       words: "@agent-2 mentioned you",
       detail: "Chat",
     }),
@@ -144,7 +144,7 @@ test("a message's toast leaves by itself once the news's hold runs out, and its 
     waiting?.({
       messageId: "m-2",
       workspaceId: "workspace-beta",
-      planId: null,
+      taskId: null,
       words: "@agent-3 messaged you",
       detail: "Chat",
     }),

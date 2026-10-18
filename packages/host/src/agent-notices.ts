@@ -204,7 +204,7 @@ export interface ChatMessageToast {
   /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
   workspaceId: string;
   /** The plan whose channel it waits in, none outside one: that task's Chat tab on screen withdraws it too. */
-  planId: string | null;
+  taskId: string | null;
   words: string;
   detail: string;
 }
@@ -454,7 +454,7 @@ function chatNoticeText(
 /** Whether a waiting message is on the Chat shown: anywhere in a workspace's whole Chat, or in its plan's channel on a task's Chat tab. */
 function chatShows(shown: ChatShown | null, entry: AccountChatEntry): boolean {
   if (shown === null || shown.workspaceId !== entry.workspaceId) return false;
-  return shown.planId === null || shown.planId === entry.planId;
+  return shown.taskId === null || shown.taskId === entry.planId;
 }
 
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
@@ -698,7 +698,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         waiting: waitingTasks(answer.items),
         tasks: answer.plans.map(({ planId: taskId, ...holding }) => ({
           ...holding,
-          taskId: taskId,
+          taskId,
         })),
         taskless: waitingTaskless(answer.planless ?? []),
         automations: answer.automations ?? [],
@@ -763,7 +763,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         doors.toastChat({
           messageId: entry.messageId,
           workspaceId: entry.workspaceId,
-          planId: entry.planId,
+          taskId: entry.planId,
           words: text.body,
           detail: text.title,
         });

@@ -54,12 +54,12 @@ export const FACTORY_WORK = {
 export type FactoryWork =
   | {
       readonly kind: typeof FACTORY_WORK.AGENT;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly agent: TaskAgentLine;
     }
   | {
       readonly kind: typeof FACTORY_WORK.PULL_REQUEST;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly pullRequest: TaskPullRequestLine;
     }
   | { readonly kind: typeof FACTORY_WORK.ONE_OFF; readonly agent: TasklessAgent };
@@ -77,12 +77,12 @@ export const FACTORY_STOP = {
 export type FactoryStop =
   | {
       readonly kind: typeof FACTORY_STOP.QUESTION;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly item: AppInboxWaitingItem;
     }
   | {
       readonly kind: typeof FACTORY_STOP.FAILED;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly agent: TaskAgentLine;
     }
   | {
@@ -106,7 +106,7 @@ export const FACTORY_BLOCK = {
 
 export interface FactoryBlock {
   readonly kind: (typeof FACTORY_BLOCK)[keyof typeof FACTORY_BLOCK];
-  readonly plan: TaskSummary;
+  readonly task: TaskSummary;
   readonly pullRequest: TaskPullRequestLine;
 }
 
@@ -120,7 +120,7 @@ export interface FactoryShipped {
 /** What the board is read from. */
 export interface FactoryInput {
   /** The tasks the sidebar lists. */
-  readonly plans: readonly TaskSummary[];
+  readonly tasks: readonly TaskSummary[];
   /** What waits, by plan: every member's open items, as the Inbox reads them (`factoryWaiting`). */
   readonly waiting: readonly AppInboxTask[];
   /** The task on this Mac's call, or none. */
@@ -207,17 +207,15 @@ function checksFailing(pullRequest: TaskPullRequestLine): boolean {
 function placeTask(task: TaskSummary, input: FactoryInput) {
   const agents = task.agents?.agents ?? [];
   const items = input.waiting.find((each) => each.taskId === task.id)?.items ?? [];
-  const questions = items.map(
-    (item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan: task, item }),
-  );
+  const questions = items.map((item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, task, item }));
   const failed = agents
     .filter((agent) => failedLately(task, agent, input.now))
-    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.FAILED, plan: task, agent }));
+    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.FAILED, task, agent }));
   const standing = pullRequestsOf(task).filter((each) => STANDING_STATES.has(each.state));
   const blocked = standing.flatMap((pullRequest): FactoryBlock[] => {
-    if (readyToMerge(pullRequest)) return [{ kind: FACTORY_BLOCK.MERGE, plan: task, pullRequest }];
+    if (readyToMerge(pullRequest)) return [{ kind: FACTORY_BLOCK.MERGE, task, pullRequest }];
     if (checksFailing(pullRequest)) {
-      return [{ kind: FACTORY_BLOCK.CHECKS, plan: task, pullRequest }];
+      return [{ kind: FACTORY_BLOCK.CHECKS, task, pullRequest }];
     }
     return [];
   });
@@ -225,9 +223,9 @@ function placeTask(task: TaskSummary, input: FactoryInput) {
   const working: FactoryWork[] = [
     ...agents
       .filter((agent) => agentStillWriting(agent.status))
-      .map((agent): FactoryWork => ({ kind: FACTORY_WORK.AGENT, plan: task, agent })),
+      .map((agent): FactoryWork => ({ kind: FACTORY_WORK.AGENT, task, agent })),
     ...building.map(
-      (pullRequest): FactoryWork => ({ kind: FACTORY_WORK.PULL_REQUEST, plan: task, pullRequest }),
+      (pullRequest): FactoryWork => ({ kind: FACTORY_WORK.PULL_REQUEST, task, pullRequest }),
     ),
   ];
   const at = factoryMovedAt(task);
@@ -235,7 +233,7 @@ function placeTask(task: TaskSummary, input: FactoryInput) {
     input.now - at < LOOKBACK_MS
       ? pullRequestsOf(task)
           .filter((pullRequest) => pullRequest.state === PULL_REQUEST_STATE.MERGED)
-          .map((pullRequest): FactoryShipped => ({ task: task, pullRequest, at }))
+          .map((pullRequest): FactoryShipped => ({ task, pullRequest, at }))
       : [];
   return { questions, failed, working, blocked, shipped };
 }
@@ -265,7 +263,7 @@ function stopAt(stop: FactoryStop): number {
     case FACTORY_STOP.ONE_OFF_QUESTION:
       return stop.item.postedAt;
     case FACTORY_STOP.FAILED:
-      return agentMovedAt(stop.plan, stop.agent);
+      return agentMovedAt(stop.task, stop.agent);
     case FACTORY_STOP.ONE_OFF_FAILED:
       return stop.agent.activityAt;
   }
@@ -274,9 +272,9 @@ function stopAt(stop: FactoryStop): number {
 function workAt(work: FactoryWork): number {
   switch (work.kind) {
     case FACTORY_WORK.AGENT:
-      return agentMovedAt(work.plan, work.agent);
+      return agentMovedAt(work.task, work.agent);
     case FACTORY_WORK.PULL_REQUEST:
-      return factoryMovedAt(work.plan);
+      return factoryMovedAt(work.task);
     case FACTORY_WORK.ONE_OFF:
       return work.agent.activityAt;
   }
@@ -299,7 +297,7 @@ function kindsInOrder<T extends { readonly kind: string }>(
 
 /** The board as it stands now. */
 export function factoryBoard(input: FactoryInput): FactoryBoard {
-  const tasks = input.plans.filter((task) => task.archivedAt === undefined);
+  const tasks = input.tasks.filter((task) => task.archivedAt === undefined);
   const placed = tasks.map((task) => placeTask(task, input));
   const oneOff = placeOneOff(input);
   const stops = [
@@ -307,7 +305,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
     ...oneOff.questions,
     ...oneOff.failed,
   ];
-  const blockAt = (block: FactoryBlock) => factoryMovedAt(block.plan);
+  const blockAt = (block: FactoryBlock) => factoryMovedAt(block.task);
   return {
     talking: tasks.filter((task) => task.id === input.callTaskId),
     stopped: kindsInOrder(
@@ -356,7 +354,7 @@ export function factoryWaiting(
     add(holder.task.id, { id, agentId, title, postedAt });
   }
   for (const { taskId, items } of main) for (const item of items) add(taskId, item);
-  return [...byTask].map(([taskId, items]) => ({ taskId: taskId, items: [...items.values()] }));
+  return [...byTask].map(([taskId, items]) => ({ taskId, items: [...items.values()] }));
 }
 
 /**

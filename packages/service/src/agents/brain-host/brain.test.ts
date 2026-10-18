@@ -512,7 +512,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
         yield* ensureMember(userId, channel.organizationId, {
           kind: MEMBER_KIND.LUKE,
-          planId: taskId,
+          taskId,
         });
         yield* postMessage(userId, channel.organizationId, {
           authorMemberId: person.id,
@@ -561,7 +561,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           yield* history(userId, organizationId, person.id, { channelId: channel.id }),
         );
         const luke = (yield* roster(userId, organizationId)).find(
-          (member) => member.kind === MEMBER_KIND.LUKE && member.planId === taskId,
+          (member) => member.kind === MEMBER_KIND.LUKE && member.taskId === taskId,
         );
         assert.ok(luke);
         assert.equal(luke.handle, "luke");

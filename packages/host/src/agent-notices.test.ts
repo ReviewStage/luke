@@ -232,7 +232,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
-    taskless: taskless,
+    taskless,
     badges,
     inboxToasted,
     openedInboxes,
@@ -1007,13 +1007,13 @@ it.effect(
         {
           messageId: chatEntry(51).messageId,
           workspaceId: "workspace-acme",
-          planId: null,
+          taskId: null,
           words: "@agent-2 asked you",
           detail: "Chat",
         },
       ]);
 
-      notices.shownChat({ workspaceId: "workspace-acme", planId: null });
+      notices.shownChat({ workspaceId: "workspace-acme", taskId: null });
       const before = f.posted.length;
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
@@ -1046,7 +1046,7 @@ it.effect(
       f.focus(true);
       f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
       yield* settled;
-      notices.shownChat({ workspaceId: "workspace-acme", planId: TASK_ID });
+      notices.shownChat({ workspaceId: "workspace-acme", taskId: TASK_ID });
       const otherTask = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
       f.answerInbox({
         items: [],

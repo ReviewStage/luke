@@ -824,21 +824,13 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     userId: Schema.String,
     organizationId: Schema.String,
     repository: Schema.NullOr(Schema.String),
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     words: Schema.NullOr(Schema.String),
     includeArchived: Schema.Boolean,
     limit: Schema.Number,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({
-    userId,
-    organizationId,
-    repository,
-    planId: taskId,
-    words,
-    includeArchived,
-    limit,
-  }) =>
+  execute: ({ userId, organizationId, repository, taskId, words, includeArchived, limit }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
@@ -978,14 +970,14 @@ const findWorldAgents = SqlSchema.findAll({
 const findAgentsOfTasks = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planIds: Schema.Array(Schema.String),
+    taskIds: Schema.Array(Schema.String),
     includeArchived: Schema.Boolean,
   }),
   Result: Schema.Struct({
     ...CodingAgentRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
-  execute: ({ userId, planIds: taskIds, includeArchived }) =>
+  execute: ({ userId, taskIds, includeArchived }) =>
     Database.use((db) =>
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
@@ -1298,7 +1290,7 @@ export function listWorkspaceCodingAgents(
   organizationId: string,
   options: {
     readonly repository?: string;
-    readonly planId?: string;
+    readonly taskId?: string;
     readonly words?: string;
     readonly includeArchived?: boolean;
     readonly limit: number;
@@ -1308,7 +1300,7 @@ export function listWorkspaceCodingAgents(
     userId,
     organizationId,
     repository: options.repository ?? null,
-    planId: options.planId ?? null,
+    taskId: options.taskId ?? null,
     words: options.words ?? null,
     includeArchived: options.includeArchived ?? false,
     limit: options.limit,
@@ -1335,9 +1327,9 @@ export interface AgentTaskName {
 }
 
 const findTaskNames = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
-  execute: ({ userId, planIds: taskIds }) =>
+  execute: ({ userId, taskIds }) =>
     Database.use((db) =>
       db
         .select({
@@ -1358,7 +1350,7 @@ export function taskNamesOf(
   const ids = [...new Set(taskIds)];
   if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findTaskNames({ userId, planIds: ids }),
+    findTaskNames({ userId, taskIds: ids }),
     (rows) => new Map(rows.map((row) => [row.id, { name: row.name, archived: row.archived }])),
   );
 }
@@ -1377,7 +1369,7 @@ export function listPublishedCodingAgents(
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
   if (taskIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
-  return Effect.map(findAgentsOfTasks({ userId, planIds: taskIds, includeArchived }), (rows) =>
+  return Effect.map(findAgentsOfTasks({ userId, taskIds, includeArchived }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }

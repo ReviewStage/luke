@@ -41,7 +41,7 @@ import { useAppState } from "../use-app-state";
 
 /** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
 export interface ChipWhere {
-  readonly planId: string;
+  readonly taskId: string;
   readonly workspace: string;
 }
 
@@ -302,7 +302,7 @@ function wordsWorkspace(
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.planId)?.workspaceId;
+  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.taskId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??

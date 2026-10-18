@@ -35,7 +35,7 @@ const GENERAL: ChatChannel = {
 };
 const TASK_CHANNEL: ChatChannel = {
   id: "plan",
-  kind: CHANNEL_KIND.PLAN,
+  kind: CHANNEL_KIND.TASK,
   name: "invites",
   planId: TASK_ID,
   archived: false,
@@ -73,7 +73,7 @@ const NAMES: ChatNames = {
       },
     ],
   ]),
-  plans: new Map([[TASK_ID, "Teammate invitations"]]),
+  tasks: new Map([[TASK_ID, "Teammate invitations"]]),
   selfName: "Dean Stratakos",
 };
 
@@ -249,7 +249,7 @@ test("a line names an agent by its title, a task's Luke as Luke, the reader by t
   assert.deepEqual(
     [AGENT, LUKE, ME, MARIA].map((id) => {
       const who = chatWho(chat, NAMES, id);
-      return [who.name, who.handle, who.planName];
+      return [who.name, who.handle, who.taskName];
     }),
     [
       ["Invite emails", "agent-2", undefined],
