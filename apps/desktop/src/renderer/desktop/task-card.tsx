@@ -3,6 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -47,7 +48,8 @@ import { WorkspaceRef } from "./workspace-ref";
  * list's row, so the card fetches nothing.
  *
  * Three of its lines are buttons, as a GitHub hover card's are: the
- * repository and a pull request open their pages on GitHub, and an agent
+ * repository opens its page on GitHub, a pull request its agent's Pull
+ * request tab where the window knows the agent and GitHub otherwise, and an agent
  * opens the task on its tab. Each is also offered where the card is not:
  * the task's menu opens the repository, and the agent's tab its pull
  * request. The rest are facts, left as text. Its rows are `@luke/ui`'s
@@ -180,16 +182,16 @@ function AgentLine({
 /**
  * One pull request's row: its glyph, which says where it stands, its
  * number muted before its title, and its size in green and red. It opens
- * the pull request on GitHub, where the service said its page; a row from
- * a service before it did is text.
+ * the pull request as a link to its page does, where the service said its
+ * page; a row from a service before it did is text.
  */
 export function PullRequestLine({
   pullRequest,
-  onOpenGitHub,
 }: {
   pullRequest: TaskPullRequestLine;
-  onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
+  // Its page opens as a link to it does: in its agent's Pull request tab where the place or the window knows the agent (`../tasks/use-open-link.ts`), else on GitHub.
+  const openLink = useOpenLink();
   const { url } = pullRequest;
   return (
     <li data-task-card-pull-request="">
@@ -207,7 +209,7 @@ export function PullRequestLine({
             <span className="agent-published-removed">−{pullRequest.deletions}</span>
           </>
         }
-        onPress={url === undefined ? undefined : () => onOpenGitHub(url)}
+        onPress={url === undefined ? undefined : () => openLink(url)}
       />
     </li>
   );
@@ -321,7 +323,6 @@ export function TaskCard({
               <PullRequestLine
                 key={pullRequest.url ?? pullRequest.number}
                 pullRequest={pullRequest}
-                onOpenGitHub={onOpenGitHub}
               />
             ))}
           </HoverCardList>

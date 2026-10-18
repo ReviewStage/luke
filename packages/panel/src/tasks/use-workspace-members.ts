@@ -1,7 +1,7 @@
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
+import { useAct } from "../act.js";
 
 /**
  * use-workspace-members.ts -- a workspace's members, and who left it, as a place that draws them holds them: the task's member directory, the command palette, and a plan's version history.

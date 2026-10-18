@@ -1,3 +1,4 @@
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,12 +15,12 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
+import { DocumentScroll } from "./document-frame";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { dayAndTimeText, momentText } from "./task-time";
 import { TaskTitle } from "./task-title";
-import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**
@@ -301,9 +302,9 @@ export function VersionView({
         ) : null}
       </header>
       <div className="desktop-document">
-        <div className="plan-document-scroll scroll-fade">
+        <DocumentScroll>
           <VersionContent viewing={viewing} title={title} section={section} task={task} />
-        </div>
+        </DocumentScroll>
       </div>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>

@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import { type AppSettingField, SETTINGS_PAGE } from "@luke/settings";
 import { settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -10,7 +11,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { SchemaSettingRows } from "./schema-rows";
-import type { SettingsWrites } from "./writes";
 
 /**
  * schema-rows.test.ts -- a schema row as the reader meets it: a toggle is a

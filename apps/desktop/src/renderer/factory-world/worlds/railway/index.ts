@@ -1,4 +1,4 @@
-import { AGENT_STATE, type FactoryWorldView } from "@luke/ui/factory-world";
+import { AGENT_STATE, agentDrawnUnder, type FactoryWorldView } from "@luke/ui/factory-world";
 import {
   Color,
   DirectionalLight,
@@ -395,7 +395,7 @@ export const world: WorldModule = {
         (agent) =>
           agent.primaryZone !== null &&
           layout.byPath.has(agent.primaryZone) &&
-          (state.layers.building || agent.state === AGENT_STATE.FAILED),
+          agentDrawnUnder(agent, state.layers),
       );
       // Note that the largest builds claim their lots first, so a small one never pushes a large one off its plot.
       const ranked = [...shownAgents].sort(

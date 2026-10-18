@@ -8,7 +8,14 @@ import {
   useCallback,
   useState,
 } from "react";
-import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js";
+import {
+  BUTTON_SHAPE,
+  BUTTON_VARIANT,
+  Button,
+  type ButtonShape,
+  type ButtonSize,
+  type ButtonVariant,
+} from "../button/button.js";
 
 /**
  * folding-button.tsx -- a toolbar's labelled button whose words a narrow toolbar folds away, leaving its glyph, named by its hint.
@@ -19,7 +26,8 @@ import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js"
  * title beside them off its line or drawing over it. Folded, the button is
  * a square around its glyph, and its words are still there for a reader,
  * drawn nowhere, so its name never changes; it raises them in its hint for
- * the pointer and the keyboard. Drawn, its words name it and it raises
+ * the pointer and the keyboard. A round one is a pill drawn and a disc
+ * folded. Drawn, its words name it and it raises
  * nothing, since a hint repeating the words beside it says nothing.
  *
  * What is drawn here is the button, and whether its words are folded. The
@@ -78,6 +86,8 @@ function FoldingBox({
   label,
   icon,
   variant,
+  shape,
+  size,
   busy,
   disabled,
   onClick,
@@ -87,6 +97,8 @@ function FoldingBox({
   label: string;
   icon: ReactNode;
   variant: ButtonVariant;
+  shape: ButtonShape | undefined;
+  size: ButtonSize | undefined;
   busy: string | undefined;
   disabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
@@ -97,6 +109,8 @@ function FoldingBox({
       <Button
         icon={icon}
         variant={variant}
+        shape={shape ?? BUTTON_SHAPE.SQUARE}
+        size={size}
         disabled={disabled}
         onClick={onClick}
         {...busyProps}
@@ -113,6 +127,8 @@ export function FoldingButton({
   label,
   icon,
   variant = BUTTON_VARIANT.QUIET,
+  shape,
+  size,
   busy,
   disabled,
   onClick,
@@ -122,6 +138,10 @@ export function FoldingButton({
   label: string;
   icon: ReactNode;
   variant?: ButtonVariant;
+  /** Its outline: the control's corner, or round, a pill drawn and a disc folded. */
+  shape?: ButtonShape | undefined;
+  /** How big it is: the control's own, or a row mark's height in the caption's type. */
+  size?: ButtonSize | undefined;
   /** While its press is out, what it is doing ("Running"): a ring stands over it under that name. */
   busy?: string | undefined;
   disabled?: boolean | undefined;
@@ -136,6 +156,8 @@ export function FoldingButton({
       label={label}
       icon={icon}
       variant={variant}
+      shape={shape}
+      size={size}
       busy={busy}
       disabled={disabled}
       onClick={onClick}

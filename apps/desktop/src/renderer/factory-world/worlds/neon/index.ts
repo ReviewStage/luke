@@ -1,5 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type FactoryWorldView } from "@luke/ui/factory-world";
+import { AGENT_STATE, agentDrawnUnder, type FactoryWorldView } from "@luke/ui/factory-world";
 import { Color, Matrix4, Quaternion, Vector3 } from "three";
 import {
   PICK_KIND,
@@ -236,9 +236,7 @@ function workersOf(state: WorldState, layout: CityLayout) {
   const claims = new Map<District, number>();
   const stacks = new Map<Building, number>();
   const drawn = view.agents
-    .filter((agent) =>
-      agent.state === AGENT_STATE.FAILED ? layers.building || layers.defects : layers.building,
-    )
+    .filter((agent) => agentDrawnUnder(agent, layers))
     .slice(0, FACTORY_WORLD_BOUNDS.MAX_AGENTS);
   const placed = drawn.map((agent): WorkerPlacement => {
     const district =

@@ -14,6 +14,7 @@ import { tasksControl } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
+import type { NewTaskPreset } from "./use-tasks-tab";
 
 /**
  * New task as the developer meets it: a card over the window holding the
@@ -46,14 +47,15 @@ async function settle(): Promise<void> {
 
 /**
  * The dialog open in its owner, a start answered by `answer` and each
- * start's name and repository written down; `preset` is the repository the
- * press that opened it chose, as a repository group's + does, `issues`
+ * start's name and repository written down; `preset` is what the press
+ * that opened it chose, a repository as a repository group's + does or an
+ * issue as its Start task… does, `issues`
  * the workspace's Linear issues where it has Linear connected, and `finds`
  * what its Linear answers a search or an identifier with.
  */
 async function mount(
   answer: string | undefined = undefined,
-  preset?: string,
+  preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
@@ -62,6 +64,8 @@ async function mount(
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const fromIssues: (string | undefined)[] = [];
+  const fromWorkspaceIssues: (string | undefined)[] = [];
+  const startedIn: (string | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -75,18 +79,20 @@ async function mount(
       newTask: {
         ...control.newTask,
         open,
-        preset: preset === undefined ? undefined : { repository: preset },
+        preset,
         repositoriesIn: () => repositories,
         start: (
           name: string,
           repository: string | null,
-          _workspaceId: string | undefined,
+          workspaceId: string | undefined,
           planning: boolean,
-          linearIssueId?: string,
+          from?: { readonly linearIssueId?: string; readonly issueId?: string },
         ) => {
           starts.push([name, repository]);
           planned.push(planning);
-          fromIssues.push(linearIssueId);
+          fromIssues.push(from?.linearIssueId);
+          fromWorkspaceIssues.push(from?.issueId);
+          startedIn.push(workspaceId);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -140,6 +146,10 @@ async function mount(
     asks,
     /** The Linear issue each start came from, where it came from one. */
     fromIssues,
+    /** The workspace's own issue each start came from, where it came from one. */
+    fromWorkspaceIssues,
+    /** The workspace each start asked for. */
+    startedIn,
     /** Whether each start asked for its planning phase. */
     planned,
     /** Every Settings link the dialog's presses followed. */
@@ -236,7 +246,7 @@ test("Plan starts on, a task started with it off starts without planning, and th
 });
 
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
-  const card = await mount(undefined, "acme/api");
+  const card = await mount(undefined, { repository: "acme/api" });
   card.type("Rate limits");
   act(() => card.button("Create task").click());
   await settle();
@@ -287,10 +297,14 @@ test("a refusal keeps the dialog and the name, says why under the field, and Cre
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
-  const dialog = await mount(undefined, "alice/private", {
-    scope: "workspace-personal",
-    recent: ["alice/notes"],
-  });
+  const dialog = await mount(
+    undefined,
+    { repository: "alice/private" },
+    {
+      scope: "workspace-personal",
+      recent: ["alice/notes"],
+    },
+  );
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
@@ -300,10 +314,14 @@ test("a workspace switch lets the pick go for the new workspace's recent reposit
 });
 
 test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
-  const dialog = await mount(undefined, "alice/private", {
-    scope: undefined,
-    recent: ["alice/notes"],
-  });
+  const dialog = await mount(
+    undefined,
+    { repository: "alice/private" },
+    {
+      scope: undefined,
+      recent: ["alice/notes"],
+    },
+  );
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-personal" });
@@ -311,6 +329,14 @@ test("the workspace first resolving keeps a repository picked before the workspa
 
   assert.deepEqual(dialog.starts, [["Dark mode", "alice/private"]]);
 });
+
+/** The lines the repository menu says in its rows' place. */
+function menuNotes(): (string | null)[] {
+  return [...document.querySelectorAll(".luke-combobox-note")].flatMap((note) => {
+    const lines = [...note.querySelectorAll("p")];
+    return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
+  });
+}
 
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
@@ -339,9 +365,7 @@ test("an owner or admin of a workspace with no GitHub connected is told so and o
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
   const open =
     buttons.find((button) => button.textContent === "Open Settings") ??
     assert.fail("the menu offers to open Settings");
@@ -365,9 +389,7 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
 
   assert.deepEqual(notes, ["Ask an owner or admin to connect GitHub."]);
   assert.equal(
@@ -387,9 +409,7 @@ async function lapsedMenu(manages: boolean) {
   });
   const buttons = await openChip();
   return {
-    notes: [...document.querySelectorAll(".task-compose-menu-note")].map(
-      (note) => note.textContent,
-    ),
+    notes: menuNotes(),
     settings: buttons.some((button) => button.textContent === "Open Settings"),
   };
 }
@@ -420,9 +440,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
   const offered = buttons.map((button) => button.textContent);
   const search =
     document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
@@ -465,7 +483,7 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
-  const listed = await mount(undefined, "acme/api", { read: listing });
+  const listed = await mount(undefined, { repository: "acme/api" }, { read: listing });
   listed.type("Rate limits");
   await listed.press("Enter", listed.field());
 
@@ -500,8 +518,8 @@ test("the repository menu names each repository first and its owner after it, so
   await openChip();
   const rows = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent,
-      row.querySelector(".task-compose-menu-detail")?.textContent,
+      row.querySelector(".luke-combobox-option-label")?.textContent,
+      row.querySelector(".luke-combobox-option-detail")?.textContent,
     ]);
 
   assert.deepEqual(rows(), [
@@ -709,4 +727,33 @@ test("a pasted link to an issue, or its key typed alone, asks Linear for that on
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, searches no Linear, and links the task to the issue", async () => {
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-2",
+    identifier: "ACME-7",
+    title: "Invites expire",
+  };
+  const linear: LinearIssueSummary = {
+    id: "linear-1",
+    identifier: "ENG-1",
+    title: "Invites expire in Linear",
+    url: "https://linear.app/acme/issue/ENG-1",
+  };
+  const card = await mount(undefined, { issue }, {}, [linear]);
+
+  assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
+  assert.equal(card.field().value, "Invites expire");
+  assert.equal(card.field().placeholder, "Task name (optional)");
+  card.type("Invites expire");
+  await settle();
+  assert.equal(document.querySelector('[role="option"]'), null, "no Linear issue is offered");
+  await card.press("Enter", card.field());
+
+  assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
+  assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
+  assert.deepEqual(card.fromIssues, [undefined]);
+  assert.deepEqual(card.startedIn, ["workspace-2"]);
 });

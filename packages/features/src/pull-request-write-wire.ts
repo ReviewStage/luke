@@ -30,6 +30,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_NAME_CHARS: 100,
   /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
   MAX_NODE_ID_CHARS: 256,
+  /** The longest path a line comment names; GitHub's own paths stop well short of it. */
+  MAX_PATH_CHARS: 4_096,
 } as const;
 
 /** How a pull request is merged, as GitHub offers each where the repository allows it. */
@@ -48,6 +50,20 @@ const headShaSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_COMMIT_CHARS),
   EffectSchema.isPattern(/^[0-9a-f]+$/u),
 );
+
+/** The reactions GitHub offers on a comment, in the order it draws them; a reaction is read with the conversation (`coding-agent-wire.ts`) and changed here. */
+export const REACTION = {
+  THUMBS_UP: "thumbs_up",
+  THUMBS_DOWN: "thumbs_down",
+  LAUGH: "laugh",
+  HOORAY: "hooray",
+  CONFUSED: "confused",
+  HEART: "heart",
+  ROCKET: "rocket",
+  EYES: "eyes",
+} as const;
+
+export type Reaction = (typeof REACTION)[keyof typeof REACTION];
 
 /** The changes the Pull request tab makes, each one press. */
 export const PULL_REQUEST_ACTION = {
@@ -89,6 +105,16 @@ export const PULL_REQUEST_ACTION = {
   RESOLVE_THREAD: "resolve-thread",
   /** A resolved review thread of the pull request opened again. */
   UNRESOLVE_THREAD: "unresolve-thread",
+  /** A comment on the pull request itself, at the foot of its conversation. */
+  COMMENT: "comment",
+  /** A reaction given to the description, a comment, a review, or a review comment. */
+  ADD_REACTION: "add-reaction",
+  /** The member's own reaction taken back. */
+  REMOVE_REACTION: "remove-reaction",
+  /** A comment on a line or lines of a changed file, published at once or added to the member's pending review. */
+  ADD_REVIEW_COMMENT: "add-review-comment",
+  /** The member's own pending review thrown away, the comments it held with it. */
+  DISCARD_REVIEW: "discard-review",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -102,6 +128,27 @@ export const REVIEW_EVENT = {
 } as const;
 
 export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
+
+/** Where a line comment goes, as GitHub's own line comment offers: published at once as a review of its own, or added to the member's pending review, which one is started for where they hold none. */
+export const REVIEW_COMMENT_MODE = {
+  SINGLE: "single",
+  REVIEW: "review",
+} as const;
+
+export type ReviewCommentMode = (typeof REVIEW_COMMENT_MODE)[keyof typeof REVIEW_COMMENT_MODE];
+
+/** The side of a diff a line comment counts its line on: the old file's, or the new file's. */
+export const REVIEW_COMMENT_SIDE = {
+  LEFT: "left",
+  RIGHT: "right",
+} as const;
+
+export type ReviewCommentSide = (typeof REVIEW_COMMENT_SIDE)[keyof typeof REVIEW_COMMENT_SIDE];
+
+const reviewCommentSideSchema = EffectSchema.Literals(Object.values(REVIEW_COMMENT_SIDE));
+
+/** A line of a file, counted from one. */
+const fileLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
 const reviewBodySchema = EffectSchema.String.check(
@@ -133,7 +180,16 @@ const threadIdSchema = EffectSchema.NonEmptyString.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
 );
 
-/** A reply's words, Markdown, never blank; GitHub's bound. */
+/**
+ * GitHub's own id for what wears a reaction, as the conversation's read
+ * carries it (`subject`); the service holds it to this pull request before
+ * it reacts.
+ */
+const subjectIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** A reply's or a comment's words, Markdown, never blank; GitHub's bound. */
 const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
 
 /** One change, as the tab asks the service to make it (POST). */
@@ -195,6 +251,37 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNRESOLVE_THREAD),
     threadId: threadIdSchema,
   }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.COMMENT),
+    body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literals([
+      PULL_REQUEST_ACTION.ADD_REACTION,
+      PULL_REQUEST_ACTION.REMOVE_REACTION,
+    ]),
+    subject: subjectIdSchema,
+    content: EffectSchema.Literals(Object.values(REACTION)),
+  }),
+  /**
+   * A comment on the lines from `startLine` on `startSide` to `line` on
+   * `side` of the file at `path`, as the diff read at `headSha` counts them;
+   * one line where no start is named.
+   */
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT),
+    mode: EffectSchema.Literals(Object.values(REVIEW_COMMENT_MODE)),
+    path: EffectSchema.NonEmptyString.check(
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_PATH_CHARS),
+    ),
+    line: fileLineSchema,
+    side: reviewCommentSideSchema,
+    startLine: EffectSchema.optionalKey(fileLineSchema),
+    startSide: EffectSchema.optionalKey(reviewCommentSideSchema),
+    body: replyBodySchema,
+    headSha: headShaSchema,
+  }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISCARD_REVIEW) }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;

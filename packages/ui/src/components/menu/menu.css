@@ -24,8 +24,8 @@
     background: var(--luke-color-overlay);
     box-shadow: var(--luke-menu-shadow);
     animation:
-      luke-menu-arrive var(--duration-quick, 0s) var(--motion-exit, ease) both,
-      luke-menu-drop var(--duration-fast, 0s) var(--spring-fast, ease) both;
+      luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+      luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
   }
 
   /* Hidden for the one layout pass that measures where it fits. */
@@ -38,7 +38,7 @@
      the one motion it has. */
   .luke-menu[data-leaving="true"] {
     pointer-events: none;
-    animation: luke-menu-leave var(--duration-exit, 0s) var(--motion-exit, ease) forwards;
+    animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
     transition: none;
   }
 
@@ -75,6 +75,17 @@
     background: var(--luke-color-fill-strong);
   }
 
+  /* A pinned row whose keys stay in a field has one highlight, which the
+     arrows and the pointer both move, so the pointer's own hover draws
+     nothing of its own. */
+  .luke-menu-item[data-steered="true"]:hover {
+    background: none;
+  }
+
+  .luke-menu-item[data-steered="true"][data-highlighted="true"] {
+    background: var(--luke-color-fill-strong);
+  }
+
   .luke-menu-item[data-danger="true"] {
     color: var(--luke-color-danger-text);
   }
@@ -85,7 +96,7 @@
 
   /* A row that cannot be chosen now is dimmed with its mark and lit by
      nothing. */
-  .luke-menu-item:disabled {
+  .luke-menu-item:is(:disabled, [aria-disabled="true"]) {
     background: none;
     opacity: 0.4;
   }
@@ -172,6 +183,21 @@
     height: var(--luke-menu-glyph);
     margin-left: auto;
     color: var(--luke-color-text-subtle);
+  }
+
+  .luke-menu-item-hint + .luke-menu-item-end {
+    margin-left: 0;
+  }
+
+  /* A setting's switch at the item's end, after its hint. */
+  .luke-menu-item-switch {
+    display: flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .luke-menu-item-hint + .luke-menu-item-switch {
+    margin-left: 0;
   }
 
   .luke-menu-item[role="menuitemcheckbox"] .luke-menu-item-end {

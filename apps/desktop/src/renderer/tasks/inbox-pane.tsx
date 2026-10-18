@@ -1,6 +1,7 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
+  fieldValueWords,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
@@ -16,16 +17,22 @@ import {
   type InboxImageBlock,
   type InboxItem,
   type InboxMessage,
+  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { opensAsLink } from "@luke/panel/tasks/use-open-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  CHOICE_FLOW,
+  CHOICE_LOOK,
   CHOICE_SELECT,
+  CHOICE_TONE,
+  Checkbox,
   ChevronRightIcon,
   ChoiceList,
   type ChoiceOption,
@@ -39,10 +46,8 @@ import {
   FormField,
   GAP,
   Stack,
-  Switch,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
-  TEXT_VARIANT,
   Text,
   TextField,
 } from "@luke/ui";
@@ -50,6 +55,7 @@ import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
+import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
@@ -58,7 +64,6 @@ import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
@@ -74,6 +79,7 @@ import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
+import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text";
 import {
   CODE_READ,
   CODE_READ_FAILED,
@@ -81,14 +87,20 @@ import {
   codeNotice,
   codeReadOf,
   codeWindow,
+  decidedOf,
+  decisionsOf,
   fieldValueOf,
   INBOX_HOLDER,
+  INBOX_MISSING,
+  type InboxDecided,
   type InboxDraft,
   type InboxHolder,
+  type InboxMissing,
   inboxFileChips,
   itemWorkspaceId,
   NEEDS_YOU,
   needsReader,
+  numberedPick,
   proposedOptions,
   readersItem,
   SETTLED_BY,
@@ -98,10 +110,12 @@ import {
   THREAD_ENTRY,
   threadCut,
   threadEntries,
+  withDecision,
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { RelativeTime } from "./relative-time";
+import { REPLY_SCOPE } from "./reply-to-selection";
 import { SentWords } from "./skill-chip";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
@@ -110,7 +124,6 @@ import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { WordsWorkspace } from "./use-link-standing";
-import { opensAsLink } from "./use-open-link";
 import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**
@@ -133,19 +146,27 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * picture is (`picture-block.tsx`), up to the pane's width and no taller
  * than theirs, and opened larger over the window by a press, in the viewer
  * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
- * message: a choice's options, one perhaps recommended, pressed one at a
- * time or several where the choice allows; a form's fields, each the
- * control Settings draws for its type; nothing for the rest. While the item
+ * message: a choice's options, one perhaps recommended, a radio list where
+ * it takes one and a checkbox list where it takes several, each numbered
+ * for the key that picks it from anywhere in the Inbox but a field; an
+ * approval's two cards, Approve and Decline, picked as a choice of two is,
+ * a green or a red mark once picked; a to-do's card, its step beside a
+ * checkbox and a "Couldn't do it" pill under it, picked the same way; a
+ * form's fields stacked, each its name over its control at one left edge,
+ * "Optional" after the name of one that may be left empty, a select's
+ * options pills that wrap, a yes or no a checkbox, a number a short field,
+ * and a text field the composer's own field with its mentions and skills
+ * (`inbox-form-text.tsx`); nothing for words or a note. Enter on an option or in a field sends the answer as
+ * the box's Send does, and never presses the option, Space and the arrow
+ * keys being an option's own. While the item
  * waits, the agent composer's box, its card and its field, with its `@`
  * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
- * docked under the thread for the note: an approval, a task, and an item
- * asking nothing are answered by presses in its footer, the one that holds
- * back and the one that goes ahead, as a confirm's are; words, a choice,
- * and a form by the box's own Send. A card whose agent need not hear back
- * says whether its answer will message the agent: a bare press does not, and
- * a typed note does. Once the item is settled,
+ * docked under the thread for the note, and every item is sent by its one
+ * Send, a note's reading "Got it" until a word is written. A card whose
+ * agent need not hear back says whether its answer will message the agent:
+ * a bare answer does not, and a typed note does. Once the item is settled,
  * what it offered folds to one line saying who picked which, which opens
- * to the options, or the presses it was answered by, with the developer's
+ * to the options, or the decisions it was answered by, with the developer's
  * pick marked and the rest stepped back; the developer's answer follows as
  * their comment, when and whether it reached the agent as a message or was
  * kept for it to read, then what they picked as a chip and what they
@@ -174,6 +195,14 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * wrote, a code block the repository's lines, and an image block a picture of what it rendered,
  * so its thread is out of the session recording (`ph-no-capture`), and the
  * viewer, drawn over the window outside it, is out of it on its own.
+ *
+ * Words selected in what the agent wrote, its question's Markdown, its
+ * messages on the thread, and why it took the item back, stand Reply over
+ * them, as an agent's words do in its tab (`reply-to-selection.tsx`): a
+ * press lays them into the box as a quote block, so an answer or a message
+ * can answer the agent point by point. Reply stands only while the box
+ * takes a quote: never while an answer is out, a dictation holds the box,
+ * or its editor is still loading (`inbox-answer-box.tsx`).
  */
 
 /** What the thread says under its item where the task's inbox could not be read. */
@@ -407,8 +436,9 @@ function KnownBlock({
 }): React.JSX.Element {
   switch (block.type) {
     case INBOX_BLOCK.MARKDOWN:
+      // The agent's words, which a selection inside may be replied to.
       return (
-        <div data-inbox-markdown="">
+        <div data-inbox-markdown="" {...{ [REPLY_SCOPE]: "" }}>
           <TranscriptWords text={block.text} />
         </div>
       );
@@ -492,19 +522,37 @@ export function choiceOptions(
   }));
 }
 
-/** A choice's options, each pressed to pick it and pressed again to let it go; several stay picked where the choice allows. */
+/** Where a choice's open options stand, which a number key and Enter's way to what is missing find them by. */
+const OPTIONS_ATTRIBUTE = "data-inbox-options";
+
+/** The options of the open item's choice, in their order. */
+function optionRows(pane: HTMLElement): HTMLButtonElement[] {
+  return [
+    ...pane.querySelectorAll<HTMLButtonElement>(
+      `[${OPTIONS_ATTRIBUTE}] [role="radio"], [${OPTIONS_ATTRIBUTE}] [role="checkbox"]`,
+    ),
+  ];
+}
+
+/**
+ * A choice's options, a radio list where it takes one and a checkbox list
+ * where it takes several, each pressed to pick it and pressed again to let
+ * it go. Where `numbered`, each of the first nine wears the number that
+ * picks it, which the Inbox's pane answers (`useOptionNumbers`).
+ */
 export function ChoiceOptions({
   choice,
   draft,
   disabled,
+  numbered = false,
   onDraft,
 }: {
   choice: InboxChoice;
   draft: InboxDraft;
   disabled: boolean;
+  numbered?: boolean;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
-  const multiple = choice.multiple === true;
   const options = choiceOptions(
     choice.options.map((option) => ({
       ...option,
@@ -512,50 +560,210 @@ export function ChoiceOptions({
     })),
   );
   return (
-    <Stack gap={GAP.TIGHT}>
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
       <ChoiceList
         legend={CHOICE_LEGEND}
         options={options}
         value={draft.choices}
-        select={multiple ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
+        select={choice.multiple === true ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
+        look={CHOICE_LOOK.MARKED}
+        numbered={numbered}
         clearable
         disabled={disabled}
         onChange={(choices) => onDraft({ ...draft, choices: [...choices] })}
       />
-      {multiple ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          Pick any that apply.
-        </Text>
-      ) : null}
-    </Stack>
+    </div>
   );
 }
 
-/** A field's name over or beside its control, saying where it must be filled. */
-function FieldName({ field }: { field: InboxField }): React.JSX.Element {
+/** What an approval's cards are named by, for a reader that does not see the question over them. */
+const DECISION_LEGEND = "Decision";
+
+/** What each decision's mark fills with once picked: going ahead in green, holding back in red. */
+const DECISION_TONE = [CHOICE_TONE.COMPLETE, CHOICE_TONE.DANGER] as const;
+
+/**
+ * An approval's two cards side by side, Approve and Decline, picked as a
+ * choice of two is and numbered for the keys that pick them, the pick's
+ * mark green for Approve and red for Decline. The pick waits for Send.
+ */
+function DecisionCards({
+  response,
+  draft,
+  disabled,
+  onDraft,
+}: {
+  response: InboxDecided;
+  draft: InboxDraft;
+  disabled: boolean;
+  onDraft: (draft: InboxDraft) => void;
+}): React.JSX.Element {
+  const decided = decidedOf(response, draft);
   return (
-    <span className="settings-copy">
-      <strong>{field.label}</strong>
-      {field.required === true ? <small>Required</small> : null}
-    </span>
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+      <ChoiceList
+        legend={DECISION_LEGEND}
+        options={decisionsOf(response).map((decision, index) => ({
+          value: decision.reply,
+          label: decision.label,
+          tone: DECISION_TONE[index],
+        }))}
+        value={decided === undefined ? [] : [decided]}
+        look={CHOICE_LOOK.MARKED}
+        flow={CHOICE_FLOW.ACROSS}
+        numbered
+        clearable
+        disabled={disabled}
+        onChange={(picked) => {
+          const [reply] = picked;
+          onDraft(reply === undefined ? { ...draft, choices: [] } : withDecision(draft, reply));
+        }}
+      />
+    </div>
   );
 }
 
-/** What a field says under its control where it must be filled. */
-function requiredWords(field: InboxField): string | undefined {
-  return field.required === true ? "Required" : undefined;
+/** What a to-do's card is named by, for a reader that does not see the question over it. */
+const TODO_LEGEND = "To-do";
+
+/** The keys that step between a to-do's two picks, and which way. */
+const TODO_STEP_KEYS = new Map([
+  ["ArrowDown", 1],
+  ["ArrowRight", 1],
+  ["ArrowUp", -1],
+  ["ArrowLeft", -1],
+]);
+
+/**
+ * A to-do as a task card: a checkbox beside its step, the item's own title,
+ * which ticks it done, and a "Couldn't do it" pill under it, the two picked
+ * as a choice of two is: a radio group whose Tab lands on the pick, or the
+ * step while none is, the arrows moving between them and picking as they
+ * go, Space or a press picking, a press on the pick taking it back, and
+ * each numbered for its key. Note that the card is drawn here rather than
+ * by `@luke/ui`'s ChoiceList, whose rows are all one shape, because a step
+ * ticked off with a pill under it is the to-do's own look.
+ */
+function TodoCard({
+  item,
+  response,
+  draft,
+  disabled,
+  onDraft,
+}: {
+  item: InboxItem;
+  response: InboxDecided;
+  draft: InboxDraft;
+  disabled: boolean;
+  onDraft: (draft: InboxDraft) => void;
+}): React.JSX.Element {
+  const decided = decidedOf(response, draft);
+  const decisions = decisionsOf(response);
+  const pick = (reply: InboxReplyKind) =>
+    onDraft(reply === decided ? { ...draft, choices: [] } : withDecision(draft, reply));
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = TODO_STEP_KEYS.get(event.key);
+    if (step === undefined || disabled) return;
+    event.preventDefault();
+    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
+    const from =
+      focused >= 0
+        ? focused
+        : Math.max(
+            0,
+            decisions.findIndex((each) => each.reply === decided),
+          );
+    const next = (from + step + decisions.length) % decisions.length;
+    const reply = decisions[next]?.reply;
+    if (reply !== undefined && reply !== decided) onDraft(withDecision(draft, reply));
+    radios[next]?.focus();
+  };
+  const checked = (index: number) => {
+    const reply = decisions[index]?.reply;
+    return reply !== undefined && reply === decided;
+  };
+  const radio = (index: number) => {
+    const reply = decisions[index]?.reply;
+    return {
+      type: "button",
+      "aria-keyshortcuts": String(index + 1),
+      tabIndex: checked(index) || (decided === undefined && index === 0) ? 0 : -1,
+      disabled,
+      onClick: () => {
+        if (reply !== undefined) pick(reply);
+      },
+    } as const;
+  };
+  return (
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+      <div role="radiogroup" aria-label={TODO_LEGEND} className="inbox-todo" onKeyDown={onKeyDown}>
+        {/* biome-ignore lint/a11y/useSemanticElements: the step is drawn as a button holding a box, its words, and its key, which a native radio cannot be, and speaks as the radio it behaves as. */}
+        <button role="radio" aria-checked={checked(0)} className="inbox-todo-step" {...radio(0)}>
+          <span className="inbox-todo-box" aria-hidden="true" />
+          <span className="inbox-todo-words">{cardTitle(item.title)}</span>
+          <span className="inbox-todo-number" aria-hidden="true">
+            1
+          </span>
+        </button>
+        <div className="inbox-todo-acts">
+          {/* biome-ignore lint/a11y/useSemanticElements: the pill is drawn as a button holding a check and its words, which a native radio cannot be, and speaks as the radio it behaves as. */}
+          <button role="radio" aria-checked={checked(1)} className="inbox-todo-pill" {...radio(1)}>
+            <CheckIcon aria-hidden="true" />
+            {decisions[1]?.label}
+            <span className="inbox-todo-number" aria-hidden="true">
+              2
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
+/** What marks a field that may be left empty, since most must be filled. */
+const OPTIONAL = "Optional";
+
+/** A field's name, and "Optional" after it where it may be left empty. */
+function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
+  return (
+    <>
+      {field.label}
+      {field.required === true ? null : <span className="inbox-field-optional">{OPTIONAL}</span>}
+    </>
+  );
+}
+
+/** How a form's text fields are drawn where the caller draws its own: the Inbox's composer field. */
+export type FormText = (props: FormTextProps) => React.ReactNode;
+
+/** The parts of a field a frame's attributes name, which Enter's way to an empty field finds it by. */
+function fieldFrame(field: InboxField) {
+  return {
+    className: "inbox-field",
+    "data-inbox-field": field.type,
+    "data-inbox-field-label": field.label,
+  } as const;
+}
+
+/**
+ * One field of a form, its name over its control and left-aligned as every
+ * field is, "Optional" after the name of one that may be left empty: a
+ * text field the caller's own or `@luke/ui`'s, a number a short field, a
+ * select its options as pills that wrap, an optional one's pick taken back
+ * by pressing it again, and a yes or no a checkbox beside its name.
+ */
 function InboxFormField({
   field,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   field: InboxField;
   draft: InboxDraft;
   disabled: boolean;
+  text: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const value = fieldValueOf(draft, field.label);
@@ -564,82 +772,97 @@ function InboxFormField({
   switch (field.type) {
     case INBOX_FIELD.TEXT:
       return (
-        <div data-inbox-field={field.type}>
-          <FormField label={field.label} description={requiredWords(field)}>
-            {(control) => (
-              <TextField
-                field={control}
-                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                value={value === undefined ? "" : String(value)}
-                disabled={disabled}
-                onChange={(typed) => set(typed === "" ? undefined : typed)}
-              />
-            )}
+        <div {...fieldFrame(field)}>
+          <FormField label={<FieldLabel field={field} />}>
+            {(control) => {
+              const words = value === undefined ? "" : String(value);
+              const onChange = (typed: string | undefined) =>
+                set(typed === undefined || typed === "" ? undefined : typed);
+              return text === undefined ? (
+                <TextField
+                  field={control}
+                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                  value={words}
+                  disabled={disabled}
+                  onChange={onChange}
+                />
+              ) : (
+                text({ field, control, value: words, disabled, onChange })
+              );
+            }}
           </FormField>
         </div>
       );
     case INBOX_FIELD.NUMBER:
       return (
-        <div data-inbox-field={field.type}>
-          <FormField label={field.label} description={requiredWords(field)}>
+        <div {...fieldFrame(field)}>
+          <FormField label={<FieldLabel field={field} />}>
             {(control) => (
-              <TextField
-                field={control}
-                type={TEXT_FIELD_TYPE.NUMBER}
-                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                value={value === undefined ? undefined : Number(value)}
-                disabled={disabled}
-                onChange={set}
-              />
+              <div className="inbox-field-short">
+                <TextField
+                  field={control}
+                  type={TEXT_FIELD_TYPE.NUMBER}
+                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                  value={value === undefined ? undefined : Number(value)}
+                  disabled={disabled}
+                  onChange={set}
+                />
+              </div>
             )}
           </FormField>
         </div>
       );
     case INBOX_FIELD.SELECT:
       return (
-        <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          {/* An optional field's choice is taken back by pressing it again, its only way to be left unanswered. */}
-          <Segmented
+        <div {...fieldFrame(field)}>
+          <span className="inbox-field-name" aria-hidden="true">
+            <FieldLabel field={field} />
+          </span>
+          <ChoiceList
             legend={field.label}
             options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
-            value={field.options?.find((option) => option === value)}
-            disabled={disabled}
+            value={(field.options ?? []).filter((option) => option === value)}
+            look={CHOICE_LOOK.PILL}
             clearable={field.required !== true}
-            onChange={set}
+            disabled={disabled}
+            onChange={(picked) => set(picked[0])}
           />
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
-        <div className="settings-row" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          <Switch checked={value === true} label={field.label} disabled={disabled} onChange={set} />
+        <div {...fieldFrame(field)}>
+          <Checkbox checked={value === true} disabled={disabled} onChange={set}>
+            <FieldLabel field={field} />
+          </Checkbox>
         </div>
       );
   }
 }
 
-/** A form's fields, in the agent's order. */
+/** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given. */
 export function FormFields({
   form,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   form: InboxForm;
   draft: InboxDraft;
   disabled: boolean;
+  text?: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   return (
-    <Stack gap={GAP.CONTROL}>
+    <Stack gap={GAP.FIELD}>
       {form.fields.map((field) => (
         <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
           disabled={disabled}
+          text={text}
           onDraft={onDraft}
         />
       ))}
@@ -652,11 +875,14 @@ function ResponseControls({
   item,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   disabled: boolean;
+  /** What a form's text fields are written with. */
+  text: FormTextDoors;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element | null {
   const response = item.response;
@@ -664,13 +890,172 @@ function ResponseControls({
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
       return (
-        <ChoiceOptions choice={response} draft={draft} disabled={disabled} onDraft={onDraft} />
+        <ChoiceOptions
+          choice={response}
+          draft={draft}
+          disabled={disabled}
+          numbered
+          onDraft={onDraft}
+        />
+      );
+    case INBOX_RESPONSE.APPROVAL:
+      return (
+        <DecisionCards response={response} draft={draft} disabled={disabled} onDraft={onDraft} />
+      );
+    case INBOX_RESPONSE.TODO:
+      return (
+        <TodoCard
+          item={item}
+          response={response}
+          draft={draft}
+          disabled={disabled}
+          onDraft={onDraft}
+        />
       );
     case INBOX_RESPONSE.FORM:
-      return <FormFields form={response} draft={draft} disabled={disabled} onDraft={onDraft} />;
+      return (
+        <FormFields
+          form={response}
+          draft={draft}
+          disabled={disabled}
+          text={(props) => <InboxFormText {...props} doors={text} />}
+          onDraft={onDraft}
+        />
+      );
     default:
       return null;
   }
+}
+
+/** What an editor's own element matches, its words written in place, and a field of several lines. */
+const WRITES_LINES = 'textarea, [contenteditable]:not([contenteditable="false"])';
+
+/** Whether a key goes to whatever takes typing: a field, a select, or an editor. */
+function takesTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches(`input, select, ${WRITES_LINES}`);
+}
+
+/** Whether a key goes to something written in lines, whose own Enter breaks one: an editor or a field of several lines. */
+function writesLines(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches(WRITES_LINES);
+}
+
+/** Whether a key comes alone, with no modifier but perhaps Shift. */
+function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
+  return !event.metaKey && !event.ctrlKey && !event.altKey;
+}
+
+/**
+ * Sends the open item's answer from wherever in its pane the developer
+ * pressed Enter, through its box's own send, so the box's checks stand: an
+ * answer complete goes, and one that is not takes the keyboard to what it
+ * lacks (`InboxAnswerBox`).
+ */
+function sendFromPane(pane: HTMLElement | null): void {
+  pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
+}
+
+/**
+ * Enter in an open item's question, on an option or in a form's field,
+ * sends the answer, and never presses the option it stands on; Shift+Enter
+ * is no send, and an editor's Enter is the editor's own to hand on.
+ */
+function onResponseKey(
+  pane: React.RefObject<HTMLElement | null>,
+  event: React.KeyboardEvent,
+): void {
+  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
+  if (event.key !== "Enter" || event.shiftKey || !bareKey(event) || event.nativeEvent.isComposing) {
+    return;
+  }
+  if (writesLines(event.target)) return;
+  event.preventDefault();
+  sendFromPane(pane.current);
+}
+
+/**
+ * Takes the keyboard to what the answer lacks: the option a reader's Tab
+ * lands on, the field's first control, or the box's words.
+ */
+function focusMissing(pane: HTMLElement | null, missing: InboxMissing): void {
+  if (pane === null) return;
+  if (missing.kind === INBOX_MISSING.OPTION) {
+    const rows = optionRows(pane);
+    (rows.find((row) => row.tabIndex === 0) ?? rows[0])?.focus();
+    return;
+  }
+  if (missing.kind === INBOX_MISSING.WORDS) {
+    pane.querySelector<HTMLElement>('.inbox-answer [contenteditable="true"]')?.focus();
+    return;
+  }
+  const field = [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+    (each) => each.dataset.inboxFieldLabel === missing.label,
+  );
+  field
+    ?.querySelector<HTMLElement>(
+      'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)',
+    )
+    ?.focus();
+}
+
+/** The responses whose options a number key picks: a choice's, and an approval's or a to-do's two. */
+const NUMBERED_RESPONSES: ReadonlySet<string> = new Set([
+  INBOX_RESPONSE.CHOICE,
+  INBOX_RESPONSE.APPROVAL,
+  INBOX_RESPONSE.TODO,
+]);
+
+/** The keys 1 to 9, each the option of its number. */
+const OPTION_NUMBER = /^[1-9]$/u;
+
+/**
+ * The number keys pick an open item's options, a choice's or an approval's
+ * or a to-do's two, 1 the first, as a press on
+ * the option would, and take the keyboard to it, wherever in the Inbox the
+ * developer stands but a field or an editor, whose keys are its own, and
+ * never under a dialog. Note that the keys are heard on the document,
+ * because a reader stepping the list with J and K holds the keyboard on its
+ * row rather than in the pane.
+ */
+function useOptionNumbers(
+  pane: React.RefObject<HTMLElement | null>,
+  item: InboxItem,
+  draft: InboxDraft,
+  control: TaskInboxControl,
+): void {
+  const latest = useRef({ item, draft, control });
+  latest.current = { item, draft, control };
+  const numbered = item.status === INBOX_STATUS.OPEN && NUMBERED_RESPONSES.has(item.response.type);
+  useEffect(() => {
+    if (!numbered) return;
+    const onKey = (event: KeyboardEvent) => {
+      const { item, draft, control } = latest.current;
+      const shown = pane.current;
+      if (!OPTION_NUMBER.test(event.key) || !bareKey(event) || event.shiftKey) return;
+      if (event.defaultPrevented || event.isComposing || takesTyping(event.target)) return;
+      if (
+        shown === null ||
+        shown.hidden ||
+        document.querySelector('[aria-modal="true"]') !== null
+      ) {
+        return;
+      }
+      const inbox = shown.parentElement;
+      const from = event.target;
+      if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
+        return;
+      const number = Number(event.key);
+      const picked = numberedPick(item, draft, number);
+      if (picked === undefined || control.sending.has(item.id)) return;
+      event.preventDefault();
+      control.onDraft(item, picked);
+      optionRows(shown)[number - 1]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [numbered, pane]);
 }
 
 /** The item's agent as the pane names it, the catalog its card names the model from, and the press that opens its tab. */
@@ -884,6 +1269,42 @@ function CommentFiles({
 /** No files, one array so a comment that has none hands down the same one. */
 const NO_FILES: NonNullable<InboxItem["answerFiles"]> = [];
 
+/**
+ * A form's values as the developer filled them, one a line in the form's
+ * order: each field's name, then what was put in it, a text field's words
+ * drawn as the agent's tab draws a sent message, so a mention they hold is
+ * its chip, and any other field's value in its words, "yes" or "no" for a
+ * yes or no.
+ */
+function FormValues({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const values = item.answer?.values ?? [];
+  if (values.length === 0) return null;
+  const response = item.response;
+  const texts = new Set(
+    knownResponse(response) && response.type === INBOX_RESPONSE.FORM
+      ? response.fields
+          .filter((field) => field.type === INBOX_FIELD.TEXT)
+          .map((field) => field.label)
+      : [],
+  );
+  return (
+    <ul className="inbox-values" data-inbox-values="">
+      {values.map(({ label, value }) => (
+        <li key={label} className="inbox-value">
+          <span className="inbox-value-label">{label}</span>
+          <div className="inbox-words inbox-value-words">
+            {texts.has(label) && isWireString(value) ? (
+              <SentWords text={value} />
+            ) : (
+              fieldValueWords(value)
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
@@ -936,9 +1357,7 @@ function Answered({
           <span>{pick}</span>
         </span>
       )}
-      {settled.values === undefined ? null : (
-        <p className="inbox-words inbox-lines">{settled.values}</p>
-      )}
+      {settled.values === undefined ? null : <FormValues item={item} />}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}
@@ -988,7 +1407,11 @@ function Withdrawn({
         </>
       }
     >
-      {settled.words === undefined ? undefined : <p className="inbox-words">{settled.words}</p>}
+      {settled.words === undefined ? undefined : (
+        <p className="inbox-words" {...{ [REPLY_SCOPE]: "" }}>
+          {settled.words}
+        </p>
+      )}
     </Comment>
   );
 }
@@ -1044,7 +1467,12 @@ function Message({
         onRetryImage={onRetryImage}
       />
       {message.text === "" ? null : (
-        <div className="inbox-words" data-inbox-message-text="">
+        <div
+          className="inbox-words"
+          data-inbox-message-text=""
+          // The agent's words alone may be replied to, as in its tab, never a member's.
+          {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
+        >
           <SentWords text={message.text} />
         </div>
       )}
@@ -1453,6 +1881,7 @@ export function InboxPane({
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
+  const pane = useRef<HTMLElement>(null);
   // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
   useLayoutEffect(() => {
     if (board.current !== null) board.current.scrollTop = 0;
@@ -1466,10 +1895,16 @@ export function InboxPane({
   };
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
+  useOptionNumbers(pane, item, draft, control);
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
   return (
-    <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
+    <section
+      ref={pane}
+      className="inbox-view-items"
+      aria-label={cardTitle(item.title)}
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
           <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
@@ -1513,12 +1948,25 @@ export function InboxPane({
                   code={doors.code}
                 />
                 {open ? (
-                  <ResponseControls
-                    item={item}
-                    draft={draft}
-                    disabled={control.sending.has(item.id)}
-                    onDraft={(next) => control.onDraft(item, next)}
-                  />
+                  // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
+                  <div className="inbox-response" onKeyDown={(event) => onResponseKey(pane, event)}>
+                    {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
+                    <AnswerMentions value={mentions}>
+                      <ResponseControls
+                        item={item}
+                        draft={draft}
+                        disabled={control.sending.has(item.id)}
+                        text={{
+                          self: item.agentId,
+                          agent: by.subject.agent,
+                          skills: agents.readSkills,
+                          keywords: answerKeywords(holder, item),
+                          onEnter: () => sendFromPane(pane.current),
+                        }}
+                        onDraft={(next) => control.onDraft(item, next)}
+                      />
+                    </AnswerMentions>
+                  </div>
                 ) : (
                   // Keyed by its item, so the fold opened on one item stands closed on the next.
                   <Offered key={item.id} item={item} />
@@ -1540,6 +1988,8 @@ export function InboxPane({
             agentName={by.subject.name}
             skills={agents.readSkills}
             keywords={answerKeywords(holder, item)}
+            replyScope={board}
+            onMissing={(missing) => focusMissing(pane.current, missing)}
           />
         </AnswerMentions>
       </div>

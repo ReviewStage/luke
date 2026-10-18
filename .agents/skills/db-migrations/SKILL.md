@@ -44,6 +44,40 @@ Apply these before generating any migration — they change what the schema file
 
 Classify every database change into one of these three rollout paths before generating or editing a migration.
 
+### Expand, migrate, contract
+
+A migration must never break the previous deployment's code. Every build runs `pnpm db:migrate` against the one shared database (`vercel.json`'s web `buildCommand`), while the deployment before it is still serving, and a coding agent's run (any Vercel Workflow run) keeps executing on the deployment it started on for up to 25 hours. So for a day after a build, code that still spells the old names runs against the schema the newest build already migrated. On Oct 17, `20261017014941_rename_plan_to_task` renamed `plan` to `task` in place, and every agent still on older code died at its next step with `relation "plan" does not exist`.
+
+Change a name or shape that old code reads in steps, each in its own deployment. Each step waits until every run pinned to a deployment from before the previous step has drained, which is 25 hours after that step reached production. Keep the old name current for as long as anything may still read it, not just present:
+
+1. **Expand.** Add the new table or column beside the old one. Ship code that writes both and still reads the old one. Backfill the new column with a script ("Data backfill" below), not in the migration, once the writers that knew only the old name have drained.
+2. **Migrate.** Ship code that reads the new name and still writes both, because runs on the expand deployment still read the old one.
+3. **Stop writing the old name.** Once the expand deployment's runs have drained, ship code that reads and writes only the new name.
+4. **Contract.** Drop the old thing in a later migration, at least 25 hours after the code that stopped writing it reached production, since runs pinned to the deployment before it still write the old name. Mark that migration with the reason, on a line of its own:
+
+   ```sql
+   -- contract: nothing has read "plan_id" since #3700 reached production on Oct 18, over 25 hours ago
+   ALTER TABLE "task" DROP COLUMN IF EXISTS "plan_id";
+   ```
+
+Two shortcuts skip the steps:
+
+- When only the code's name for a column changes, rename the property and keep the column, since Drizzle maps a property to any column name (`taskId: text("plan_id")`).
+- For a table rename, rename the table and create a view under the old name in the same migration, aliasing any renamed column back to its old name. Postgres lets old code read and write a single-table view with no join or aggregate as if it were the table, `INSERT … ON CONFLICT (columns) DO UPDATE` and `RETURNING` included, so nothing has to be kept in step. `ON CONFLICT ON CONSTRAINT <name>` fails through a view, because the constraint belongs to the table; Drizzle's `onConflictDoUpdate` names columns, so check that the old code does too. Mark that migration `-- contract: "plan" stays readable and writable as a view` and drop the view in a later contract step.
+
+The same holds for any change that narrows what old code may do:
+
+- `NOT NULL` without a default on a column old code inserts into, since old code's insert leaves it out.
+- Narrowing a column's type.
+- Dropping or renaming an enum value.
+- Tightening a constraint old code may violate (a new `CHECK`, `UNIQUE`, or foreign key).
+
+Expand first (a nullable column, a default, a `NOT VALID` constraint), ship the code that satisfies it, then tighten in a later migration.
+
+`pnpm --filter @luke/database check:contractions` (run by `scripts/repository-checks.sh`, `packages/database/src/core/migration-contractions.ts`) refuses a new migration that renames a table, column, type, or view, or drops a table, column, type, or view, unless it carries the `-- contract:` marker. Renaming or dropping an index or constraint is not refused, because no statement the code runs names one. The narrowing changes in the list above are not checked: review is the check.
+
+**Generating the expand step.** `drizzle-kit generate` asks "Is `<x>` created or renamed from another?" only when one table or column disappears from the schema modules and another appears in the same run. Without a TTY, such as in an agent's shell, it refuses with "Interactive prompts require a TTY". Its rename option writes the in-place `RENAME` this rule forbids. So for the expand step, keep the old property in the schema module and add the new one beside it: `pnpm db:generate --name=<table>_add_<column>` then writes only the `ADD COLUMN` (or `CREATE TABLE`) and asks nothing. For the contract step, delete the old property in a later change and generate again, which writes the `DROP` with no prompt. Then add the marker line to that `migration.sql`.
+
 ### Validate rollout assumptions on the actual Dev database
 
 Do not choose a rollout path from hypothetical claims such as “this migration might be slow” or “installing these triggers could block deployment.” Before deciding that a schema change needs a manual production step, deferred installation, or a dedicated backfill, test the relevant operation against the project's actual Dev database.

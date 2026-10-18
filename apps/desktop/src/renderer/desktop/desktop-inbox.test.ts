@@ -36,6 +36,7 @@ import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { appBridge } from "@luke/panel/app-bridge";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -63,8 +64,8 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -657,8 +658,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const { page } = mount();
   await settle();
   assert.deepEqual(optionHeads(page), [
-    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
-    "Retry once",
+    "Retry 3 times over an hourRecommended1Backs off 5, 15, then 40 minutes.",
+    "Retry once2",
   ]);
 
   act(() => root?.unmount());
@@ -670,7 +671,401 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
   const again = mount();
   await settle();
-  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour", "Retry once"]);
+  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
+});
+
+/** The open item's options, a choice's radios or checkboxes, in order. */
+function openOptions(pane: HTMLElement): HTMLButtonElement[] {
+  return [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="checkbox"]')];
+}
+
+/** The labels of the open item's options that stand checked. */
+function checkedOptions(pane: HTMLElement): (string | null | undefined)[] {
+  return openOptions(pane)
+    .filter((option) => option.getAttribute("aria-checked") === "true")
+    .map((option) => option.querySelector(".luke-choice-label")?.textContent);
+}
+
+/** The open item's Send, at its box's foot. */
+function answerSend(pane: HTMLElement): HTMLButtonElement {
+  return (
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
+    assert.fail("no Send")
+  );
+}
+
+/** What the box's quiet line says, or nothing where it says nothing. */
+function quietWords(pane: HTMLElement): string | null {
+  return pane.querySelector("[data-inbox-quiet]")?.textContent ?? null;
+}
+
+/**
+ * A key pressed on an element as the browser presses it: a button's Enter
+ * and Space press the button unless a handler held the key back, which
+ * jsdom does not do of itself.
+ */
+function keyOn(target: Element, key: string, init: KeyboardEventInit = {}): void {
+  act(() => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    const presses = key === "Enter" || key === " ";
+    if (presses && !event.defaultPrevented && target instanceof HTMLButtonElement) target.click();
+  });
+}
+
+test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
+  const keys = standKeymap();
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  assert.deepEqual(
+    openOptions(pane).map((option) => [
+      option.getAttribute("role"),
+      option.querySelector(".luke-choice-control")?.getAttribute("data-shape"),
+      option.getAttribute("aria-keyshortcuts"),
+    ]),
+    [
+      ["radio", "radio", "1"],
+      ["radio", "radio", "2"],
+    ],
+  );
+
+  const row = rowNamed(page, "Alert at 80%?");
+  act(() => row.focus());
+  pressKey("2", row);
+  assert.deepEqual(checkedOptions(pane), ["Retry once"]);
+  assert.equal(document.activeElement, openOptions(pane)[1], "the keyboard follows the pick");
+
+  const first = openOptions(pane)[0] ?? assert.fail("no first option");
+  act(() => first.focus());
+  keyOn(first, " ");
+  assert.deepEqual(checkedOptions(pane), ["Retry 3 times over an hour"]);
+
+  composerEditor(pane).focus();
+  pressKey("2", composerEditor(pane));
+  assert.deepEqual(
+    checkedOptions(pane),
+    ["Retry 3 times over an hour"],
+    "typing a number picks none",
+  );
+
+  act(() => first.focus());
+  pressKey("j", first);
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  act(() => keys.unmount());
+});
+
+test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Enter there or in the box sends nothing, takes the keyboard to the options, and says on the box's foot what is missing until an option is picked", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(document.activeElement, openOptions(pane)[0], "the keyboard goes to the options");
+  assert.equal(quietWords(pane), "Pick an option");
+  keyOn(openOptions(pane)[0] ?? assert.fail("no option"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "an answer lacking its pick goes nowhere");
+  assert.deepEqual(checkedOptions(pane), [], "and Enter picked nothing");
+
+  const once = openOptions(pane)[1] ?? assert.fail("no second option");
+  act(() => once.click());
+  assert.equal(quietWords(pane), null, "the line goes once the pick is made");
+  keyOn(once, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, choices }) => ({ reply, choices })),
+    [{ reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Retry once"], "Enter left the pick standing");
+});
+
+test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
+  inboxes.set(BILLING.id, [
+    {
+      ...THRESHOLD,
+      response: {
+        type: INBOX_RESPONSE.CHOICE,
+        multiple: true,
+        options: [{ label: "Email" }, { label: "Slack" }, { label: "Pager" }],
+      },
+    },
+    RETRY,
+  ]);
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const boxes = () => openOptions(pane);
+  assert.deepEqual(
+    boxes().map((box) => box.querySelector(".luke-choice-control")?.getAttribute("data-shape")),
+    ["box", "box", "box"],
+  );
+  assert.equal(quietWords(pane), "Pick any that apply");
+  assert.equal(pane.textContent?.includes("Pick any that apply."), false, "no line under the list");
+
+  const email = boxes()[0] ?? assert.fail("no Email");
+  act(() => email.focus());
+  keyOn(email, "ArrowDown");
+  assert.equal(document.activeElement, boxes()[1]);
+  keyOn(boxes()[1] ?? assert.fail("no Slack"), "ArrowUp");
+  keyOn(email, "ArrowUp");
+  assert.equal(document.activeElement, boxes()[2], "the arrows wrap");
+  assert.deepEqual(checkedOptions(pane), [], "and pick nothing");
+
+  pressKey("3", document.activeElement ?? document.body);
+  pressKey("1", document.activeElement ?? document.body);
+  pressKey("2", document.activeElement ?? document.body);
+  pressKey("2", document.activeElement ?? document.body);
+  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"]);
+  assert.equal(quietWords(pane), "2 picked");
+
+  keyOn(email, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, choices }) => ({ reply, choices })),
+    [{ reply: INBOX_REPLY.CHOSE, choices: ["Pager", "Email"] }],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"], "Enter let no pick go");
+});
+
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      response: {
+        type: INBOX_RESPONSE.FORM,
+        fields: [
+          { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+          { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
+          { type: INBOX_FIELD.NUMBER, label: "Retries" },
+          { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+        ],
+      },
+    },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const field = (label: string) =>
+    [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+      (each) => each.dataset.inboxFieldLabel === label,
+    ) ?? assert.fail(`no ${label} field`);
+  const retries = field("Retries").querySelector("input") ?? assert.fail("no Retries input");
+
+  act(() => retries.focus());
+  keyOn(retries, "Enter");
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
+  assert.equal(quietWords(pane), "Fill in Severity");
+
+  act(() => segment(segmentedGroup(pane, "Severity"), "High").click());
+  keyOn(segment(segmentedGroup(pane, "Severity"), "High"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "Enter on the pill sends nothing yet");
+  assert.equal(document.activeElement, composerEditor(field("Reason")));
+  assert.equal(quietWords(pane), "Fill in Reason");
+  assert.equal(
+    segment(segmentedGroup(pane, "Severity"), "High").getAttribute("aria-checked"),
+    "true",
+  );
+
+  typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
+  await settle();
+  pressInComposer(field("Reason"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "the first Enter picks the mention");
+  pressInComposer(field("Reason"), "Enter");
+  await settle();
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  assert.deepEqual(
+    sent.map(({ reply, values }) => ({ reply, values })),
+    [
+      {
+        reply: INBOX_REPLY.SUBMITTED,
+        values: [
+          { label: "Severity", value: "High" },
+          { label: "Reason", value: `Spiked twice\nSee ${file}` },
+          { label: "Page on-call", value: false },
+        ],
+      },
+    ],
+  );
+});
+
+/** The open item's only item in the Inbox: an item of the agent's asking `response`, the rest of the list as it stands. */
+function onlyAsking(response: InboxItem["response"], extra: Partial<InboxItem> = {}): InboxItem {
+  const asking = { ...THRESHOLD, response, ...extra };
+  inboxes.set(BILLING.id, [asking, RETRY]);
+  return asking;
+}
+
+/** The words of every button at the open item's box's foot, the Send among them. */
+function footPresses(pane: HTMLElement): (string | null)[] {
+  return [...pane.querySelectorAll<HTMLButtonElement>(".inbox-answer-actions button")].map(
+    (button) => button.getAttribute("aria-label") ?? button.textContent,
+  );
+}
+
+test("an approval is decided in its question, Approve and Decline two cards picked as a choice of two, each numbered, its mark green or red once picked; its box ends in the one Send, Enter going to the cards until one is picked and then sending it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.APPROVAL });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.deepEqual(
+    openOptions(pane).map((card) => [
+      card.querySelector(".luke-choice-label")?.textContent,
+      card.getAttribute("aria-keyshortcuts"),
+      card.dataset.tone,
+    ]),
+    [
+      ["Approve", "1", "complete"],
+      ["Decline", "2", "danger"],
+    ],
+  );
+  assert.deepEqual(
+    footPresses(pane),
+    ["Dictate", "Send to agent"],
+    "Decline and Approve left the foot",
+  );
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.equal(document.activeElement, openOptions(pane)[0]);
+  assert.equal(quietWords(pane), "Approve or decline");
+
+  pressKey("2", document.activeElement ?? document.body);
+  assert.deepEqual(checkedOptions(pane), ["Decline"]);
+  assert.equal(quietWords(pane), null);
+  keyOn(openOptions(pane)[1] ?? assert.fail("no Decline"), "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply }) => reply),
+    [INBOX_REPLY.DECLINED],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Decline"], "Enter left the pick standing");
+});
+
+test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.TODO }, { title: "Add POSTMARK_SERVER_TOKEN to Vercel" });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const [step, pill] = openOptions(pane);
+  assert.ok(step && pill, "the card holds two picks");
+  assert.equal(
+    step.querySelector(".inbox-todo-words")?.textContent,
+    "Add POSTMARK_SERVER_TOKEN to Vercel",
+  );
+  assert.equal(pill.textContent, "Couldn't do it2");
+  assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
+  assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");
+
+  act(() => step.click());
+  assert.equal(step.getAttribute("aria-checked"), "true");
+  act(() => step.focus());
+  keyOn(step, "ArrowDown");
+  assert.equal(pill.getAttribute("aria-checked"), "true", "the arrow picks as it moves");
+  assert.equal(document.activeElement, pill);
+  pressKey("1", pill);
+  assert.equal(step.getAttribute("aria-checked"), "true");
+  assert.equal(document.activeElement, step);
+  act(() => step.click());
+  assert.equal(step.getAttribute("aria-checked"), "false", "a press on the pick takes it back");
+  keyOn(step, "Enter");
+  assert.equal(quietWords(pane), "Tick it, or say you couldn't");
+  assert.equal(step.getAttribute("aria-checked"), "false", "Enter ticks nothing");
+
+  act(() => step.click());
+  typeInComposer(pane, "Added it under Production.");
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, note }) => ({ reply, note })),
+    [{ reply: INBOX_REPLY.DONE, note: "Added it under Production." }],
+  );
+});
+
+test("a note's Send says Got it while its box is empty and Send once a word is written, and Enter in its box sends the nod, with no Got it at the foot beside it", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.NONE });
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  assert.deepEqual(footPresses(pane), ["Dictate", "Got it"]);
+  assert.equal(answerSend(pane).textContent, "Got it");
+  typeInComposer(pane, "Looks right");
+  assert.equal(answerSend(pane).textContent, "Send");
+  act(() => composerEditor(pane).editor?.commands.clearContent(true));
+  assert.equal(answerSend(pane).textContent, "Got it");
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, note }) => ({ reply, note })),
+    [{ reply: INBOX_REPLY.ACKNOWLEDGED, note: undefined }],
+  );
+});
+
+test("a settled approval or to-do still folds what it offered to one line, and its answer's chip reads the decision, Approve or Couldn't do it", async () => {
+  const settled = (
+    id: string,
+    title: string,
+    response: InboxItem["response"],
+    reply: NonNullable<InboxItem["answer"]>,
+  ) => ({
+    ...item(id, title, 6_000),
+    response,
+    status: INBOX_STATUS.ANSWERED,
+    settledAt: 6_000,
+    answeredBy: READER,
+    answer: reply,
+  });
+  inboxes.set(BILLING.id, [
+    settled(
+      "a1b2c3d4-0000-4000-8000-000000000031",
+      "Run the migration?",
+      { type: INBOX_RESPONSE.APPROVAL },
+      { reply: INBOX_REPLY.APPROVED },
+    ),
+    settled(
+      "a1b2c3d4-0000-4000-8000-000000000032",
+      "Add the token",
+      { type: INBOX_RESPONSE.TODO },
+      { reply: INBOX_REPLY.NOT_DONE },
+    ),
+  ]);
+  const { page } = mount();
+  await settle();
+  const read = (title: string) => {
+    act(() => rowNamed(page, title).click());
+    const pane = itemPane(page);
+    return [
+      pane.querySelector("details[data-inbox-offered] summary")?.textContent,
+      pane.querySelector("[data-inbox-pick]")?.textContent,
+    ];
+  };
+  assert.deepEqual(read("Run the migration?"), ["2 options · you picked Approve", "Approve"]);
+  assert.deepEqual(read("Add the token"), [
+    "2 options · you picked Couldn't do it",
+    "Couldn't do it",
+  ]);
 });
 
 test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge", async () => {
@@ -728,7 +1123,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
-test("a form's select fields are radio groups, an optional one's pick taken back by pressing it again and a required one's kept, and its yes-or-no field a switch", async () => {
+test("a form stacks its fields, each its name over its control, \"Optional\" after the name of one that may be left empty and \"Required\" nowhere: a select's options are pills, an optional one's pick taken back by pressing it again and a required one's kept, a yes-or-no a checkbox beside its name, a number a short field, and a text field the composer's own field", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -738,6 +1133,8 @@ test("a form's select fields are radio groups, an optional one's pick taken back
           { type: INBOX_FIELD.SELECT, label: "Channel", options: ["Email", "Slack"] },
           { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
           { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+          { type: INBOX_FIELD.NUMBER, label: "Retries" },
+          { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
         ],
       },
     },
@@ -746,12 +1143,12 @@ test("a form's select fields are radio groups, an optional one's pick taken back
   await settle();
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  const pane = page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("no pane");
+  const pane = itemPane(page);
   const channel = () => segmentedGroup(pane, "Channel");
   const severity = () => segmentedGroup(pane, "Severity");
   const onCall = () =>
-    pane.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Page on-call"]') ??
-    assert.fail("no Page on-call switch");
+    pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
+    assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
 
   act(() => segment(channel(), "Slack").click());
@@ -761,11 +1158,41 @@ test("a form's select fields are radio groups, an optional one's pick taken back
   act(() => segment(severity(), "High").click());
   act(() => onCall().click());
 
+  assert.deepEqual(
+    [...pane.querySelectorAll("[data-inbox-field]")].map((each) => [
+      each.getAttribute("data-inbox-field"),
+      each.querySelector(".inbox-field-optional") !== null,
+    ]),
+    [
+      ["select", true],
+      ["select", false],
+      ["boolean", true],
+      ["number", true],
+      ["text", false],
+    ],
+  );
+  assert.equal(pane.textContent?.includes("Required"), false);
+  assert.equal(channel().dataset.look, "pill");
   assert.deepEqual(unpicked, { options: ["Email", "Slack"], checked: [], tabStops: ["Email"] });
   assert.deepEqual(picked, [["Slack"], ["High"]]);
   assert.deepEqual(readSegmented(channel()).checked, [], "the optional pick is taken back");
   assert.deepEqual(readSegmented(severity()).checked, ["High"], "the required pick stands");
-  assert.equal(onCall().getAttribute("aria-checked"), "true");
+  assert.equal(onCall().checked, true);
+  assert.ok(pane.querySelector('[data-inbox-field="number"] .inbox-field-short input'));
+  assert.ok(pane.querySelector('[data-inbox-field="text"] .inbox-field-composer .composer-editor'));
+  const reason =
+    pane.querySelector<HTMLElement>('[data-inbox-field="text"]') ?? assert.fail("no Reason");
+  act(() => reason.querySelector<HTMLElement>(".luke-field-label")?.click());
+  assert.equal(
+    document.activeElement,
+    composerEditor(reason),
+    "a press on its name takes the caret in",
+  );
+  assert.equal(
+    document.getElementById(composerEditor(reason).getAttribute("aria-labelledby") ?? "")
+      ?.textContent,
+    "Reason",
+  );
 });
 
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
@@ -1688,6 +2115,35 @@ test("an item's box is the agent's message box: it takes no caret as the item op
   );
 });
 
+/** Whether an item's row wears the Draft pencil. */
+function rowDrafted(page: HTMLElement, title: string): boolean {
+  return rowNamed(page, title).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
+}
+
+test("an item whose box holds unsent words wears the Draft pencil on its row while another item is chosen, as a sidebar task's row does, and none while its box stands beside the list; with the list standing alone, the chosen item's row wears it too", async () => {
+  const { page } = mount();
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the chosen item's box shows its words");
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the draft is marked while away");
+  assert.equal(rowDrafted(page, "Expire after 7 days?"), false, "only the item holding it is");
+  assert.equal(rowDrafted(page, "How is a failed email retried?"), false);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false);
+  layOut(page, 800);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the list standing alone hides its box");
+});
+
 /** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */
 async function handFiles(page: HTMLElement, files: readonly File[], how: "pick" | "drop") {
   const pane = itemPane(page);
@@ -1949,6 +2405,56 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
   assert.equal(note?.textContent, "See rollout-store.ts");
 });
 
+test("an answered form draws its values a field a line under the answer's head, a text field's words as a sent message's, so a mention it holds is its chip and never its link's words", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const filled: InboxItem = {
+    ...RETRY,
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.SELECT, label: "Effort", options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reason" },
+        { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+      ],
+    },
+    answer: {
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [
+        { label: "Effort", value: "high" },
+        { label: "Reason", value: `See ${file}` },
+        { label: "Page on-call", value: false },
+      ],
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, filled]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const values = itemPane(page).querySelector(
+    '[data-inbox-comment="answered"] [data-inbox-values]',
+  );
+
+  assert.deepEqual(
+    [...(values?.querySelectorAll("li") ?? [])].map((line) => [
+      line.querySelector(".inbox-value-label")?.textContent,
+      line.querySelector(".inbox-value-words")?.textContent,
+    ]),
+    [
+      ["Effort", "high"],
+      ["Reason", "See rollout-store.ts"],
+      ["Page on-call", "no"],
+    ],
+  );
+  assert.equal(values?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
+});
+
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
   // The strip draws still under reduced motion, which jsdom has no answer to.
   Object.defineProperty(window, "matchMedia", {
@@ -2070,7 +2576,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   assert.deepEqual(opened, [RELEASE_ON_GITHUB]);
 });
 
-test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
+test("an item that needs no reply says a bare answer won't message the agent, and that a note typed in its box will", async () => {
   const todo: InboxItem = {
     ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
     response: { type: INBOX_RESPONSE.TODO },
@@ -2152,7 +2658,7 @@ test("an answered item that asked to be heard back, carried without its answer, 
   assert.match(answerHead(page) ?? "", /· Sent to /u);
 });
 
-test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
+test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare answer", async () => {
   const todo = (id: string, title: string): InboxItem => ({
     ...item(id, title, 6_000),
     response: { type: INBOX_RESPONSE.TODO },
@@ -2183,19 +2689,19 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
       return bridge.act(request);
     },
   });
-  const press = (name: string) =>
-    [...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items button")].find(
-      (button) => button.textContent === name,
-    );
+  const doneAndSend = async () => {
+    act(() => openOptions(itemPane(page))[0]?.click());
+    await act(async () => answerSend(itemPane(page)).click());
+  };
 
   act(() => rowNamed(page, "Add the secret").click());
-  await act(async () => press("Done")?.click());
+  await doneAndSend();
   await settle();
   assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
 
   act(() => rowNamed(page, "Turn on the flag").click());
   typeInComposer(page.querySelector(".inbox-view-items") ?? page, "On preview too.");
-  await act(async () => press("Done")?.click());
+  await doneAndSend();
   await settle();
   assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
 });
@@ -2978,6 +3484,115 @@ test("a thread draws its messages after the question in the order they were writ
   assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
+/** Selects the words drawn in the item's pane as `words`, from `from` through `to`, as a drag lets them go. */
+function selectInPane(page: HTMLElement, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(itemPane(page), NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** Reply, where it stands over the window. */
+function replyPress(): HTMLButtonElement | undefined {
+  return [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
+    (each) => each.textContent === "Reply",
+  );
+}
+
+test("words selected in the agent's part of a thread stand Reply over them, which quotes them into the box: a settled item's message sends the quote set apart over the words typed under it, and a teammate's words offer no Reply", async () => {
+  const threaded: InboxItem = {
+    ...RETRY,
+    updatedAt: 5_300,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000041",
+        { member: TEAMMATE },
+        "Should it page at night too?",
+        4_500,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000042",
+        "agent",
+        "Only in business hours. Nights wait for the morning.",
+        5_100,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, threaded]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const sent = heldMessages(writtenOn(threaded, "c1b2c3d4-0000-4000-8000-000000000043"));
+  const pane = itemPane(page);
+
+  selectInPane(page, "Should it page", "Should", "too?");
+  assert.equal(replyPress(), undefined, "a teammate's words are not the agent's");
+
+  selectInPane(page, "Only in business hours.", "Only", "hours.");
+  const reply = replyPress() ?? assert.fail("Reply stands over the agent's words");
+  act(() => reply.click());
+  await settle();
+  assert.equal(replyPress(), undefined, "Reply goes once pressed");
+  assert.equal(document.activeElement, composerEditor(pane), "the box takes the caret");
+  typeInComposer(pane, "Page at night for a full outage.");
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["> Only in business hours.\n\nPage at night for a full outage."],
+  );
+});
+
+test("words selected in an open item's question quote into its box, its answer's note carries the quote, and Reply stands down while the answer is out", async () => {
+  const asking: InboxItem = {
+    ...THRESHOLD,
+    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Usage alerts fire at 80% of the plan's quota." }],
+  };
+  inboxes = new Map([
+    [BILLING.id, [asking]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+
+  selectInPane(page, "Usage alerts fire", "Usage", "quota.");
+  const reply = replyPress() ?? assert.fail("Reply stands over the agent's question");
+  act(() => reply.click());
+  await settle();
+  typeInComposer(pane, "Make it 90%.");
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  selectInPane(page, "Usage alerts fire", "Usage", "quota.");
+  assert.equal(replyPress(), undefined, "no quote is offered while the answer is out");
+  assert.deepEqual(
+    sent.map(({ itemId, note }) => ({ itemId, note })),
+    [
+      {
+        itemId: THRESHOLD.id,
+        note: "> Usage alerts fire at 80% of the plan's quota.\n\nMake it 90%.",
+      },
+    ],
+  );
+});
+
 test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {
   const { page } = mount();
   await settle();
@@ -3273,6 +3888,42 @@ test("the attention mark stands before the time on the reader's own open item al
   ]);
 });
 
+test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; Needs you leaves it out, and Group by person lists it under the teammate", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
+  await settle();
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Quarantine the flaky test?",
+    rows.join(" | "),
+  );
+  const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
+  assert.equal(meta?.querySelector(".attention-mark"), null);
+  assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+  assert.equal(meta?.querySelector(".visually-hidden")?.textContent, "Waiting on Charles Pan");
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  assert.equal(
+    listed(page).includes("Quarantine the flaky test?"),
+    false,
+    listed(page).join(" | "),
+  );
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
+  const byPersonChoice = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
+    (each) => each.textContent === "Group by person",
+  );
+  act(() => byPersonChoice?.click());
+  const byPerson = listed(page);
+  assert.equal(
+    byPerson[byPerson.indexOf("# Charles Pan") + 1],
+    "Quarantine the flaky test?",
+    byPerson.join(" | "),
+  );
+});
+
 /** Whether a row reads as unread: its blue dot, its title in the unread weight, and "Unread" said to a reader, each `?` where only some stand. */
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
@@ -3489,8 +4140,13 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
     DOMRect.fromRect({ width: 300, height: 56 }),
   );
   Object.assign(item, { setPointerCapture: () => undefined });
+  // Note that every event is stamped at one instant, since the swipe reads the hand's speed off the stamps and jsdom's come off the wall clock; never at 0, which React replaces with the wall clock's.
   const at = (type: string, x: number) =>
-    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 });
+    Object.defineProperty(
+      new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 }),
+      "timeStamp",
+      { value: 1 },
+    );
   const swipe = (to: number) =>
     act(() => {
       const press = rowNamed(page, retry);

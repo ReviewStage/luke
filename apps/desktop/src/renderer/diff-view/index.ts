@@ -11,17 +11,22 @@ import {
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
+  type SelectedLineRange,
 } from "@pierre/diffs";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
 import {
+  DIFF_SELECTION_SIDE,
   type DiffAnnotation,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
+  type DiffListSelection,
   type DiffLook,
+  type DiffSelection,
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
+  sameListSelection,
   sameLook,
   sameNotes,
 } from "./contract";
@@ -161,11 +166,11 @@ const LOOK_CSS = `
     display: none;
   }
   ::highlight(find-match) {
-    background-color: var(--find-match);
+    background-color: var(--luke-color-find-match);
   }
   ::highlight(find-current) {
-    background-color: var(--find-current);
-    color: var(--find-current-text);
+    background-color: var(--luke-color-find-current);
+    color: var(--luke-color-on-find-current);
   }
 }
 `;
@@ -296,6 +301,36 @@ interface DrawnFile {
   readonly item: CodeViewDiffItem<string>;
 }
 
+/** A range Pierre picked, in the contract's words: a side Pierre leaves unsaid is the new file's. */
+function selectionOf(range: SelectedLineRange): DiffSelection {
+  const side = range.side ?? DIFF_SELECTION_SIDE.ADDITIONS;
+  return { start: range.start, side, end: range.end, endSide: range.endSide ?? side };
+}
+
+/**
+ * Pierre's own picking of lines, where the view comments on them: a press
+ * of a line's number picks it and a ⇧-press or a drag picks a range, as
+ * GitHub's diff does, and the gutter's + on the line under the pointer, or
+ * on the range picked, tells the view, which opens its comment there. A file
+ * drawn as its notes alone has no line of its own to pick, so its pick is
+ * let go.
+ */
+function commentOptions(
+  latest: () => DiffListProps,
+  commentable: (path: string) => boolean,
+): CodeViewOptions<string, undefined> {
+  if (latest().onComment === undefined) return {};
+  return {
+    enableLineSelection: true,
+    enableGutterUtility: true,
+    lineHoverHighlight: "number",
+    onGutterUtilityClick: (range: SelectedLineRange, context: { item: { id: string } }) => {
+      const path = context.item.id;
+      if (commentable(path)) latest().onComment?.({ path, selection: selectionOf(range) });
+    },
+  };
+}
+
 /**
  * Pierre's options for a list: the look, each file's header and notes drawn
  * in the elements the view keeps for them, read off the latest props, and
@@ -305,9 +340,11 @@ function listOptions(
   drawn: DiffLook,
   latest: () => DiffListProps,
   dress: (element: HTMLElement, path: string) => void,
+  commentable: (path: string) => boolean,
 ): CodeViewOptions<string, undefined> {
   return {
     ...sharedOptions(drawn),
+    ...commentOptions(latest, commentable),
     hunkSeparators: "line-info-basic",
     stickyHeaders: true,
     itemMetrics: {
@@ -378,7 +415,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       return item;
     });
   typeset(host, props.look);
-  const view = new CodeView<string, undefined>(listOptions(props.look, () => latest, dress));
+  const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
+  const optionsFor = (next: DiffListProps) =>
+    listOptions(next.look, () => latest, dress, commentable);
+  const view = new CodeView<string, undefined>(optionsFor(props));
   view.setup(host);
   view.setItems(itemsOf(props.files));
   view.render(true);
@@ -395,16 +435,27 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   const unsubscribe = view.subscribeToScroll((scrollTop) => tellTop(scrollTop));
   tellTop(0);
+  // The lines being commented on, lit; Pierre's own pick stands while none is.
+  const light = (selected: DiffListSelection | undefined) => {
+    if (selected === undefined) return view.clearSelectedLines();
+    const { start, side, end, endSide } = selected.selection;
+    view.setSelectedLines({ id: selected.path, range: { start, side, end, endSide } });
+  };
+  if (props.selected !== undefined) light(props.selected);
   return {
     update: (next) => {
       const was = latest;
       latest = next;
       typeset(host, next.look);
-      if (!sameLook(next.look, was.look))
-        view.setOptions(listOptions(next.look, () => latest, dress));
+      if (
+        !sameLook(next.look, was.look) ||
+        (next.onComment === undefined) !== (was.onComment === undefined)
+      )
+        view.setOptions(optionsFor(next));
       view.setItems(itemsOf(next.files));
       view.render();
       tellTop(host.scrollTop);
+      if (!sameListSelection(next.selected, was.selected)) light(next.selected);
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),

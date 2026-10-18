@@ -62,6 +62,11 @@ import {
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import {
+  type AgentsRead,
+  type RunChoices,
+  useRunChoices,
+} from "@luke/panel/desktop/use-run-choices";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -78,6 +83,7 @@ import {
   ErrorState,
   IconButton,
   POPOVER_ALIGN,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -129,7 +135,6 @@ import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
 import { PaneGlide } from "./pane-motion";
 import { useAutomationRuns } from "./use-automation-runs";
-import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
@@ -463,7 +468,7 @@ function OwnServersRow({
             ) : (
               <span className="automation-servers">
                 {shown.map((provider) => (
-                  <ProviderMark key={provider} provider={provider} />
+                  <ProviderMark key={provider} provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
                 ))}
                 {on.length > shown.length ? (
                   <ChipName>{`+${on.length - shown.length}`}</ChipName>
@@ -1297,11 +1302,9 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <div className="task-compose-menu-note">
-            <Spinner label="Loading agents" />
-          </div>
+          <Spinner label="Loading agents" />
         ) : rows.length === 0 ? (
-          <p className="task-compose-menu-note">No agents of this workspace work in it yet.</p>
+          "No agents of this workspace work in it yet."
         ) : undefined
       }
       noMatch={NO_MATCH}

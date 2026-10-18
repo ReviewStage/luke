@@ -17,6 +17,8 @@
 
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { tellAct } from "@luke/panel/act";
+import { appBridge } from "@luke/panel/app-bridge";
 import {
   AVATAR_CLOSE_REASON,
   type AvatarCloseReason,
@@ -46,8 +48,6 @@ import { Base64 } from "effect/encoding";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { tellAct } from "../act";
-import { appBridge } from "../app-bridge";
 import { avatarSessionAtom } from "../bundle-loader";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
 

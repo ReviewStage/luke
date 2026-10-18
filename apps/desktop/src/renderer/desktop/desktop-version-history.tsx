@@ -5,6 +5,7 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
@@ -22,6 +23,7 @@ import {
   RetryRowLabel,
   Skeleton,
   SkeletonRegion,
+  TEXT_BUTTON_LINES,
   TextButton,
   useMenu,
 } from "@luke/ui";
@@ -38,6 +40,7 @@ import type { NavigationHistory } from "../navigation-history";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
 import { centreWithin } from "../tasks/code-pane";
+import { DocumentScroll } from "../tasks/document-frame";
 import {
   type ChangedSection,
   changedSections,
@@ -62,7 +65,6 @@ import {
   type ViewedVersion,
 } from "../tasks/use-plan-history";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
@@ -385,14 +387,16 @@ function LogSkeleton(): React.JSX.Element {
 
 /**
  * The foot of the list while an older page stands: read on its press, and
- * offered again after a read that failed. Note that it is a row rather than
- * `@luke/ui`'s Button, because its failure and Retry run to two lines in a
- * column the sidebar's width, which a control's one line would cut short.
+ * offered again after a read that failed. Note that it is a text button
+ * rather than `@luke/ui`'s Button, because its failure and Retry run to two
+ * lines in a column the sidebar's width, which a control's one line would
+ * cut short.
  */
 function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const read = () => {
+    if (reading) return;
     setReading(true);
     onRead().then(
       (landed) => {
@@ -406,15 +410,17 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
     );
   };
   return (
-    <button type="button" className="version-earlier" disabled={reading} onClick={read}>
-      <BusyLabel busy={reading} label="Loading older versions">
-        {failed ? (
-          <RetryRowLabel failure="Could not read older versions." />
-        ) : (
-          "Show older versions"
-        )}
-      </BusyLabel>
-    </button>
+    <p className="version-earlier">
+      <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
+        <BusyLabel busy={reading} label="Loading older versions">
+          {failed ? (
+            <RetryRowLabel failure="Could not read older versions." />
+          ) : (
+            "Show older versions"
+          )}
+        </BusyLabel>
+      </TextButton>
+    </p>
   );
 }
 
@@ -554,9 +560,9 @@ function VersionPage({
           </div>
         </header>
         <div className="desktop-document">
-          <div className="plan-document-scroll scroll-fade">
+          <DocumentScroll>
             <VersionSkeleton />
-          </div>
+          </DocumentScroll>
         </div>
       </>
     );

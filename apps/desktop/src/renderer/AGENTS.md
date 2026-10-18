@@ -21,7 +21,7 @@ a fiber of its own runs under the services it was built over, read through
 Effects leave on `app:act` alone, one invoke carrying one `{kind, payload}` from
 `ACT_KIND`, parsed here and again in `@luke/host/act-router`, answered as an
 `ActOutcome` so nothing an exception happened to carry ever crosses back.
-`renderer/act.ts` is the only caller — `act` when a row reads the answer, `tell`
+`@luke/panel`'s `act.ts` is the only caller — `act` when a row reads the answer, `tell`
 when nothing does. **A new command is a new `ACT_KIND` entry with its payload
 schema, its answer's guard, and its one router row. There is no second write path
 to add one on.**

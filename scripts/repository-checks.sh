@@ -232,7 +232,8 @@ fi
 # the bundle, so a `node:assert` import is its whole point. The main-process
 # door stays shut for it either way — a renderer test that needs main is
 # testing the wrong side.
-renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
+renderer_escapes=$(grep -ranE 'from "(#main/|node:)' \
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
     printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
@@ -251,6 +252,31 @@ if [[ -n "$ui_app_reaches" ]]; then
         "$ui_app_reaches" >&2
     exit 1
 fi
+# For the same reason a component reads only the custom properties
+# `@luke/ui/tokens.css` and the package itself declare, all `--luke-*`: a name
+# one app's own stylesheet sets is unset in every other app, and the rule that
+# reads it silently drops there. A comment line is skipped.
+ui_foreign_tokens=$(grep -rnaP --include='*.css' --include='*.ts' --include='*.tsx' \
+    'var\(\s*--(?!luke-)' "$LUKE_REPO_ROOT/packages/ui/src" |
+    grep -vE '\.test\.tsx?:|:[0-9]+:\s*(\*|//|/\*)' || true)
+if [[ -n "$ui_foreign_tokens" ]]; then
+    printf 'error: @luke/ui reads a custom property it does not own (declare it as a --luke-* token under packages/ui/src/tokens):\n%s\n' \
+        "$ui_foreign_tokens" >&2
+    exit 1
+fi
+
+# `@luke/panel` is the panel every client mounts, the desktop's window and the
+# web's page alike, so it reaches neither shell: no preload global, no alias of
+# the desktop's, and no Electron. The shell installs its bridge and platform
+# into the panel's doors (`app-bridge.ts`, `app-platform.ts`), and the panel
+# reads them there.
+panel_shell_reaches=$(grep -rnaE 'window\.luke|"#(shared|renderer|main|preload|testing)/|from "(electron|electron-updater|@sentry/electron)(/[^"]*)?"' \
+    "$LUKE_REPO_ROOT/packages/panel/src" || true)
+if [[ -n "$panel_shell_reaches" ]]; then
+    printf 'error: @luke/panel reaches into a shell (read the bridge or the platform through the doors the shell installs):\n%s\n' \
+        "$panel_shell_reaches" >&2
+    exit 1
+fi
 
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
@@ -258,7 +284,7 @@ fi
 # rule is that nothing drawn reads them.
 drawn_hosted_quota=$(grep -rnaE --include='*.ts' --include='*.tsx' \
     'requestHostedUsage|hostedUsage|<meter\b|quota\.(used|limit|remaining|resetsAt)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:' || true)
 if [[ -n "$drawn_hosted_quota" ]]; then
     printf 'error: hosted quota values must not reach the customer-facing renderer:\n%s\n' \
@@ -278,7 +304,8 @@ fi
 # export.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
     'mkdtemp' \
-    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" \
+    "$LUKE_REPO_ROOT/packages/panel/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory from @luke/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
@@ -471,12 +498,10 @@ node --input-type=module -e '
     "apps/web/server/preview-*.ts",
     "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
-    // The doors the window root installs its platform bridge and platform
-    // services into. Step 16 of the web plan moves them into the panel
-    // package, together with renderer/act.ts and the hooks above them, and
-    // removes these rows.
-    "apps/desktop/src/renderer/app-bridge.ts",
-    "apps/desktop/src/renderer/app-platform.ts",
+    // What the desktop answers the platform door of the panel with, which
+    // the window root installs: each capability as the act or the preload
+    // event main serves, so it names nothing but the panel and the act table.
+    "apps/desktop/src/renderer/desktop-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -614,18 +639,21 @@ node --input-type=module -e '
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"(@effect/platform-node|effect/sql)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" || true)
 if [[ -n "$node_reaching_effect" ]]; then
     printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
     exit 1
 fi
 
-# A deployment's migration runs while the deployment before it still serves
-# the old names, so a migration newer than the cutoff renames no table and no
-# column in place (`packages/database/src/core/migration-renames.ts`): the
-# Oct 17 plan-to-task rename broke the 26 turns then running.
-pnpm --silent --filter @luke/database check:renames
+# A deployment's migration runs while the deployment before it, and every
+# coding agent run pinned to it for up to 25 hours, still serves the old names,
+# so a new migration renames or drops no table, column, type, or view unless it
+# is marked `-- contract: <why old readers have drained>`
+# (`packages/database/src/core/migration-contractions.ts`, the db-migrations
+# skill's "Expand, migrate, contract"): the Oct 17 plan-to-task rename broke
+# the 26 turns then running.
+pnpm --silent --filter @luke/database check:contractions
 
 # A `var(--name)` with no fallback, where nothing declares `--name`, fails
 # nothing: the declaration it stands in is invalid at computed-value time, so a
@@ -713,6 +741,88 @@ node --input-type=module -e '
     process.exit(1);
   }
 ' "$LUKE_REPO_ROOT"
+
+# A box that scrolls up and down scrolls sideways too unless it says
+# otherwise: `overflow-y: auto` alone computes `overflow-x` to `auto`, so a
+# pixel of a ring, a negative margin, or a row being dragged past its edge
+# hands the box a sideways scroll a trackpad swipe drifts it along, and a
+# find or a column kept in view counts it a sideways scroller. So every rule
+# in a tracked sheet under apps/ and packages/ that scrolls on one value
+# (`overflow-y: auto|scroll`, or `overflow: auto|scroll`) names its
+# `overflow-x` in the same rule: `hidden` where nothing should scroll
+# sideways, `auto` where something should. A Tailwind class list does the
+# same with `overflow-x-*` beside `overflow-y-auto` or `overflow-auto`.
+node --input-type=module -e '
+  import { execFileSync } from "node:child_process";
+  import { readFileSync } from "node:fs";
+  import path from "node:path";
+
+  const root = process.argv[1];
+  const SCROLLING = /^(?:auto|scroll)$/;
+  // A sideways value that stands beside a scroll; `visible` and the resets
+  // compute to `auto` there, so they name nothing.
+  const KEEPS_X = /^(?:hidden|clip|auto|scroll)$/;
+  const CLASS_SCROLLS = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
+  const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
+  // Whether a block scrolls up and down with its sideways overflow left to
+  // compute to `auto`, read in order, since a later `overflow` resets both
+  // axes. Note that a one-value `overflow: auto` counts as naming no axis,
+  // since it is the very spelling that scrolls sideways unasked.
+  const scrollsUnnamed = (body) => {
+    let scrollsY = false;
+    let x;
+    for (const declaration of body.split(";")) {
+      const match = declaration.match(/(?:^|\s)(overflow(?:-x|-y)?)\s*:\s*(.+)$/s);
+      if (match === null) continue;
+      const values = match[2].trim().split(/\s+/);
+      if (match[1] === "overflow-x") x = values[0];
+      else if (match[1] === "overflow-y") scrollsY = SCROLLING.test(values[0]);
+      else {
+        scrollsY = SCROLLING.test(values[values.length - 1]);
+        x = values.length > 1 || !SCROLLING.test(values[0]) ? values[0] : undefined;
+      }
+    }
+    return scrollsY && (x === undefined || !KEEPS_X.test(x));
+  };
+  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((file) => /\.(css|tsx)$/.test(file) && !/\.test\.tsx$/.test(file));
+  const found = [];
+  for (const file of files) {
+    const source = readFileSync(path.join(root, file), "utf8");
+    if (file.endsWith(".tsx")) {
+      source.split("\n").forEach((line, index) => {
+        if (CLASS_SCROLLS.test(line) && !CLASS_NAMES_X.test(line)) found.push(`  ${file}:${index + 1}`);
+      });
+      continue;
+    }
+    // Blank comments, keeping every newline, so a line number still points home.
+    const text = source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+    // Note that each block collects only its own declarations, the text of
+    // a nested block going to that block, so a nested rule is read alone.
+    const open = [];
+    let line = 1;
+    for (const character of text) {
+      if (character === "\n") line += 1;
+      if (character === "{") open.push({ line, body: "" });
+      else if (character === "}") {
+        const block = open.pop();
+        if (block !== undefined && scrollsUnnamed(block.body)) {
+          found.push(`  ${file}:${block.line}`);
+        }
+      } else if (open.length > 0) open[open.length - 1].body += character;
+    }
+  }
+  if (found.length > 0) {
+    process.stderr.write(
+      `error: a rule scrolls up and down without naming overflow-x, which then computes to auto and scrolls sideways too; add overflow-x: hidden, or auto where it should scroll sideways:\n${found.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$LUKE_REPO_ROOT"
+
 # The unit of work is a task and a plan is the document inside it. The rename
 # from one to the other had to be finished twice by hand because new code kept
 # arriving under the old names, so a name or a file that calls a task a plan,

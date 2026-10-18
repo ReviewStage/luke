@@ -64,7 +64,7 @@ import {
   treeShapesOf,
   yardAnchorsOf,
 } from "@luke/ui/factory-campus";
-import { SIGNAL_COLOR } from "@luke/ui/factory-world";
+import { AGENT_STATE, agentDrawnUnder, SIGNAL_COLOR } from "@luke/ui/factory-world";
 import * as Atom from "effect/reactivity/Atom";
 import {
   createElement,
@@ -1322,6 +1322,8 @@ export function CampusScene({
       layers[layer] ? [] : [[HIDDEN_LAYER[layer], ""]],
     ),
   );
+  // Note that a failed agent's signal stands under Building or Defects, as every world draws a failed agent (`agentDrawnUnder`).
+  const failedHidden = !agentDrawnUnder({ state: AGENT_STATE.FAILED }, layers);
   const districtLabels = plan.districts.map((district) =>
     district.path === NOT_IN_CODE
       ? "Not in code yet"
@@ -1338,6 +1340,7 @@ export function CampusScene({
         data-glow={glow ? "" : undefined}
         data-resting={shown && visible ? undefined : ""}
         {...hidden}
+        data-hide-failed={failedHidden ? "" : undefined}
         style={cssCustomProperties({
           "--campus-ground": colours.ground,
           "--campus-unlit": colours.unlit,

@@ -2,7 +2,7 @@
    in their line, so a column of blocks sits where the lines will; a control
    is a control's box; a circle is a person's mark; a block fills its
    container, whose box is the size of what it stands for. Only opacity moves, in
-   step across every block, and the loop answers `--loop-motion`. */
+   step across every block, and the loop answers `--luke-loop-motion`. */
 
 @layer components {
   .luke-skeleton {
@@ -14,9 +14,9 @@
     border-radius: 4px;
     background: var(--luke-color-fill-strong);
     /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --loop-motion with every other. */
+       it holds still on --luke-loop-motion with every other. */
     animation: luke-skeleton-pulse 1500ms ease-in-out infinite;
-    animation-play-state: var(--loop-motion, running);
+    animation-play-state: var(--luke-loop-motion);
   }
 
   .luke-skeleton[data-shape="control"] {

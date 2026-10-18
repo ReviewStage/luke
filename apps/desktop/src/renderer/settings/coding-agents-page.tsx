@@ -11,6 +11,8 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   ErrorState,
@@ -24,7 +26,6 @@ import {
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import { Segmented } from "../segmented";
 import {
@@ -45,7 +46,6 @@ import {
   windowLabel,
   windowOf,
 } from "../tasks/coding-agent-model";
-import { useOpenLink } from "../tasks/use-open-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { SwitchRow } from "./switch-row";

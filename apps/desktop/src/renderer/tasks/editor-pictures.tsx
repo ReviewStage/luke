@@ -2,13 +2,13 @@ import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { encodeImage } from "../feedback-images";
 import { FoldingButton } from "../folding-button";
@@ -21,6 +21,7 @@ import type {
   PlanEditorPictures,
 } from "../plan-editor/contract";
 import { Spinner } from "../spinner";
+import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -212,7 +213,7 @@ interface ToolsLayout {
 function useToolsLayout(column: HTMLElement): ToolsLayout {
   const [layout, setLayout] = useState<ToolsLayout>({ worded: true, above: true });
   useLayoutEffect(() => {
-    const scroller = column.closest<HTMLElement>(".plan-document-scroll");
+    const scroller = column.closest<HTMLElement>(`.${DOCUMENT_SCROLL_CLASS}`);
     const measure = () => {
       const box = column.getBoundingClientRect();
       if (box.width <= 0) return;

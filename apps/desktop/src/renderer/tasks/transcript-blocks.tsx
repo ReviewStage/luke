@@ -21,6 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { opensAsLink, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   Disclosure,
   DisclosureBody,
@@ -51,6 +52,9 @@ import {
   EyeIcon,
   FilePenIcon,
   FileTextIcon,
+  FolderInputIcon,
+  FolderMinusIcon,
+  FolderPlusIcon,
   GlobeIcon,
   HourglassIcon,
   ImageIcon,
@@ -117,7 +121,6 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown";
-import { opensAsLink, useOpenLink } from "./use-open-link";
 import { WorkingTime } from "./working-time";
 
 /**
@@ -582,6 +585,9 @@ const CALL_ICON = {
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.LIST_MODELS]: CpuIcon,
   [CALL_KIND.STOP_AGENT]: CircleStopIcon,
+  [CALL_KIND.CREATE_SECTION]: FolderPlusIcon,
+  [CALL_KIND.DELETE_SECTION]: FolderMinusIcon,
+  [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,

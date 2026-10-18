@@ -6,6 +6,8 @@ import {
 } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
 import { ImageIcon } from "lucide-react";
 import {
@@ -17,12 +19,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act";
 import type { PictureDrawer } from "../markdown-message";
 import { PictureBlock } from "../picture-block";
 import { TextLink } from "../text-link";
 import { AttachmentViewer } from "./attachment-viewer";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * plan-pictures.tsx -- a plan's pictures where its words are drawn: each read through the host as the plan's, drawn in its own block, and opened over the window walking the plan's pictures in reading order.

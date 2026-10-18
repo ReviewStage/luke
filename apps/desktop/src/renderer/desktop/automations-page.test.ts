@@ -746,6 +746,15 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
+/** The option of the list standing open whose words are `words`. */
+function optionWords(words: string): HTMLElement {
+  const found = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
+    (each) => each.textContent === words,
+  );
+  assert.ok(found, `no option ${words}`);
+  return found;
+}
+
 /** The item of the menu standing open whose words are `name`. */
 function menuItem(name: string): HTMLButtonElement {
   const found = [
@@ -819,7 +828,7 @@ function pickerDescription(page: HTMLElement, label: string): (string | undefine
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -1099,7 +1108,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent,
+    row.querySelector(".luke-combobox-option-label")?.textContent,
     row.querySelector(".actor-mark") !== null
       ? "person"
       : row.querySelector(".workspace-tile") !== null
@@ -1112,7 +1121,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   ]);
 
   const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (row) => row.querySelector(".task-compose-menu-name")?.textContent === "Acme",
+    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Acme",
   );
   assert.ok(acme, "the menu offers the workspace");
   act(() => acme.click());
@@ -1157,7 +1166,11 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   await settle();
   const chip = button("MCP servers");
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 2, "Linear's and Sentry's marks");
+  assert.equal(
+    chip.querySelectorAll(".luke-provider-mark").length,
+    2,
+    "Linear's and Sentry's marks",
+  );
 
   act(() => chip.click());
   await settle();
@@ -1167,7 +1180,7 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   assert.ok(sentry, "the agent box's own switches stand");
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
   act(() => button("Save").click());
   await settle();
 
@@ -1208,7 +1221,7 @@ test("a new agent's MCP servers row says a refused read of the owner's connectio
   act(() => button("Retry").click());
   await settle();
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(button("MCP servers").querySelectorAll(".provider-mark").length, 2);
+  assert.equal(button("MCP servers").querySelectorAll(".luke-provider-mark").length, 2);
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
@@ -1723,7 +1736,7 @@ test("the repository chosen first is not said again among the others its runs wo
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
-  act(() => button("webacme").click());
+  act(() => optionWords("webacme").click());
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
@@ -1773,13 +1786,13 @@ test("the agent a same-agent automation was saved with is not offered once its r
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
-  act(() => button("webacme").click());
+  act(() => optionWords("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Choose an agent");
   act(() => picker(page, "Agent").click());
 
   assert.deepEqual(
-    [...document.querySelectorAll("[role=option] .task-compose-menu-name")].map(
+    [...document.querySelectorAll("[role=option] .luke-combobox-option-label")].map(
       (name) => name.textContent,
     ),
     ["CI digest"],
@@ -1818,7 +1831,7 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
-    if (row.querySelector(".provider-mark") !== null) return "github";
+    if (row.querySelector(".luke-provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
       (name) => name.startsWith("lucide-") && name !== "lucide-icon",

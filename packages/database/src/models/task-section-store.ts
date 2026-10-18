@@ -129,6 +129,19 @@ const findSection = SqlSchema.findOneOption({
     ),
 });
 
+/** How many of the account's entries stand in one of its sections. */
+const countEntriesIn = SqlSchema.findAll({
+  Request: SectionKeySchema,
+  Result: Schema.Struct({ held: Schema.Number }),
+  execute: ({ userId, id }) =>
+    Database.use((db) =>
+      db
+        .select({ held: count() })
+        .from(taskSectionEntry)
+        .where(and(eq(taskSectionEntry.userId, userId), eq(taskSectionEntry.sectionId, id))),
+    ),
+});
+
 /** How many sections the account keeps, in every workspace. */
 const countSections = SqlSchema.findAll({
   Request: Schema.String,
@@ -410,6 +423,40 @@ export function writeTaskSections(
         if (Option.isNone(yield* lockAccount(userId))) return Option.none();
         if (!(yield* applyWrite(userId, write))) return Option.none();
         return Option.some(yield* listTaskSections(userId));
+      }),
+    ),
+  );
+}
+
+/** A section a delete took away, and how many of the account's tasks went back under Tasks with it. */
+export interface DeletedTaskSection {
+  readonly section: TaskSection;
+  readonly returnedTasks: number;
+}
+
+/**
+ * Deletes one of the account's sections of the workspace given, under the
+ * same lock every write takes, and answers what it took away as it read it
+ * there: the section, and how many entries went with it. Nothing where the
+ * account keeps no such section in that workspace, the account is gone, or
+ * another write deleted it first, with nothing written.
+ */
+export function deleteTaskSectionIn(
+  userId: string,
+  workspaceId: string,
+  id: string,
+): TaskStoreEffect<Option.Option<DeletedTaskSection>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        if (Option.isNone(yield* lockAccount(userId))) return Option.none();
+        const found = yield* findSection({ userId, id });
+        if (Option.isNone(found) || found.value.organizationId !== workspaceId) {
+          return Option.none();
+        }
+        const [entries] = yield* countEntriesIn({ userId, id });
+        yield* deleteSection({ userId, id });
+        return Option.some({ section: sectionOf(found.value), returnedTasks: entries?.held ?? 0 });
       }),
     ),
   );

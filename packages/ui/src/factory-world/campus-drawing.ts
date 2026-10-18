@@ -69,12 +69,14 @@ export const CAMPUS_DETAIL = {
 
 export type CampusDetail = (typeof CAMPUS_DETAIL)[keyof typeof CAMPUS_DETAIL];
 
-/** The layers of the pipeline bar a shape belongs to, by the same names the bar switches. */
+/** The layers of the pipeline bar a shape belongs to, by the same names the bar switches, and the failed agent's, which two of them switch. */
 const CAMPUS_LAYER = {
   PLANNED: "planned",
   BUILDING: "building",
   SHIPPED: "shipped",
   DEFECTS: "defects",
+  /** A failed agent's signal, drawn while Building or Defects is (`agentDrawnUnder`). */
+  FAILED: "failed",
 } as const;
 
 type CampusLayer = (typeof CAMPUS_LAYER)[keyof typeof CAMPUS_LAYER];
@@ -423,7 +425,7 @@ function litOf(signal: CampusSignal, drawing: CampusDrawing): Lit {
         colour: SIGNAL_COLOR.DEFECT,
         ratio: 0.7,
         opacity: full,
-        layer: CAMPUS_LAYER.DEFECTS,
+        layer: CAMPUS_LAYER.FAILED,
       };
     case CAMPUS_SIGNAL.WORKING:
       return {
@@ -1051,7 +1053,7 @@ function signShapes(
   if (task.signal === CAMPUS_SIGNAL.FAILED) {
     pieces.push({
       kind: PIECE.SIGN,
-      layer: CAMPUS_LAYER.DEFECTS,
+      layer: CAMPUS_LAYER.FAILED,
       shapes: [
         {
           tag: SHAPE_TAG.CIRCLE,

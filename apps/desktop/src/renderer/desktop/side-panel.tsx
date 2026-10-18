@@ -12,6 +12,9 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -55,9 +58,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -100,7 +101,6 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { OpenHereProvider } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -916,6 +916,7 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
         </Text>
       </div>
       <MenuRowList
+        label="Open a tab"
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
       />
@@ -1368,7 +1369,7 @@ function TabContent({
   if (isChangesTab(tab)) {
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <OpenHereProvider key={tab.changes} value={undefined}>
+      <PullRequestsOnGitHub key={tab.changes}>
         <AgentPullRequestTab
           agentId={tab.changes}
           control={agents}
@@ -1378,7 +1379,7 @@ function TabContent({
           view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
           onView={(view) => onPullRequestView(tab.changes, view)}
         />
-      </OpenHereProvider>
+      </PullRequestsOnGitHub>
     );
   }
   if (isFileTab(tab)) {

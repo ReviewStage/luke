@@ -14,9 +14,9 @@
  */
 
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import { appBridge } from "@luke/panel/app-bridge";
 import { Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
-import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { readKept, writeKept } from "./folded-groups";
 

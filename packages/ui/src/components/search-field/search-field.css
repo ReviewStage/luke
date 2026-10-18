@@ -21,7 +21,7 @@
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text-subtle);
     cursor: text;
-    transition: border-color var(--duration-hover) ease;
+    transition: border-color var(--luke-duration-hover) ease;
   }
 
   .luke-search-field > svg {
@@ -83,7 +83,7 @@
     background: transparent;
     color: var(--luke-color-text-muted);
     cursor: default;
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-search-field-clear:hover {
@@ -98,5 +98,23 @@
   .luke-search-field-clear > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
+  }
+
+  /* A menu's head row: as tall as a menu row and its inset, its words
+     inset as a row's are, and only a hairline under it; no ring, since the
+     caret is always in it while the menu stands. */
+  .luke-search-field[data-look="menu"] {
+    height: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
+    padding: 0 var(--luke-space-12);
+    border: 0;
+    border-bottom: 1px solid var(--luke-color-border);
+    border-radius: 0;
+    background: none;
+    outline: none;
+  }
+
+  .luke-search-field[data-look="menu"] > svg {
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
   }
 }

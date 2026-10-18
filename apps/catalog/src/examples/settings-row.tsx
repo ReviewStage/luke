@@ -5,6 +5,7 @@ import {
   BUTTON_VARIANT,
   Button,
   MARK_PROVIDER,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_ROW_DENSITY,
   SETTINGS_ROW_INDENT,
@@ -88,7 +89,7 @@ function Rows(): React.JSX.Element {
 
 /** A provider's mark, at the size a row's leading mark stands. */
 function Mark({ provider }: { provider: (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER] }) {
-  return <ProviderMark provider={provider} className="catalog-settings-mark" />;
+  return <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.ROW} />;
 }
 
 /** A key's field and its presses, grown under the key's row. */

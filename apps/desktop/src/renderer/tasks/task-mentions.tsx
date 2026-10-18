@@ -1,6 +1,8 @@
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useOpenTask } from "@luke/panel/tasks/use-open-link";
 import {
   createContext,
   type ReactNode,
@@ -11,7 +13,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act";
 import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
 import { agentActor, agentTabLabel } from "./coding-agent-model";
@@ -23,7 +24,6 @@ import type {
   MentionablePullRequest,
 } from "./mention-picker";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenTask } from "./use-open-link";
 
 /**
  * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.

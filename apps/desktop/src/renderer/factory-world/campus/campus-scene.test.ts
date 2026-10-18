@@ -36,7 +36,7 @@ import { FactoryWorldPage } from "../world-page";
 import { CampusScene } from "./campus-scene";
 
 /**
- * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request, with no Three.js loaded; a press on a building opening its card and its door to the task; a layer switched off hidden; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.
+ * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request, with no Three.js loaded; a press on a building opening its card and its door to the task; a layer chosen alone hiding the rest; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.
  *
  * The service is a script at the act boundary and the snapshot synthetic;
  * jsdom lays nothing out, so the campus draws at its first scale.
@@ -220,19 +220,35 @@ test("a press on a container at the gate selects its agent's pull request", asyn
   assert.match(page.querySelector(".factory-world-card")?.textContent ?? "", /#3501/u);
 });
 
-test("a layer switched off is hidden on the campus without drawing it again, and switched on stands again", async () => {
+test("a layer chosen alone hides what the others hold without drawing the campus again, a failed agent's signal standing under Defects as under Building, and chosen again shows all", async () => {
   const page = await mount();
-  const shippedChip = page.querySelector('.factory-world-pipeline [data-layer="shipped"]');
+  const chip = (layer: string) =>
+    page.querySelector(`.factory-world-pipeline [data-layer="${layer}"]`);
+  const hidden = () =>
+    [...scene(page).attributes].flatMap((attribute) =>
+      attribute.name.startsWith("data-hide-") ? [attribute.name] : [],
+    );
   const building = page.querySelector(".factory-campus-building");
-  press(shippedChip);
-  assert.ok(scene(page).hasAttribute("data-hide-shipped"));
+  press(chip("shipped"));
+  assert.deepEqual(hidden().sort(), [
+    "data-hide-building",
+    "data-hide-defects",
+    "data-hide-failed",
+    "data-hide-planned",
+  ]);
   assert.equal(
     page.querySelector(".factory-campus-building"),
     building,
     "the buildings were not drawn again",
   );
-  press(shippedChip);
-  assert.equal(scene(page).hasAttribute("data-hide-shipped"), false);
+  press(chip("defects"));
+  assert.deepEqual(hidden().sort(), [
+    "data-hide-building",
+    "data-hide-planned",
+    "data-hide-shipped",
+  ]);
+  press(chip("defects"));
+  assert.deepEqual(hidden(), []);
 });
 
 test("Districts stand each zone with something in it as a district, and Town lays the plots out without them", async () => {

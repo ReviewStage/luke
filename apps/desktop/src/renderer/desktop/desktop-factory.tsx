@@ -97,7 +97,8 @@ import { useRowKeys } from "./use-row-keys";
  * stopped on a question or a failed turn, under Ship failing checks and pull
  * requests ready to merge. The line above the stations says how many wait,
  * how many agents work, and how much shipped today. A question opens in the
- * Inbox, an agent its page, a pull request on GitHub (its row ends in ↗), and
+ * Inbox, an agent its page, a pull request its agent's Pull request tab, or
+ * GitHub where the service named no agent (its row then ends in ↗), and
  * anything else its task, whose card hangs on the row's hover. A row that
  * moves from one station to another slides there once, and one that arrives
  * fades in; nothing else moves, and the times count on with the window's
@@ -136,16 +137,32 @@ function count(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** A pull request opens on GitHub, where it is worked on and merged; one the service sent no page for opens its plan. */
+/** The Pull request tab a pull request's row opens, its agent's on its task; none where the service named no agent. */
+function pullRequestPlace(
+  task: TaskSummary,
+  pullRequest: TaskPullRequestLine,
+): LinkPlace | undefined {
+  const { agentId } = pullRequest;
+  return agentId === undefined ? undefined : { kind: LINK_PLACE.CHANGES, planId: task.id, agentId };
+}
+
+/** Whether a pull request's row leaves for GitHub: one the service named a page for but no agent of. */
+function opensOnGitHub(task: TaskSummary, pullRequest: TaskPullRequestLine): boolean {
+  return pullRequestPlace(task, pullRequest) === undefined && pullRequest.url !== undefined;
+}
+
+/** A pull request opens in its agent's Pull request tab, else on GitHub, where it is worked on and merged; one the service sent no page for opens its task. */
 function openPullRequest(tasks: TasksControl, task: TaskSummary, pullRequest: TaskPullRequestLine) {
-  if (pullRequest.url === undefined) tasks.onSelect(task.id);
+  const place = pullRequestPlace(task, pullRequest);
+  if (place !== undefined) tasks.onOpenLink({ workspace: "", place });
+  else if (pullRequest.url === undefined) tasks.onSelect(task.id);
   else tasks.repositories.openGitHub(pullRequest.url);
 }
 
 /** What a row's Copy link copies: what a press on it opens, a place in Luke, or a pull request's page on GitHub. */
 type RowLink = { readonly place: LinkPlace } | { readonly url: string };
 
-/** What a pull request's row copies: its page on GitHub, which it opens, or its task where the service sent no page. */
+/** What a pull request's row copies: its page on GitHub, or its task where the service sent no page. Note that its page is copied though a press may open its Pull request tab, because a link to a pull request is read by teammates outside Luke too, and in Luke it opens the same tab. */
 function pullRequestLink(task: TaskSummary, pullRequest: TaskPullRequestLine): RowLink {
   return pullRequest.url === undefined
     ? { place: { kind: LINK_PLACE.TASK, planId: task.id } }
@@ -617,7 +634,7 @@ function Line({
         context={task.name}
         actor={who(task)}
         at={factoryMovedAt(task)}
-        external={pullRequest.url !== undefined}
+        external={opensOnGitHub(task, pullRequest)}
         card={card(task)}
         link={pullRequestLink(task, pullRequest)}
         onOpen={() => openPullRequest(tasks, task, pullRequest)}
@@ -634,7 +651,7 @@ function Line({
       actor={who(task)}
       at={factoryMovedAt(task)}
       end={kind === FACTORY_BLOCK.CHECKS ? stateEndMark(GLYPH_STATE.FAILED, true) : undefined}
-      external={pullRequest.url !== undefined}
+      external={opensOnGitHub(task, pullRequest)}
       waiting
       card={card(task)}
       link={pullRequestLink(task, pullRequest)}
@@ -650,7 +667,7 @@ function Line({
       context={task.name}
       actor={who(task)}
       at={at}
-      external={pullRequest.url !== undefined}
+      external={opensOnGitHub(task, pullRequest)}
       card={card(task)}
       link={pullRequestLink(task, pullRequest)}
       onOpen={() => openPullRequest(tasks, task, pullRequest)}

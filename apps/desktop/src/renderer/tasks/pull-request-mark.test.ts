@@ -55,7 +55,7 @@ function pullRequest(
 function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement> {
   const ignore = (): void => undefined;
   return new Map<string, ReactElement>([
-    ["plan card", createElement(PullRequestLine, { pullRequest: drawn, onOpenGitHub: ignore })],
+    ["plan card", createElement(PullRequestLine, { pullRequest: drawn })],
     [
       "pinned row",
       createElement(PublishedRow, {

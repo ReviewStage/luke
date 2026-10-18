@@ -7,6 +7,8 @@ import {
   ErrorState,
   type ErrorStatePlacement,
   RetryRowLabel,
+  TEXT_BUTTON_LINES,
+  TextButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -90,7 +92,7 @@ function EdgeRow({
   label: string;
   onRead: () => Promise<boolean>;
 }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLDivElement>(null);
   const [read, setRead] = useState<EdgeRead>(EDGE_READ.IDLE);
   const load = useRef(() => {
     setRead(EDGE_READ.READING);
@@ -111,21 +113,22 @@ function EdgeRow({
   }, [read]);
 
   return (
-    <button
-      ref={row}
-      type="button"
-      className="file-tab-edge"
-      disabled={read === EDGE_READ.READING}
-      onClick={() => load.current()}
-    >
-      <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
-        {read === EDGE_READ.FAILED ? (
-          <RetryRowLabel failure="Could not read these lines." />
-        ) : (
-          label
-        )}
-      </BusyLabel>
-    </button>
+    <div ref={row} className="file-tab-edge">
+      <TextButton
+        lines={TEXT_BUTTON_LINES.TWO}
+        onClick={() => {
+          if (read !== EDGE_READ.READING) load.current();
+        }}
+      >
+        <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
+          {read === EDGE_READ.FAILED ? (
+            <RetryRowLabel failure="Could not read these lines." />
+          ) : (
+            label
+          )}
+        </BusyLabel>
+      </TextButton>
+    </div>
   );
 }
 

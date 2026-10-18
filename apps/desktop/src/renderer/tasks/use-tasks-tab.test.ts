@@ -5,7 +5,12 @@ import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -892,6 +897,57 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
     { agent: AGENT_ID },
     "the worker's agent's tab opens with it, which draws the worker",
   );
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
+test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second, unless that agent was archived", async () => {
+  const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
+  const shared = {
+    repository: "acme/relay",
+    branch: "luke/invites",
+    pullRequest: {
+      number: 41,
+      title: "Teammate invitations",
+      url: "https://github.com/acme/relay/pull/41",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 12,
+      deletions: 3,
+      changedFiles: 2,
+    },
+  };
+  let listed: readonly CodingAgentSummary[] = [EARLIER, RUNNING_AGENT];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        const archived = { ...EARLIER, archivedAt: 5 };
+        listed = [archived, RUNNING_AGENT];
+        return Promise.resolve({ agent: archived });
+      },
+    },
+  );
+  await settle();
+  const open = (agentId: string) =>
+    act(() =>
+      tab.control().onOpenLink({
+        workspace: "acme",
+        place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId },
+      }),
+    );
+
+  open(EARLIER.id);
+  open(AGENT_ID);
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: EARLIER.id } });
+  assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
+
+  // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
+  await act(() => tab.control().agents.onArchive(EARLIER.id, true));
+  await settle();
+  open(AGENT_ID);
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
@@ -1823,7 +1879,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".task-compose-menu-detail", ".task-compose-menu-name"]
+        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),

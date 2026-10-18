@@ -66,6 +66,12 @@ export const CALL_KIND = {
   /** A list of the models a coding agent may be started on (`list_models`). */
   LIST_MODELS: "list-models",
   STOP_AGENT: "stop-agent",
+  /** A section made in the member's sidebar (`create_section`), its row naming its title. */
+  CREATE_SECTION: "create-section",
+  /** A section of the member's sidebar deleted (`delete_section`), its row naming its title once answered. */
+  DELETE_SECTION: "delete-section",
+  /** A task moved into a section of the member's sidebar or out of them (`move_task`), its row naming the task once answered. */
+  MOVE_TASK: "move-task",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
@@ -112,6 +118,9 @@ export const CALL_WORDS = {
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
   [CALL_KIND.STOP_AGENT]: { verb: "Stopped the coding agent", code: false },
+  [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
+  [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
+  [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },

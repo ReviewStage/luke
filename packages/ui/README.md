@@ -63,8 +63,17 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `danger*`, `focus-ring`, …), set by both profiles in both themes.
 - **Display** (`display.css`): the site's marketing styles, `--luke-display-*`,
   set under the web profile only; the window has no display type.
-- **Motion** (`motion.css`): `--loop-motion`, the play state an endless loop
-  holds, paused under reduced motion.
+- **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
+  `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
+  `--luke-spring-fast`, `--luke-motion-exit|pane`, `--luke-hint-delay`, and
+  `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
+  zeroes the durations but hover's and pauses the loop. A component reads
+  only `--luke-*` custom properties (`scripts/repository-checks.sh`).
+- **Placement hooks**: the few properties an app may set on a component's
+  container, each the one way a measurement of the app's reaches inside.
+  `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
+  unset), so a picker placed against the window's edge hands its list the
+  room it found; nothing else inside the list is the app's to set.
 
 ## Using a component
 
@@ -97,7 +106,7 @@ What the barrel holds (`src/index.ts`):
 | Kind | Components |
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `Card`, `Prose` |
-| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem` |
+| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
 | Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |

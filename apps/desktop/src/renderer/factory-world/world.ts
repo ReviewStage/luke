@@ -50,7 +50,7 @@ export interface PickTarget {
   readonly id: string;
 }
 
-/** The layers the pipeline bar's counts switch, each a signal a world draws or leaves out. */
+/** The layers the pipeline bar's counts pick out, each a signal a world draws or leaves out. */
 export const WORLD_LAYER = {
   PLANNED: "planned",
   BUILDING: "building",
