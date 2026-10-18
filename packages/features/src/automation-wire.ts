@@ -7,6 +7,7 @@ import {
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
  * automation-wire.ts -- an automation as the service keeps it: what fires it, what it starts, the guards on how often, and each run it made.
@@ -17,8 +18,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * firing described beneath it, exactly as a developer's own Start with a
  * task would. A trigger is a schedule, a cron expression read in an IANA
  * time zone, or an event of the task's repository the Luke GitHub App is
- * told of, filtered by label or branch, or a call to the automation's own
- * webhook address. Every firing is a run, kept whether it started an agent,
+ * told of, filtered by label or branch, a call to the automation's own
+ * webhook address, or an event of an integration installed on the
+ * automation's workspace (`trigger-catalog.ts`), filtered by its fields. Every firing is a run, kept whether it started an agent,
  * was held back by a guard, or failed to start, so the history says why an
  * automation did or did not act. The shapes here are what the store keeps
  * as JSON (`packages/database/src/schemas/automation.ts`) and what the
@@ -52,6 +54,8 @@ export const AUTOMATION_BOUNDS = {
   MAX_KEY_CHARS: 128,
   /** The most runs one history read answers. */
   MAX_RUNS_READ: 100,
+  /** The longest an integration trigger waits before the same subject fires it again, in hours: a week. */
+  MAX_SUBJECT_COOLDOWN_HOURS: 168,
 } as const;
 
 /** What fires an automation. */
@@ -62,6 +66,8 @@ export const AUTOMATION_TRIGGER = {
   GITHUB: "github",
   /** A POST to the automation's own secret address. */
   WEBHOOK: "webhook",
+  /** An event of an integration installed on the automation's workspace (`trigger-catalog.ts`). */
+  INTEGRATION: "integration",
 } as const;
 
 export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUTOMATION_TRIGGER];
@@ -179,13 +185,49 @@ const webhookTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.WEBHOOK),
 });
 
+/**
+ * What a Sentry trigger keeps its events to: within a field any value
+ * named matches, across fields every one named must, and an empty or
+ * absent field keeps nothing out.
+ */
+const sentryTriggerFiltersSchema = EffectSchema.Struct({
+  project: EffectSchema.optionalKey(filterValuesSchema),
+  environment: EffectSchema.optionalKey(filterValuesSchema),
+  level: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(SENTRY_LEVEL))).check(
+      EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_FILTER_VALUES),
+    ),
+  ),
+});
+
+/**
+ * An event of the Sentry organization installed on the automation's
+ * workspace; only deliveries from that workspace's installation fire it.
+ */
+const sentryTriggerSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(AUTOMATION_TRIGGER.INTEGRATION),
+  provider: EffectSchema.Literal(TRIGGER_PROVIDER.SENTRY),
+  event: EffectSchema.Literals(Object.values(SENTRY_TRIGGER_EVENT)),
+  filters: EffectSchema.optionalKey(sentryTriggerFiltersSchema),
+});
+
 export const automationTriggerSchema = EffectSchema.Union([
   scheduleTriggerSchema,
   githubTriggerSchema,
   webhookTriggerSchema,
+  sentryTriggerSchema,
 ]);
 
 export type AutomationTrigger = typeof automationTriggerSchema.Type;
+
+/** A trigger on an integration's event, whichever the provider. */
+export type IntegrationTrigger = Extract<
+  AutomationTrigger,
+  { kind: typeof AUTOMATION_TRIGGER.INTEGRATION }
+>;
+
+/** What an integration trigger filters its events by. */
+export type IntegrationTriggerFilters = NonNullable<IntegrationTrigger["filters"]>;
 
 /** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const codingAgentActionSchema = EffectSchema.Struct({
@@ -208,8 +250,10 @@ export type AutomationActionJson = typeof automationActionSchema.Encoded;
 
 /**
  * How far one automation may go: how many of its agents may be at work at
- * once, past which a firing is skipped rather than queued, and how many
- * runs it may start in a day, counted over the last twenty-four hours.
+ * once, past which a firing is skipped rather than queued, how many
+ * runs it may start in a day, counted over the last twenty-four hours, and,
+ * for an integration trigger, how many hours pass before the same subject
+ * (one Sentry issue) may start another run, the default where absent.
  */
 export const automationGuardsSchema = EffectSchema.Struct({
   maxConcurrentRuns: EffectSchema.Int.check(
@@ -217,6 +261,14 @@ export const automationGuardsSchema = EffectSchema.Struct({
   ),
   dailyRunCap: EffectSchema.Int.check(
     EffectSchema.isBetween({ minimum: 1, maximum: AUTOMATION_BOUNDS.MAX_DAILY_RUNS }),
+  ),
+  subjectCooldownHours: EffectSchema.optionalKey(
+    EffectSchema.Int.check(
+      EffectSchema.isBetween({
+        minimum: 1,
+        maximum: AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS,
+      }),
+    ),
   ),
 });
 
@@ -228,7 +280,9 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
   dailyRunCap: 10,
 };
 
-/** Why an automation stands paused where the developer did not pause it. */
+/** How long an integration trigger waits before the same subject fires it again, where its guards name no cooldown: a day. */
+export const AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS = 24;
+
 /** Who an automation belongs to: its owner alone, or the workspace it was made in. */
 export const AUTOMATION_SCOPE = {
   /** Its creator's: only they see and change it; the workspace's owners and admins see and pause it. */
@@ -274,7 +328,8 @@ export const AUTOMATION_FIRING = {
 /**
  * What fired a run, in brief: the instant a schedule was due, the GitHub
  * event with the issue or pull request it names, a webhook call with how
- * large its body was, or a "Run now" with who asked for it. Only what the
+ * large its body was, an integration's event with the subject it is about
+ * (a Sentry issue), or a "Run now" with who asked for it. Only what the
  * run's history shows is kept; a webhook's body reaches the agent's prompt
  * and is kept nowhere else here.
  */
@@ -297,6 +352,17 @@ export const automationFiringSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AUTOMATION_FIRING.WEBHOOK),
     bytes: EffectSchema.Int,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(AUTOMATION_FIRING.INTEGRATION),
+    provider: EffectSchema.Literal(TRIGGER_PROVIDER.SENTRY),
+    event: EffectSchema.Literals(Object.values(SENTRY_TRIGGER_EVENT)),
+    /** What the event is about, by the provider's own id (a Sentry issue's), which the cooldown keys on. */
+    subject: EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.optionalKey(EffectSchema.String),
+      url: EffectSchema.optionalKey(EffectSchema.String),
+    }),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AUTOMATION_FIRING.MANUAL),
@@ -350,6 +416,8 @@ export const AUTOMATION_RUN_REASON = {
   MISSED: "missed",
   /** The agent the automation hands each run to is gone, archived, or no longer its creator's to reach. */
   AGENT_GONE: "agent-gone",
+  /** A run on the same subject (one Sentry issue) started within the trigger's cooldown. */
+  SAME_SUBJECT: "same-subject",
 } as const;
 
 export type AutomationRunReason =

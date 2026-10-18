@@ -46,6 +46,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import { failureKind } from "@luke/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -172,6 +173,8 @@ function firingSentence(automation: Automation, run: ActedRun): string {
       return `${GITHUB_EVENT_WORDS[firing.event]} on GitHub`;
     case AUTOMATION_FIRING.WEBHOOK:
       return "its webhook was called";
+    case AUTOMATION_FIRING.INTEGRATION:
+      return TRIGGER_CATALOG[firing.provider].events[firing.event].sentence;
   }
 }
 

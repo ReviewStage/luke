@@ -25,10 +25,12 @@ import {
   GITHUB_TRIGGER_EVENT,
   type GitHubSender,
   type GitHubTriggerEvent,
+  type IntegrationTrigger,
   PULL_REQUEST_DEFAULT_MOMENTS,
   type PullRequestMoment,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
+import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
  * automation-draft-model.ts -- an automation as its editor holds it while it is written: its trigger, a schedule in the picker's terms, a GitHub event, or a webhook, the task, the repository, and the owner, with what stops it saving and the write that saves it.
@@ -83,7 +85,7 @@ export interface AutomationDraft {
   readonly schedule: ScheduleDraft;
   readonly timezone: string;
   readonly prompt: string;
-  /** What fires it: a schedule, a GitHub event, or a call to its webhook. */
+  /** What fires it: a schedule, a GitHub event, a call to its webhook, or an integration's event. */
   readonly triggerKind: AutomationTriggerKind;
   /** The GitHub event it fires on, where that is its trigger; a new draft's is a pull request opened or updated. */
   readonly githubEvent: GitHubTriggerEvent;
@@ -94,6 +96,8 @@ export interface AutomationDraft {
   };
   /** Whose events, at which moments, and whether drafts and forks fire a GitHub trigger: the row of choices under its sentence. */
   readonly githubSettings: GitHubTriggerSettings;
+  /** The integration event it fires on, with its filters, kept as it was given; a new draft's is a Sentry alert. */
+  readonly integrationTrigger: IntegrationTrigger;
   /** The repository a run starts in, `owner/name`, or none chosen yet. */
   readonly repository: string | null;
   /** Any other repositories its runs work in, kept behind the first as they were given. */
@@ -127,6 +131,13 @@ const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
   moments: PULL_REQUEST_DEFAULT_MOMENTS,
   drafts: false,
   forks: false,
+};
+
+/** An integration trigger where none was given: a Sentry alert, unfiltered. */
+const NEW_INTEGRATION_TRIGGER: IntegrationTrigger = {
+  kind: AUTOMATION_TRIGGER.INTEGRATION,
+  provider: TRIGGER_PROVIDER.SENTRY,
+  event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
 };
 
 /** What a draft starts from where nothing is written: nine on weekdays, in the zone the window is in. */
@@ -242,7 +253,18 @@ function sameSettings(one: GitHubTriggerSettings, other: GitHubTriggerSettings):
   );
 }
 
-/** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
+/** Whether two integration triggers listen for the same event under the same filters, each filter's values in any order. */
+function sameIntegrationTrigger(one: IntegrationTrigger, other: IntegrationTrigger): boolean {
+  return (
+    one.provider === other.provider &&
+    one.event === other.event &&
+    sameSet(one.filters?.project, other.filters?.project) &&
+    sameSet(one.filters?.environment, other.filters?.environment) &&
+    sameSet(one.filters?.level, other.filters?.level)
+  );
+}
+
+/** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, its webhook, or its integration's event. */
 export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
     case AUTOMATION_TRIGGER.SCHEDULE:
@@ -267,6 +289,8 @@ export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
     }
     case AUTOMATION_TRIGGER.WEBHOOK:
       return { kind: AUTOMATION_TRIGGER.WEBHOOK };
+    case AUTOMATION_TRIGGER.INTEGRATION:
+      return draft.integrationTrigger;
   }
 }
 
@@ -334,6 +358,7 @@ export function automationDraft(
       githubEvent: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
       githubFilters: {},
       githubSettings: GITHUB_DEFAULT_SETTINGS,
+      integrationTrigger: NEW_INTEGRATION_TRIGGER,
       repository: null,
       alsoRepositories: [],
       owner: defaults.owner,
@@ -362,6 +387,8 @@ export function automationDraft(
         }
       : {},
     githubSettings: github ? githubSettingsOf(trigger) : GITHUB_DEFAULT_SETTINGS,
+    integrationTrigger:
+      trigger.kind === AUTOMATION_TRIGGER.INTEGRATION ? trigger : NEW_INTEGRATION_TRIGGER,
     repository: automation.repositories?.[0] ?? null,
     alsoRepositories: automation.repositories?.slice(1) ?? [],
     owner: automation.scope ?? AUTOMATION_SCOPE.PERSONAL,
@@ -476,6 +503,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
       (one.githubEvent === other.githubEvent &&
         sameFilters(one.githubFilters, other.githubFilters) &&
         sameSettings(one.githubSettings, other.githubSettings))) &&
+    (one.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION ||
+      sameIntegrationTrigger(one.integrationTrigger, other.integrationTrigger)) &&
     // A new draft's guards, unset, are whatever the service sets, so they differ from none.
     (one.guards === null ||
       other.guards === null ||
@@ -514,7 +543,11 @@ export function changeOf(
     (draft.githubEvent !== was.githubEvent ||
       !sameFilters(draft.githubFilters, was.githubFilters) ||
       !sameSettings(draft.githubSettings, was.githubSettings));
-  const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
+  const integrationMoved =
+    draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION &&
+    !sameIntegrationTrigger(draft.integrationTrigger, was.integrationTrigger);
+  const triggerMoved =
+    draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved || integrationMoved;
   const actionMoved =
     draft.prompt.trim() !== was.prompt ||
     !sameChoice(draft.choice, was.choice) ||
@@ -569,6 +602,8 @@ export function presetDraft(draft: AutomationDraft, preset: AutomationPreset): A
     githubFilters: {},
     githubSettings:
       trigger.kind === AUTOMATION_TRIGGER.GITHUB ? githubSettingsOf(trigger) : draft.githubSettings,
+    integrationTrigger:
+      trigger.kind === AUTOMATION_TRIGGER.INTEGRATION ? trigger : draft.integrationTrigger,
     target: AUTOMATION_TARGET.NEW_AGENT,
     agentId: null,
     archiveSuccessful: preset.archiveSuccessful,

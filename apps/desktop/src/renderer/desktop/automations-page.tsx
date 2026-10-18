@@ -200,9 +200,7 @@ function AutomationRow({
         ref={(node) => {
           press.current = node;
         }}
-        leading={
-          <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
-        }
+        leading={<StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />}
         title={
           <span className="automation-row-name" data-enabled={String(automation.enabled)}>
             {automation.name}

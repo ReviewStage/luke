@@ -23,6 +23,7 @@ import {
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
@@ -960,6 +961,60 @@ const findGithubAutomations = SqlSchema.findAll({
     ),
 });
 
+const findIntegrationAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    provider: Schema.String,
+    event: Schema.String,
+    limit: Schema.Int,
+  }),
+  Result: ListeningRowSchema,
+  execute: ({ organizationId, provider, event, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.enabled, true),
+            // Note that an integration automation was made after workspaces came to every row, so its own column names its workspace.
+            eq(automation.organizationId, organizationId),
+            eq(automation.triggerKind, AUTOMATION_TRIGGER.INTEGRATION),
+            sql`${automation.trigger}->>'provider' = ${provider}`,
+            sql`${automation.trigger}->>'event' = ${event}`,
+            memberOfAutomationWorkspace(automation.userId),
+          ),
+        )
+        .orderBy(asc(automation.createdAt), asc(automation.id))
+        .limit(limit),
+    ),
+});
+
+const findSubjectRun = SqlSchema.findAll({
+  Request: Schema.Struct({
+    automationId: Schema.String,
+    subjectId: Schema.String,
+    since: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ automationId, subjectId, since }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            gte(automationRun.firedAt, since),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            sql`${automationRun.firing}->>'kind' = ${AUTOMATION_FIRING.INTEGRATION}`,
+            sql`${automationRun.firing}->'subject'->>'id' = ${subjectId}`,
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 const findRunsSince = SqlSchema.findAll({
   Request: Schema.Struct({ automationId: Schema.String, since: Schema.Date }),
   Result: RunRowSchema,
@@ -1426,4 +1481,33 @@ export function githubAutomationsOn(
   limit: number,
 ): TaskStoreEffect<readonly ListeningAutomation[]> {
   return findGithubAutomations({ repository, event, limit });
+}
+
+/**
+ * The enabled automations of the workspace listening for the provider's
+ * event, of owners still members of it, oldest first, at most `limit`:
+ * what a delivery from the workspace's installation may fire, its filters
+ * still to read. No other workspace's automation is ever among them.
+ */
+export function integrationAutomationsOn(
+  organizationId: string,
+  provider: TriggerProvider,
+  event: SentryTriggerEvent,
+  limit: number,
+): TaskStoreEffect<readonly ListeningAutomation[]> {
+  return findIntegrationAutomations({ organizationId, provider, event, limit });
+}
+
+/**
+ * Whether the automation started a run on the integration subject named
+ * (one Sentry issue, by the provider's id) that fired at or after `since`:
+ * what its per-subject cooldown holds a new delivery back by. A run that was
+ * skipped or failed started nothing, so it holds nothing back.
+ */
+export function subjectRunStartedSince(
+  automationId: string,
+  subjectId: string,
+  since: Date,
+): TaskStoreEffect<boolean> {
+  return Effect.map(findSubjectRun({ automationId, subjectId, since }), (rows) => rows.length > 0);
 }
