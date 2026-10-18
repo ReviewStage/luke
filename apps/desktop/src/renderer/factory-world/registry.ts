@@ -1,4 +1,4 @@
-import { FlaskConicalIcon, type LucideIcon } from "lucide-react";
+import { FlaskConicalIcon, type LucideIcon, SatelliteIcon } from "lucide-react";
 import type { WorldModule } from "./world";
 
 /**
@@ -28,7 +28,14 @@ export interface WorldEntry {
 export const FACTORY_BOARD = "board";
 
 /** The worlds every build offers, in the picker's order. */
-const FACTORY_WORLDS = [] as const satisfies readonly WorldEntry[];
+const FACTORY_WORLDS = [
+  {
+    key: "station",
+    name: "Orbital Station",
+    icon: SatelliteIcon,
+    load: () => import("./worlds/station/index"),
+  },
+] as const satisfies readonly WorldEntry[];
 
 /** The world a development build offers after them, which no packaged app does: the plainest drawing of the reading, for standing the host up. */
 const DEV_WORLDS = [

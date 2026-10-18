@@ -18,7 +18,7 @@ import { tasksControl } from "#testing/tasks-control";
 import { DesktopFactory } from "../desktop/desktop-factory";
 
 /**
- * world-picker.test.ts -- the Factory toolbar's picker: the board first and what the page opens on, each world the build offers after it, a world chosen standing in the board's place until the board is chosen again, the choice kept while Factory closes and opens in the same session, and nothing of it standing where no world is offered or Factory's experiment is off.
+ * world-picker.test.ts -- the Factory toolbar's picker: the board first and what the page opens on, each world the build offers after it, a world chosen standing in the board's place until the board is chosen again, the choice kept while Factory closes and opens in the same session, the development build's test pattern offered in no packaged app, and nothing of it standing where Factory's experiment is off.
  *
  * The worlds' scene is never landed here (`unlandedBundles`), so a world
  * chosen stands at its wait; what it draws is `world-page.test.ts`'s.
@@ -129,13 +129,15 @@ function boardStands(page: HTMLElement): boolean {
   );
 }
 
-test("Factory opens on the board, its picker offering the board first and then the development build's test pattern", async () => {
+test("Factory opens on the board, its picker offering the board first, then the worlds, and the development build's test pattern last", async () => {
   launch({ factory: true, packaged: false });
   const page = mount();
   await settle();
   assert.equal(picker(page)?.getAttribute("aria-label"), "View: Board");
   assert.ok(boardStands(page));
-  assert.deepEqual(entries(page), ["Board", "Test pattern"]);
+  const offered = entries(page);
+  assert.equal(offered[0], "Board");
+  assert.equal(offered.at(-1), "Test pattern");
   assert.deepEqual(asked, [], "no world is read while the board stands");
 });
 
@@ -173,12 +175,15 @@ test("the world chosen stands when Factory is opened again in the same session, 
   assert.ok(boardStands(next));
 });
 
-test("a packaged app, offering no world yet, draws no picker and only the board", async () => {
+test("a packaged app opens on the board and offers its worlds, but not the development build's test pattern", async () => {
   launch({ factory: true, packaged: true });
   const page = mount();
   await settle();
-  assert.equal(picker(page), null);
   assert.ok(boardStands(page));
+  const offered = entries(page);
+  assert.equal(offered[0], "Board");
+  assert.ok(offered.length > 1, "a world is offered");
+  assert.ok(!offered.includes("Test pattern"));
 });
 
 test("with Factory's experiment off, no world is offered", async () => {
