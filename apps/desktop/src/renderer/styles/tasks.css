@@ -1762,47 +1762,11 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The Files changed bar's diff settings (diff-settings.tsx): the button,
-   and under it a popover in the context popover's look, its rows the
-   settings page's own, scrolling within the room the panel leaves. */
+   and under it `@luke/ui`'s popover panel, its rows the settings page's
+   own, set apart in groups by a rule. */
 .diff-settings {
   position: relative;
   display: flex;
-}
-
-.diff-settings-popover {
-  display: flex;
-  max-height: min(560px, 70vh);
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 12px 32px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.diff-settings-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.diff-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.diff-settings-title {
-  margin: 0;
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .diff-settings-group {
@@ -2278,45 +2242,6 @@ button.file-ref:hover .file-ref-path {
   display: flex;
 }
 
-/* Never taller than the room its side of the press leaves (`@luke/ui`'s
-   `AnchoredPopover` sets it as `--luke-popover-room`), scrolling within it,
-   so a short window keeps Submit in reach. */
-.pull-request-review-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  max-height: var(--luke-popover-room, none);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.pull-request-review-panel:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.pull-request-review-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.pull-request-review-title {
-  margin: 0;
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
 .pull-request-review-lead {
   margin: calc(-1 * var(--luke-space-8)) 0 0;
   color: var(--luke-color-text-muted);
@@ -2327,10 +2252,6 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
-}
-
-.pull-request-review-panel > * {
-  flex-shrink: 0;
 }
 
 .pull-request-review-field,
@@ -5470,6 +5391,12 @@ button.agent-ref:hover .agent-ref-name {
   max-height: clamp(160px, 100vh - 320px, 400px);
 }
 
+/* The searchable menu's class rides a box drawn as its contents
+   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
+.luke-popover-panel > .agent-servers-menu {
+  display: contents;
+}
+
 .agent-servers-row[data-opens="true"] {
   cursor: default;
 }
@@ -5627,39 +5554,6 @@ button.agent-ref:hover .agent-ref-name {
 /* The popover hangs above the ring as the model menu does above its chip,
    at its width, on the menu's own surface; each part of the context wears
    one colour on the bar and on its legend row's square. */
-.agent-context-popover {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.agent-context-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.agent-context-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.agent-context-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: var(--luke-weight-semibold);
-}
-
 .agent-context-summary {
   display: flex;
   justify-content: space-between;
@@ -5737,19 +5631,19 @@ button.agent-ref:hover .agent-ref-name {
   font-size: var(--luke-type-caption-size);
 }
 
-.agent-context-popover [data-part="system-prompt"] {
+.agent-context [data-part="system-prompt"] {
   --context-part: var(--luke-color-merged);
 }
 
-.agent-context-popover [data-part="tool-definitions"] {
+.agent-context [data-part="tool-definitions"] {
   --context-part: var(--luke-color-working);
 }
 
-.agent-context-popover [data-part="brief"] {
+.agent-context [data-part="brief"] {
   --context-part: var(--luke-color-complete);
 }
 
-.agent-context-popover [data-part="conversation"] {
+.agent-context [data-part="conversation"] {
   --context-part: var(--luke-color-text-muted);
 }
 

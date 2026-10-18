@@ -23,6 +23,7 @@ import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
+import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
@@ -83,6 +84,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
+  POPOVER_PANELS_EXAMPLE,
   PROSE_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
