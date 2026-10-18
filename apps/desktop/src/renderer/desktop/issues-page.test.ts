@@ -20,7 +20,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
+import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import type { SideBundles } from "../bundle-loader";
@@ -125,11 +125,13 @@ const EDITOR_STAND_IN: PlanEditorModule = {
   mountComposer: () => assert.fail("the issue's page mounts no message box"),
 };
 
+/** The bundles the page is drawn over: the editor's stand-in landed, unless a test draws it over others. */
+let landed: SideBundles;
 let bundles: SideBundles;
 
 // Landed before any page renders, as it is once a plan or an issue has been shown in this window.
 beforeAll(async () => {
-  bundles = await Effect.runPromise(
+  landed = await Effect.runPromise(
     landedBundles({ planEditor: () => Promise.resolve(EDITOR_STAND_IN) }),
   );
 });
@@ -178,6 +180,7 @@ beforeEach(() => {
   changeRefused = false;
   copied = [];
   editors.length = 0;
+  bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   fakeAppBridge({
     act: (request: Act) => {
@@ -964,7 +967,7 @@ test("a description past its bound is not sent, and the open editor says why", a
   assert.match(page.textContent ?? "", /The description is too long/u);
 });
 
-test("while a save is out, a finish sends nothing more, and words typed meanwhile stay open for the next save", async () => {
+test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
   heldChanges = [];
@@ -980,20 +983,84 @@ test("while a save is out, a finish sends nothing more, and words typed meanwhil
   const sentWhileOut = changes.length;
   act(() => held[0]?.());
   await settle();
-  const openAfterFirst = !editor.destroyed;
-  finish(editor);
-  await settle();
+  const openBetween = !editor.destroyed;
   act(() => held[1]?.());
   await settle();
 
-  assert.equal(sentWhileOut, 1, "a finish while the save is out sends nothing");
-  assert.ok(openAfterFirst, "newer words keep the editor open");
+  assert.equal(sentWhileOut, 1, "nothing more is sent while the first save is out");
+  assert.ok(openBetween, "the newer words keep the editor open");
   assert.deepEqual(changes, [
     { issueId: issue(1).id, change: { description: "First draft" } },
     { issueId: issue(1).id, change: { description: "First draft, and more" } },
   ]);
   assert.ok(editor.destroyed);
   assert.equal(descriptionOf(page).textContent, "First draft, and more");
+});
+
+test("words typed while a save is out are sent once it is kept, though the page left the issue meanwhile", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "First draft");
+  finish(editor);
+  await settle();
+  type(editor, "First draft, plus details");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "First draft" } },
+    { issueId: issue(1).id, change: { description: "First draft, plus details" } },
+  ]);
+});
+
+test("a control pressed while a finished save is out keeps the keyboard once the save closes the editor", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Steps");
+  finish(editor);
+  await settle();
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
+  act(() => held[0]?.());
+  await settle();
+
+  assert.ok(editor.destroyed);
+  assert.equal(document.activeElement, title);
+});
+
+test("focus leaving the description before its editor has loaded opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  bundles = unlandedBundles();
+  const page = await openIssue(issue(1).id);
+
+  const description = descriptionOf(page);
+  act(() => description.focus());
+  act(() => description.click());
+  const busy = description.closest("[aria-busy='true']") !== null;
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
+
+  assert.ok(busy, "the description waits on its editor, keeping its words");
+  assert.equal(descriptionOf(page), description, "the words pressed are the ones drawn");
+  assert.equal(page.querySelector("[aria-busy='true']"), null);
+  assert.equal(document.activeElement, title);
 });
 
 test("words typed in the description are sent as the page leaves the issue with its editor open", async () => {

@@ -33,9 +33,11 @@ import { useOpenLink } from "../tasks/use-open-link";
  * Mermaid block previewed as its diagram. Leaving the editor, Esc, or ⌘↩
  * sends what was typed, and so does the page going while it is open; text
  * left as it was sends nothing. The editor stays open until the service
- * keeps the save, so a refused save keeps every word and says so under it,
- * and words typed while a save is out stay in the editor for the next. Its
- * words are document text, which the recording masks.
+ * keeps the save, so a refused save keeps every word and says so under it.
+ * A save asked for while another is out, by a finish, a leaving, or the page
+ * going, waits for it and then sends the words as they stand by then, so
+ * nothing typed meanwhile is lost. Its words are document text, which the
+ * recording masks.
  */
 
 /** What stands where an issue has no description, and what the empty editor says. */
@@ -68,6 +70,8 @@ export function IssueDescription({
   const [placement, setPlacement] = useState<PlanEditorPlacement | undefined>(undefined);
   const [note, setNote] = useState<string | undefined>(undefined);
   const saving = useRef(false);
+  // Whether a save was asked for while one was out, which goes once that one is kept.
+  const queued = useRef(false);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   // The words the editor last handed over, read where its handle is gone.
   const drafted = useRef<string | undefined>(undefined);
@@ -91,9 +95,12 @@ export function IssueDescription({
     setNote(undefined);
     setOpen(false);
   };
-  // Note that a save under way is not asked again, since the words it sent are already on their way.
   const save = () => {
-    if (!open || saving.current) return;
+    if (!open) return;
+    if (saving.current) {
+      queued.current = true;
+      return;
+    }
     const text = typed();
     if (text === description) {
       close();
@@ -106,13 +113,19 @@ export function IssueDescription({
     saving.current = true;
     onSave(text).then((kept) => {
       saving.current = false;
+      const again = queued.current;
+      queued.current = false;
       if (!kept) {
         setNote(REFUSED_LINE);
         return;
       }
-      // Words typed since the save was sent stay open for the next one.
-      if (typed() === text) close();
-      else setNote(undefined);
+      if (typed() === text) {
+        close();
+        return;
+      }
+      // Words typed since the save was sent stay open, and go now where a save was asked for meanwhile, the page gone or not.
+      setNote(undefined);
+      if (again) leave.current();
     });
   };
   const finish = () => {
@@ -123,10 +136,13 @@ export function IssueDescription({
   const leave = useRef(save);
   leave.current = save;
   useLayoutEffect(() => () => leave.current(), []);
+  // Note that the keyboard is taken back only where it was left with the editor, never from a control pressed while the save was out.
   useEffect(() => {
     if (open || !refocus.current) return;
     refocus.current = false;
-    block.current?.focus();
+    if (document.activeElement === null || document.activeElement === document.body) {
+      block.current?.focus();
+    }
   });
 
   const drawn = (
@@ -157,20 +173,8 @@ export function IssueDescription({
       )}
     </div>
   );
-  if (!open) return drawn;
-  // Until the editor's bundle has loaded the words stay drawn, so a click's point still lands on the same word.
-  if (!AsyncResult.isSuccess(module)) {
-    return (
-      <section className="plan-document-editor ph-no-capture" aria-busy="true">
-        {drawn}
-        {AsyncResult.isFailure(module) ? (
-          <p className="issue-description-refused" role="alert">
-            {EDITOR_LOAD_FAILED}
-          </p>
-        ) : null}
-      </section>
-    );
-  }
+  const loaded = AsyncResult.isSuccess(module) ? module.value : undefined;
+  const editor = open ? loaded : undefined;
   const props: PlanEditorProps = {
     markdown: description,
     placement,
@@ -186,15 +190,31 @@ export function IssueDescription({
     onLeaveUp: () => undefined,
     drawDiagram: diagrams.draw,
   };
+  // Note that the description stands in the same room open or not, so the
+  // words drawn while the editor's bundle loads are the ones pressed, and
+  // keep the keyboard: focus leaving them then opens nothing, since nothing
+  // was typed, and a click's point still lands on the same word.
   return (
     <section
-      className="plan-document-editor ph-no-capture"
-      aria-label="Editing the description"
+      className={open ? "plan-document-editor ph-no-capture" : undefined}
+      aria-label={editor === undefined ? undefined : "Editing the description"}
+      aria-busy={open && editor === undefined ? true : undefined}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) save();
+        if (!open || event.currentTarget.contains(event.relatedTarget)) return;
+        if (editor === undefined) setOpen(false);
+        else save();
       }}
     >
-      <MountedPlanEditor module={module.value} props={props} handle={handle} />
+      {editor === undefined ? (
+        drawn
+      ) : (
+        <MountedPlanEditor module={editor} props={props} handle={handle} />
+      )}
+      {open && AsyncResult.isFailure(module) ? (
+        <p className="issue-description-refused" role="alert">
+          {EDITOR_LOAD_FAILED}
+        </p>
+      ) : null}
       {note === undefined ? null : (
         <p className="issue-description-refused" role="status">
           {note}
