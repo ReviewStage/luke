@@ -8649,8 +8649,15 @@ button.automation-run:hover {
   gap: var(--luke-space-6);
 }
 
+/* Note that the context gives way before the marks and the time, because
+   the metadata's slot clips at its end and the time is what ends it. */
 .home-row-meta > .home-row-context {
+  min-width: 0;
   flex: 0 1 auto;
+}
+
+.home-row-meta > :not(.home-row-context) {
+  flex: none;
 }
 
 .home-row-picture {

@@ -19,6 +19,14 @@ import type { IssueChange } from "./use-issues";
  * here.
  */
 
+/** Each drawn row's press, by the issue it opens. */
+const ROW_ISSUES = new WeakMap<Element, string>();
+
+/** The issue whose list row's press the element is, if it is one. */
+export function listRowIssue(element: Element): string | undefined {
+  return ROW_ISSUES.get(element);
+}
+
 /** One issue's row: one press that opens it, holding the keyboard as it is drawn where it is the issue the page came back from. */
 function IssueRow({
   issue,
@@ -40,9 +48,13 @@ function IssueRow({
   const menu = useMenu(shown);
   const identifier = issueIdentifier(workspaceName, issue.number);
   const row = useRef<HTMLElement | null>(null);
-  const hold = useCallback((press: HTMLElement | null) => {
-    row.current = press;
-  }, []);
+  const hold = useCallback(
+    (press: HTMLElement | null) => {
+      row.current = press;
+      if (press !== null) ROW_ISSUES.set(press, issue.id);
+    },
+    [issue.id],
+  );
   useLayoutEffect(() => {
     if (focused) row.current?.focus();
   }, [focused]);

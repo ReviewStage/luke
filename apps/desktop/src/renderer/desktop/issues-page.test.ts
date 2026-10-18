@@ -1352,6 +1352,26 @@ test("a card moved by a status picked from its menu keeps the keyboard in its ne
   assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
 });
 
+test("a list row moved by a status picked from its menu keeps the keyboard under its new heading", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(1));
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement;
+  assert.ok(holding instanceof HTMLButtonElement, "a row holds the keyboard");
+  assert.match(holding.textContent ?? "", /^ACME-1/u);
+  assert.equal(holding.closest("section")?.getAttribute("aria-label"), "Done");
+});
+
 test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
   standing = [issue(1), issue(2)];
   heldChanges = [];

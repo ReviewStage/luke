@@ -36,7 +36,7 @@ import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
-import { IssueList } from "./issue-list";
+import { IssueList, listRowIssue } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -125,9 +125,9 @@ function useChangeSaid(): (asked: IssueChange, sent: Promise<IssueView>) => Prom
 function keyboardLeftWith(issueId: string): boolean {
   const at = document.activeElement;
   if (at === null || at === document.body) return true;
+  if (!(at instanceof HTMLElement)) return false;
   return (
-    at instanceof HTMLElement &&
-    at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId === issueId
+    (at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId ?? listRowIssue(at)) === issueId
   );
 }
 
