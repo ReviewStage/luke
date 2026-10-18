@@ -28,9 +28,13 @@ type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[]
 /** A row's words as the shared row draws them, and the control standing before its ⋯. */
 interface MenuRowWords {
   label: ReactNode;
+  /** What rides the label's line without naming the row: a Modified word, a mark. */
+  adornment?: ReactNode;
   description?: ReactNode;
   /** What went wrong with the row's last act, or nothing while none did. */
   error?: ReactNode;
+  /** What the row grows under its line and owns alone, a stored key's field. */
+  below?: ReactNode;
   /** The provider's or service's mark the row leads with. */
   leading?: ReactNode;
   control?: ReactNode;
@@ -102,8 +106,10 @@ export function MenuRow({
           <SettingsRow
             leading={row.leading}
             label={row.label}
+            adornment={row.adornment}
             description={row.description}
             error={row.error}
+            below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (
               <>

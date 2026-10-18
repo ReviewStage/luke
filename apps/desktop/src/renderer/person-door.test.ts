@@ -88,7 +88,7 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
 
 /** The actor's card, hung by resting on its name. */
 function cardOf(view: HTMLElement): Element {
-  const named = view.querySelector(".actor-ref") ?? assert.fail("the actor is named");
+  const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
   act(() => {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -104,7 +104,7 @@ function press(element: Element | null | undefined): void {
 
 test("a member's name is a press that opens their page, and their card is read, never a door", () => {
   const view = draw(createElement(ActorRef, { actor: DANA }));
-  const named = view.querySelector(".actor-ref");
+  const named = view.querySelector("[data-actor-ref]");
 
   assert.equal(named?.tagName, "BUTTON");
   press(named);
@@ -116,19 +116,19 @@ test("a member's name is a press that opens their page, and their card is read, 
 test("someone who left opens their page by the account id the service still names them by, with the name the place knows", () => {
   const view = draw(createElement(ActorRef, { actor: LEE }));
 
-  press(view.querySelector(".actor-ref"));
+  press(view.querySelector("[data-actor-ref]"));
   assert.deepEqual(opened, ["user-lee"]);
   assert.deepEqual(names, ["Lee Park"]);
 });
 
 test("a GitHub account who is no member opens on GitHub, a person their profile and an App's bot its App's page", () => {
   const person = draw(createElement(ActorRef, { actor: OCTOCAT }));
-  press(person.querySelector(".actor-ref"));
+  press(person.querySelector("[data-actor-ref]"));
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const bot = draw(createElement(ActorRef, { actor: DEPENDABOT }));
-  press(bot.querySelector(".actor-ref"));
+  press(bot.querySelector("[data-actor-ref]"));
 
   assert.deepEqual(github, ["https://github.com/octocat", "https://github.com/apps/dependabot"]);
   assert.deepEqual(opened, []);
@@ -136,19 +136,19 @@ test("a GitHub account who is no member opens on GitHub, a person their profile 
 
 test("someone nobody names opens nothing, and outside the window nobody does", () => {
   const unnamed = draw(createElement(ActorRef, { actor: NOBODY }));
-  assert.equal(unnamed.querySelector(".actor-ref")?.tagName, "SPAN");
+  assert.equal(unnamed.querySelector("[data-actor-ref]")?.tagName, "SPAN");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const outside = draw(createElement(ActorRef, { actor: DANA }), false);
-  assert.equal(outside.querySelector(".actor-ref")?.tagName, "SPAN");
+  assert.equal(outside.querySelector("[data-actor-ref]")?.tagName, "SPAN");
 });
 
 test("a place's own door wins over the person's", () => {
   let own = 0;
   const view = draw(createElement(ActorRef, { actor: DANA, onOpen: () => (own += 1) }));
 
-  press(view.querySelector(".actor-ref"));
+  press(view.querySelector("[data-actor-ref]"));
 
   assert.equal(own, 1);
   assert.deepEqual(opened, []);
@@ -167,7 +167,7 @@ test("a person named inside a workspace's members opens in that workspace, an ag
     }),
   );
 
-  press(view.querySelector(".actor-ref"));
+  press(view.querySelector("[data-actor-ref]"));
 
   assert.deepEqual(workspaces, ["workspace-acme"]);
 });
