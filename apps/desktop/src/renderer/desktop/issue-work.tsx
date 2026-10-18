@@ -1,9 +1,11 @@
 import type { Issue } from "@luke/features/issue-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ComposeIcon, DocumentIcon, INLINE_REF_LOOK } from "@luke/ui";
 import { BotIcon } from "lucide-react";
 import { createContext, useContext } from "react";
 import { InlineRef } from "../inline-ref";
+import { pullRequestNumberLabel } from "../tasks/coding-agent-model";
+import { PullRequestMark } from "../tasks/pull-request-mark";
 import type { MenuAction } from "./action-menu";
 
 /**
@@ -17,7 +19,10 @@ import type { MenuAction } from "./action-menu";
  * workspace started from it, archived ones among them, newest started first
  * whatever the sidebar's pins put first, each a chip that opens
  * its task; an issue no task was started from lists none and draws no row.
- * The Issues page hands these doors down once, so a card's menu, a row's,
+ * Beside each task stand its pull requests as Factory draws them, each a
+ * mark for where it stands and its number, opening where Factory's row
+ * opens it, and the issue's card draws the newest of them after its
+ * priority. The Issues page hands these doors down once, so a card's menu, a row's,
  * and the issue's own page offer the same ones.
  */
 
@@ -29,6 +34,8 @@ export interface IssueWork {
   readonly tasksOf: (issueId: string) => readonly TaskSummary[];
   /** Opens a task. */
   readonly onOpenTask: (taskId: string) => void;
+  /** Opens one of a task's pull requests where Factory's row opens it: its agent's Pull request tab, else GitHub, else the task. */
+  readonly onOpenPullRequest: (task: TaskSummary, pullRequest: TaskPullRequestLine) => void;
 }
 
 const IssueWorkContext = createContext<IssueWork | undefined>(undefined);
@@ -63,15 +70,50 @@ export function IssueWorkRow({ issue }: { issue: Issue }): React.JSX.Element | n
     <section className="issue-work" aria-label="Tasks">
       <span className="issue-work-label">Tasks</span>
       {tasks.map((task) => (
-        <InlineRef
-          key={task.id}
-          look={INLINE_REF_LOOK.PILL}
-          glyph={<DocumentIcon />}
-          label={task.name}
-          pressLabel={`Open ${task.name}`}
-          onPress={() => work.onOpenTask(task.id)}
-        />
+        <span key={task.id} className="issue-work-task">
+          <InlineRef
+            look={INLINE_REF_LOOK.PILL}
+            glyph={<DocumentIcon />}
+            label={task.name}
+            pressLabel={`Open ${task.name}`}
+            onPress={() => work.onOpenTask(task.id)}
+          />
+          {(task.agents?.pullRequests ?? []).map((pullRequest) => (
+            <InlineRef
+              key={pullRequest.number}
+              look={INLINE_REF_LOOK.PILL}
+              glyph={<PullRequestMark pullRequest={pullRequest} />}
+              label={pullRequestNumberLabel(pullRequest)}
+              pressLabel={`Open pull request ${pullRequestNumberLabel(pullRequest)}, ${pullRequest.title}`}
+              onPress={() => work.onOpenPullRequest(task, pullRequest)}
+              data-pull-request-state={pullRequest.state}
+            />
+          ))}
+        </span>
       ))}
     </section>
+  );
+}
+
+/**
+ * The newest pull request of the tasks started from the issue, as its card
+ * draws it after its priority: its mark for where it stands and its number,
+ * and how many more stand beside it where any do; nothing while none was
+ * opened. It is the newest task's newest, as the tasks stand newest started
+ * first and each task's newest agent's first.
+ */
+export function IssueCardPullRequest({ issue }: { issue: Issue }): React.JSX.Element | null {
+  const work = useContext(IssueWorkContext);
+  const tasks = work?.tasksOf(issue.id) ?? [];
+  const newest = tasks.flatMap((task) => task.agents?.pullRequests ?? [])[0];
+  if (newest === undefined) return null;
+  const total = tasks.reduce((sum, task) => sum + (task.agents?.pullRequestTotal ?? 0), 0);
+  const more = total - 1;
+  return (
+    <span className="issue-card-pull-request" data-pull-request-state={newest.state}>
+      <PullRequestMark pullRequest={newest} />
+      <span>{pullRequestNumberLabel(newest)}</span>
+      {more > 0 ? <span className="issue-card-pull-request-more">{`+${more}`}</span> : null}
+    </span>
   );
 }
