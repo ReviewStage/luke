@@ -289,17 +289,17 @@ export default defineEval({
       await chatChosen(true);
       // Asked to post, the model posts in the plan's channel as the plan's
       // Luke, and says where it landed.
-      const chatPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
-      const chatConversationId = await taskConversation(run, chatPlan.id);
+      const chatTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      const chatConversationId = await taskConversation(run, chatTask.id);
       const posting = await openSession(chatConversationId, `${SCRIPTED_POST}${PLAN_WORDS.POSTED}`);
       const postingSession = await t.target.attachSession(posting.sessionId);
       postingSession.succeeded();
-      const channel = await run(ensureTaskChannel(LOCAL_DEV_PRINCIPAL, chatPlan.id));
+      const channel = await run(ensureTaskChannel(LOCAL_DEV_PRINCIPAL, chatTask.id));
       assert.ok(Option.isSome(channel));
       const { organizationId } = channel.value;
       const members = await run(roster(LOCAL_DEV_PRINCIPAL, organizationId));
       const luke = members.find(
-        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatPlan.id,
+        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatTask.id,
       );
       assert.ok(luke);
       const said = await run(

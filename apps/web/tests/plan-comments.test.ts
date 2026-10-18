@@ -142,7 +142,7 @@ function threadIn(answered: Answered): PlanCommentThread {
 }
 
 /** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
-const openSharedPlan = Effect.gen(function* () {
+const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
@@ -171,7 +171,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
     "a thread a member started reads for every member past a stale cursor, and as nothing for an outsider",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, taskId } = yield* openSharedPlan;
+        const { owner, teammate, outsider, taskId } = yield* openSharedTask;
 
         const started = yield* answer(
           "comments",
@@ -213,7 +213,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
   it.effect("any member resolves a teammate's thread, and it reads resolved", () =>
     Effect.gen(function* () {
-      const { owner, teammate, taskId } = yield* openSharedPlan;
+      const { owner, teammate, taskId } = yield* openSharedTask;
       const thread = threadIn(
         yield* answer("comments", request(COMMENTS, teammate, { id: taskId }, startBody("v1?"))),
       );
@@ -238,7 +238,7 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
     "an edit deleting the anchored words leaves the thread its quote, and the edit undo sends anchors it again",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         const thread = threadIn(
           yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
         );

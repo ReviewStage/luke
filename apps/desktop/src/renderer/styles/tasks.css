@@ -3122,7 +3122,7 @@ ol.transcript-list {
   color: var(--luke-color-text);
 }
 
-/* A plan's card (../ai-elements/task.tsx), and what else a transcript opens
+/* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
    on drawn as one: a card on the raised ground inside a hairline, clipped to
    its corners so the header's hover fill follows them and what is in it
    rings inside itself. The header is the one line a closed card shows, its

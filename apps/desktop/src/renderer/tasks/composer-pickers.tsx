@@ -6,10 +6,10 @@ import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../pla
 import type { ComposerFieldMentions } from "./composer-field";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { usePlanMentions } from "./plan-mentions";
 import { MentionedServers, type MentionedServersPlace } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
+import { useTaskMentions } from "./task-mentions";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation";
 import { useKnownNames } from "./use-known-names";
 
@@ -18,7 +18,7 @@ import { useKnownNames } from "./use-known-names";
  *
  * Both boxes write words an agent reads as one of the developer's messages,
  * so both take the same things: an `@` at the start of a word, where the box
- * stands on a page that hands mentions (`plan-mentions.tsx`), opens the list
+ * stands on a page that hands mentions (`task-mentions.tsx`), opens the list
  * of what the words may mention, written in as its link and drawn as its
  * chip (`mention-picker.tsx`, `mention-chip.tsx`), the repository's skills
  * and the account's connected servers among them; a `/` opens the
@@ -80,11 +80,11 @@ export function useComposerPickers({
   const openSkill = useSkillOpener();
   const skillPicker = useSkillPicker({ editor, room, draft, source: skills, onOpen: openSkill });
   // An `@` picks a mention of the page the box stands on, where it stands on one that hands them.
-  const planMentions = usePlanMentions();
+  const taskMentions = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
   const mentionPicker = useMentionPicker({
-    source: planMentions,
+    source: taskMentions,
     self,
     // The repository's skills, a pick written as the `/name` chip the `/` list writes.
     skills:
@@ -126,21 +126,21 @@ export function useComposerPickers({
       onTrigger: skillPicker.onTrigger,
       chip: skillPicker.chip,
       mentions:
-        planMentions === undefined
+        taskMentions === undefined
           ? undefined
           : {
               onTrigger: mentionPicker.onTrigger,
               // A server's chip in the box says what a send now does with it.
               chip: (mention) => (
                 <MentionedServers value={servers.place}>
-                  <MentionNodeChip mention={mention} doors={planMentions.doors} />
+                  <MentionNodeChip mention={mention} doors={taskMentions.doors} />
                 </MentionedServers>
               ),
               pasted: (words) =>
-                pastedMentionNode(words, planMentions.doors.place, {
+                pastedMentionNode(words, taskMentions.doors.place, {
                   known,
-                  planId: planMentions.taskId,
-                  text: planMentions.text,
+                  planId: taskMentions.taskId,
+                  text: taskMentions.text,
                 }),
             },
       children: (

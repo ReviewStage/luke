@@ -18,7 +18,7 @@ import { CatalogSection } from "../section";
  * row of filters, one pressed at a time.
  */
 
-const FILTERS = ["All", "Plans", "Agents", "Files"] as const;
+const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
 
 /** A row of filter chips, the pressed one moving to whichever is pressed. */
 function FilterRow(): React.JSX.Element {

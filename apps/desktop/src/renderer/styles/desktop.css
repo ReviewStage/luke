@@ -3409,7 +3409,7 @@ ul.actor-stack {
 /* Too narrow for both of the backend's parts: the notetaker's goes while
    Luke's stands, so what Luke is doing keeps the line. */
 @container call-bar (max-width: 479px) {
-  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+  .call-backend-part[data-part="brain"] ~ [data-part="notes"] {
     display: none;
   }
 }
@@ -5633,9 +5633,9 @@ button.integration-tool-head:hover,
   font-weight: var(--luke-weight-semibold);
 }
 
-/* The plan's own Chat tab fills its column as an agent's tab does, the
+/* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
-.desktop-plan-chat {
+.desktop-task-chat {
   display: flex;
   min-height: 0;
   flex: 1;

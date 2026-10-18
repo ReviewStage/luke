@@ -13,7 +13,7 @@ import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * add-to-plan.test.ts -- a picture an agent showed, added to its plan from
@@ -69,7 +69,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -115,7 +115,7 @@ const SHOWN: CodingAgentMessage = {
 };
 
 /** The agent's turn drawn with its pictures' door, on the plan's page where `page` is given. */
-async function drawn(page: PlanMentionsValue | undefined) {
+async function drawn(page: TaskMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -136,7 +136,7 @@ async function drawn(page: PlanMentionsValue | undefined) {
       createElement(
         "div",
         null,
-        page === undefined ? turn : createElement(PlanMentions, { value: page, children: turn }),
+        page === undefined ? turn : createElement(TaskMentions, { value: page, children: turn }),
         createElement(ToastHost),
       ),
     ),

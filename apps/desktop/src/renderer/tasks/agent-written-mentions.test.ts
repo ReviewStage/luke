@@ -14,7 +14,7 @@ import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { OpenLinkProvider } from "./use-open-link";
 
@@ -47,7 +47,7 @@ const REPLY = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** The task's page an agent's tab stands on, whose repository a file's link is read against. */
-const TASK_PAGE: PlanMentionsValue = {
+const TASK_PAGE: TaskMentionsValue = {
   taskId: TASK,
   taskName: "Teammate invitations",
   workspace: "acme",
@@ -82,7 +82,7 @@ function drawn(text: string, opened: ReadLink[]): HTMLElement {
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => opened.push(link) },
-          createElement(PlanMentions, {
+          createElement(TaskMentions, {
             value: TASK_PAGE,
             children: createElement(TranscriptWords, { text }),
           }),

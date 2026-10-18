@@ -101,10 +101,10 @@ import {
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
 import { SentWords } from "./skill-chip";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
@@ -1303,10 +1303,10 @@ function AnswerMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue | undefined;
+  value: TaskMentionsValue | undefined;
   children: React.ReactNode;
 }): React.ReactNode {
-  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
 /** The words a dictation into an item's box is likely to say: its repository's, its title's, and the paths its blocks name. */
@@ -1486,7 +1486,7 @@ export function InboxPane({
   /** The next item that needs the developer, offered over the box once the item is settled. */
   next: InboxNext | undefined;
   /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
-  mentions?: PlanMentionsValue | undefined;
+  mentions?: TaskMentionsValue | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);

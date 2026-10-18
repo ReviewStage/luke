@@ -1324,11 +1324,11 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onSelect(taskId);
   };
-  const showPlans = () => {
+  const showTasks = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
   };
   const newTask = () => {
-    showPlans();
+    showTasks();
     tasks.onNewTask();
   };
   const openPinnedTab = (pin: PinnedTab) => {
@@ -1508,7 +1508,7 @@ function SidebarColumn({
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice, and stand aside while the archived tasks are shown.
   // The agents with no plan stand among the plans, the archived ones among the archived.
-  const unpinnedPlans = archive.shown
+  const unpinnedTasks = archive.shown
     ? listedRows.archived
     : listedRows.tasks.filter(
         (plan) => plan.pinnedAt === undefined && !sectioned.taskIds.has(plan.id),
@@ -1516,7 +1516,7 @@ function SidebarColumn({
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
-  const unpinned = [...unpinnedPlans.map(taskRow), ...unpinnedAgents.map(agentRow)];
+  const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1704,7 +1704,7 @@ function SidebarColumn({
           {tasks.signedIn ? (
             <ViewChips
               createdBy={createdBy}
-              tasks={unpinnedPlans}
+              tasks={unpinnedTasks}
               onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
               archive={archive}
             />

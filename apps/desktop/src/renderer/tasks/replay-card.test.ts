@@ -42,7 +42,7 @@ import { OpenLinkProvider } from "./use-open-link";
  * not add up is drawn whole as today. Synthetic throughout.
  */
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 /** When the new agent's first message was sent. */
@@ -51,7 +51,7 @@ const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 function summary(overrides: Partial<CodingAgentSummary> & { id: string }): CodingAgentSummary {
   return {
-    planId: PLAN_ID,
+    planId: TASK_ID,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: null,
@@ -347,7 +347,7 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
   );
   press(container.querySelector("[data-replay-open]"));
   assert.deepEqual(places, [
-    { kind: LINK_PLACE.MESSAGE, planId: PLAN_ID, agentId: SOURCE.id, messageId: FORKED_AT },
+    { kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: SOURCE.id, messageId: FORKED_AT },
   ]);
 });
 
@@ -409,7 +409,7 @@ test("on an agent's own page, which lists no source, the card names the source a
   assert.ok((mark?.childElementCount ?? 0) > 0);
   press(container.querySelector("[data-replay-card] > summary .actor-ref"));
   assert.deepEqual(opened, []);
-  assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
+  assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
 
 test("a replay holding Luke's summary of the oldest steps opens on one folded row naming it as his, which opens onto the summary", async () => {

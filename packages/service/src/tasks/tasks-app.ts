@@ -130,7 +130,7 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  * `DELETE` stops every coding agent of the task first, through the one Stop
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task. Each
  * row of the list carries what the task's coding agents are doing and what
- * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
+ * they published, in brief, where it has any (`packages/service/src/agents/task-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
  * member's own and reads pinned for no one else, and the list leaves the archived
  * tasks out unless `archived=include` asks for them, so a build from before
