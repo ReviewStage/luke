@@ -153,7 +153,6 @@ export function ForkMessageAction({
     <MessageAction
       label={FORK_WORDS.ACTION}
       tooltip={FORK_WORDS.ACTION}
-      data-fork-action=""
       onClick={() => onFork(messageId, words, cut)}
     >
       <SplitIcon />
@@ -201,16 +200,16 @@ export function ForkChip({
   onDrop: () => void;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();
-  const planId = source?.planId ?? null;
+  const taskId = source?.planId ?? null;
   const { agentId, messageId } = fork;
   const open =
-    openPlace === undefined || planId === null
+    openPlace === undefined || taskId === null
       ? undefined
       : () =>
           openPlace(
             messageId === undefined
-              ? { kind: LINK_PLACE.AGENT, planId, agentId }
-              : { kind: LINK_PLACE.MESSAGE, planId, agentId, messageId },
+              ? { kind: LINK_PLACE.AGENT, planId: taskId, agentId }
+              : { kind: LINK_PLACE.MESSAGE, planId: taskId, agentId, messageId },
           );
   const quote = `“${fork.opening}”`;
   const drop = messageId === undefined ? FORK_WORDS.DROP_CONTINUE : FORK_WORDS.DROP;

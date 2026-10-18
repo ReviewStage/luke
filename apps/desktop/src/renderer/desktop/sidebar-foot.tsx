@@ -12,6 +12,8 @@ import {
   GearIcon,
   IconButton,
   KeyboardIcon,
+  NAV_ITEM_VARIANT,
+  NavItem,
   ProviderMark,
   riseAbove,
   UpdateIcon,
@@ -247,12 +249,13 @@ function AccountMenu({
   });
   return (
     <>
-      <button type="button" className="sidebar-item sidebar-account" {...trigger(riseAbove)}>
-        <AccountAvatar account={account} />
-        <span className="sidebar-account-name">
-          {signedIn ? (account.name ?? account.email) : "Not signed in"}
-        </span>
-      </button>
+      <NavItem
+        variant={NAV_ITEM_VARIANT.IDENTITY}
+        icon={<AccountAvatar account={account} />}
+        menu={trigger(riseAbove)}
+      >
+        {signedIn ? (account.name ?? account.email) : "Not signed in"}
+      </NavItem>
       {drawn === undefined ? null : (
         <ActionMenu
           label="Account"

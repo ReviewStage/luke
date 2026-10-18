@@ -457,15 +457,15 @@ function taskRows(
   // The pinned stand first, as the sidebar's; the rest by their last
   // activity, as the sidebar, Home's Recent, and the row's time read it.
   const standing = [
-    ...tasks.tasks.filter((plan) => plan.pinnedAt !== undefined),
+    ...tasks.tasks.filter((task) => task.pinnedAt !== undefined),
     ...orderTasks(
-      tasks.tasks.filter((plan) => plan.pinnedAt === undefined),
+      tasks.tasks.filter((task) => task.pinnedAt === undefined),
       TASK_ORDER.UPDATED,
     ),
   ];
   return [
-    ...listedFirst(standing).map((plan) => row(plan, false)),
-    ...listedFirst(tasks.archived).map((plan) => row(plan, true)),
+    ...listedFirst(standing).map((task) => row(task, false)),
+    ...listedFirst(tasks.archived).map((task) => row(task, true)),
   ];
 }
 
@@ -663,11 +663,11 @@ function readMarkRows(
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY) return [];
-  const { task: plan } = tasks.region;
-  if (plan.id !== reads.watched) return [];
+  const { task } = tasks.region;
+  if (task.id !== reads.watched) return [];
   const item = markReadItem({
-    unread: reads.markedUnread(plan.id),
-    onMark: (unread) => reads.mark(plan, unread),
+    unread: reads.markedUnread(task.id),
+    onMark: (unread) => reads.mark(task, unread),
   });
   return [
     {
@@ -690,9 +690,9 @@ function taskPinRows(
   reads: ReadMarks,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
-  const plan = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
-  if (plan === undefined || plan.archivedAt !== undefined) return [];
-  const pinned = plan.pinnedAt !== undefined;
+  const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
+  if (task === undefined || task.archivedAt !== undefined) return [];
+  const pinned = task.pinnedAt !== undefined;
   const label = pinned ? "Unpin task" : "Pin task";
   const mark = pinned ? TASK_MARK.UNPIN : TASK_MARK.PIN;
   return [
@@ -700,7 +700,7 @@ function taskPinRows(
       icon: pinned ? <UnpinIcon /> : <PinIcon />,
       label,
       terms: [label],
-      onChoose: () => choose(() => tasks.onMarkTask(plan.id, mark)),
+      onChoose: () => choose(() => tasks.onMarkTask(task.id, mark)),
     },
   ];
 }
@@ -881,7 +881,7 @@ export function CommandPalette({
   available,
   tab,
   onTabChange,
-  tasks: plans,
+  tasks,
   links,
   settings,
   readFiles,
@@ -1023,19 +1023,19 @@ export function CommandPalette({
 
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
-  const members = useWorkspaceMembers(plans.workspace);
+  const members = useWorkspaceMembers(tasks.workspace);
   const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
-  const taskId = plans.activeTaskId;
+  const taskId = tasks.activeTaskId;
   const repository =
-    [...plans.tasks, ...plans.archived].find((task) => task.id === taskId)?.repository ?? null;
+    [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.repository ?? null;
   // The files held are the open task's repository's, or none of its.
   const held =
     files !== undefined && files.taskId === taskId && files.repository === repository
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsTaskPanel(plans) && taskId !== undefined && repository !== null;
+  const filesOpen = holdsTaskPanel(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
@@ -1074,21 +1074,21 @@ export function CommandPalette({
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
-      plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
+      tasks.signedIn ? taskRows(tasks, members, (id) => onTasks(() => tasks.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, chatOn, onTasks)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
-      peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
+      peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(plans, onTasks),
-        ...readMarkRows(plans, reads, choose),
-        ...taskPinRows(plans, reads, choose),
-        ...agentPinRows(plans, choose),
+        ...panelTabRows(tasks, onTasks),
+        ...readMarkRows(tasks, reads, choose),
+        ...taskPinRows(tasks, reads, choose),
+        ...agentPinRows(tasks, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
@@ -1099,11 +1099,11 @@ export function CommandPalette({
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
-    onTasks(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
+    onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
       ? (filesOpen ? matchedPaths : []).map((path) =>
-          fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
+          fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, query, limit, byRow))

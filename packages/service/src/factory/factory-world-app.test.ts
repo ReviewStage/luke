@@ -347,7 +347,7 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
             status: INTEGRATION_ROW_STATUS.CONNECTED,
           }),
         );
-        const plan = yield* createTask(owner, {
+        const task = yield* createTask(owner, {
           organizationId: workspaceId,
           name: "Invite expiry",
           repository: "acme/relay",
@@ -365,7 +365,7 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
         const working = yield* openAgent(owner, workspaceId, {
           repository: "acme/relay",
           createdAt: NOW - MINUTE,
-          taskId: plan.id,
+          taskId: task.id,
           published: openPull,
         });
         const mergedPull = relayPull(
@@ -450,7 +450,7 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
               title: "Agent on acme/relay",
               status: CODING_AGENT_STATUS.STARTING,
               startedBy: { userId: owner, name: "Sam Okafor" },
-              taskId: plan.id,
+              taskId: task.id,
               activityAt: NOW - MINUTE,
               pullRequest: {
                 number: 11,

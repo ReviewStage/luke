@@ -139,7 +139,7 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const registry = AtomRegistry.make();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     activeTaskId: DOCUMENT_TASK.id,
   });
@@ -156,7 +156,7 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
               available: true,
               tab: PANEL_TAB.TASKS,
               onTabChange: () => undefined,
-              tasks: plans,
+              tasks: tasks,
               settings: {
                 rows: {
                   settings: settingsView(),
@@ -635,7 +635,9 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".luke-tooltip-card .actor-words .actor-ref")?.textContent;
+    const words = document.querySelector(
+      ".luke-tooltip-card .actor-words [data-actor-ref]",
+    )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;
@@ -750,8 +752,8 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
         ]),
       }),
     }),
-    (planId) => {
-      read.push(planId);
+    (taskId) => {
+      read.push(taskId);
       return Promise.reject(new Error("not read here"));
     },
   );
@@ -1035,7 +1037,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
-  for (const plans of [
+  for (const tasks of [
     ON_AGENT_TAB,
     tasksControl({
       ...listed,
@@ -1055,7 +1057,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
     }),
     tasksControl({ ...listed, factoryView: { ...tasksControl().factoryView, open: true } }),
   ]) {
-    openPalette(plans);
+    openPalette(tasks);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1311,12 +1313,12 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
   const [listed, setListed] = useState<Task>(DOCUMENT_TASK);
-  const plans = tasksControl({
+  const tasks = tasksControl({
     tasks: [listed],
     region: { kind: DOCUMENT_REGION.READY, task: listed },
     activeTaskId: listed.id,
-    onMarkTask: (planId, mark) => {
-      assert.equal(planId, listed.id);
+    onMarkTask: (taskId, mark) => {
+      assert.equal(taskId, listed.id);
       setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_TASK, pinnedAt: 5 } : DOCUMENT_TASK);
     },
   });
@@ -1324,12 +1326,12 @@ function PinnableTask(): React.JSX.Element {
     Fragment,
     null,
     createElement(Looker, { looked: listed }),
-    createElement(DesktopSidebar, sidebarProps(plans)),
+    createElement(DesktopSidebar, sidebarProps(tasks)),
     createElement(WindowPalette, {
       available: true,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
-      tasks: plans,
+      tasks: tasks,
       settings: {
         rows: {
           settings: settingsView(),

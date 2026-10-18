@@ -365,31 +365,15 @@ body,
   letter-spacing: -0.01em;
 }
 
-/* New plan reads as a row of the list it heads: no ground at rest, a read
-   plan's weight, ink, and height, and the plan rows' own hover and
-   selection, since its page is a place like theirs. Search beneath it is
-   drawn the same, and a hairline under it parts the two from the list. */
-.sidebar-new-task,
-.sidebar-search {
+/* The sidebar's places, New task and Search over the pages: each a
+   NavItem a list's gap from the next, as the task rows under them are, and
+   a hairline under them parts them from the list. */
+.sidebar-places {
   display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-control-height);
-  margin: 0 0 var(--luke-list-gap);
-  padding: 0 var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-sidebar-ink);
-  font-size: var(--luke-type-body-size);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.sidebar-new-task:hover:not(:disabled),
-.sidebar-search:hover:not(:disabled),
-.sidebar-search[aria-current="page"] {
-  color: var(--luke-color-text);
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--luke-list-gap);
+  margin-bottom: var(--luke-list-gap);
 }
 
 .sidebar-rule {
@@ -398,69 +382,6 @@ body,
   margin: var(--luke-space-8) var(--row-inset);
   border: 0;
   background: var(--luke-color-border);
-}
-
-.sidebar-new-task:disabled,
-.sidebar-home:disabled,
-.sidebar-inbox:disabled,
-.sidebar-factory:disabled,
-.sidebar-automations:disabled,
-.sidebar-issues:disabled {
-  opacity: 0.45;
-}
-
-/* The Home row is the place shown while the home page stands, the Inbox
-   row while the window's Inbox does, Factory's while Factory does, and the
-   Automations row while the Automations page does, and the Issues row
-   while the Issues page does, each filled as the open plan's row is.
-   The Inbox's count of what waits on the developer stands at its end in a
-   group count's ink, and gives way to its chord while the row is hovered
-   or reached from the keyboard, as the rows above show theirs. */
-.sidebar-home[aria-current="page"],
-.sidebar-inbox[aria-current="page"],
-.sidebar-factory[aria-current="page"],
-.sidebar-automations[aria-current="page"],
-.sidebar-issues[aria-current="page"] {
-  background: var(--luke-color-fill-strong);
-}
-
-.sidebar-inbox-waiting {
-  margin-left: auto;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-}
-
-.sidebar-inbox-waiting ~ .row-shortcut,
-.sidebar-inbox:hover > .sidebar-inbox-waiting,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting {
-  display: none;
-}
-
-.sidebar-inbox:hover > .sidebar-inbox-waiting ~ .row-shortcut,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting ~ .row-shortcut {
-  display: inline-flex;
-}
-
-/* The Automations row's failed mark stands where the Inbox's count does on
-   its row, and gives way to the chord as that count does. */
-.sidebar-automations-failed {
-  display: inline-flex;
-  margin-left: auto;
-}
-
-.sidebar-automations-failed ~ .row-shortcut,
-.sidebar-automations:hover > .sidebar-automations-failed,
-:root[data-keyboard="true"] .sidebar-automations:focus-visible > .sidebar-automations-failed {
-  display: none;
-}
-
-.sidebar-automations:hover > .sidebar-automations-failed ~ .row-shortcut,
-:root[data-keyboard="true"]
-  .sidebar-automations:focus-visible
-  > .sidebar-automations-failed
-  ~ .row-shortcut {
-  display: inline-flex;
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
@@ -614,33 +535,15 @@ body,
   padding-bottom: var(--luke-space-12);
 }
 
-.sidebar-workspace-toggle {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-6) var(--row-inset);
-  border-radius: var(--luke-radius-10);
-  background: none;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-workspace-toggle:hover,
-.sidebar-workspace-toggle[aria-expanded="true"] {
-  background: var(--luke-color-fill-hover);
-}
-
-.sidebar-workspace-toggle > .workspace-ref {
+.sidebar-workspace .workspace-ref {
   flex: 1;
 }
 
-.sidebar-workspace-toggle .workspace-ref-copy {
+.sidebar-workspace .workspace-ref-copy {
   gap: var(--luke-space-2);
 }
 
-.sidebar-workspace-toggle .workspace-ref-name {
+.sidebar-workspace .workspace-ref-name {
   color: var(--luke-color-text);
   font-size: var(--luke-type-section-size);
   font-weight: var(--luke-weight-semibold);
@@ -658,21 +561,6 @@ body,
 .sidebar-workspace-shared > svg {
   width: 11px;
   height: 11px;
-}
-
-.sidebar-workspace-toggle > svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-.sidebar-new-task svg,
-.sidebar-search svg,
-.sidebar-item svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 .sidebar-section {
@@ -699,33 +587,17 @@ body,
   height: var(--luke-control-height);
   align-items: center;
   gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-4) 0 var(--row-inset);
+  padding: 0 var(--luke-space-4) 0 0;
   -webkit-app-region: no-drag;
 }
 
 .sidebar-section-head-name {
-  display: flex;
   min-width: 0;
   flex: 1;
-  align-items: baseline;
-  gap: var(--luke-space-6);
-  padding: 0;
-  border: 0;
-  background: none;
+  padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font: inherit;
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
-  text-align: left;
-}
-
-button.sidebar-section-head-name:hover {
-  color: var(--luke-color-text);
-}
-
-.sidebar-section-head-count {
-  color: var(--luke-color-text-subtle);
-  font-variant-numeric: tabular-nums;
 }
 
 /* View options wears a dot while the view leaves tasks out, so a filtered
@@ -845,9 +717,7 @@ button.sidebar-section-head-name:hover {
 /* A plan's row fills while the pointer is anywhere on its item, its own
    buttons at its end included, and no more than its hover does, so the open
    plan keeps its stronger fill. */
-:where(.sidebar-task-item:hover) > .sidebar-task,
-.sidebar-new-task:hover:not(:disabled),
-.sidebar-search:hover {
+:where(.sidebar-task-item:hover) > .sidebar-task {
   background: var(--luke-color-fill-hover);
 }
 
@@ -991,44 +861,6 @@ button.sidebar-section-head-name:hover {
 
 .actor-picture[data-loaded="false"] {
   visibility: hidden;
-}
-
-/* An actor named in a line: its mark and its name as one target, in the
-   line's own ink, rising to the primary on hover as the crumb's presses do.
-   The hover fill bleeds by a ring of its own colour rather than padding, so
-   the words around it keep their spacing. Its name sits on the baseline of
-   the words around it. */
-.actor-ref {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-  white-space: nowrap;
-}
-
-/* Note that the name alone is baseline-aligned, so the ref takes its
-   baseline from the name rather than the mark, and stands at least the
-   16px mark's height, so the mark stays centred on it. */
-.actor-ref-name {
-  min-width: 0;
-  align-self: baseline;
-  padding-block: max(0px, calc((16px - 1lh) / 2));
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.actor-ref:hover {
-  background: var(--luke-color-fill-hover);
-  box-shadow: 0 0 0 3px var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A line that names an actor: its words and the actor in one row centred on
@@ -1219,8 +1051,7 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-.sidebar-task-name,
-.sidebar-account-name {
+.sidebar-task-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1247,10 +1078,11 @@ ul.actor-stack {
 
 /* The one unread mark: what the developer has not seen, a plan saved since
    they last looked at it on this Mac, a tab that something arrived on while
-   another was chosen, and an Inbox item that needs them, reads in the
+   another was chosen, and a Factory row that waits on them, reads in the
    heavier weight and the primary ink until they look, as a chat app's
-   channels do. Only what waits on them, the Inbox item, also wears the
-   blue dot (`.inbox-row-dot`). In the sidebar, where a read name is in the
+   channels do. Only what waits on them, the Factory's row, also wears the
+   blue dot (`.inbox-row-dot`); an Inbox item that needs them wears the
+   attention mark instead (`.inbox-row-attention`). In the sidebar, where a read name is in the
    quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
@@ -1389,7 +1221,7 @@ ul.actor-stack {
    where it always is and nothing moves. They are the row's siblings, since
    a button holds no button, laid over its end. */
 .sidebar-task-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -1403,37 +1235,6 @@ ul.actor-stack {
   gap: var(--luke-space-2);
   font-size: var(--luke-type-body-size);
   opacity: 0;
-}
-
-/* Note that Pin and Archive draw no ground under the pointer, as the
-   repository header's glyphs do not, because the row under them is already
-   lit by the hover: only the glyph itself brightens. */
-.sidebar-task-mark {
-  display: inline-flex;
-  width: var(--sidebar-plan-mark);
-  height: var(--sidebar-plan-mark);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-task-mark:hover:not(:disabled) {
-  color: var(--luke-color-text);
-}
-
-.sidebar-task-mark:disabled {
-  opacity: 0.45;
-}
-
-.sidebar-task-mark svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 .sidebar-task-item:hover > .sidebar-task-marks,
@@ -1480,10 +1281,10 @@ ul.actor-stack {
 }
 
 /* A repository's plans under a header in the headings' voice, drawn as a
-   row with the plan rows' own hover: the owner's picture, which gives way to
-   the fold's chevron while the header is hovered or reached from the
-   keyboard, the name, and at the end a ⋯ and a + that show while the header
-   is hovered, holds focus, or has its menu open. */
+   row with the task rows' own hover: its fold (`sidebar-group-header.tsx`),
+   a NavItem whose owner's picture gives way to the chevron, and at the end
+   a ⋯ and a + that show while the header is hovered, holds focus, or has
+   its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository {
   margin-top: var(--luke-space-8);
@@ -1510,97 +1311,10 @@ ul.actor-stack {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.sidebar-repository-toggle {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: var(--luke-space-8) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  text-align: left;
-  transition: color var(--duration-hover) ease;
-}
-
-/* A header in the sidebar stands as tall as the rows under it. */
-.desktop-sidebar .sidebar-repository-toggle {
-  padding-block: calc((var(--luke-control-height) - var(--luke-type-label-leading)) / 2);
-  line-height: var(--luke-type-label-leading);
-}
-
-.sidebar-repository-header:hover .sidebar-repository-toggle {
-  color: var(--luke-color-text);
-}
-
-.sidebar-repository-toggle:focus-visible {
-  outline: none; /* no ring: the header around it rings, as a plan row does */
-}
-
-/* The keyboard on the fold rings the whole header, its ⋯ and + included,
-   as a plan row's ring takes in its Pin and Archive. */
-:root[data-keyboard="true"]
-.sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: var(--luke-focus-ring-offset);
-}
-
-.sidebar-repository-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The picture and the chevron share one cell, only one of them drawn, so the
-   swap crossfades in place and the name never moves. */
-.sidebar-repository-glyph {
-  display: grid;
+/* An owner's picture stands in the fold's glyph cell at a glyph's size. */
+.sidebar-repository-header .repository-picture {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
-  flex: none;
-  place-items: center;
-}
-
-.sidebar-repository-glyph > * {
-  grid-area: 1 / 1;
-  transition:
-    opacity var(--duration-hover) ease,
-    transform var(--duration-hover) ease;
-}
-
-.sidebar-repository-glyph > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.sidebar-repository-glyph > .repository-picture {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.sidebar-repository-glyph > .settings-chevron {
-  width: 12px;
-  height: 12px;
-  opacity: 0;
-}
-
-.sidebar-repository-toggle[aria-expanded="true"] .settings-chevron {
-  transform: rotate(90deg);
-}
-
-.sidebar-repository-header:is(:hover, :has(.sidebar-repository-toggle:focus-visible))
-  .sidebar-repository-glyph
-  > :not(.settings-chevron) {
-  opacity: 0;
-}
-
-.sidebar-repository-header:is(:hover, :has(.sidebar-repository-toggle:focus-visible))
-  .sidebar-repository-glyph
-  > .settings-chevron {
-  opacity: 1;
 }
 
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
@@ -1654,7 +1368,7 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
 }
 
-.sidebar-own-section:not(:has(.sidebar-repository-glyph)) > .sidebar-section-empty {
+.sidebar-own-section[data-iconless="true"] > .sidebar-section-empty {
   padding-left: var(--row-inset);
 }
 
@@ -1891,26 +1605,6 @@ ul.actor-stack {
   height: 11px;
 }
 
-/* A folded group's count of its plans, a small gap after the name, shown
-   with the chevron while the header is hovered or reached from the
-   keyboard. It is always laid out while the group is folded, only its
-   opacity changing, so the name is cut where it always is. */
-.sidebar-repository-count {
-  flex: none;
-  margin-left: calc(var(--luke-space-6) - var(--luke-icon-gap));
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.sidebar-repository-header:is(:hover, :has(.sidebar-repository-toggle:focus-visible))
-  .sidebar-repository-count,
-.sidebar-repository-count[data-steady="true"] {
-  opacity: 1;
-}
-
 .sidebar-repository-actions {
   display: flex;
   flex: none;
@@ -1922,30 +1616,6 @@ ul.actor-stack {
 .sidebar-repository-header:is(:hover, :focus-within, [data-menu-open="true"])
   .sidebar-repository-actions {
   opacity: 1;
-}
-
-/* The header's glyph buttons brighten without a fill, as a tab's × does,
-   because the row under them is already lit by the hover. */
-.sidebar-repository-action {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-repository-action:hover,
-.sidebar-repository-action[aria-expanded="true"] {
-  color: var(--luke-color-text);
-}
-
-.sidebar-repository-action svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
@@ -2010,36 +1680,6 @@ ul.actor-stack {
   padding-top: var(--luke-space-8);
 }
 
-.sidebar-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  width: 100%;
-  height: 34px;
-  padding: 0 var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  font-weight: var(--luke-weight-semibold);
-  text-align: left;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.sidebar-item:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.sidebar-item[aria-current="page"],
-.sidebar-item[aria-current="location"] {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
 /* The foot's one row: the account at its start, taking what room is left;
    a release on its way in, while there is one; and Settings' gear last. */
 .sidebar-account-row {
@@ -2047,27 +1687,6 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-space-4);
   container: sidebar-foot / inline-size;
-}
-
-/* The account: photo and name, one press target the height of a plan row so
-   the avatar has room to read as a face, and ringed while its menu is open,
-   as a sidebar plan is while its own is. */
-.sidebar-account {
-  min-width: 0;
-  flex: 1;
-  height: 42px;
-  color: var(--luke-color-text);
-}
-
-.sidebar-account[aria-expanded="true"] {
-  background: var(--luke-color-fill-hover);
-}
-
-.sidebar-account-name {
-  min-width: 0;
-  flex: 1;
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
 }
 
 /* A release with something to press, a pill between the account and the
@@ -2328,12 +1947,10 @@ ul.actor-stack {
 .luke-button,
 .luke-chip,
 .luke-segment,
+.luke-nav-item,
 .desktop-toolbar-actions,
 .desktop-toolbar .file-breadcrumbs,
-.sidebar-new-task,
-.sidebar-search,
-.sidebar-task,
-.sidebar-item {
+.sidebar-task {
   -webkit-app-region: no-drag;
 }
 
@@ -4277,25 +3894,21 @@ button.integration-tool-head:hover,
   transform: translateY(-50%);
 }
 
-/* In a ListRow the dot stands in a place of its own at the end of the row's
-   metadata, kept on every row, so the times line up whether a row wears one
-   or not. */
-.inbox-row-dot-place {
-  --inbox-dot: 7px;
-
-  position: relative;
-  display: inline-block;
-  width: var(--inbox-dot);
-  height: var(--inbox-dot);
-  flex: none;
+/* An Inbox item that needs the developer wears the attention mark before
+   its time (`inbox-list.tsx`), a size under a row glyph's, as a sidebar plan
+   wears it, so the disc's edge reads at the time's height. */
+.inbox-row-attention {
+  display: inline-flex;
 }
 
-/* A teammate's open item waits on them, not on the reader: the dot's place
-   holds a hollow ring in the time's ink, so the column still says something
-   is open there without the blue that means the reader is asked. */
-.inbox-row-dot[data-hollow="true"] {
-  background: none;
-  box-shadow: inset 0 0 0 1.5px var(--luke-color-text-subtle); /* off-scale: a hairline ring at the dot's size */
+.inbox-row-attention .attention-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.inbox-row-attention .attention-mark svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
@@ -4438,10 +4051,6 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
   font-weight: var(--luke-weight-medium);
-}
-
-.inbox-comment-name .actor-ref > .actor-mark {
-  display: none;
 }
 
 .inbox-comment-when {
@@ -5606,40 +5215,6 @@ button.integration-tool-head:hover,
   text-transform: uppercase;
 }
 
-.chat-rail-row .sidebar-task-line {
-  align-items: center;
-  gap: var(--luke-space-6);
-}
-
-/* What a direct message's row says after the handle, the agent's title or
-   the plan, steps back and gives way first, so the handle stays whole. */
-.chat-rail-row .sidebar-task-name {
-  flex: none;
-  max-width: 70%;
-}
-
-.chat-rail-sub {
-  min-width: 0;
-  flex: 1 1 0;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-rail-count {
-  margin-left: auto;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-semibold);
-}
-
 /* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
 .desktop-task-chat {
@@ -6058,15 +5633,10 @@ button.integration-tool-head:hover,
   background: var(--luke-color-sidebar);
 }
 
-.settings-pages-back,
-.version-log-back {
-  width: auto;
-  margin-bottom: var(--luke-space-12);
-}
-
+/* The title stands a step under the way back above it. */
 .settings-pages-title,
 .version-log-title {
-  margin: 0 var(--row-inset) var(--luke-space-12);
+  margin: var(--luke-space-12) var(--row-inset);
   font-size: var(--luke-type-title-size);
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
@@ -6193,13 +5763,6 @@ button.integration-tool-head:hover,
   gap: var(--luke-section-gap);
 }
 
-.settings-search-result {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .settings-pages ul {
   display: flex;
   flex-direction: column;
@@ -6223,12 +5786,6 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-6);
   color: var(--luke-color-text);
-}
-
-/* A page that needs a hand wears the front page's own mark at the row's end,
-   where the front page's row wears it before its chevron. */
-.settings-pages .sidebar-item .settings-attention {
-  margin-left: auto;
 }
 
 .settings-page,
@@ -6280,55 +5837,6 @@ button.integration-tool-head:hover,
   width: auto;
   margin: var(--luke-space-16) 0 0;
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
-}
-
-/* A Settings page has no top bar: the page names itself at the head of its
-   column (`SettingsPage`), so the title-bar row above it is only the
-   window's drag strip, and the page fills the room under the strip and
-   scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
-   row scrolled up dissolves into the strip rather than being sliced off. */
-.settings-page > .luke-settings-page {
-  flex: 1 1 0;
-}
-
-/* The page's sections are the width its rows answer (`@container settings`
-   in `settings.css`) rather than the window's: the column beside the page
-   list is as narrow at a wide nav as a small window makes it. */
-.settings-page .luke-settings-page-sections {
-  container: settings / inline-size;
-}
-
-/* A page whose reads are out draws nothing under its name until every one
-   has answered, then the whole page at once, so nothing grows into place. */
-.settings-page:has(.settings-reading) .luke-settings-page-sections {
-  visibility: hidden;
-}
-
-/* A page that holds an empty state gives it the room under the page's
-   name, which the state stands in the middle of, at the page's measure. */
-.settings-page > .luke-settings-page:has(.luke-empty-state),
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
-  flex: 1 0 auto;
-}
-
-.settings-page .luke-settings-page-sections:has(> .luke-empty-state) {
-  flex: 1 0 auto;
-}
-
-/* A quiet act ends the line flush with the card's edge, its words rather than
-   its hover's pill standing in the column. Note that the actions take the
-   margin rather than the button, because a button wider than its container
-   by its own negative margin would be held to it and cut short. */
-.settings-page .luke-settings-page-actions {
-  margin-right: calc(-1 * var(--luke-control-inset));
 }
 
 /* Version history ------------------------------------------------------------ */
@@ -6430,7 +5938,7 @@ button.integration-tool-head:hover,
    sidebar plan's Pin and Archive are: the row's sibling, since a button
    holds no button, laid over its first line. */
 .version-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -6497,11 +6005,6 @@ button.integration-tool-head:hover,
   transform: translateX(-100%);
 }
 
-.version-sections-back {
-  width: auto;
-  margin-bottom: var(--luke-space-8);
-}
-
 /* Who wrote the revision, on the one line over its sections: a row of its
    own that goes where the revision was written, lit under the pointer as a
    sidebar row is, where anywhere in the window wrote it. */
@@ -6511,7 +6014,7 @@ button.integration-tool-head:hover,
   flex: none;
   align-items: center;
   gap: var(--luke-space-8);
-  margin: 0 0 var(--luke-space-8);
+  margin: var(--luke-space-8) 0;
   padding: var(--luke-space-6) var(--row-inset);
   border-radius: var(--luke-control-radius);
   background: none;
@@ -6757,9 +6260,9 @@ button.integration-tool-head:hover,
   width: var(--summary-rail-width);
 }
 
-/* Needs you's glyph is the Inbox's own, wearing the rows' blue dot at its
-   top right while anything needs the developer, filtered out or not, so the
-   dot says there is something to answer and the pressed fill alone says the
+/* Needs you's glyph is the Inbox's own, wearing a dot in the rows'
+   attention orange at its top right while anything needs the developer,
+   filtered out or not, so the dot says there is something to answer and the pressed fill alone says the
    filter is on. The stroke is cut back in a ring around the dot, as lucide's
    own dotted glyphs are drawn. The dot stands in the glyph's 24-unit box,
    the cut in the glyph's pixels at the same point, scaled by one unit. */
@@ -6767,7 +6270,7 @@ button.integration-tool-head:hover,
   cx: 19px;
   cy: 5px;
   r: 3.6px;
-  fill: var(--luke-color-accent);
+  fill: var(--luke-color-attention-fill);
   stroke: none;
 }
 
@@ -6987,7 +6490,7 @@ button.integration-tool-head:hover,
 }
 
 .task-summary-archived-agent {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 

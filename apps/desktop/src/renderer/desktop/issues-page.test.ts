@@ -225,7 +225,7 @@ function Pages({
 }): React.JSX.Element {
   const [place, setPlace] = useState<IssuesPlace>(start);
   const control = tasksControl({ workspace });
-  const plans = tasksControl({
+  const tasks = tasksControl({
     workspace,
     me: READER,
     issuesView: {
@@ -242,7 +242,7 @@ function Pages({
   return createElement(
     Fragment,
     null,
-    createElement(IssuesPage, { tasks: plans }),
+    createElement(IssuesPage, { tasks: tasks }),
     createElement(ToastHost),
     createElement(Keymap),
   );

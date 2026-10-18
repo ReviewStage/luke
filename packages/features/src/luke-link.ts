@@ -250,49 +250,49 @@ function parsedUrl(target: string): URL | undefined {
 }
 
 /** The steps after a task's id: a version, a page, the Call tab or a call, a turn, an agent's, or a worker of Luke's. */
-function taskFields(planId: string, rest: readonly string[]) {
+function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
-  if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId };
-  if (step === STEP.AGENT && id !== undefined) return agentFields(planId, id, more);
+  if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId: taskId };
+  if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
   if (id === undefined || more.length > 0) return undefined;
   switch (step) {
     case STEP.VERSION:
       return WHOLE.test(id)
-        ? { kind: LINK_PLACE.VERSION, planId, revision: Number(id) }
+        ? { kind: LINK_PLACE.VERSION, planId: taskId, revision: Number(id) }
         : undefined;
     case STEP.PAGE:
-      return { kind: LINK_PLACE.PAGE, planId, pageId: id };
+      return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: id };
     case STEP.CALL:
-      return { kind: LINK_PLACE.CALL, planId, callId: id };
+      return { kind: LINK_PLACE.CALL, planId: taskId, callId: id };
     case STEP.WORK:
-      return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId, at: Number(id) } : undefined;
+      return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId: taskId, at: Number(id) } : undefined;
     case STEP.WORKER:
-      return { kind: LINK_PLACE.WORKER, planId, callId: id };
+      return { kind: LINK_PLACE.WORKER, planId: taskId, callId: id };
     case STEP.INBOX:
-      return { kind: LINK_PLACE.INBOX_ITEM, planId, itemId: id };
+      return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
     // A picture of the task's plan opens the task, and nothing of the picture.
     case STEP.FILES:
-      return PICTURE_ID.test(id) ? { kind: LINK_PLACE.TASK, planId } : undefined;
+      return PICTURE_ID.test(id) ? { kind: LINK_PLACE.TASK, planId: taskId } : undefined;
     default:
       return undefined;
   }
 }
 
 /** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, or a message. */
-function agentFields(planId: string | undefined, agentId: string, rest: readonly string[]) {
+function agentFields(taskId: string | undefined, agentId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
-  const task = planId === undefined ? {} : { planId };
+  const task = taskId === undefined ? {} : { planId: taskId };
   if (step === undefined) return { kind: LINK_PLACE.AGENT, ...task, agentId };
-  if (step === STEP.CHANGES && id === undefined && planId !== undefined) {
-    return { kind: LINK_PLACE.CHANGES, planId, agentId };
+  if (step === STEP.CHANGES && id === undefined && taskId !== undefined) {
+    return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId };
   }
   if (id === undefined || more.length > 0) return undefined;
   if (step === STEP.MESSAGE) return { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId: id };
-  if (step === STEP.INBOX && planId === undefined) {
+  if (step === STEP.INBOX && taskId === undefined) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
   }
-  if (step === STEP.WORKER && planId !== undefined) {
-    return { kind: LINK_PLACE.WORKER, planId, agentId, callId: id };
+  if (step === STEP.WORKER && taskId !== undefined) {
+    return { kind: LINK_PLACE.WORKER, planId: taskId, agentId, callId: id };
   }
   return undefined;
 }
@@ -341,8 +341,8 @@ function placeFields(steps: readonly string[]) {
  * either, as the form it writes: `/plan/`, whichever step named the task,
  * with no slash after the id, and the fragment as it came.
  */
-function taskLink(workspace: string, planId: string, hash: string): LinkPlace | undefined {
-  const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(planId)}${hash}`;
+function taskLink(workspace: string, taskId: string, hash: string): LinkPlace | undefined {
+  const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(taskId)}${hash}`;
   const mention = decodeMention(written, null);
   // Note that the place is read again as every place is, so a task's id is held to the ids the service mints, as any other's is, where a mention takes any.
   if (mention?.kind === MENTION_KIND.TASK) {
@@ -406,8 +406,8 @@ function placePath(place: LinkPlace): readonly string[] {
 }
 
 /** An agent's path: under its task where it has one, else under the workspace. */
-function agentPath(planId: string | undefined, agentId: string): readonly string[] {
-  return planId === undefined ? [STEP.AGENT, agentId] : [STEP.PLAN, planId, STEP.AGENT, agentId];
+function agentPath(taskId: string | undefined, agentId: string): readonly string[] {
+  return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.PLAN, taskId, STEP.AGENT, agentId];
 }
 
 /**
@@ -447,10 +447,10 @@ export function readLink(target: string): ReadLink | undefined {
   if (workspace.length > LINK_BOUNDS.MAX_STEP_CHARS) return undefined;
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
-  const [step, planId, ...rest] = after;
+  const [step, taskId, ...rest] = after;
   const place =
-    step !== undefined && TASK_STEPS.has(step) && planId !== undefined && rest.length === 0
-      ? taskLink(workspace, planId, url.hash)
+    step !== undefined && TASK_STEPS.has(step) && taskId !== undefined && rest.length === 0
+      ? taskLink(workspace, taskId, url.hash)
       : Option.getOrUndefined(readPlace(placeFields(after)));
   return place === undefined ? undefined : { workspace, place };
 }

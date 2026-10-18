@@ -68,7 +68,7 @@ import { useTabViews } from "./strip-tabs";
  * agent's items stand there and no plan's Inbox tab does. Beside it stands
  * the window's side panel, held by the agent while its page stands
  * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
- * Changes chip its pull request's changes, as on a task, and its toggle,
+ * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
@@ -151,7 +151,7 @@ function useTaskAgentsFollow(
   agent: { readonly planId: string | null; readonly archivedAt?: number | undefined } | undefined,
 ): void {
   const seen = useRef<{ agentId: string; archivedAt: number | undefined } | undefined>(undefined);
-  const planId = agent?.planId ?? null;
+  const taskId = agent?.planId ?? null;
   const archivedAt = agent?.archivedAt;
   const drawn = agent !== undefined;
   const { activeTaskId } = tasks;
@@ -161,8 +161,8 @@ function useTaskAgentsFollow(
     const was = seen.current;
     seen.current = { agentId, archivedAt };
     if (was === undefined || was.agentId !== agentId || was.archivedAt === archivedAt) return;
-    if (planId !== null && planId === activeTaskId) readTaskAgents();
-  }, [drawn, agentId, archivedAt, planId, activeTaskId, readTaskAgents]);
+    if (taskId !== null && taskId === activeTaskId) readTaskAgents();
+  }, [drawn, agentId, archivedAt, taskId, activeTaskId, readTaskAgents]);
 }
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
@@ -255,7 +255,7 @@ export function DesktopAgentPage({
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
   };
-  // A delegation's row opens its worker in the side panel, and the Changes chip the pull request's changes, as on a task.
+  // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
     agent: string,
     callId: string,
@@ -265,8 +265,6 @@ export function DesktopAgentPage({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  const openChanges = (changed: string) =>
-    showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
@@ -372,7 +370,6 @@ export function DesktopAgentPage({
                           shown={shown}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}

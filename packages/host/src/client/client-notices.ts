@@ -76,7 +76,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    listAgents: (planId) => host.codingAgentList({ taskId: planId }),
+    listAgents: (taskId) => host.codingAgentList({ taskId: taskId }),
     readAgent: (agentId) => host.codingAgentPage({ agentId }),
     readPullRequest: (agentId) => host.codingAgentPullRequest({ agentId }),
     taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),

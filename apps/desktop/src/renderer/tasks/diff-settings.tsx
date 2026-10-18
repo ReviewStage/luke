@@ -96,12 +96,8 @@ function SegmentedRow<Value extends string>({
   return (
     <SettingsRow
       density={SETTINGS_ROW_DENSITY.COMPACT}
-      label={
-        <>
-          {label}
-          {changed ? <ChangedMark /> : null}
-        </>
-      }
+      label={label}
+      adornment={changed ? <ChangedMark /> : null}
       description={detail}
     >
       {() => <Segmented legend={label} options={options} value={value} onChange={onChange} />}

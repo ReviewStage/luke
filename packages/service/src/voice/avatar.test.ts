@@ -118,7 +118,7 @@ interface Stand {
 /** The service for one account holding one plan, with the avatar on the Keyframe given, or none. */
 async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand> {
   const userId = await database.createUser();
-  const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
+  const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
   const openAi = await startFakeOpenAi();
   const log: LogEntry[] = [];
   const voice = voiceServer();
@@ -149,7 +149,7 @@ async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand
   return {
     log,
     openAi,
-    planId: plan.id,
+    planId: task.id,
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
       await database.run(Scope.close(scope, Exit.void));
@@ -419,13 +419,13 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
-      const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
+      const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const record = voiceSessionRecord();
       const voiceSessionId = await database.run(
         record.register({
           userId,
           sessionId: `live_reattached_${userId}`,
-          taskId: plan.id,
+          taskId: task.id,
           attachId: "attach-1",
           model: LIVE_DEFAULTS.MODEL,
         }),
@@ -465,13 +465,13 @@ it.effect(
       const startedAt = 1_800_000_000_000;
       const record = voiceSessionRecord(() => startedAt);
       const userId = await database.createUser();
-      const plan = await database.run(startTask(userId, { name: "Teammate invitations" }));
+      const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
       const sessionId = `live_orphan_${userId}`;
       const voiceSessionId = await database.run(
         record.register({
           userId,
           sessionId,
-          taskId: plan.id,
+          taskId: task.id,
           attachId: "attach-1",
           model: LIVE_DEFAULTS.MODEL,
         }),
@@ -493,7 +493,7 @@ it.effect(
         record.register({
           userId,
           sessionId: strandedSessionId,
-          taskId: plan.id,
+          taskId: task.id,
           attachId: "attach-2",
           model: LIVE_DEFAULTS.MODEL,
         }),

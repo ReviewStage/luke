@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import {
+  createCodingAgent,
+  recordCodingAgentPublished,
+  updateCodingAgentBranch,
+} from "@luke/database/models/coding-agent-store";
 import { account, user } from "@luke/database/schemas/auth";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
+import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import {
   CHECK_STATE,
+  CHECK_SUMMARY,
   CODING_AGENT_AUTHOR,
   CONVERSATION_ENTRY,
   DEPLOYMENT_STATE,
@@ -72,6 +78,9 @@ interface PullOverrides {
   readonly mergeable_state?: string;
   readonly body?: string | null;
   readonly body_html?: string | null;
+  readonly draft?: boolean;
+  readonly labels?: readonly { readonly name: string; readonly color: string }[];
+  readonly base?: { readonly ref: string };
 }
 
 /** The pull request as GitHub answers it whole, open and ready unless said otherwise. */
@@ -148,9 +157,37 @@ function repository(answers: {
   readonly reviews?: readonly object[];
   readonly graphql?: object | Response;
   readonly deployments?: readonly object[] | Response;
+  /** The repository's open pull requests, as the stack's GraphQL read lists them. */
+  readonly open?: readonly object[] | Response;
 }): RepositoryScript {
   return (sent) => {
     const { pathname } = new URL(sent.url);
+    if (
+      pathname === "/graphql" &&
+      sent.method === "POST" &&
+      sent.body.includes("OpenPullRequests")
+    ) {
+      const asked: { variables: { owner: string; name: string; after: string | null } } =
+        JSON.parse(sent.body);
+      // Note that the stack is read of the agent's repository alone.
+      assert.deepEqual([asked.variables.owner, asked.variables.name], ["acme", "relay"]);
+      const open = answers.open ?? [];
+      if (open instanceof Response) return open;
+      // GitHub pages the listing a hundred to a page, the cursor here the place the next one starts.
+      const from = Number(asked.variables.after ?? "0");
+      const nodes = open.slice(from, from + 100);
+      const more = from + 100 < open.length;
+      return Response.json({
+        data: {
+          repository: {
+            pullRequests: {
+              nodes,
+              pageInfo: { hasNextPage: more, endCursor: more ? String(from + 100) : null },
+            },
+          },
+        },
+      });
+    }
     if (pathname === "/graphql" && sent.method === "POST") {
       const asked: { query: string; variables?: object } = JSON.parse(sent.body);
       // Note that the threads and the deployments are each asked of this one pull request by name and number.
@@ -183,6 +220,48 @@ function repository(answers: {
   };
 }
 
+/** One open pull request as the stack's GraphQL read lists it. */
+function openPull(number: number, head: string, base: string) {
+  return {
+    number,
+    title: `Pull request ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    isDraft: false,
+    headRefName: head,
+    baseRefName: base,
+    isCrossRepository: false,
+  };
+}
+
+/** A coding agent the account started on a plan of the repository, its sandbox on the branch given, its pull request as last read the one numbered. */
+const agentPublishing = (userId: string, branch: string, number: number) =>
+  Effect.gen(function* () {
+    const task = yield* startTask(userId, { name: "Invites", repository: REPOSITORY });
+    const started = yield* createCodingAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: `start-${randomUUID()}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Invites\n",
+      prompt: null,
+      repository: REPOSITORY,
+    });
+    assert.ok(Option.isSome(started));
+    const { agent } = started.value;
+    yield* updateCodingAgentBranch(userId, agent.id, branch);
+    yield* recordCodingAgentPublished(userId, agent.id, {
+      number,
+      title: `Pull request ${number}`,
+      url: `https://github.com/acme/relay/pull/${number}`,
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.NONE,
+      additions: 1,
+      deletions: 0,
+      changedFiles: 1,
+    });
+    return agent;
+  });
+
 /** A Luke account that signed in with GitHub as the GitHub account given. */
 const linkedAccount = (githubId: number) =>
   Effect.gen(function* () {
@@ -199,13 +278,13 @@ const linkedAccount = (githubId: number) =>
     return userId;
   });
 
-/** The pull request itself read off the repository given and named for an agent of the workspace given; none where GitHub holds no such pull request. */
-const pullRequestPartOf = (organizationId: string) =>
-  Effect.flatMap(pullRequestOverview(TOKEN, REPOSITORY, NUMBER), (read) =>
+/** The pull request itself read off the repository given and named for an agent of the workspace given, its stack read where `stacked` says so; none where GitHub holds no such pull request. */
+const pullRequestPartOf = (organizationId: string, stacked = true) =>
+  Effect.flatMap(pullRequestOverview(TOKEN, REPOSITORY, NUMBER, stacked), (read) =>
     Option.isNone(read)
       ? Effect.succeed(undefined)
       : namedOverviewPullRequest(
-          { organizationId, author: CODING_AGENT_AUTHOR.DEVELOPER },
+          { organizationId, repository: REPOSITORY, author: CODING_AGENT_AUTHOR.DEVELOPER },
           read.value,
         ),
   );
@@ -1079,6 +1158,140 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           conversation.conversation.map((entry) => entry.url),
           [`${PAGE}#issuecomment-1`],
         );
+      }),
+  );
+
+  it.effect(
+    "its labels, and the stack it stands in, base first, each pull request named by the agent of its workspace that published it",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const below = yield* agentPublishing(charles, "luke/expiry-job", 5);
+        // A newer agent on the same branch published another pull request, so it names none of the stack.
+        yield* agentPublishing(charles, "luke/expiry-job", 12);
+        // An agent of another workspace that published the one above names nothing here.
+        const stranger = yield* linkedAccount(PRIYA.id);
+        yield* openWorkspace(stranger);
+        yield* agentPublishing(stranger, "luke/invite-copy", 9);
+
+        const overview = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: pull({
+                base: { ref: "luke/expiry-job" },
+                labels: [
+                  { name: "bug", color: "d73a4a" },
+                  { name: "good first issue", color: "7057ff" },
+                ],
+              }),
+              open: [
+                openPull(9, "luke/invite-copy", "luke/invite-once"),
+                openPull(NUMBER, "luke/invite-once", "luke/expiry-job"),
+                openPull(5, "luke/expiry-job", "main"),
+                openPull(11, "luke/unrelated", "main"),
+              ],
+            }),
+          ),
+        );
+
+        assert.ok(overview !== undefined);
+        assert.deepEqual(overview.labels, [
+          { name: "bug", color: "d73a4a" },
+          { name: "good first issue", color: "7057ff" },
+        ]);
+        assert.deepEqual(
+          overview.stack?.map(({ number, agent }) => ({ number, agent })),
+          [
+            { number: 5, agent: { id: below.id, taskId: below.taskId } },
+            { number: NUMBER, agent: undefined },
+            { number: 9, agent: undefined },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "the stack is worked out from every page of the open pull requests, so a second child on a later page unmakes the edge, and a pull request from a fork stands in none",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const filler = Array.from({ length: 120 }, (_, at) =>
+          openPull(100 + at, `luke/other-${at}`, "main"),
+        );
+        const stacked = [
+          openPull(9, "luke/invite-copy", "luke/invite-once"),
+          openPull(NUMBER, "luke/invite-once", "luke/expiry-job"),
+          openPull(5, "luke/expiry-job", "main"),
+        ];
+        const pulled = pull({ base: { ref: "luke/expiry-job" } });
+
+        const paged = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: pulled,
+              open: [
+                ...stacked,
+                ...filler,
+                openPull(300, "luke/invite-copy-2", "luke/invite-once"),
+              ],
+            }),
+          ),
+        );
+        const forked = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: {
+                ...pulled,
+                head: { ref: "luke/invite-once", sha: "a1b2c3d", repo: { id: 2 } },
+                base: { ref: "luke/expiry-job", repo: { id: 1 } },
+              },
+              open: stacked,
+            }),
+          ),
+        );
+
+        assert.deepEqual(
+          paged?.stack?.map((entry) => entry.number),
+          [5, NUMBER],
+          "#9 is not the one child of luke/invite-once, since #300 on the second page targets it too",
+        );
+        assert.deepEqual(forked?.stack, []);
+      }),
+  );
+
+  it.effect(
+    "no stack for a pull request no longer open, or where GitHub will not list the open ones, the rest standing",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const open = [openPull(9, "luke/invite-copy", "luke/invite-once")];
+
+        const merged = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: pull({ state: "closed", merged: true, merged_at: "2026-10-16T09:00:00Z" }),
+              open,
+            }),
+          ),
+        );
+        const refused = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: pull(),
+              open: Response.json({ message: "Resource not accessible" }, { status: 403 }),
+            }),
+          ),
+        );
+        const unasked = yield* pullRequestPartOf(workspace, false).pipe(
+          answering(repository({ pull: pull(), open })),
+        );
+
+        assert.equal(merged?.state, PULL_REQUEST_STATE.MERGED);
+        assert.deepEqual(merged?.stack, []);
+        assert.equal(refused?.title, "Send the invite once");
+        assert.deepEqual(refused?.stack, []);
+        assert.deepEqual(unasked?.stack, []);
       }),
   );
 

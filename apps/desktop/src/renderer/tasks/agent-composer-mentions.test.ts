@@ -127,12 +127,12 @@ const BILLING = { id: "2b2b2b2b-0000-4000-8000-000000000000", name: "Billing" };
 function workspaceAgent(
   id: string,
   title: string,
-  planId: string | null,
+  taskId: string | null,
   archivedAt?: number,
 ): CodingAgentSummary {
   return {
     id,
-    planId,
+    planId: taskId,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
@@ -414,7 +414,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   pressInComposer(container, "ArrowDown");
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -465,7 +465,7 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
     planPage(opened),
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip, "the mention is a chip");
   act(() => chip.click());
 
@@ -487,7 +487,7 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
     undefined,
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip !== null, "the mention is a chip");
   act(() => chip.click());
 
@@ -524,7 +524,7 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
     planPage(opened),
   );
 
-  const chip = container.querySelector(".mention-chip");
+  const chip = container.querySelector("[data-mention-ref]");
 
   assert.equal(chip?.tagName, "SPAN");
   assert.equal(chip?.textContent, "Linear");
@@ -641,7 +641,7 @@ test("a page of an integration's pasted into the box on a plan's page is drawn a
   typeInComposer(container, "Fix ");
   pasteInComposer(container, ISSUE_URL);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -660,7 +660,7 @@ test("a sent message's page of an integration's is a chip that opens the page in
     planPage([]),
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip, "the page is a chip");
   act(() => chip.click());
 
@@ -676,7 +676,7 @@ test("off a plan's page a sent message's page of an integration's is still its c
     undefined,
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip !== null, "the page is a chip");
   act(() => chip.click());
 
@@ -708,7 +708,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -757,7 +757,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     taskPage(),
   );
 
-  const chips = [...container.querySelectorAll<HTMLButtonElement>("button.mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")];
   for (const chip of chips) act(() => chip.click());
 
   assert.deepEqual(
@@ -905,7 +905,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     },
   );
 
-  const notes = [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => {
+  const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
@@ -931,7 +931,7 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
   typeInComposer(container, "Follow ");
   pasteInComposer(container, address);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -970,7 +970,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   typeInComposer(container, "in ");
   pasteInComposer(container, file);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1077,7 +1077,7 @@ test("a bare End and Home take the highlight to the last row and the first, a mo
   assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
   assert.deepEqual(last, ["Mention from", "Linear"]);
   assert.deepEqual(first, ["Plan", "Goal"]);
-  assert.equal(composerEditor(container).querySelector(".mention-chip"), null);
+  assert.equal(composerEditor(container).querySelector("[data-mention-ref]"), null);
 });
 
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
@@ -1276,7 +1276,7 @@ test("a pull request picked from the @ list is drawn as its link's chip and sent
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1377,7 +1377,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1403,11 +1403,11 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
   );
   await settle();
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip);
   act(() => chip.click());
 
-  assert.equal(chip.querySelector(".mention-chip-label")?.textContent, "Dana");
+  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana");
   assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
   assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
   assert.deepEqual(opened, [
@@ -1435,7 +1435,7 @@ test("a person's page pasted into the box becomes their chip called by their nam
   typeInComposer(container, "not ");
   pasteInComposer(container, elsewhere);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 

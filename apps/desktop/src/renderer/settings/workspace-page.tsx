@@ -16,7 +16,6 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
-import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   BUTTON_TYPE,
@@ -27,11 +26,15 @@ import {
   Chip,
   ChipName,
   ConfirmDialog,
+  ErrorState,
   FormField,
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
+  SETTINGS_LINE_KIND,
+  SETTINGS_ROW_INDENT,
+  SettingsLine,
   SettingsRow,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
@@ -63,14 +66,12 @@ import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { useCapability } from "../use-app-state";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -106,8 +107,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
  * be undone asking first in the confirm dialog, whose refusal is said where
  * it was asked. The page draws whole: while the members or the invitations
- * are being read it holds itself back (`.settings-reading`), and a read that
- * failed says so in red with Retry.
+ * are being read their loading lines hold the page back (`SettingsLine`),
+ * and a read that failed says so with Retry.
  */
 
 /** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 32, so it stays sharp on a Retina screen. */
@@ -263,10 +264,15 @@ type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: s
 
 /** The line a page draws while it reads, which holds the whole page back until every read is in. */
 function Reading({ label }: { label: string }): React.JSX.Element {
+  return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>{label}</SettingsLine>;
+}
+
+/** A card's line where the read of its rows did not land: the read failure, then Retry, in the rows' place. */
+function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
   return (
-    <div className="settings-card-line settings-reading">
-      <SpinnerRegion label={label} />
-    </div>
+    <SettingsLine>
+      <ErrorState onRetry={onRetry}>{line}</ErrorState>
+    </SettingsLine>
   );
 }
 
@@ -447,6 +453,7 @@ function MemberRow({
             </span>
           ),
           description: <OneLine as="span" text={member.email} />,
+          error: refusal,
           control: (
             <>
               <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
@@ -457,11 +464,6 @@ function MemberRow({
           ),
         }}
       />
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
       <ConfirmDialog
         confirm={remove}
         question={{
@@ -753,20 +755,18 @@ function LeaveGroup({
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
-    <div {...searchAnchorProps(SETTINGS_SECTION.LEAVE)}>
-      <SettingsSection>
-        {owner ? (
-          <OwnerLeave
-            workspace={workspace}
-            members={members}
-            onChanged={onChanged}
-            onRefresh={onRefresh}
-          />
-        ) : (
-          <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
-        )}
-      </SettingsSection>
-    </div>
+    <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
+      {owner ? (
+        <OwnerLeave
+          workspace={workspace}
+          members={members}
+          onChanged={onChanged}
+          onRefresh={onRefresh}
+        />
+      ) : (
+        <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
+      )}
+    </SettingsSection>
   );
 }
 
@@ -986,9 +986,9 @@ function Invitations({
           </Button>
         </form>
         {note === undefined ? null : (
-          <p className="error-message" role="alert">
-            {note}
-          </p>
+          <SettingsLine>
+            <ErrorState>{note}</ErrorState>
+          </SettingsLine>
         )}
       </div>
       {firstReadFailed !== undefined ? (
@@ -996,7 +996,7 @@ function Invitations({
       ) : pending === undefined ? (
         <Reading label="Loading the invitations" />
       ) : pending.length === 0 ? (
-        <p className="settings-card-line settings-note">{INVITATIONS_EMPTY}</p>
+        <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
@@ -1047,39 +1047,38 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
  * it Connected, or that GitHub suspended or removed its installation. The
  * tile is a workspace's, keyed by the login, so the login's letter stands
  * until the picture loads and wherever it fails to. It is `@luke/ui`'s
- * `SettingsRow`, its inset its container's.
+ * `SettingsRow`, indented to GitHub's words.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
-    <div className="workspace-github-account">
-      <SettingsRow
-        leading={
-          <span className="settings-row-mark">
-            <WorkspaceTile
-              workspace={{
-                id: `github:${connection.login}`,
-                name: connection.login,
-                pictureUrl: githubAccountPictureUrl(connection.login),
-              }}
-            />
+    <SettingsRow
+      indent={SETTINGS_ROW_INDENT.MARK}
+      leading={
+        <span className="settings-row-mark workspace-github-account-mark">
+          <WorkspaceTile
+            workspace={{
+              id: `github:${connection.login}`,
+              name: connection.login,
+              pictureUrl: githubAccountPictureUrl(connection.login),
+            }}
+          />
+        </span>
+      }
+      label={connection.login}
+      description={
+        connection.active ? (
+          <span className="settings-state" data-state="connected">
+            {GITHUB_CONNECTED}
           </span>
-        }
-        label={connection.login}
-        description={
-          connection.active ? (
-            <span className="settings-state" data-state="connected">
-              {GITHUB_CONNECTED}
-            </span>
-          ) : (
-            <span className="settings-state" data-state="attention">
-              {GITHUB_SUSPENDED}
-            </span>
-          )
-        }
-      >
-        {() => null}
-      </SettingsRow>
-    </div>
+        ) : (
+          <span className="settings-state" data-state="attention">
+            {GITHUB_SUSPENDED}
+          </span>
+        )
+      }
+    >
+      {() => null}
+    </SettingsRow>
   );
 }
 
@@ -1117,6 +1116,7 @@ function ManagedGitHub({
         leading={GITHUB_MARK}
         label="GitHub"
         description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
+        error={refusal}
       >
         {() =>
           connected ? (
@@ -1134,11 +1134,6 @@ function ManagedGitHub({
           )
         }
       </SettingsRow>
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
     </div>
   );
 }
@@ -1236,6 +1231,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           leading: LINEAR_MARK,
           label: "Linear",
           description: linearLine(linear, true),
+          error: refusal,
           control:
             linear?.active === true ? null : (
               <Button
@@ -1249,11 +1245,6 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
             ),
         }}
       />
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
       {linear === undefined ? null : (
         <ConfirmDialog
           confirm={disconnect}
@@ -1489,6 +1480,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
             />
           ),
           description: identityLine(workspace),
+          error: refusal,
           control: (
             <>
               {rename}
@@ -1497,11 +1489,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           ),
         }}
       />
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
       <ConfirmDialog
         confirm={remove}
         question={{
@@ -1533,13 +1520,13 @@ export function WorkspacePage({
   const workspace = shownWorkspace(control);
   if (workspace === undefined) {
     return (
-      <SettingsGroup>
+      <SettingsSection>
         {control.listFailed ? (
           <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
         ) : (
           <Reading label="Loading your workspaces" />
         )}
-      </SettingsGroup>
+      </SettingsSection>
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.
@@ -1571,33 +1558,24 @@ function ShownWorkspace({
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
       </SettingsSection>
-      <div {...searchAnchorProps(SETTINGS_SECTION.MEMBERS)}>
-        <SettingsSection title="Members">
-          <TeamMembers
-            workspace={workspace}
-            readerId={readerId}
-            members={members.read}
-            onRetry={members.retry}
-            onChanged={members.changed}
-          />
-        </SettingsSection>
-      </div>
+      <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
+        <TeamMembers
+          workspace={workspace}
+          readerId={readerId}
+          members={members.read}
+          onRetry={members.retry}
+          onChanged={members.changed}
+        />
+      </SettingsSection>
       {managesWorkspace(workspace) ? (
-        <div {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}>
-          <SettingsSection title="Invitations">
-            <Invitations
-              workspaceId={workspace.id}
-              owner={workspace.role === WORKSPACE_ROLE.OWNER}
-            />
-          </SettingsSection>
-        </div>
-      ) : null}
-      <div {...searchAnchorProps(SETTINGS_SECTION.GITHUB_REPOSITORIES)}>
-        <SettingsSection title="Integrations">
-          <WorkspaceGitHub workspace={workspace} />
-          <WorkspaceLinear workspace={workspace} />
+        <SettingsSection title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
+          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
         </SettingsSection>
-      </div>
+      ) : null}
+      <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+        <WorkspaceGitHub workspace={workspace} />
+        <WorkspaceLinear workspace={workspace} />
+      </SettingsSection>
       {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}

@@ -57,7 +57,7 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
-const PLAN: TaskSummary = {
+const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: ACME.id,
   name: "Teammate invitations",
@@ -69,7 +69,7 @@ const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: PLAN.id,
+  planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Batch the invitations",
@@ -90,7 +90,7 @@ const FUNNEL: PageLine = {
 /** The item's words, naming a pull request, a page of its plan, a file of its repository, and a page of another plan. */
 const WORDS = [
   `Opened [@relay#42](${PULL}).`,
-  `See [@Invite funnel](https://tryluke.dev/acme/plan/${PLAN.id}/page/${FUNNEL.id}).`,
+  `See [@Invite funnel](https://tryluke.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
   "The change is in [@invites.ts](https://github.com/acme/relay/blob/HEAD/src/invites.ts).",
   `Compare [@Old funnel](https://tryluke.dev/acme/plan/${OTHER_TASK}/page/${FUNNEL.id}).`,
 ].join(" ");
@@ -139,7 +139,7 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
         value: {
-          repository: PLAN.repository,
+          repository: TASK.repository,
           branch: "luke/batch-invitations",
           pullRequest: {
             number: 42,
@@ -185,9 +185,9 @@ async function inbox({ pages }: { pages: readonly PageLine[] | undefined } = { p
       createElement(DesktopInbox, {
         tasks: tasksControl({
           workspace: ACME,
-          tasks: [PLAN],
-          inbox: [{ taskId: PLAN.id, items: [waitingOf(ITEM)] }],
-          inboxTasks: [{ taskId: PLAN.id, items: 1, updatedAt: 2_000 }],
+          tasks: [TASK],
+          inbox: [{ taskId: TASK.id, items: [waitingOf(ITEM)] }],
+          inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2_000 }],
           inboxView: {
             open: true,
             chosen,
@@ -222,8 +222,8 @@ async function settle(): Promise<void> {
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] .mention-chip"),
-  ].find((each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name));
+    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
   assert.ok(chip, `no chip says ${name}`);
   act(() => chip.click());
   await settle();

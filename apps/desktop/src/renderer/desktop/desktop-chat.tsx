@@ -1,5 +1,5 @@
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, NAV_CURRENT, NavItem } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -35,6 +35,9 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
  * press never loses the place being read.
  */
 
+/** What a row's count is read as. */
+const UNREAD = "unread";
+
 /** What the view says where no chat is read. */
 const NO_CHAT = "Chat is not available yet.";
 
@@ -44,17 +47,6 @@ const CHAT_FAILED = "The workspace's chat could not be read.";
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
   return place.kind === CHAT_PLACE.CHANNEL && place.channelId === row.channel.id;
-}
-
-/** A row's unread count at its end, nothing at none. */
-function Count({ count }: { count: number }): React.JSX.Element | null {
-  if (count === 0) return null;
-  return (
-    <span className="chat-rail-count">
-      {count}
-      <span className="visually-hidden"> unread</span>
-    </span>
-  );
 }
 
 /** One channel's or direct message's row: its glyph or the other member's mark, its name, what it says after, and its count. */
@@ -68,24 +60,17 @@ function RailRow({
   onChoose: () => void;
 }): React.JSX.Element {
   return (
-    <li className="sidebar-task-item chat-rail-row">
-      <button
-        type="button"
-        className="sidebar-task"
-        aria-current={current ? "page" : undefined}
-        data-unread={String(row.unread > 0)}
-        data-channel-id={row.channel.id}
+    <li>
+      <NavItem
+        icon={row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
+        detail={row.sub}
+        current={current ? NAV_CURRENT.PAGE : undefined}
+        unread={row.unread > 0}
+        count={{ value: row.unread, noun: UNREAD }}
         onClick={onChoose}
       >
-        <span className="sidebar-task-line">
-          <span className="sidebar-pinned-tab-glyph">
-            {row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
-          </span>
-          <span className="sidebar-task-name">{row.label}</span>
-          {row.sub === undefined ? null : <span className="chat-rail-sub">{row.sub}</span>}
-          <Count count={row.unread} />
-        </span>
-      </button>
+        {row.label}
+      </NavItem>
     </li>
   );
 }
@@ -147,22 +132,16 @@ export function DesktopChat({
         </header>
         <div className="chat-rail-scroll">
           <ul className="sidebar-tasks">
-            <li className="sidebar-task-item chat-rail-row">
-              <button
-                type="button"
-                className="sidebar-task"
-                aria-current={view.place.kind === CHAT_PLACE.FOR_YOU ? "page" : undefined}
-                data-unread={String(rail.forYou > 0)}
+            <li>
+              <NavItem
+                icon={<AtSignIcon />}
+                current={view.place.kind === CHAT_PLACE.FOR_YOU ? NAV_CURRENT.PAGE : undefined}
+                unread={rail.forYou > 0}
+                count={{ value: rail.forYou, noun: UNREAD }}
                 onClick={() => view.onChoose(FOR_YOU)}
               >
-                <span className="sidebar-task-line">
-                  <span className="sidebar-pinned-tab-glyph">
-                    <AtSignIcon />
-                  </span>
-                  <span className="sidebar-task-name">For you</span>
-                  <Count count={rail.forYou} />
-                </span>
-              </button>
+                For you
+              </NavItem>
             </li>
           </ul>
           <h2 className="chat-rail-heading">Channels</h2>

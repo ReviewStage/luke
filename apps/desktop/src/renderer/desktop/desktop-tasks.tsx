@@ -387,7 +387,7 @@ function PlanDocument({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const planId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  const taskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // What waits in the task's inbox opens its Inbox tab where an item did
   // not wait at the last read (`use-main-tabs.ts`). Note that only a read
   // that answered counts, because a task just opened holds nothing yet, and
@@ -395,9 +395,9 @@ function PlanDocument({
   const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
   const { onInboxRead } = tasks.mainTabs;
   useEffect(() => {
-    if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
-  }, [planId, inbox.read, waiting, onInboxRead]);
-  const rename = useInlineRename(planId, tasks.onRenameTask);
+    if (taskId !== undefined && inbox.read) onInboxRead(taskId, waiting);
+  }, [taskId, inbox.read, waiting, onInboxRead]);
+  const rename = useInlineRename(taskId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
@@ -530,11 +530,8 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  // An agent's Changes chip opens its pull request's changes in the side panel, beside its
-  // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
-  const openChanges = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
-  // Its pull request's chip opens the same tab on the pull request's conversation.
+  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
+  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
   const openPullRequest = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
@@ -815,7 +812,6 @@ function PlanDocument({
                           shown={tasks.shown && !sidePanel.fullScreen}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}

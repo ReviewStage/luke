@@ -102,7 +102,7 @@ function editsOnClick(target: EventTarget): boolean {
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, .mention-chip, .plan-unit-row") !== null
+    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
   );
 }
 

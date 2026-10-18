@@ -166,7 +166,7 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
@@ -268,16 +268,16 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 const NO_INBOX = { open: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function TaskColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
+function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  const layout = useSummaryLayout(pin, column, false, summaryHolds(plans, NO_INBOX));
+  const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks, NO_INBOX));
   return createElement(
     "div",
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
-      tasks: plans,
+      tasks: tasks,
       layout,
       cardId: "summary-card",
       inbox: NO_INBOX,
@@ -289,7 +289,7 @@ function TaskColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
 }
 
 /** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
-function columnAt(width: number, plans: TasksControl = tasksControl()) {
+function columnAt(width: number, tasks: TasksControl = tasksControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));
   const page = document.body.appendChild(document.createElement("div"));
@@ -298,7 +298,7 @@ function columnAt(width: number, plans: TasksControl = tasksControl()) {
     act(() =>
       root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { plans: shown }))),
     );
-  draw(plans);
+  draw(tasks);
   return {
     page,
     rail: () => page.querySelector('aside[aria-label="Summary"]'),

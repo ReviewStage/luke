@@ -92,6 +92,7 @@ import {
   proposedOptions,
   readersItem,
   SETTLED_BY,
+  sentenceCased,
   settledAt,
   settlementOf,
   THREAD_ENTRY,
@@ -711,8 +712,17 @@ interface ItemAgent {
 }
 
 /** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
-function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
+function AgentName({
+  by,
+  nameOnly = false,
+}: {
+  by: ItemAgent;
+  /** Whether the name stands without its tile, as a comment's writer does beside their face. */
+  nameOnly?: boolean;
+}): React.JSX.Element {
+  return (
+    <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} nameOnly={nameOnly} />
+  );
 }
 
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
@@ -851,11 +861,6 @@ function CommentName({ children }: { children: React.ReactNode }): React.JSX.Ele
   return <span className="inbox-comment-name">{children}</span>;
 }
 
-/** A word set as the start of a sentence. */
-function sentenceCased(words: string): string {
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
-}
-
 /**
  * What the developer's answer leads with: what they picked, the options'
  * labels, or, where they picked none and wrote nothing, what they did,
@@ -954,7 +959,7 @@ function Answered({
       head={
         <>
           <CommentName>
-            <ActorRef actor={answerer} />
+            <ActorRef actor={answerer} nameOnly />
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime
@@ -1012,7 +1017,7 @@ function Withdrawn({
       head={
         <>
           <CommentName>
-            <AgentName by={by} />
+            <AgentName by={by} nameOnly />
           </CommentName>
           <span className="inbox-comment-when">
             withdrew this{" "}
@@ -1065,7 +1070,7 @@ function Message({
       head={
         <>
           <CommentName>
-            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
+            {fromAgent ? <AgentName by={by} nameOnly /> : <ActorRef actor={member} nameOnly />}
           </CommentName>
           <span className="inbox-comment-when">
             <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
@@ -1533,7 +1538,7 @@ export function InboxPane({
                 head={
                   <>
                     <CommentName>
-                      <AgentName by={by} />
+                      <AgentName by={by} nameOnly />
                     </CommentName>
                     <span className="inbox-comment-when">
                       <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />

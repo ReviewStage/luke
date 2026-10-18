@@ -721,26 +721,26 @@ test("a server or tool of an account past a provider's first names it by its con
 test("a page or an agent of a plan is its Luke link, read back by the app's scheme too, a bare one named by its kind, and a step or a fragment past its id names nothing", () => {
   const page: Mention = { kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: "page-1" };
   const agent: Mention = { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: "agent-1" };
-  const plan = `https://tryluke.dev/acme/plan/${TASK_ID}`;
+  const taskLink = `https://tryluke.dev/acme/plan/${TASK_ID}`;
 
-  assert.equal(encodeMention(page, PLACE), `${plan}/page/page-1`);
-  assert.equal(encodeMention(agent, PLACE), `${plan}/agent/agent-1`);
+  assert.equal(encodeMention(page, PLACE), `${taskLink}/page/page-1`);
+  assert.equal(encodeMention(agent, PLACE), `${taskLink}/agent/agent-1`);
   assert.deepEqual(
     decodeMention(`tryluke://tryluke.dev/acme/plan/${TASK_ID}/agent/agent-1`, null),
     agent,
   );
-  assert.deepEqual(linkMention(`${plan}/page/page-1`, `${plan}/page/page-1`, null), {
+  assert.deepEqual(linkMention(`${taskLink}/page/page-1`, `${taskLink}/page/page-1`, null), {
     mention: page,
     name: "Page",
   });
-  assert.deepEqual(linkMention("", `${plan}/agent/agent-1`, null)?.name, "Agent");
+  assert.deepEqual(linkMention("", `${taskLink}/agent/agent-1`, null)?.name, "Agent");
   for (const target of [
-    `${plan}/page/page-1/version/2`,
-    `${plan}/agent/agent-1/changes`,
-    `${plan}/page/page-1#top`,
-    `${plan}/page/`,
-    `${plan}/version/2`,
-    `${plan}/agent/agent%2F1`,
+    `${taskLink}/page/page-1/version/2`,
+    `${taskLink}/agent/agent-1/changes`,
+    `${taskLink}/page/page-1#top`,
+    `${taskLink}/page/`,
+    `${taskLink}/version/2`,
+    `${taskLink}/agent/agent%2F1`,
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
   }
@@ -813,17 +813,17 @@ test("words pasted whole that are an address of Luke's own become its mention, n
 
 test("an agent is handed each @ mention and each bare address of Luke's own, in order, a bare address ending where GFM ends it", () => {
   const section = encodeMention(ROLLOUT, PLACE);
-  const plan = encodeMention(TASK, PLACE);
+  const taskLink = encodeMention(TASK, PLACE);
   const words = [
-    `Read (${plan}), then [@app.ts](luke://file/app.ts) and **${section}**.`,
+    `Read (${taskLink}), then [@app.ts](luke://file/app.ts) and **${section}**.`,
     `Not https://github.com/${REPOSITORY}/blob/HEAD/a.ts, https://linear.app/acme/issue/LUKE-1,`,
-    `![@pic](${plan}), [the plan](${plan}), \`${section}\`, or x${section}.`,
+    `![@pic](${taskLink}), [the plan](${taskLink}), \`${section}\`, or x${section}.`,
   ].join("\n");
 
   assert.deepEqual(
     handedMentionsIn(words, REPOSITORY).map(({ label, mention }) => ({ label, mention })),
     [
-      { label: plan, mention: TASK },
+      { label: taskLink, mention: TASK },
       { label: "@app.ts", mention: { kind: MENTION_KIND.FILE, path: "app.ts" } },
       { label: section, mention: ROLLOUT },
     ],

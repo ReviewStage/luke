@@ -139,7 +139,8 @@ async function agentCard(on: boolean, nested = false) {
     subject: { name: "Triage", tile: agentActor(AGENT, "Triage"), read },
     models: [],
     onOpen: () => undefined,
-    children: "Triage",
+    glyph: undefined,
+    label: "Triage",
   });
   const directory = (children: ReturnType<typeof createElement>) =>
     createElement(AutomationDirectory, {
@@ -167,7 +168,7 @@ async function agentCard(on: boolean, nested = false) {
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
   const { card, opened } = await agentCard(true);
-  const starter = card.querySelector<HTMLElement>(".actor-words .actor-ref");
+  const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
   assert.ok(starter, "the card names who started the agent");
   assert.equal(card.querySelector(".actor-words")?.firstChild?.textContent, "Started by ");
   assert.equal(starter.dataset.kind, "automation");
@@ -181,7 +182,9 @@ test("an agent an automation started says it was started by the automation, its 
 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
   const { card, opened } = await agentCard(true);
-  hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
+  hover(
+    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+  );
   const standing = cards();
   assert.equal(standing.length, 2, "the automation's card hangs over the agent's");
   const automation = standing[1]?.querySelector<HTMLElement>("[data-actor-card='automation']");
@@ -206,13 +209,16 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
     undefined,
     "the card offers nothing to press",
   );
-  act(() => card.querySelector<HTMLElement>(".actor-words .actor-ref")?.click());
+  act(() => card.querySelector<HTMLElement>(".actor-words [data-actor-ref]")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
 });
 
 test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
   const { card } = await agentCard(true, true);
-  assert.equal(card.querySelector(".actor-words .actor-ref")?.textContent, "Morning Sentry triage");
+  assert.equal(
+    card.querySelector(".actor-words [data-actor-ref]")?.textContent,
+    "Morning Sentry triage",
+  );
   assert.deepEqual(listed, [WORKSPACE.id]);
 });
 
@@ -228,7 +234,9 @@ test("an automation a GitHub event fires says where on its card, as its row in t
     },
   ];
   const { card } = await agentCard(true);
-  hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
+  hover(
+    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+  );
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".luke-hover-card-sub")?.textContent,
@@ -238,9 +246,9 @@ test("an automation a GitHub event fires says where on its card, as its row in t
 
 test("with the Automations experiment off, the card says nothing of the automation, names the teammate who started the agent as before, and the automations go unread", async () => {
   const { card } = await agentCard(false);
-  const starter = card.querySelector<HTMLElement>(".actor-words .actor-ref");
+  const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
   assert.equal(starter?.dataset.kind, "person");
-  assert.equal(starter?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
+  assert.equal(starter?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.doesNotMatch(card.textContent ?? "", /Morning Sentry triage/u);
   assert.deepEqual(listed, []);
 });
