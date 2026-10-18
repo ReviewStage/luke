@@ -1,6 +1,5 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import { cn } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -186,7 +185,7 @@ export function CallEnded({
       label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
       card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
     >
-      <p className={cn(STATUS_LINE_CLASS, "w-fit tabular-nums")} data-call-ended="">
+      <p className={STATUS_LINE_CLASS} data-call-ended="">
         <span data-call-length="">
           {line}
           {WORKED_SEPARATOR}
