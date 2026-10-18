@@ -13,7 +13,7 @@
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195519,
     "renderer/diff-view.js": 142443,
-    "renderer/factory-world.js": 161744,
+    "renderer/factory-world.js": 161750,
     "renderer/factory-world-dev.js": 1745,
     "renderer/factory-world-station.js": 31732,
     "renderer/factory-world-citadel.js": 31274,
@@ -21,6 +21,7 @@
     "renderer/factory-world-archipelago.js": 35105,
     "renderer/factory-world-neon.js": 29957,
     "renderer/factory-world-factory.js": 38318,
-    "renderer/factory-world-colony.js": 31066
+    "renderer/factory-world-colony.js": 31066,
+    "renderer/factory-world-atlantis.js": 37101
   }
 }
