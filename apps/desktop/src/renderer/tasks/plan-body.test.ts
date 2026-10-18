@@ -17,9 +17,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -75,6 +76,7 @@ const AGENT: CodingAgentSummary = {
 let root: Root | undefined;
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -92,11 +94,20 @@ interface Drawn {
   readonly looks?: TaskLooks;
   readonly agents?: EditAgents;
   readonly onShowHistory?: (save: number | undefined) => void;
+  /** The account signed in on this Mac, as main's document names it; none where the test names nobody. */
+  readonly account?: { readonly id: string; readonly email: string; readonly name: string };
 }
 
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
+  const signedIn = drawn.account === undefined ? undefined : signedInAs(drawn.account);
   fakeAppBridge({
+    ...(signedIn === undefined
+      ? {}
+      : {
+          onAppState: () => () => undefined,
+          requestAppState: () => Promise.resolve(signedIn),
+        }),
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -108,7 +119,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const { readerId, ...rest } = drawn;
+  const { readerId, account: _account, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
     live: false,
@@ -170,16 +181,23 @@ test("the saved body is drawn as Markdown", () => {
 });
 
 test("under its title the plan says who created the task and when, then who last edited it and when, and a plan nobody edited says only who created it", async () => {
+  // Note that only the date is fixed, so the plan's minute reads `now` and nothing waits on a timer.
+  const now = Date.UTC(2026, 9, 14, 12);
+  vi.useFakeTimers({ now, toFake: ["Date"] });
   const day = 24 * 60 * 60 * 1000;
-  const started = { ...TASK, createdAt: Date.now() - 3 * day, createdBy: CHARLES };
+  const started = { ...TASK, createdAt: now - 3 * day, createdBy: CHARLES };
   const edited = {
     ...started,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: Date.now() },
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: now },
   };
+  // A reader the members read does not list, signed in on this Mac, whose task the service names by its owner's id alone.
+  const GRACE = { id: "user-grace", email: "grace@example.com", name: "Grace Hopper" };
+  const { createdBy: _named, ...byOwnerAlone } = { ...started, ownerId: GRACE.id };
 
   const view = await draw(edited, { readerId: DEAN.userId });
   const byline = view.querySelector(".plan-byline");
   const unedited = await draw(started, { readerId: DEAN.userId });
+  const own = await draw(byOwnerAlone, { readerId: GRACE.id, account: GRACE });
 
   assert.equal(
     byline?.previousElementSibling?.textContent,
@@ -193,6 +211,11 @@ test("under its title the plan says who created the task and when, then who last
   assert.deepEqual([...unedited.querySelectorAll(".plan-byline .actor-line")].map(lineWords), [
     "Created by Charles Pan · 3d ago",
   ]);
+  assert.equal(
+    lineWords(own.querySelector(".plan-byline .actor-line")),
+    "Created by you · 3d ago",
+    "a task named by its owner's id alone is the reader's own",
+  );
 });
 
 test("two members each see the other's edits under the other's name on their face, and only their own as you", async () => {

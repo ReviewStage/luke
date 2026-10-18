@@ -9,13 +9,14 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
-import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorRef, ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
+import { useCreator } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
@@ -277,7 +278,8 @@ function PlanByline({
   place: EditPlace;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
-  const creator = creatorActor(task, place.reader, undefined);
+  // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
+  const creator = useCreator(task, place.reader.readerId);
   return (
     <p className="plan-byline">
       <span className="actor-line">
