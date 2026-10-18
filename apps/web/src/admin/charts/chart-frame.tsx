@@ -12,6 +12,7 @@
 import type { AdminTrend } from "@luke/service/admin/admin-metrics";
 import {
   ALIGN,
+  Card,
   GAP,
   Inline,
   JUSTIFY,
@@ -24,8 +25,6 @@ import {
   Text,
 } from "@luke/ui";
 import { formatNumber, formatTrendMove, trendTone } from "@luke/ui/admin-format";
-
-const CHART_CARD = "relative rounded-lg border border-border bg-card p-5";
 
 /** The room an empty window's line stands in, about a short plot's height. */
 const CHART_EMPTY = "py-6 text-center";
@@ -93,7 +92,7 @@ export function ChartFrame({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div ref={ref} className={CHART_CARD}>
+    <Card ref={ref}>
       <Stack gap={GAP.FIELD}>
         {title === undefined ? null : (
           <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
@@ -115,7 +114,7 @@ export function ChartFrame({
         )}
       </Stack>
       {overlay}
-    </div>
+    </Card>
   );
 }
 
@@ -136,7 +135,7 @@ export function ChartFrameSkeleton({
   plot: string;
 }): React.JSX.Element {
   return (
-    <div className={CHART_CARD}>
+    <Card>
       <Stack gap={GAP.FIELD}>
         <Inline justify={JUSTIFY.BETWEEN}>
           <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.LABEL}>
@@ -157,6 +156,6 @@ export function ChartFrameSkeleton({
           </Text>
         ) : null}
       </Stack>
-    </div>
+    </Card>
   );
 }

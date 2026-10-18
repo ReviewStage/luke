@@ -32,7 +32,7 @@ export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode
   if (!undelivered.has(messageId)) return null;
   return (
     <p className="agent-undelivered" data-undelivered="">
-      <CircleAlertIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <CircleAlertIcon aria-hidden="true" />
       {UNDELIVERED_WORDS}
     </p>
   );

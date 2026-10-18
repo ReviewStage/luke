@@ -1,5 +1,6 @@
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { useId, useLayoutEffect, useRef } from "react";
+import { useComboboxField } from "./use-combobox-field.js";
 
 /**
  * combobox.tsx -- a text field whose words narrow a list of options under it, which the keys move through while the caret stays in the field.
@@ -24,6 +25,8 @@ import { useId, useLayoutEffect, useRef } from "react";
  * Keys an input method is composing with are its own: the Enter that
  * commits a composition and the Escape that dismisses its candidates never
  * reach the list, though an Escape is still kept from the surface behind.
+ * The keys and the field's names are `useComboboxField`'s, which the
+ * desktop's searchable menu steers its own rows with too.
  *
  * Options stand in groups, each with an optional heading, and the active
  * option counts across them, so a caller's index is one list's. Each option
@@ -48,22 +51,6 @@ export interface ComboboxGroup {
   /** The heading drawn over the run, which names it to a reader too. */
   readonly label?: string | undefined;
   readonly options: readonly ComboboxOption[];
-}
-
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
-}
-
-/** Where the active option moves for a key, among `count`, or undefined for a key that moves none. */
-function movedTo(key: string, active: number, count: number): number | undefined {
-  if (key === "ArrowDown") return (active + 1) % count;
-  if (key === "ArrowUp") return (active - 1 + count) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return undefined;
 }
 
 /** One option's row: a press chooses it and keeps the caret in the field, a pointer moving over it makes it active. */
@@ -165,28 +152,17 @@ export function Combobox({
     if (option !== undefined) onChoose(index, option);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    // Note that an Escape an input method is composing with is kept from the
-    // surface behind even with the list shut, because it cancels candidates.
-    const ime = composing(event);
-    if (event.key === "Escape" && (shown || ime)) event.stopPropagation();
-    if (ime) return;
-    const moved = shown ? movedTo(event.key, at, options.length) : undefined;
-    if (moved !== undefined) {
-      event.preventDefault();
-      onActiveChange(moved);
-      return;
-    }
-    if (shown && event.key === "Escape") {
-      event.preventDefault();
-      onEscape?.();
-      return;
-    }
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    if (shown && !event.metaKey && !event.ctrlKey) choose(at);
-    else onEnter?.();
-  };
+  const keys = useComboboxField({
+    open: shown,
+    active: at,
+    count: options.length,
+    controls: listId,
+    activeId: optionId(at),
+    onActiveChange,
+    onChoose: choose,
+    onEnter,
+    onEscape,
+  });
 
   // Note that the active option is scrolled into the list's own view by
   // hand, because the caret stays in the field, which no browser scrolls
@@ -213,21 +189,16 @@ export function Combobox({
         ref={ref}
         type="text"
         className="luke-text-field"
-        role="combobox"
+        {...keys.field}
         aria-label={label}
         aria-keyshortcuts={keyShortcuts}
-        aria-expanded={shown}
-        aria-controls={shown ? listId : undefined}
-        aria-autocomplete="list"
-        aria-activedescendant={shown ? optionId(at) : undefined}
-        autoComplete="off"
         placeholder={placeholder}
         disabled={disabled}
         maxLength={maxLength}
         spellCheck={spellCheck}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
+        onKeyDown={keys.onKeyDown}
       />
       {shown ? (
         <div

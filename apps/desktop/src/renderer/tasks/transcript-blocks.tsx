@@ -21,7 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn, ProviderMark } from "@luke/ui";
+import { ProviderMark, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -1029,16 +1029,16 @@ function TurnFold({
   children: ReactNode;
 }): ReactNode {
   return (
-    <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
+    <Fold className="transcript-fold" defaultOpen={open} data-turn-fold="">
       <FoldSummary
-        className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="transcript-fold-line"
         aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
       >
         <FoldChevron />
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
         {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
       </FoldSummary>
-      <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
+      <FoldBody className="turn-fold-body">{children}</FoldBody>
     </Fold>
   );
 }
@@ -1112,6 +1112,10 @@ export function TranscriptRows<B>({
 }
 
 /** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
-export function TranscriptNote({ className, ...props }: ComponentProps<"p">): ReactNode {
-  return <p className={cn("m-0 text-[11.5px] text-muted-foreground", className)} {...props} />;
+export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      {children}
+    </Text>
+  );
 }

@@ -10,7 +10,7 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
-import { ChoiceList } from "@luke/ui";
+import { ChoiceList, TEXT_TONE, Text } from "@luke/ui";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
 import { ArrowUpIcon } from "lucide-react";
@@ -127,13 +127,13 @@ function Settled({
   const values = ask.answer.values ?? [];
   return (
     <div className="chat-ask-settled" data-settled="answered">
-      <p className="m-0">
+      <Text tone={TEXT_TONE.MUTED}>
         {by === undefined ? "" : `${by}: `}
         {replyWords(ask.answer)}
         {ask.answer.note === undefined ? null : (
           <span className="chat-ask-settled-note"> {ask.answer.note}</span>
         )}
-      </p>
+      </Text>
       {/* A form's answer is what was filled in, so each field stands under the line, in the form's order. */}
       {values.length === 0 ? null : (
         <ul className="chat-ask-values">

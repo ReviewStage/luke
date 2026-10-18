@@ -208,7 +208,7 @@ body,
   position: absolute;
   inset: 0;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .desktop-stage {
@@ -375,37 +375,37 @@ body,
   background: var(--desktop-sidebar);
 }
 
-.luke-identity {
+.sidebar-identity {
   display: flex;
   align-items: center;
   gap: var(--luke-space-12);
   padding: var(--luke-space-2) var(--row-inset) var(--luke-section-gap);
 }
 
-.luke-identity-face {
+.sidebar-identity-face {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-strong);
 }
 
-.luke-identity-face .luke-face {
+.sidebar-identity-face .luke-face {
   width: 24px;
   height: 24px;
 }
 
-.luke-identity-copy {
+.sidebar-identity-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
 }
 
-.luke-identity-name {
-  font-size: 15px;
-  font-weight: 700;
+.sidebar-identity-name {
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
 }
 
@@ -421,10 +421,10 @@ body,
   height: var(--luke-control-height);
   margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--sidebar-ink);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
@@ -471,7 +471,7 @@ body,
 .sidebar-inbox-waiting {
   margin-left: auto;
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
 
@@ -520,7 +520,7 @@ body,
   border-radius: 4px;
   color: var(--workspace-tile-ink);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--luke-weight-semibold);
   line-height: 1;
 }
 
@@ -592,7 +592,7 @@ body,
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 5px; /* off-scale: a 14px tile's gap to its word, an actor's alike */
+  gap: var(--luke-space-4);
   vertical-align: middle;
 }
 
@@ -620,7 +620,7 @@ body,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px; /* off-scale */
+  gap: var(--luke-space-2);
 }
 
 .workspace-ref-name {
@@ -645,7 +645,7 @@ body,
 
 .workspace-ref-line {
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The sidebar's head: the workspace listed, its tile, its name in the head's
@@ -664,7 +664,7 @@ body,
   align-items: center;
   gap: var(--luke-space-12);
   padding: var(--luke-space-6) var(--row-inset);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -686,8 +686,8 @@ body,
 
 .sidebar-workspace-toggle .workspace-ref-name {
   color: var(--luke-color-text);
-  font-size: 14px; /* off-scale: the sidebar's head, a step above its rows */
-  font-weight: 650;
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.005em;
 }
 
@@ -758,8 +758,8 @@ body,
   background: none;
   color: var(--luke-color-text-muted);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   text-align: left;
 }
 
@@ -809,11 +809,11 @@ button.sidebar-section-head-name:hover {
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-selected);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   -webkit-app-region: no-drag;
 }
 
@@ -835,7 +835,7 @@ button.sidebar-section-head-name:hover {
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: none;
   color: var(--luke-color-text-muted);
 }
@@ -856,15 +856,15 @@ button.sidebar-section-head-name:hover {
   margin: 0 0 var(--luke-space-4);
   padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .sidebar-note {
   margin: var(--luke-space-4) var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The task list's failure is a row of the section under Tasks' head: its
@@ -885,7 +885,7 @@ button.sidebar-section-head-name:hover {
 
 .sidebar-skeleton-row {
   padding: var(--luke-space-6) var(--row-inset);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   line-height: var(--sidebar-row-line);
 }
 
@@ -904,7 +904,7 @@ button.sidebar-section-head-name:hover {
   display: block;
   width: 100%;
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -914,7 +914,7 @@ button.sidebar-section-head-name:hover {
    rather than left to the font, so every row of the column stands as tall
    whatever the font measures. */
 .desktop-sidebar {
-  --sidebar-row-line: 18px;
+  --sidebar-row-line: var(--luke-type-label-leading);
 }
 
 .desktop-sidebar .sidebar-task-item {
@@ -1099,10 +1099,10 @@ button.sidebar-section-head-name:hover {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 5px; /* off-scale: a 16px mark's gap to its word */
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -1261,13 +1261,13 @@ ul.actor-stack {
   display: inline-grid;
   height: 18px;
   min-width: 18px;
-  padding: 0 5px; /* off-scale */
+  padding: 0 var(--luke-space-4);
   place-items: center;
-  border-radius: 9px;
+  border-radius: var(--luke-radius-full);
   background: var(--actor-tile);
   color: var(--luke-color-text-muted);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1307,13 +1307,13 @@ ul.actor-stack {
 .actor-you,
 .actor-bot {
   flex-shrink: 0;
-  padding: 0 5px; /* off-scale */
-  border-radius: 4px;
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .sidebar-task-name,
@@ -1327,7 +1327,7 @@ ul.actor-stack {
    what marks it. In the sidebar a read name is in the quieter ink, and the
    open one and the one under the pointer go up to the primary. */
 .sidebar-task-name {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .desktop-sidebar :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
@@ -1352,11 +1352,11 @@ ul.actor-stack {
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--luke-color-text);
-  font-weight: 680;
+  font-weight: var(--luke-weight-bold);
 }
 
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -1395,7 +1395,7 @@ ul.actor-stack {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1498,7 +1498,7 @@ ul.actor-stack {
   height: 1lh;
   align-items: center;
   gap: var(--luke-space-2);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   opacity: 0;
 }
 
@@ -1513,7 +1513,7 @@ ul.actor-stack {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
@@ -1557,7 +1557,7 @@ ul.actor-stack {
    pointer frame for frame, so its own transform eases nothing. */
 .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
   z-index: 2;
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
     var(--desktop-sidebar);
@@ -1592,7 +1592,7 @@ ul.actor-stack {
   gap: var(--luke-space-2);
   margin-bottom: var(--list-gap);
   padding-right: var(--luke-space-4);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
@@ -1614,11 +1614,11 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   text-align: left;
   transition: color var(--duration-hover) ease;
 }
@@ -1719,7 +1719,7 @@ ul.actor-stack {
 
 .sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
   z-index: 3;
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
     var(--desktop-sidebar);
@@ -1737,7 +1737,7 @@ ul.actor-stack {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
   place-items: center;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   line-height: 1;
 }
 
@@ -1748,7 +1748,7 @@ ul.actor-stack {
   padding: var(--luke-space-4) var(--row-inset) var(--luke-space-6)
     calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-space-8));
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .sidebar-own-section:not(:has(.sidebar-repository-glyph)) > .sidebar-section-empty {
@@ -1758,7 +1758,7 @@ ul.actor-stack {
 /* The section, or Tasks, a row is carried over is washed while it is, and a
    line stands where the row would land among a section's tasks. */
 [data-row-drop][data-drop-target="true"] {
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
 
@@ -1841,8 +1841,8 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
   padding: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-bar {
@@ -1853,7 +1853,7 @@ ul.actor-stack {
 }
 
 .section-icon-search {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .section-icon-colors,
@@ -1921,14 +1921,14 @@ ul.actor-stack {
 .section-emoji-group-name {
   margin: 0 0 var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-note {
   margin: var(--luke-space-8) 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .section-icon-resting {
@@ -1936,7 +1936,7 @@ ul.actor-stack {
   margin: 0;
   overflow: hidden;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1952,7 +1952,7 @@ ul.actor-stack {
   border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 15px;
+  font-size: var(--luke-control-icon);
   line-height: 1;
   transition:
     background-color var(--duration-hover) ease,
@@ -1976,7 +1976,7 @@ ul.actor-stack {
 }
 
 .section-emoji-field {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A pinned repository says so after its name, quietly, since the pin is
@@ -2000,7 +2000,7 @@ ul.actor-stack {
   flex: none;
   margin-left: calc(var(--luke-space-6) - var(--luke-icon-gap));
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
@@ -2033,7 +2033,7 @@ ul.actor-stack {
   height: 24px;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
@@ -2091,7 +2091,7 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   white-space: nowrap;
 }
 
@@ -2119,11 +2119,11 @@ ul.actor-stack {
   width: 100%;
   height: 34px;
   padding: 0 var(--row-inset);
-  border-radius: 8px;
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
-  font-weight: 560;
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-semibold);
   text-align: left;
   transition:
     background-color var(--duration-hover) ease,
@@ -2167,8 +2167,8 @@ ul.actor-stack {
 .sidebar-account-name {
   min-width: 0;
   flex: 1;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A release with something to press, a pill between the account and the
@@ -2182,11 +2182,11 @@ ul.actor-stack {
   gap: var(--luke-space-4);
   height: 24px;
   padding: 0 var(--luke-space-8);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
   color: var(--luke-color-working);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
@@ -2291,8 +2291,8 @@ ul.actor-stack {
   margin: 0 0 0 calc(-1 * var(--luke-space-6));
   padding-left: var(--luke-space-6);
   overflow: hidden;
-  font-size: 15px;
-  font-weight: 680;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2317,24 +2317,20 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 480px) {
-  .start-agent .start-agent-word {
-    display: none;
-  }
-
-  .start-agent .start-agent-main {
-    width: var(--luke-control-height);
-    padding: 0;
+  .start-agent {
+    --luke-fold: folded;
   }
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .start-agent-chevron,
+  .start-agent .luke-split-button > .luke-button:last-child,
   .main-tabs .retry-word {
     display: none;
   }
 
-  .start-agent .start-agent-main {
-    border-radius: calc(var(--luke-control-radius) - 1px);
+  .start-agent .luke-split-button > .luke-button:first-child {
+    border-inline-end-width: 1px;
+    border-radius: var(--luke-control-radius);
   }
 }
 
@@ -2395,8 +2391,8 @@ ul.actor-stack {
   padding: 0 var(--luke-space-12);
   border-radius: var(--luke-control-radius);
   background: var(--button-fill);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
@@ -2498,7 +2494,7 @@ ul.actor-stack {
 .quiet-button {
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A labelled toolbar button inside a hairline, the edge Start's split button
@@ -2538,7 +2534,7 @@ ul.actor-stack {
   height: 24px;
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
@@ -2550,19 +2546,11 @@ ul.actor-stack {
 
 /* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
    `@luke/ui/styles.css`. What stays here is the window's own: the marks it
-   holds a size under the control's glyph, its menu's chevron at the size a
-   menu draws it (restated, since `.settings-chevron`'s own rule here would
-   otherwise win over the shared layer). */
+   holds a size under the control's glyph. */
 .luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-}
-
-.luke-chip .settings-chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--luke-color-text-subtle);
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -2642,7 +2630,7 @@ ul.actor-stack {
   border-radius: var(--luke-menu-row-radius);
   background: none;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   white-space: nowrap;
   cursor: default;
@@ -2728,7 +2716,7 @@ ul.actor-stack {
   margin-left: auto;
   padding-left: var(--luke-space-16);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -2785,8 +2773,7 @@ ul.actor-stack {
   z-index: calc(var(--z-dialog) + 1);
 }
 
-.luke-menu-item-glyph :is(svg, .repository-picture),
-.luke-menu-item-end > svg {
+.luke-menu-item-glyph .repository-picture {
   width: var(--menu-glyph);
   height: var(--menu-glyph);
   flex: 0 0 auto;
@@ -2822,7 +2809,7 @@ ul.actor-stack {
 
 .account-menu-name {
   color: var(--luke-color-text);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .account-menu-email {
@@ -2853,8 +2840,8 @@ ul.actor-stack {
 .desktop-empty p {
   max-width: 400px;
   margin: 0 0 var(--luke-space-8);
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
@@ -2996,7 +2983,7 @@ ul.actor-stack {
   margin: var(--luke-space-16) auto 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--desktop-well);
 }
 
@@ -3066,7 +3053,7 @@ ul.actor-stack {
   align-items: center;
   padding-inline: var(--luke-space-4);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The line under a sent message's bubble: its Copy and Copy link, shown
@@ -3087,7 +3074,7 @@ ul.actor-stack {
   gap: calc(var(--luke-space-4) + var(--luke-space-2));
   padding-inline-end: var(--luke-space-4);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3158,7 +3145,7 @@ ul.actor-stack {
    the body as the caller sent it in the code type, broken anywhere rather
    than run past the card. */
 .agent-origin-body {
-  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+  font-size: var(--luke-type-caption-size);
 }
 
 .agent-origin-body-line {
@@ -3190,7 +3177,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4);
   font-family: var(--luke-font-mono);
-  font-size: 12px; /* off-scale: a call's code type */
+  font-size: var(--luke-type-caption-size);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -3214,7 +3201,7 @@ ul.actor-stack {
    the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
   padding: 0;
-  border-radius: 4px; /* off-scale: the keyboard ring's corner around words */
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -3298,7 +3285,7 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="1"] {
   font-size: 1.9em;
-  font-weight: 720;
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -3643,7 +3630,7 @@ ul.actor-stack {
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .task-compose-menu-search input::placeholder {
@@ -3678,7 +3665,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4) var(--row-inset) 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* What stands in the list's place: one quiet line, centred, at a row or
@@ -3691,7 +3678,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4) var(--luke-space-12);
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-align: center;
 }
 
@@ -3789,7 +3776,7 @@ body:has(.app-stage[data-capture="true"])
 .task-compose-menu-name {
   min-width: 0;
   flex: 0 1 auto;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* A searchable menu's words fade where they are cut rather than end in an
@@ -3804,7 +3791,7 @@ body:has(.app-stage[data-capture="true"])
 .task-compose-menu-detail {
   flex: 0 0 auto;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -3824,8 +3811,8 @@ body:has(.app-stage[data-capture="true"])
 .command-palette [cmdk-group-heading] {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 [role="group"]:first-child > .menu-heading,
@@ -3860,7 +3847,7 @@ body:has(.app-stage[data-capture="true"])
   width: 100%;
   min-width: 0;
   flex-direction: column;
-  gap: 1px; /* off-scale */
+  gap: var(--luke-space-2);
   padding: var(--luke-space-4) calc(var(--row-inset) + var(--luke-space-16)) var(--luke-space-4)
     var(--row-inset);
   border-radius: var(--luke-menu-row-radius);
@@ -3904,7 +3891,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3993,7 +3980,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: text;
@@ -4047,12 +4034,12 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .integration-tool-section-count {
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4081,7 +4068,7 @@ button.integration-tool-head:hover,
 .integration-tool-parameter-name {
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   overflow-wrap: anywhere;
   user-select: text;
 }
@@ -4089,14 +4076,14 @@ button.integration-tool-head:hover,
 .integration-tool-parameter-type {
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .integration-tool-parameter-required {
   margin-left: auto;
   color: var(--luke-color-attention);
-  font-size: 10.5px;
-  font-weight: 560;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .integration-tool-parameter-body {
@@ -4105,8 +4092,8 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-4);
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
-  line-height: 1.4;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   user-select: text;
 }
 
@@ -4124,12 +4111,12 @@ button.integration-tool-head:hover,
 
 .integration-tool-parameter-values code {
   padding: 0 var(--luke-space-4);
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
-  font-size: 10.5px;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .integration-tool-parameter-values code[data-default="true"] {
@@ -4346,7 +4333,7 @@ button.integration-tool-head:hover,
   margin: 0;
   color: var(--luke-color-text);
   font-size: 1.25em;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -4359,7 +4346,7 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-6);
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-subject-agent {
@@ -4425,7 +4412,7 @@ button.integration-tool-head:hover,
   position: relative;
   padding: 0 0 var(--luke-space-20) calc(20px + var(--luke-space-12));
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-thread-earlier::before {
@@ -4459,7 +4446,7 @@ button.integration-tool-head:hover,
   align-items: center;
   column-gap: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The writer is named by name alone in the thread's own ink, since their
@@ -4468,8 +4455,8 @@ button.integration-tool-head:hover,
   display: flex;
   min-width: 0;
   color: var(--luke-color-text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .inbox-comment-name .actor-ref > .actor-mark {
@@ -4495,7 +4482,7 @@ button.integration-tool-head:hover,
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   line-height: 1.625;
 }
 
@@ -4511,11 +4498,11 @@ button.integration-tool-head:hover,
   align-items: flex-start;
   gap: var(--luke-space-4);
   padding: 1px var(--luke-space-6); /* off-scale */
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .inbox-pick > span,
@@ -4607,7 +4594,7 @@ button.integration-tool-head:hover,
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -4619,14 +4606,14 @@ button.integration-tool-head:hover,
 .inbox-next-lead {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-next-title {
   overflow: hidden;
   min-width: 0;
   flex: 1;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4644,7 +4631,7 @@ button.integration-tool-head:hover,
 .inbox-pager-count {
   margin-right: var(--luke-space-6);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4760,11 +4747,11 @@ button.integration-tool-head:hover,
   flex: none;
   padding: 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
   letter-spacing: 0.01em;
 }
 
@@ -4883,11 +4870,7 @@ button.integration-tool-head:hover,
 }
 
 .factory-glyph + .luke-text {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .factory-head-dot {
@@ -5084,11 +5067,6 @@ button.integration-tool-head:hover,
   white-space: nowrap;
 }
 
-.factory-world-label > .luke-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .factory-world-label > .factory-world-signal {
   width: 8px;
   height: 8px;
@@ -5118,11 +5096,7 @@ button.integration-tool-head:hover,
 }
 
 .factory-world-card-head > .luke-text {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .factory-world-tag {
@@ -5323,54 +5297,18 @@ button.integration-tool-head:hover,
   margin-top: var(--luke-space-16);
 }
 
-/* One automation's row: its clock wearing its newest run's state, its name
-   over what fires it, its owner, when it runs next in the tertiary ink, a
-   failure's mark, and its switch, divided by the card's hairlines. */
-.automation-row {
-  position: relative;
-  display: flex;
-  min-height: 52px; /* off-scale */
+/* An automation's or a run's metadata at its row's end (`ListRow`'s meta):
+   its owner, when it runs next or when it fired, and a failure's mark, in a
+   line of their own. */
+.automation-row-meta {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-space-12);
-  padding-right: var(--luke-space-16);
-}
-
-.automation-row-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.automation-row-name,
-.automation-row-detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The name in the body role, what fires it and when it runs next in the
-   caption role's quietest ink. */
-.automation-row-name {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
-.automation-row-detail,
-.automation-row-when {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.automation-row-when {
-  flex: none;
-  font-variant-numeric: tabular-nums;
+  vertical-align: top;
 }
 
 /* An automation turned off reads as set aside: its name in the muted ink. */
-.automation-row[data-enabled="false"] .automation-row-name {
+.automation-row-name[data-enabled="false"] {
   color: var(--luke-color-text-muted);
 }
 
@@ -5399,61 +5337,6 @@ button.integration-tool-head:hover,
 
 .automation-owner[data-owner="workspace"] {
   color: var(--luke-color-text);
-}
-
-/* A row is its press, which opens its page, from its edge to its switch, as
-   a sidebar task's row is: the owner, the next run, and the failure's mark
-   stand in it, and the switch stands beside it, so the switch stays a
-   switch. */
-.automation-row-open {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-self: stretch;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8) 0 var(--luke-space-8) var(--luke-space-16);
-  border-radius: inherit;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-/* Note that the press reaches past its own box to the row's, because the
-   gap before the switch and the inset after it would otherwise be filled
-   by the hover yet answer no press. */
-.automation-row-open::after {
-  position: absolute;
-  border-radius: inherit;
-  content: "";
-  inset: 0;
-}
-
-/* The row's cells and its switch stand above that reach, so the owner's and
-   the next run's titles still answer the pointer; a press on a cell still
-   reaches the button it stands in. */
-.automation-row-open > *,
-.automation-row > .luke-switch {
-  position: relative;
-  z-index: 1;
-}
-
-.automation-row-open > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
-.automation-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.automation-row-open:focus-visible {
-  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
-}
-
-:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* The suggested automations, each a card of its own in a grid that wraps
@@ -5746,32 +5629,6 @@ button.integration-tool-head:hover,
   border-left: 1px solid var(--luke-color-border);
 }
 
-.automation-runs-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.automation-run {
-  display: flex;
-  width: 100%;
-  min-height: 44px; /* off-scale */
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.automation-run > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-button.automation-run:hover {
-  background: var(--luke-color-fill-hover);
-}
-
 /* Chat ----------------------------------------------------------------------- */
 
 /* The window's Chat, in the plan's place beside the sidebar as the Inbox
@@ -5810,8 +5667,8 @@ button.automation-run:hover {
   margin: var(--luke-space-12) 0 var(--luke-space-4);
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -5833,8 +5690,8 @@ button.automation-run:hover {
   flex: 1 1 0;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5842,12 +5699,12 @@ button.automation-run:hover {
 .chat-rail-count {
   margin-left: auto;
   padding: 0 var(--luke-space-6);
-  border-radius: 9px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* The plan's own Chat tab fills its column as an agent's tab does, the
@@ -5867,11 +5724,11 @@ button.automation-run:hover {
   height: 28px;
   flex: none;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
 }
 
 .chat-mark[data-size="small"] {
@@ -5905,15 +5762,15 @@ button.automation-run:hover {
 
 .chat-head-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-head-meta {
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5938,7 +5795,7 @@ button.automation-run:hover {
   display: flex;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
 }
 
 .chat-reply {
@@ -5976,18 +5833,18 @@ button.automation-run:hover {
 }
 
 .chat-author {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-handle {
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-where,
 .chat-time {
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -6001,10 +5858,10 @@ button.automation-run:hover {
   margin: 0;
   padding: var(--luke-space-6) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .chat-code-lines,
@@ -6027,23 +5884,23 @@ button.automation-run:hover {
   margin-top: var(--luke-space-4);
   padding: var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-kind {
   margin: 0;
   color: var(--luke-color-attention);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
 .chat-ask-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-ask-options {
@@ -6058,18 +5915,18 @@ button.automation-run:hover {
 .chat-ask-option {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-option-label {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-ask-recommended,
 .chat-ask-option-detail {
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-ask-option-detail {
@@ -6087,8 +5944,8 @@ button.automation-run:hover {
   border: 0;
   background: none;
   color: var(--voice-luke);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 /* The composer at a place's foot, at the stream's reading measure: the box,
@@ -6112,13 +5969,13 @@ button.automation-run:hover {
   gap: var(--luke-space-8);
   padding: var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-composer[data-compact="true"] .chat-composer-box {
   padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
 }
 
 .chat-composer-field,
@@ -6130,7 +5987,7 @@ button.automation-run:hover {
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
   resize: none;
   outline: none; /* no ring: the box around it rings (`.field-well`) */
 }
@@ -6140,7 +5997,7 @@ button.automation-run:hover {
   align-items: center;
   gap: var(--luke-space-12);
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .chat-composer[data-compact="true"] .chat-composer-bar {
@@ -6196,7 +6053,7 @@ button.automation-run:hover {
   margin: var(--luke-space-4) 0 0;
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
   background: var(--desktop-sidebar);
 }
 
@@ -6209,7 +6066,7 @@ button.automation-run:hover {
 .chat-ask-settled {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-ask-values {
@@ -6228,7 +6085,7 @@ button.automation-run:hover {
   margin: var(--luke-space-8) 0;
   padding: var(--luke-space-12) var(--luke-space-16);
   border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
 }
 
@@ -6238,12 +6095,12 @@ button.automation-run:hover {
   gap: var(--luke-space-8);
   margin-bottom: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-notice-from {
   color: var(--voice-luke);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A person's handle reads in the developer's green, as their words do on a call. */
@@ -6252,7 +6109,7 @@ button.automation-run:hover {
 }
 
 .chat-notice-words {
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-notice-place {
@@ -6271,7 +6128,7 @@ button.automation-run:hover {
   border: 0;
   background: none;
   color: var(--luke-color-text-subtle);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   white-space: nowrap;
 }
 
@@ -6319,8 +6176,8 @@ button.automation-run:hover {
 .settings-pages-title,
 .version-log-title {
   margin: 0 var(--row-inset) var(--luke-space-12);
-  font-size: 20px;
-  font-weight: 720;
+  font-size: var(--luke-type-title-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
 }
 
@@ -6546,25 +6403,9 @@ button.automation-run:hover {
    column (`SettingsPage`), so the title-bar row above it is only the
    window's drag strip, and the page fills the room under the strip and
    scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
-   row scrolled up dissolves into the strip rather than being sliced off. A
-   landed search result keeps the page's inset above it rather than the
-   fade's. */
+   row scrolled up dissolves into the strip rather than being sliced off. */
 .settings-page > .luke-settings-page {
   flex: 1 1 0;
-  scroll-padding-top: var(--luke-page-inset);
-}
-
-/* The page's inset narrows under 480px (`settings-page.css`), and a landed
-   result keeps the narrower inset above it. The page cannot query its own
-   width, so the pane around it is the container. */
-.settings-page {
-  container: settings-pane / inline-size;
-}
-
-@container settings-pane (max-width: 479px) {
-  .settings-page > .luke-settings-page {
-    scroll-padding-top: var(--luke-page-inset-narrow);
-  }
 }
 
 /* The page's sections are the width its rows answer (`@container settings`
@@ -6877,7 +6718,7 @@ button.automation-run:hover {
 /* The moment's place in the toolbar while the versions are read, in the
    title's type. */
 .version-skeleton-title {
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
 }
 
 /* A row while the versions are read: the author's block over the summary's,
@@ -7080,7 +6921,7 @@ button.automation-run:hover {
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   box-shadow: 0 16px 40px var(--luke-color-shadow);
   outline: none; /* no ring: a card holding focus for its controls */
@@ -7181,7 +7022,7 @@ button.automation-run:hover {
   border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -7217,7 +7058,7 @@ button.automation-run:hover {
 .task-summary-detail {
   margin-left: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The Inbox row's count of what waits, at its end in the quiet count a
@@ -7225,7 +7066,7 @@ button.automation-run:hover {
 .inbox-row-count {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
 
@@ -7237,8 +7078,8 @@ button.automation-run:hover {
 
 .task-summary-rows[data-tree="true"] .task-summary-row {
   height: 24px;
-  border-radius: 5px;
-  font-size: 12.5px;
+  border-radius: var(--luke-radius-6);
+  font-size: var(--luke-type-caption-size);
 }
 
 .task-summary-rows[data-tree="true"] .task-summary-glyph svg {
@@ -7504,8 +7345,8 @@ button.automation-run:hover {
   margin: auto;
   padding: var(--luke-space-24);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: center;
 }
 
@@ -7866,7 +7707,7 @@ button.automation-run:hover {
   border-radius: 0.36em;
   background: color-mix(in srgb, currentColor 13%, transparent);
   color: var(--luke-color-text);
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* Who opened a pull request on its card, and how long ago it moved after
@@ -7923,12 +7764,12 @@ button.automation-run:hover {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
-  padding: 0 6px; /* off-scale */
+  padding: 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 11px;
-  line-height: 16px; /* off-scale */
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   overflow-wrap: anywhere;
 }
 
@@ -7952,7 +7793,7 @@ button.automation-run:hover {
 .card-name-link {
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -7987,7 +7828,7 @@ button.automation-run:hover {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-subtle);
   opacity: 0;
@@ -8105,8 +7946,8 @@ button.automation-run:hover {
    window is. */
 .confirm-dialog-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 650;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .confirm-dialog-body {
@@ -8114,7 +7955,7 @@ button.automation-run:hover {
   margin: 0;
   overflow-y: auto;
   color: var(--luke-color-text-muted);
-  line-height: 1.5;
+  line-height: var(--luke-type-body-leading);
   overflow-wrap: anywhere;
 }
 
@@ -8212,7 +8053,7 @@ button.automation-run:hover {
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
 }
 
 .command-palette-search input::placeholder {
@@ -8249,7 +8090,7 @@ button.automation-run:hover {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8268,7 +8109,7 @@ button.automation-run:hover {
   flex: 0 1 auto;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8284,7 +8125,7 @@ button.automation-run:hover {
   padding: 0 var(--luke-space-16);
   border-top: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .command-palette-footer-hint {
@@ -8310,7 +8151,7 @@ button.automation-run:hover {
   align-items: center;
   justify-content: center;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A quiet line under the rows: the Files filter saying its search is of
@@ -8327,13 +8168,7 @@ button.automation-run:hover {
 
 /* Start ------------------------------------------------------------------ */
 
-/* The toolbar's Start: a split button whose main part starts an agent on
-   the account's default and whose chevron drops the model menu. The
-   labelled button and the icon button above, joined into one pill by a
-   hairline around both and between them, the way a split button is drawn
-   in every toolbar; each half keeps its own hover. Unavailable, both halves
-   say so (`aria-disabled`) and fade as a disabled button does while they
-   keep answering the pointer, so the hover can say why. */
+/* The toolbar's Start, a shared SplitButton, and the note beside it. */
 .start-agent {
   position: relative;
   display: flex;
@@ -8341,21 +8176,9 @@ button.automation-run:hover {
   gap: var(--luke-control-gap);
 }
 
+/* The split button's box, which hears its presses as they pass. */
 .start-agent-split {
   display: flex;
-  align-items: center;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  -webkit-app-region: no-drag;
-}
-
-.start-agent-main {
-  border-radius: calc(var(--luke-control-radius) - 1px) 0 0 calc(var(--luke-control-radius) - 1px);
-}
-
-.start-agent-chevron {
-  border-left: 1px solid var(--luke-color-border);
-  border-radius: 0 calc(var(--luke-control-radius) - 1px) calc(var(--luke-control-radius) - 1px) 0;
 }
 
 /* The model menu hangs under the chevron, to the toolbar's right edge. */
@@ -8471,7 +8294,7 @@ button.automation-run:hover {
   width: min(600px, 100%);
   flex-direction: column;
   gap: var(--luke-space-32);
-  margin: clamp(0px, 7vh, 72px) auto 0; /* off-scale */
+  margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
 }
 
 .home-head {
@@ -8495,8 +8318,8 @@ button.automation-run:hover {
   margin: 0 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A section's note, nothing waiting or a read refused, on its rows' inset. */
@@ -8507,9 +8330,9 @@ button.automation-run:hover {
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
 .home-section-count {
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 .home-row .sidebar-task-line {
@@ -8537,7 +8360,7 @@ button.automation-run:hover {
   min-width: min(16ch, 35%);
   flex: 1;
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8669,7 +8492,7 @@ button.automation-run:hover {
   align-items: center;
   justify-content: center;
   margin-bottom: var(--luke-space-4);
-  border-radius: 14px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
 }
@@ -8767,8 +8590,8 @@ button.automation-run:hover {
   background: var(--desktop-well);
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   transition: border-color var(--duration-hover) ease;
 }
 
@@ -8904,7 +8727,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   box-shadow:
     0 1px 2px var(--luke-color-shadow-soft),
@@ -9021,7 +8844,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 .task-card-corner,
 .task-card-more {
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -9053,12 +8876,12 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 
 .task-card-detail {
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .task-card-line {
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
@@ -9110,7 +8933,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   flex-direction: column;
   gap: var(--luke-space-2);
   margin: 0;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .run-card-figure {
