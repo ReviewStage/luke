@@ -24,7 +24,14 @@ import {
   factoryZoneOf,
   HOUR_MS,
 } from "@luke/ui/testing";
-import { type InstancedMesh, type Object3D, PerspectiveCamera, Scene } from "three";
+import {
+  type InstancedMesh,
+  Matrix4,
+  type Object3D,
+  PerspectiveCamera,
+  Scene,
+  Vector3,
+} from "three";
 import { describe, expect, it } from "vitest";
 import {
   PICK_KIND,
@@ -113,6 +120,21 @@ function pickable(registrations: Set<Registration>, scene: Scene): Map<PickKind,
     for (const target of targets) if (target !== undefined) found.get(target.kind)?.add(target.id);
   }
   return found;
+}
+
+/** Where the instance registered for `target` stands, as the host's flight would aim at it. */
+function anchorOf(registrations: Set<Registration>, target: PickTarget): Vector3 | undefined {
+  for (const registration of registrations) {
+    if ("target" in registration) continue;
+    for (let index = 0; index < registration.object.count; index += 1) {
+      const found = registration.targetOf(index);
+      if (found?.kind !== target.kind || found.id !== target.id) continue;
+      const matrix = new Matrix4();
+      registration.object.getMatrixAt(index, matrix);
+      return new Vector3().setFromMatrixPosition(matrix);
+    }
+  }
+  return undefined;
 }
 
 const ALL_LAYERS: WorldLayers = { planned: true, building: true, shipped: true, defects: true };
@@ -304,6 +326,31 @@ describe("Atlantis", () => {
     instance.update(stateOf(snapshot, { selected, blast, still: false }));
     instance.frame?.(1 / 60, 2);
     expect(pickable(registrations, host.scene)).toEqual(everythingIn(snapshot));
+  });
+
+  it("stands two issues planned on the same zones apart, so each can be picked", () => {
+    const snapshot = factoryWorldOf({
+      zones: [
+        factoryZoneOf("packages/wire"),
+        factoryZoneOf("packages/live"),
+        ...["a", "b", "c"].map((app) =>
+          factoryZoneOf(`apps/${app}`, ["packages/wire", "packages/live"]),
+        ),
+      ],
+      planned: [
+        factoryPlannedOf(1, { zonePaths: ["packages/wire", "packages/live"] }),
+        factoryPlannedOf(2, { zonePaths: ["packages/wire", "packages/live"] }),
+      ],
+    });
+    const { host, registrations } = fakeHost();
+    const instance = world.create(host);
+    instance.update(stateOf(snapshot));
+    const [first, second] = ["ENG-1", "ENG-2"].map((id) =>
+      anchorOf(registrations, { kind: PICK_KIND.PLANNED, id }),
+    );
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first?.distanceTo(second ?? new Vector3()) ?? 0).toBeGreaterThan(5);
   });
 
   it("draws a scrubbed instant from its own view: work merged later is not there to pick", () => {

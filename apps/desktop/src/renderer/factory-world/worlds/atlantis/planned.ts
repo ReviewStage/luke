@@ -133,14 +133,23 @@ function blueprintsOf(layout: CityLayout, planned: readonly FactoryPlanned[]): B
         if (a === b) continue;
         const dx = a.at.x - b.at.x;
         const dz = a.at.z - b.at.z;
-        const distance = Math.hypot(dx, dz);
+        let distance = Math.hypot(dx, dz);
         const need = a.radius + b.radius + 3;
-        if (distance >= need || distance < 0.01) continue;
+        if (distance >= need) continue;
+        // Note that two blueprints placed on one spot part along a bearing their places in the list name, so the push stays the same every time.
+        let ux = dx / distance;
+        let uz = dz / distance;
+        if (distance < 0.01) {
+          const bearing = placed.indexOf(a) * 2.39996 + placed.indexOf(b);
+          ux = Math.cos(bearing);
+          uz = Math.sin(bearing);
+          distance = 0;
+        }
         const push = (need - distance) / 2;
-        a.at.x += (dx / distance) * push;
-        a.at.z += (dz / distance) * push;
-        b.at.x -= (dx / distance) * push;
-        b.at.z -= (dz / distance) * push;
+        a.at.x += ux * push;
+        a.at.z += uz * push;
+        b.at.x -= ux * push;
+        b.at.z -= uz * push;
       }
       for (const district of layout.districts) {
         if (district.kind === DISTRICT_KIND.CRYSTAL) continue;

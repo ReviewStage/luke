@@ -512,16 +512,18 @@ void main(){ float core = pow(abs(dot(normalize(vN), normalize(vV))), 1.5); floa
     ) {
       return work;
     }
-    const visiting =
-      diver.away[Math.floor((elapsed + diver.seed * 100) / (diver.cycle * 2)) % diver.away.length];
-    if (visiting === undefined) return work;
-    const visit = visitOf(visiting, diver.centre);
-    const distance = work.at.distanceTo(visit.at);
-    const travel = 2 + distance / 7.5;
+    // Note that every trip takes the same period, long enough for the farthest destination, so the trip number alone names where a diver is bound and it never changes course mid-swim.
+    const travelTo = (visit: Visit) => 2 + diver.centre.distanceTo(visit.at) / 7.5;
+    const visits = diver.away.map((district) => visitOf(district, diver.centre));
     const stay = 7;
-    const period = diver.cycle + travel * 2 + stay;
-    const k = (elapsed + diver.seed * 100) % period;
-    if (k < diver.cycle) return work;
+    const period = diver.cycle + stay + 2 * Math.max(...visits.map(travelTo));
+    const clock = elapsed + diver.seed * 100;
+    const visit = visits[Math.floor(clock / period) % visits.length];
+    if (visit === undefined) return work;
+    const travel = travelTo(visit);
+    const distance = work.at.distanceTo(visit.at);
+    const k = clock % period;
+    if (k < diver.cycle || k >= diver.cycle + travel * 2 + stay) return work;
     const arc = (u: number, from: Vector3, to: Vector3) => {
       const middle = from.clone().add(to).multiplyScalar(0.5);
       middle.y = Math.max(from.y, to.y) + 6 + distance * 0.12;

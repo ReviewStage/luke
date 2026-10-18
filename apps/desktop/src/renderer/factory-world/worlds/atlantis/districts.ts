@@ -98,6 +98,8 @@ export interface Districts {
   readonly build: (layout: CityLayout) => void;
   /** Relights every district as `lights` says, by its index. */
   readonly paint: (layout: CityLayout, lights: readonly ZoneLight[]) => void;
+  /** Puts out every ring's burst of shipped green. */
+  readonly quench: () => void;
   /** Lights a district's ring with a burst of shipped green, at `now`. */
   readonly flash: (district: District, now: number) => void;
   /** Draws the standing lights: crowns, lanterns, spire tips; blinking only while `moving`. */
@@ -1028,6 +1030,10 @@ export function districtsOf(scene: Scene, sea: Sea, picking: WorldPicking): Dist
   return {
     build,
     paint,
+    quench: () => {
+      for (let ring = 0; ring < bandZone.count; ring += 1) bandZone.setW(ring, -1e6);
+      bandZone.needsUpdate = true;
+    },
     flash: (district, now) => {
       const ring = bandSlots[district.index] ?? -1;
       if (ring < 0) return;

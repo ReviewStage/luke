@@ -26,8 +26,12 @@ import type { Sea } from "./sea";
  * damage behind.
  */
 
-/** The most tubes drawn: four to a zone, which no repository's graph of directories comes near. */
-const TUBES = FACTORY_WORLD_BOUNDS.MAX_ZONES * 4;
+/**
+ * The most tubes drawn: eight to a zone. A denser graph draws the tubes the
+ * developer's focus lights first, then the rest in the view's order, and
+ * leaves the remainder out rather than drawing a tangle no one could read.
+ */
+const TUBES = FACTORY_WORLD_BOUNDS.MAX_ZONES * 8;
 
 /** How many pods ride each tube. */
 const PODS_PER_TUBE = 2;
@@ -204,7 +208,10 @@ export function pipesOf(scene: Scene, sea: Sea): Pipes {
       let tube = 0;
       let beam = 0;
       let pod = 0;
-      edges.forEach((edge, order) => {
+      const lit = (path: string) => (lights[layout.byPath.get(path)?.index ?? -1]?.lit ?? 0) > 0;
+      const inFocus = (edge: ZoneEdge) => lit(edge.from) && lit(edge.to);
+      const ordered = [...edges.filter(inFocus), ...edges.filter((edge) => !inFocus(edge))];
+      ordered.forEach((edge, order) => {
         const from = layout.byPath.get(edge.from);
         const to = layout.byPath.get(edge.to);
         if (from === undefined || to === undefined || from === to) return;

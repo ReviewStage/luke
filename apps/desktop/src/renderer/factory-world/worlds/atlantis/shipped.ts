@@ -66,14 +66,10 @@ export interface Shipped {
     alive: readonly number[],
   ) => void;
   /** Circles the fish and lands the newest work, while the scrubber stands at now. */
-  readonly step: (
-    delta: number,
-    elapsed: number,
-    live: boolean,
-    particles: Particles,
-    pings: Pings,
-  ) => void;
+  readonly step: (delta: number, elapsed: number, live: boolean, particles: Particles) => void;
   readonly paint: (glows: Billboards) => void;
+  /** Lands nothing more: drops every launch in flight and puts out every landing's flash and ring. */
+  readonly quiet: () => void;
 }
 
 const BLOOM_VERTEX = /* glsl */ `
@@ -207,6 +203,7 @@ export function shippedOf(
   sea: Sea,
   picking: WorldPicking,
   districts: Districts,
+  pings: Pings,
 ): Shipped {
   const shippedColor = new Color(sea.signal.SHIPPED);
   const selection = new Color(sea.signal.SELECTION);
@@ -277,6 +274,8 @@ export function shippedOf(
   let shown = true;
   const launches: Launch[] = [];
   let nextLaunch = 2;
+  /** When work last landed, or -1 once every landing's flash is out. */
+  let lastLanding = -1;
   let lastStep = 0;
   const matrix = new Matrix4();
   const turn = new Quaternion();
@@ -318,9 +317,21 @@ export function shippedOf(
     fishes.instanceMatrix.needsUpdate = true;
   };
 
+  const quiet = () => {
+    if (launches.length === 0 && lastLanding < 0) return;
+    launches.length = 0;
+    lastLanding = -1;
+    districts.quench();
+    pings.clear();
+    for (let slot = 0; slot < beaconLook.count; slot += 1) beaconLook.setY(slot, -1e6);
+    beaconLook.needsUpdate = true;
+  };
+
   return {
+    quiet,
     draw: (layout, timeline, now, chosen, visible, alive) => {
       shown = visible;
+      if (!visible) quiet();
       spots = [];
       const bySchool = new Map<District, number>();
       for (const entry of timeline) {
@@ -424,9 +435,14 @@ export function shippedOf(
       beacons.instanceMatrix.needsUpdate = true;
       beaconLook.needsUpdate = true;
     },
-    step: (delta, elapsed, live, particles, pings) => {
+    step: (delta, elapsed, live, particles) => {
       lastStep = elapsed;
       swim(elapsed);
+      // Note that work lands only while the scrubber stands at now and shipped is shown, so nothing green flashes outside its layer or its instant.
+      if (!live || !shown) {
+        quiet();
+        return;
+      }
       const green = shippedColor;
       // Note that the newest work keeps landing while the scrubber stands at now, the newest most often.
       nextLaunch -= delta;
@@ -460,10 +476,10 @@ export function shippedOf(
         const launch = launches[index];
         if (launch === undefined) continue;
         const k = (elapsed - launch.startedAt) / 1.5;
-        if (k >= 1 || !live || !shown) {
+        if (k >= 1) {
           launches.splice(index, 1);
-          if (k < 1) continue;
           pings.send(launch.to, launch.to.y + 0.4, 14, green, 2.2, elapsed);
+          lastLanding = elapsed;
           for (let mote = 0; mote < 18; mote += 1) {
             const angle = random() * TAU;
             const speed = 1 + random() * 3;

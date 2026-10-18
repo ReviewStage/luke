@@ -68,7 +68,6 @@ export const world: WorldModule = {
     const seabed = seabedOf(scene, sea);
     const districts = districtsOf(scene, sea, picking);
     const pipes = pipesOf(scene, sea);
-    const shipped = shippedOf(scene, sea, picking, districts);
     const planned = plannedOf(scene, sea, picking);
     const defects = defectsOf(scene, sea, picking);
     const agents = agentsOf(scene, sea, picking, host.camera.camera);
@@ -76,6 +75,7 @@ export const world: WorldModule = {
     const bubbles = billboardsOf(sea, SPRITES.BUBBLES, SPRITE_KIND.BUBBLE);
     const inks = billboardsOf(sea, SPRITES.INK, SPRITE_KIND.INK);
     const pings = pingsOf(sea, SPRITES.PINGS);
+    const shipped = shippedOf(scene, sea, picking, districts, pings);
     const particles = particlesOf(SPRITES.PARTICLES, seededRandom(9));
     scene.add(glows.mesh, bubbles.mesh, inks.mesh, pings.mesh);
     const blast = new Color(palette.signal.BLAST_RADIUS);
@@ -215,6 +215,7 @@ export const world: WorldModule = {
           moving,
         );
         if (!moving) {
+          shipped.quiet();
           particles.clear();
           pings.clear();
           planned.sweep(elapsed, false);
@@ -226,7 +227,7 @@ export const world: WorldModule = {
         sea.uniforms.uTime.value = now;
         seabed.step(delta, now, particles);
         agents.step(delta, now, particles, sendPing);
-        shipped.step(delta, now, state?.live === true, particles, pings);
+        shipped.step(delta, now, state?.live === true, particles);
         defects.step(delta, now, particles);
         planned.sweep(now, true);
         particles.step(delta);
