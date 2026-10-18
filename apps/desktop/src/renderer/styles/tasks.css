@@ -658,7 +658,7 @@
   }
 
   .conversation-empty-wide {
-    max-width: 440px; /* off-scale: a one-line failure's measure */
+    max-width: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
   }
 
   /* Its own ground under the button, ringed and lifted off the lines, which
@@ -893,14 +893,10 @@
 }
 
 /* An Inbox item's words and what was filled in, which a reader may select
-   and copy; what was filled in keeps the lines it was typed on. */
+   and copy. */
 .inbox-words {
   margin: 0;
   user-select: text;
-}
-
-.inbox-lines {
-  white-space: pre-line;
 }
 
 /* A link the window does not open: its address beside its label, to copy. */
@@ -3374,14 +3370,31 @@ ol.transcript-list {
 
 /* The block a transcript ends on once its turn was stopped or failed, or
    once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
-   end line, then under it the row the end leads on to, Continue in new
-   agent or Continued in. In an empty transcript the two stand as siblings
-   in the empty state's own centred column instead. */
+   end line's row, then under it Continued in, where an archive took the
+   box. In an empty transcript the two stand as siblings in the empty
+   state's own centred column instead. */
 .agent-end {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* The end line's row: the line, then Continue in new agent (or Continue
+   again) after its words, centred on the line's text. Note that the line is
+   one flex item, so a failure too long to share the row takes it whole and
+   the press wraps under it, never between its words; in the empty state
+   the row is centred as its column is. */
+.agent-end-row {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.conversation-empty > .agent-end-row {
+  justify-content: center;
 }
 
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
@@ -3418,9 +3431,9 @@ ol.transcript-list {
   vertical-align: middle;
 }
 
-/* Where an agent may be continued (`continue-agent.tsx`), under a failed
-   turn's end line or in a closed box's note: Continue in new agent, and
-   why it did not start where it did not. */
+/* Where an agent may be continued (`continue-agent.tsx`), on a failed
+   turn's end line's row, in a closed box's note, or in a continued box's:
+   Continue in new agent, and why it did not start where it did not. */
 .agent-continue {
   display: inline-flex;
   flex-wrap: wrap;
@@ -4512,6 +4525,21 @@ ol.transcript-list {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-sidebar);
+}
+
+/* Note that the arrow, the words' first line, and the presses share one
+   centre, the presses' own, so chips that wrap to a second line leave the
+   arrow on the first rather than centred between the two. */
+.continued-composer .luke-banner-row {
+  align-items: flex-start;
+}
+
+.continued-composer .luke-banner-glyph {
+  height: var(--luke-control-height);
+}
+
+.continued-composer .luke-banner-words {
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

@@ -285,7 +285,8 @@ export interface EndLineParts {
  * in parts, so its words and its failed mark can be drawn apart; nothing
  * for an agent still writing or one that completed. A teammate's agent
  * names its starter's key, since it runs on theirs and not the reader's.
- * An agent another already `continued` is not told to start a new one.
+ * An agent whose tab offers Continue, or that another already continued
+ * (`continuable`), is not told to start a new one.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's foot says (`agentUsageLine`).
  */
@@ -293,14 +294,14 @@ export function endLineParts(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
   starter?: string,
-  continued = false,
+  continuable = false,
 ): EndLineParts | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return { words: "Stopped", failed: false };
     case CODING_AGENT_STATUS.FAILED: {
       const words =
-        failure === undefined ? undefined : agentFailureWords(failure, starter, continued);
+        failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
     }
     case CODING_AGENT_STATUS.STARTING:
@@ -376,11 +377,17 @@ const SHARED_FAILURE_NOTE = {
 /** What a Start from an agent whose session has ended says. */
 const START_RETIRED = "This agent has ended. Start a new one.";
 
-/** What a message to an agent whose session has ended says, its box closed on it, beside the press that continues it in a new agent (`ContinueAgent`). */
+/** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+
+/** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
+const BOX_RETIRED = "This agent has ended.";
 
 /** What the press that starts a new agent on another's whole transcript says. */
 export const CONTINUE_LABEL = "Continue in new agent";
+
+/** What that press says once another agent continued the agent, in the same place on the failed end line. */
+export const CONTINUE_AGAIN_LABEL = "Continue again";
 
 /** What the line naming the agents that continued another says before their chips. */
 export const CONTINUED_IN = "Continued in";
@@ -432,6 +439,24 @@ export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string
 /** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
 export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
   return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+}
+
+/**
+ * Whether the end line's row ends on Continue, after its words: where the
+ * line continues the agent (`endLineContinues`), as Continue in new agent,
+ * and once another agent continued it as Continue again, in the same place,
+ * since the continued note that takes the box offers none. Before then, a
+ * box closed on an ended agent offers the press itself, carrying its words,
+ * so the line offers none and one Continue stands on screen.
+ */
+export function endLineOffersContinue(input: {
+  readonly status: CodingAgentStatus;
+  readonly endReason: FailureReason;
+  readonly continued: boolean;
+  readonly boxClosed: boolean;
+}): boolean {
+  if (!endLineContinues(input.status, input.endReason)) return false;
+  return input.continued || !input.boxClosed;
 }
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -596,9 +621,12 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
 
 /** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
 export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
-  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
-    ? unreachedFailure(refused.unreached, taskId)
-    : callFailure(messageFailureWords(refused.failure));
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
+    return unreachedFailure(refused.unreached, taskId);
+  }
+  // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  return callFailure(messageFailureWords(refused.failure));
 }
 
 /** What a message that did not reach the agent says, by why, where only the words are drawn, as an Inbox answer's are. */
