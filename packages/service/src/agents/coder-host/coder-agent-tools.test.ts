@@ -1692,11 +1692,11 @@ test("archive_agent refuses an agent still working, the caller itself, an agent 
   }
 });
 
-test("update_task archives a teammate's task of the caller's workspace for the caller's starter, as the Archive task menu does, without stopping or refusing over the agent still working on it, answers a call run again as done, and brings it back", async () => {
+test("update_task refuses to archive a task while an agent on it still works, then archives the teammate's task for the caller's starter with its agents, as the Archive task menu does, answers a call run again as done, and brings both back", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  await turnOn(agents.teammates, false);
+  const turnId = await turnOn(agents.teammates, false);
   const answered = (archived: boolean, already: boolean) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
@@ -1717,20 +1717,44 @@ test("update_task archives a teammate's task of the caller's workspace for the c
   const archive = (archived: boolean, key: string) =>
     call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
 
+  const agentArchive = async () =>
+    Option.getOrThrow(
+      await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id)),
+    ).archivedBy;
+
+  assert.deepEqual(await archive(true, "call-0"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.AGENTS_WORKING,
+  });
+  assert.equal(await archivedAt(), undefined, "a refused archive leaves the task standing");
+  assert.equal(await agentArchive(), null, "and its agent unarchived and at work");
+  const target = {
+    userId: agents.teammates.userId,
+    conversationId: agents.teammates.conversationId,
+  };
+  await database.run(
+    writer.consume(target, {
+      conversationId: sessionKey(target.conversationId),
+      turnId,
+      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      sequence: 2,
+      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+      responseIds: [],
+      at: NOW,
+    }),
+  );
+
   assert.deepEqual(await archive(true, "call-1"), answered(true, false));
   const stamped = await archivedAt();
   assert.ok(stamped !== undefined);
+  assert.deepEqual(await agentArchive(), {
+    by: CODING_AGENT_ARCHIVER.MEMBER,
+    userId: agents.caller.userId,
+    withTask: true,
+  });
   // Every member of the workspace reads it archived, its owner among them, as after the menu's.
   assert.ok(!(await listedBy(agents.caller.userId)).includes(tasks.billing));
   assert.ok(!(await listedBy(agents.teammates.userId)).includes(tasks.billing));
-  const working = await call(CODER_TOOL.LIST_AGENTS, { taskId: tasks.billing });
-  assert.deepEqual(
-    Array.isArray(working.agents)
-      ? working.agents.map((agent) => isRecord(agent) && [agent.status, agent.archived])
-      : [],
-    [[CODING_AGENT_STATUS.RUNNING, false]],
-    "the agent on it is neither stopped nor archived",
-  );
   // list_tasks leaves it out unless asked, and then names it archived, so it is found to bring back.
   const listedIds = (listed: WireRecord) =>
     Array.isArray(listed.tasks)
@@ -1752,6 +1776,7 @@ test("update_task archives a teammate's task of the caller's workspace for the c
   assert.deepEqual(await archive(false, "call-4"), answered(false, false));
   assert.equal(await archivedAt(), undefined);
   assert.ok((await listedBy(agents.teammates.userId)).includes(tasks.billing));
+  assert.equal(await agentArchive(), null, "its agent comes back with it");
   assert.deepEqual(await archive(false, "call-5"), answered(false, true));
 });
 

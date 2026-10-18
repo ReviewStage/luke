@@ -134,6 +134,9 @@
                 },
                 "reason": {
                   "type": "string"
+                },
+                "withTask": {
+                  "type": "boolean"
                 }
               },
               "required": [

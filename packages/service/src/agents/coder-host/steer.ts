@@ -6,6 +6,8 @@ import {
   dispatchMentioningServers,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
+  readCodingAgent,
+  taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
@@ -73,10 +75,13 @@ import { codingAgentStatusOf } from "./status.js";
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
  * exactly this message (`coder-host/channel.ts`). An archived task's agents
- * take no message, so a send to one is refused before eve is asked; a turn
- * already running when the task was archived runs on to its end. An agent
- * archived on its own takes none either, and is refused as one that names
- * nothing, since every list leaves it out until it is brought back. A
+ * take no message, so a send to one is refused before eve is asked, and
+ * read again under the conversation's lock just before, the lock a task's
+ * archive takes to archive the agent with it: a send that waited on the
+ * archive is refused, and an archive that waited on a send finds the line
+ * awaiting its turn and is refused instead. An agent archived on its own
+ * takes none either, and is refused as one that names nothing, since every
+ * list leaves it out until it is brought back. A
  * session eve answers it no longer runs has ended for good, and nothing
  * will end the turn it was running, so that turn, as read before eve was
  * asked, is settled failed for its session's end
@@ -167,6 +172,23 @@ const settledEnded = (
     ),
   );
 
+/**
+ * Why the agent takes no message now, read again as the hand-over runs:
+ * its task archived, or the agent archived on its own or gone; nothing
+ * while it still takes one.
+ */
+const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: CodingAgent,
+) {
+  const tasks = agent.taskId === null ? undefined : yield* taskNamesOf(userId, [agent.taskId]);
+  if (agent.taskId !== null && tasks?.get(agent.taskId)?.archived !== false) {
+    return tasks?.has(agent.taskId) ? HOSTED_REFUSAL.TASK_ARCHIVED : HOSTED_REFUSAL.NOT_FOUND;
+  }
+  const now = yield* readCodingAgent(userId, agent.id);
+  return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
+});
+
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: EveSessions,
@@ -185,7 +207,6 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
-  if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
   const held =
     agent.taskId === null
@@ -195,6 +216,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const task = held === undefined ? undefined : Option.getOrUndefined(held);
   if (task?.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  // An agent archived with its task is refused as its task is, above; one archived on its own names nothing.
+  if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   yield* workspaceRepository(
@@ -217,7 +240,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const running = yield* runningTurnOf(agent);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
-  const handOver = eve
+  const send = eve
     .send(sessionId, {
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
@@ -238,6 +261,13 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         return false;
       }),
     );
+  // Note that the archive is read again here, under the conversation's lock, because a plan's archive
+  // takes that lock to archive the agent, so the two never cross.
+  const handOver = Effect.flatMap(refusalNow(userId, agent), (refusal) => {
+    if (refusal === undefined) return send;
+    refused = refusal;
+    return Effect.succeed(false);
+  });
   // The servers the words mention stand for the agent's next turn from just before eve hears them, and
   // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.

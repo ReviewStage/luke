@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { organization, user } from "../../schemas/auth.js";
+import { codingAgent } from "../../schemas/coding-agent.js";
 import { issue } from "../../schemas/issue.js";
+import { conversations } from "../../schemas/storage.js";
 import { taskPin } from "../../schemas/task-pin.js";
+import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import { createIssue } from "../issue-store.js";
 import {
   createTask,
@@ -27,7 +32,8 @@ import {
  * plan they share, and each reads only the pin they made, through the
  * store's public reads, over a real dialect. A pin made again keeps its first
  * instant, an archive leaves it standing, and it goes with its plan and its
- * account.
+ * account. And a plan's archive, which archives its coding agents with it
+ * and whose unarchive brings back those it archived and no other.
  *
  * Synthetic accounts, workspaces, and plans throughout.
  */
@@ -394,6 +400,94 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         yield* updateTask(dean, taskId, { organizationId: elsewhere });
         assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
         assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
+      }),
+  );
+});
+
+/** One of the plan's coding agents, started by `userId`, standing unarchived. */
+const openPlanAgent = (userId: string, organizationId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    const conversationId = randomUUID();
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    yield* db.insert(codingAgent).values({
+      id,
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/api",
+      repositories: ["acme/api"],
+      idempotencyKey: randomUUID(),
+    });
+    return id;
+  });
+
+/** The agent's archive as the store reads it: when, and who it was by. */
+const archiveOf = (userId: string, agentId: string) =>
+  Effect.map(readCodingAgent(userId, agentId), (read) => {
+    const agent = Option.getOrThrow(read);
+    return { archivedAt: agent.archivedAt?.getTime(), archivedBy: agent.archivedBy };
+  });
+
+it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
+  it.effect(
+    "a plan's archive archives its standing agents with it as the member who archived it, again for one brought back on its own since, and its unarchive brings back only those",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
+        const working = yield* openPlanAgent(dean, workspace, taskId);
+        const putAway = yield* openPlanAgent(dean, workspace, taskId);
+        yield* archiveCodingAgent(charles, putAway, true);
+        const before = yield* archiveOf(dean, putAway);
+
+        const archived = Option.getOrThrow(yield* updateTask(charles, taskId, { archived: true }));
+        assert.deepEqual(yield* archiveOf(dean, working), {
+          archivedAt: archived.archivedAt,
+          archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: charles, withTask: true },
+        });
+        assert.deepEqual(yield* archiveOf(dean, putAway), before);
+
+        // An agent brought back on its own is taken in again by the archive asked again, under its stamp.
+        yield* archiveCodingAgent(dean, working, false);
+        yield* updateTask(charles, taskId, { archived: true });
+        assert.equal((yield* archiveOf(dean, working)).archivedAt, archived.archivedAt);
+
+        yield* updateTask(dean, taskId, { archived: false });
+        assert.deepEqual(yield* archiveOf(dean, working), {
+          archivedAt: undefined,
+          archivedBy: null,
+        });
+        assert.deepEqual(yield* archiveOf(dean, putAway), before);
+      }),
+  );
+
+  it.effect(
+    "an archive whose guard finds an agent at work under its conversation's lock is refused, and nothing is archived",
+    () =>
+      Effect.gen(function* () {
+        const { dean, taskId } = yield* openSharedTask;
+        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
+        const agentId = yield* openPlanAgent(dean, workspace, taskId);
+        const read: string[] = [];
+
+        const refused = yield* Effect.result(
+          updateTask(dean, taskId, { archived: true }, undefined, (agent) => {
+            read.push(agent.id);
+            return Effect.succeed(false);
+          }),
+        );
+
+        assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
+        assert.deepEqual(read, [agentId]);
+        assert.equal((yield* listedTask(dean, taskId)).archivedAt, undefined);
+        assert.equal((yield* archiveOf(dean, agentId)).archivedAt, undefined);
       }),
   );
 });
