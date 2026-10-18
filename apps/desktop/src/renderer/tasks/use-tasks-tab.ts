@@ -167,7 +167,7 @@ import {
 } from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, newTaskCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -1303,20 +1303,20 @@ export function useTasksTab(input: {
     startsSeen.current = { taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
-  // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
-  // again, as one lands in the work of the task it was made on.
-  const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
-  const newTasksSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+  // A call of Luke's that made a new task, or made, deleted, or filled a section, changes the
+  // sidebar only once the tasks are read again, as one lands in the work of the task it was made on.
+  const sidebarByLuke = useMemo(() => sidebarCallIds(viewed.conversation), [viewed.conversation]);
+  const sidebarSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
     taskId: undefined,
     ids: new Set(),
   });
   useEffect(() => {
-    const seen = newTasksSeen.current;
+    const seen = sidebarSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
-    newTasksSeen.current = { taskId, ids: new Set(newTasksByLuke) };
+    const landed = seen.taskId === taskId && sidebarByLuke.some((callId) => !seen.ids.has(callId));
+    sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [newTasksByLuke, viewed.activeTaskId, tell]);
+  }, [sidebarByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),

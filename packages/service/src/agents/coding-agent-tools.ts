@@ -20,6 +20,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
+import { listTaskSections } from "@luke/database/models/task-section-store";
 import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
@@ -759,11 +760,14 @@ export const LIST_TASKS_TOOL = {
   description:
     "List the open tasks of your workspace, started by any member: each with its id, its name, " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
-    "the task you work on, and its mention, the `[@name](link)` to name it by in your words, " +
-    `the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
-    "nextOffset where more stand. Narrow it by words of a task's name with nameContains. Call it " +
-    `to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to ` +
-    `narrow ${AGENT_TOOL.LIST_AGENTS} to one.`,
+    "the task you work on, the sectionId of the sidebar section the developer you work for " +
+    "keeps it in (null for none, under Tasks), and its mention, the `[@name](link)` to name it " +
+    `by in your words, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "nextOffset where more stand; and beside them every section that developer keeps in this " +
+    "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
+    `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
+    `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
+    `${AGENT_TOOL.MOVE_TASK} and ${AGENT_TOOL.DELETE_SECTION} name.`,
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -900,7 +904,7 @@ const publishedOf = (
   );
 
 /** The member a call acts for: the one on Luke's call, or the starter of the coding agent calling. */
-function callerUserId(caller: AgentCaller): string {
+export function callerUserId(caller: AgentCaller): string {
   return caller.kind === AGENT_CALLER.LUKE ? caller.plan.userId : caller.agent.userId;
 }
 
@@ -910,7 +914,7 @@ function callerTask(caller: AgentCaller): string | null {
 }
 
 /** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
-const callerWorkspace = (caller: AgentCaller) =>
+export const callerWorkspace = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.LUKE
     ? taskWorkspace(caller.plan.userId, caller.plan.taskId)
     : agentWorkspace(caller.agent.userId, caller.agent);
@@ -1024,7 +1028,7 @@ const startedReading = (
   });
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
-const orStoreRefusal = <R>(
+export const orStoreRefusal = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
 ): Effect.Effect<WireRecord, never, R> =>
   Effect.catch(effect, (failure) =>
@@ -1677,7 +1681,7 @@ export function runStopAgent(
   );
 }
 
-/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first. */
+/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -1696,19 +1700,29 @@ export function runListTasks(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const ownTask = callerTask(caller);
-      const listed = yield* listTasks(callerUserId(caller));
+      const userId = callerUserId(caller);
+      const listed = yield* listTasks(userId);
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
           (words === undefined || task.name.toLowerCase().includes(words)),
       );
-      const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
+      const kept = yield* listTaskSections(userId);
+      const sections = kept.sections.filter((section) => section.workspaceId === workspace.value);
+      const shelved = new Set(sections.map((section) => section.id));
+      const sectionOf = new Map(
+        kept.entries
+          .filter((entry) => shelved.has(entry.sectionId))
+          .map((entry) => [entry.taskId, entry.sectionId]),
+      );
+      const step = yield* workspaceStepOf(userId, workspace.value);
       const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((task) => ({
         id: task.id,
         name: task.name,
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
+        sectionId: sectionOf.get(task.id) ?? null,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));
       const next = offset + TASKS_LIST_LIMIT;
@@ -1716,6 +1730,7 @@ export function runListTasks(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         tasks,
         nextOffset: next < matching.length ? next : null,
+        sections: sections.map((section) => ({ id: section.id, title: section.title })),
       };
     }),
   );

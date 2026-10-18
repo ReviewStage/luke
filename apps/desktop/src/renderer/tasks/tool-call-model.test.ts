@@ -557,6 +557,46 @@ test("a stop names the agent its answer titles and opens that agent's tab, which
   assert.equal(toolTarget(refused), undefined);
 });
 
+test("the section calls read as theirs, a made section by the title asked and a deleted one and a moved task by what the answer names, and open nothing", () => {
+  const made = {
+    tool: "create_section",
+    callId: "call-1",
+    input: { title: "Growth" },
+    output: { status: "accepted", section: { id: "section-1", title: "Growth" } },
+  };
+  const deleted = {
+    tool: "delete_section",
+    callId: "call-2",
+    input: { sectionId: "section-1" },
+    output: {
+      status: "accepted",
+      section: { id: "section-1", title: "Growth" },
+      tasksBackUnderTasks: 2,
+    },
+  };
+  const moved = {
+    tool: "move_task",
+    callId: "call-3",
+    input: { taskId: "task-1", sectionId: "section-2" },
+    output: {
+      status: "accepted",
+      task: { id: "task-1", name: "Bill by seat" },
+      section: { id: "section-2", title: "Billing" },
+    },
+  };
+
+  const rows = [made, deleted, moved].map((call) => {
+    const view = toolCallView(call);
+    return [view.kind, view.subject, toolTarget(call)];
+  });
+  assert.deepEqual(rows, [
+    [CALL_KIND.CREATE_SECTION, "Growth", undefined],
+    [CALL_KIND.DELETE_SECTION, "Growth", undefined],
+    [CALL_KIND.MOVE_TASK, "Bill by seat", undefined],
+  ]);
+  assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
+});
+
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
   const call = (isYourTask: boolean) => ({
     tool: "read_page",

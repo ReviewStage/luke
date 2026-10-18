@@ -26,7 +26,13 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";
-import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type WireValue,
+} from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
@@ -615,6 +621,36 @@ function answeredAgentCall(
   return { ...namedCall(kind, input, output, undefined), subject: stringAt(agent, "title") ?? "" };
 }
 
+/** A call named by a field of what its answer names, as a section by its title; nothing before the answer, whose input holds only ids. */
+function answeredCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+  answered: string,
+  field: string,
+): ToolCallView {
+  const named = isRecord(output) ? output[answered] : undefined;
+  return { ...namedCall(kind, input, output, undefined), subject: stringAt(named, field) ?? "" };
+}
+
+/** The tools that keep the member's sidebar sections, whose accepted call changes the sidebar. */
+const SECTION_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.CREATE_SECTION,
+  AGENT_TOOL.DELETE_SECTION,
+  AGENT_TOOL.MOVE_TASK,
+]);
+
+/**
+ * Whether an answered call changed what the sidebar draws, so the window
+ * reads the tasks again: a start that made a new task, or a section made,
+ * deleted, or a task moved, each only once it was accepted.
+ */
+export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
+  if (!isRecord(output)) return false;
+  if (tool === AGENT_TOOL.START_AGENT) return isRecord(output.newTask);
+  return SECTION_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
+}
+
 /** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
@@ -692,6 +728,12 @@ function tasksToolView(
       return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
     case AGENT_TOOL.STOP_AGENT:
       return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
+    case AGENT_TOOL.CREATE_SECTION:
+      return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
+    case AGENT_TOOL.DELETE_SECTION:
+      return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
+    case AGENT_TOOL.MOVE_TASK:
+      return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:

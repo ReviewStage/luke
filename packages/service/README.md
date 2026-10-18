@@ -1074,7 +1074,13 @@ the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
 staying available and an idle one answered as idle; `read_page`, a page shown on any task
 of the workspace by its id, its HTML cut on a line to a bound, which a
 mention of a page points the agent at; `list_tasks`, the workspace's
-open tasks; and `list_models`, the models and efforts the agent's starter may
+open tasks, each with the sidebar section the agent's starter keeps it in,
+and those sections; `create_section`, `delete_section`, and `move_task`
+(`src/agents/task-section-tools.ts`), which make and delete the starter's
+own sections of the workspace's sidebar and move a task into one or out of
+them by the sidebar's own write (`PUT /api/task-sections`), a section made
+under an id drawn from eve's key for the call, so a call run again makes
+one; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1857,7 +1863,9 @@ how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
 `list_agents`, `read_agent`, `message_agent`, `start_agent`,
 `stop_agent`, `archive_agent`, `unarchive_agent`, `list_tasks`, and `list_models`
-every coding agent is offered: a list
+every coding agent is offered, and the same `create_section`,
+`delete_section`, and `move_task` (`src/agents/task-section-tools.ts`), which
+keep the call's member's own sidebar sections: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent

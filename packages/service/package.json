@@ -89,6 +89,7 @@
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
+    "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/coding-agents-app": "./src/agents/coding-agents-app.js",
     "./agents/command-description": "./src/agents/command-description.js",
     "./agents/mac-command": "./src/agents/mac-command.js",
