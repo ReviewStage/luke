@@ -404,8 +404,8 @@
     "dest": "/api/default.js?route=live/inbox"
   },
   {
-    "src": "/api/live/plan-inbox",
-    "dest": "/api/default.js?route=live/plan-inbox"
+    "src": "/api/live/task-inbox",
+    "dest": "/api/default.js?route=live/task-inbox"
   },
   {
     "src": "/api/mac-commands",

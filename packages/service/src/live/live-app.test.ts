@@ -172,10 +172,10 @@ it.layer(getTestDB())("the live reads", (it) => {
         });
         assert.ok(Option.isSome(started));
         const agentId = started.value.agent.id;
-        const planPath = `/api/live/plan-inbox?id=${task.id}`;
+        const taskPath = `/api/live/task-inbox?id=${task.id}`;
         const agentPath = `/api/live/agent-inbox?id=${agentId}`;
 
-        for (const path of [planPath, agentPath]) {
+        for (const path of [taskPath, agentPath]) {
           const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
           assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
           const answer = Schema.decodeUnknownSync(scopeInboxLiveAnswerSchema)(sealed.body);

@@ -37,7 +37,7 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * Realtime is misconfigured answers `unavailable`, and the desktop asks
  * again a moment later.
  *
- * `GET /api/live/plan-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
+ * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
  * latest settled ones as one statement, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.

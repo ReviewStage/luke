@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
@@ -19,6 +18,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
+import { Hex } from "effect/encoding";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
@@ -62,12 +62,21 @@ type LiveState =
   | { readonly kind: "standing"; readonly inbox: LiveInbox }
   | { readonly kind: "broken" };
 
-/** A digest of where every item stands: any change to any of them moves it, as the service's cursor moves. */
-function cursorOf(items: readonly InboxItem[]): string {
+/**
+ * A digest of where every item stands: any change to any of them moves it,
+ * as the service's cursor moves. Note that it is Web Crypto's SHA-256, since
+ * the host loads where no `node:` module does.
+ */
+function cursorOf(items: readonly InboxItem[]): Effect.Effect<string> {
   const standing = items
     .map((item) => [item.id, item.revision, item.status, item.updatedAt] as const)
     .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `live-${createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, 32)}`;
+  return Effect.map(
+    Effect.promise(() =>
+      crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(standing))),
+    ),
+    (digest) => `live-${Hex.encode(new Uint8Array(digest)).slice(0, 32)}`,
+  );
 }
 
 export interface ScopeInboxDependencies {
@@ -113,10 +122,9 @@ export function scopeInboxes(
               onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
               onSome: (decoded) => {
                 const items = inboxOfLiveRows(decoded);
-                return SubscriptionRef.set(inbox, {
-                  kind: "standing",
-                  inbox: { items, cursor: cursorOf(items) },
-                });
+                return Effect.flatMap(cursorOf(items), (cursor) =>
+                  SubscriptionRef.set(inbox, { kind: "standing", inbox: { items, cursor } }),
+                );
               },
             }),
           ).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: "broken" }))),

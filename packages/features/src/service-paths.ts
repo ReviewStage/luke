@@ -71,9 +71,9 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
-  /** One plan's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
-  LIVE_TASK_INBOX: "/api/live/plan-inbox",
-  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a plan's is. */
+  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
+  LIVE_TASK_INBOX: "/api/live/task-inbox",
+  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
   /**
    * A workspace's agents, on a task or with none, newest started first and
