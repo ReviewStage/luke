@@ -26,6 +26,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
+import { NEEDS_YOU } from "../tasks/inbox-model";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopFactory } from "./desktop-factory";
 
@@ -177,17 +178,17 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
   assert.ok(region, `${step} stands`);
-  return [...region.querySelectorAll(".sidebar-task")].map((row) => {
-    const words = row.querySelector(".sidebar-task-name")?.textContent;
+  return [...region.querySelectorAll("li > button")].map((row) => {
+    const words = row.querySelector(".luke-list-row-title")?.firstChild?.textContent;
     const context = row.querySelector(".home-row-context")?.textContent;
-    const waits = row.getAttribute("data-unread") === "true" ? " (waits)" : "";
+    const waits = row.textContent?.includes(NEEDS_YOU.LABEL) === true ? " (waits)" : "";
     return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
   });
 }
 
 function row(page: HTMLElement, words: string): HTMLButtonElement {
-  const found = [...page.querySelectorAll<HTMLButtonElement>(".sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === words,
+  const found = [...page.querySelectorAll<HTMLButtonElement>("li > button")].find(
+    (each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === words,
   );
   assert.ok(found, `${words} stands`);
   return found;
@@ -226,7 +227,10 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.deepEqual(rows(page, "ship"), ["#2505 ready to merge · Workspace invites (waits)"]);
   // What waits stands in a list of its own, ahead of the work.
   const build = page.querySelector('section[data-step="build"]');
-  assert.equal(build?.querySelector("[data-needs] .sidebar-task-name")?.textContent, QUESTION);
+  assert.equal(
+    build?.querySelector("[data-needs] .luke-list-row-title")?.firstChild?.textContent,
+    QUESTION,
+  );
   // The working agent wears the working mark; the stalled one its own mark at rest.
   const working = '.state-glyph[data-state="working"]';
   assert.ok(row(page, "Plan index").querySelector(working));
@@ -425,7 +429,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
   );
 
   const face = (words: string) =>
-    row(page, words).querySelector(".sidebar-task-time .actor-mark")?.textContent ?? null;
+    row(page, words).querySelector(".home-row-meta .actor-mark")?.textContent ?? null;
   assert.equal(face(DRAFT.name), "C");
   assert.equal(face("Plan index"), null);
   assert.equal(face("Plan UI"), "C");
@@ -441,7 +445,7 @@ test("a refresh that fails over a list read before keeps the line standing, and 
     },
   });
   // The agent at work on the task read before still stands in Build.
-  assert.ok(page.querySelector('section[data-step="build"] .sidebar-task'));
+  assert.ok(page.querySelector('section[data-step="build"] li > button'));
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
@@ -670,7 +674,7 @@ test("↓ from the window reaches the first row and moves on through the station
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   const focused = () =>
-    document.activeElement?.querySelector(".sidebar-task-name")?.textContent ?? null;
+    document.activeElement?.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? null;
   press("ArrowDown");
   assert.equal(focused(), "Usage alerts");
   press("ArrowDown");
@@ -690,7 +694,8 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
   act(() => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   });
-  const name = () => document.activeElement?.querySelector(".sidebar-task-name")?.textContent;
+  const name = () =>
+    document.activeElement?.querySelector(".luke-list-row-title")?.firstChild?.textContent;
   assert.equal(name(), "Plan index");
   const working = SEARCH.agents;
   assert.ok(working);

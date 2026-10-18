@@ -4,6 +4,7 @@ import {
   IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_VARIANT,
   List,
   ListRow,
@@ -162,6 +163,19 @@ function ListRows(): React.JSX.Element {
                   label="Archive Draw the sidebar with the shared rows"
                 />
               }
+            />
+            <ListRow
+              title="Read the release notes"
+              meta="2d"
+              ink={LIST_ROW_INK.SIDEBAR}
+              unread
+              onPress={() => undefined}
+            />
+            <ListRow
+              title="A read plan in the sidebar's ink"
+              meta="2d"
+              ink={LIST_ROW_INK.SIDEBAR}
+              onPress={() => undefined}
             />
             <ListRow title="Deleting a plan" meta="3d" disabled onPress={() => undefined} />
           </List>

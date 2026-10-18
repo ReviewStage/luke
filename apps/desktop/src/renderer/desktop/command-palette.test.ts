@@ -1349,7 +1349,7 @@ function PinnableTask(): React.JSX.Element {
 function pinnedNames(): (string | null)[] {
   const section = document.querySelector('nav[aria-label="Pinned"]');
   return [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
-    (name) => name.firstChild?.textContent,
+    (name) => name.firstChild?.textContent ?? null,
   );
 }
 

@@ -1453,7 +1453,7 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   const { page } = mount();
   await settle();
   const offered = () =>
-    page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   assert.equal(offered(), null, "the item chosen waits on its box");
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
@@ -1469,7 +1469,8 @@ test("a settled item offers, over its box, the next item that needs you, by its 
 test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
   const { page } = mount();
   await settle();
-  const next = () => page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  const next = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board");
   assert.ok(board, "the item's thread");

@@ -4,12 +4,21 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { CHIP_LOOK, Chip, ChipName, CopyIcon, ProviderMark, useMenu } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  CopyIcon,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  ProviderMark,
+  useMenu,
+} from "@luke/ui";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import {
   checkoutCommand,
   publishedUrl,
@@ -202,7 +211,7 @@ export function LinesChanged({
   );
 }
 
-/** The row at the end of a finished transcript: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
+/** The row at the end of a finished transcript, a card of one row: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it, and the pointer reads its title whole where it is cut short. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   openGitHub,
@@ -210,30 +219,35 @@ export function PublishedRow({
   pullRequest: CodingAgentPullRequest;
   openGitHub: (url: string) => void;
 }): ReactNode {
-  // Whether the title is cut short, which fades it and lets the pointer read it whole.
-  const [words, clipped] = useClipped();
+  // Whether the title is cut short, which lets the pointer read it whole.
+  const [clipped, setClipped] = useState(false);
   const state = pullRequestStateWord(pullRequest.state);
   return (
-    <Tooltip label={clipped ? pullRequest.title : undefined}>
-      <button
-        type="button"
-        className="agent-published-row"
-        data-published-row=""
-        onClick={() => openGitHub(pullRequest.url)}
-      >
-        <PullRequestMark pullRequest={pullRequest} />
-        <span className="agent-published-name">
-          <span className="agent-published-number">{pullRequestNumberLabel(pullRequest)} ·</span>
-          <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
-            {pullRequest.title}
-          </span>
-        </span>
-        {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
-          <span className="agent-published-checks">{CHECKS_FAILING}</span>
-        ) : null}
-        {state === undefined ? null : <span className="agent-published-state">{state}</span>}
-        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </button>
-    </Tooltip>
+    <div className="agent-published">
+      <List label="Pull request" variant={LIST_VARIANT.CARD}>
+        <RowHintOptions shown={clipped}>
+          <ListRow
+            leading={<PullRequestMark pullRequest={pullRequest} />}
+            title={
+              <>
+                {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
+              </>
+            }
+            meta={
+              <span className="agent-published-meta">
+                {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
+                  <span className="agent-published-checks">{CHECKS_FAILING}</span>
+                ) : null}
+                {state === undefined ? null : <span>{state}</span>}
+                <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
+              </span>
+            }
+            hint={{ Hint: RowHint, label: pullRequest.title }}
+            onTitleClipped={setClipped}
+            onPress={() => openGitHub(pullRequest.url)}
+          />
+        </RowHintOptions>
+      </List>
+    </div>
   );
 }

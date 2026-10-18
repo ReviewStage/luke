@@ -5396,57 +5396,22 @@ button.agent-ref:hover .agent-ref-name {
   font-size: 11.5px; /* off-scale: a branch's name in the code face */
 }
 
-/* The pull request's row at a finished transcript's end: a boxed line, the
-   whole of it the button that opens the pull request, drawn as the
-   subagent's row is and for the same reason written here. The lines it
-   adds and removes read in the success green and the danger red, in
-   tabular numerals so a count does not shift as it grows. The row answers
-   its own width, as the composer does, so it holds in the main column and
-   the side panel alike, and clips, so nothing it draws paints past its
-   edge. */
-.agent-published-row {
+/* The pull request's row at a finished transcript's end, a card of one row
+   (`@luke/ui`'s List). The lines it adds and removes read in the success
+   green and the danger red, in tabular numerals so a count does not shift as
+   it grows. The row answers its own width, as the composer does, so it holds
+   in the main column and the side panel alike. */
+.agent-published {
   container: published-row / inline-size;
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  height: 36px; /* off-scale: a transcript's boxed row */
+}
+
+.agent-published-meta {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: none;
-  color: var(--luke-color-text);
-  overflow: hidden;
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.agent-published-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* The number, never cut, then the title, which gives way first. */
-.agent-published-name {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  gap: 0.3em;
-  white-space: nowrap;
-}
-
-.agent-published-number {
-  flex: none;
-}
-
-.agent-published-title {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* Too narrow for the checks' word: the mark's red still says they failed,
-   and its label says so to a reader. */
+/* Too narrow for the checks' word: the mark's red still says they failed. */
 @container published-row (max-width: 359px) {
   .agent-published-checks {
     display: none;
@@ -5461,21 +5426,13 @@ button.agent-ref:hover .agent-ref-name {
   }
 }
 
-.agent-published-state {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-}
-
 /* The one word the checks still get: said, in the danger red, only once
    they have failed, since that is the one result that asks for a look. */
 .agent-published-checks {
-  flex: 0 0 auto;
   color: var(--luke-color-danger-text);
 }
 
 .agent-published-lines {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

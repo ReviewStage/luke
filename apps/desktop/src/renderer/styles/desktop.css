@@ -937,10 +937,6 @@ button.sidebar-section-head-name:hover {
   flex: 1;
 }
 
-.desktop-sidebar .sidebar-task-marks {
-  top: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
-}
-
 /* A plan's row fills while the pointer is anywhere on its item, its own
    buttons at its end included, and no more than its hover does, so the open
    plan keeps its stronger fill. */
@@ -1384,13 +1380,10 @@ ul.actor-stack {
 }
 
 /* A one-off agent's row leads with its harness mark, as its tab does, so it
-   reads apart from a task; the line's baseline holds it level with the name. */
+   reads apart from a task. */
 .sidebar-agent-glyph {
   display: inline-flex;
-  flex: none;
-  align-self: center;
   --state-glyph-size: 14px;
-  color: var(--luke-color-text-muted);
 }
 
 .sidebar-task-time {
@@ -1483,24 +1476,10 @@ ul.actor-stack {
 }
 
 /* Pin and Archive stand in the time's slot, which is always as wide as the
-   two of them, while the row is hovered or holds the keyboard: the time
-   steps out and they step in over the name's first line, so the name is cut
-   where it always is and nothing moves. They are the row's siblings, since
-   a button holds no button, laid over its end. */
+   two of them, while the row is hovered or holds the keyboard (`ListRow`'s
+   acts on hover), so the name is cut where it always is and nothing moves. */
 .sidebar-task-item {
   position: relative;
-}
-
-.sidebar-task-marks {
-  position: absolute;
-  top: var(--luke-space-8);
-  right: var(--row-inset);
-  display: flex;
-  height: 1lh;
-  align-items: center;
-  gap: var(--luke-space-2);
-  font-size: 13px;
-  opacity: 0;
 }
 
 /* Note that Pin and Archive draw no ground under the pointer, as the
@@ -1532,11 +1511,6 @@ ul.actor-stack {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
   flex: 0 0 auto;
-}
-
-.sidebar-task-item:hover > .sidebar-task-marks,
-.sidebar-task-item:has(:focus-visible) > .sidebar-task-marks {
-  opacity: 1;
 }
 
 /* Note that the row holding the keyboard stands over its neighbours, because
@@ -1574,9 +1548,8 @@ ul.actor-stack {
   cursor: grabbing;
 }
 
-/* Note that a one-off agent's row keeps its time, because it has no marks to make room for. */
-.sidebar-task-item:hover .sidebar-task:not(.sidebar-agent) .sidebar-task-time,
-.sidebar-task-item:has(:focus-visible) .sidebar-task:not(.sidebar-agent) .sidebar-task-time {
+.sidebar-task-item:hover .sidebar-task .sidebar-task-time,
+.sidebar-task-item:has(:focus-visible) .sidebar-task .sidebar-task-time {
   visibility: hidden;
 }
 
@@ -4518,44 +4491,31 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* A settled item's foot, over its box: the next item that needs the
-   developer as one wide press in the options' fill (`inbox-pager.tsx`), led
-   by Next in the meta voice, then its agent's tile and its title in the
-   unread weight, cut short at the row's end, and J where J reaches it. */
+   developer as a card of one row (`inbox-pager.tsx`), led by its agent's
+   tile, then Next in the meta voice and its title in the unread weight, cut
+   short at the row's end, and J where J reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }
 
-.inbox-next {
-  display: flex;
-  width: 100%;
-  align-items: center;
+.inbox-next-words {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
   gap: var(--luke-space-8);
-  padding: var(--luke-space-12);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: 13px;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.inbox-next:hover {
-  background: var(--luke-color-fill-strong);
+.inbox-next-words > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inbox-next-lead {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
-}
-
-.inbox-next-title {
-  overflow: hidden;
-  min-width: 0;
-  flex: 1;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
 }
 
 /* An item standing alone ends its bar in the pager (`inbox-pager.tsx`):
@@ -4829,12 +4789,6 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--luke-space-2) var(--row-inset) var(--luke-space-6);
 }
 
-.factory-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 /* What waits on the developer stands apart from the work after it. */
 .factory-rows[data-needs] + .factory-rows {
   margin-top: var(--luke-space-4);
@@ -4842,8 +4796,8 @@ body:has(.app-stage[data-capture="true"])
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* A row offers no Pin or Archive to give way to, so its time stays put
-   while the row is hovered or holds the keyboard, as Home's does. */
+/* An issue board's card offers no Pin or Archive to give way to, so its
+   time stays put while the card is hovered or holds the keyboard. */
 .factory-row:hover .sidebar-task-time,
 .factory-row:has(:focus-visible) .sidebar-task-time {
   visibility: visible;
@@ -4852,9 +4806,9 @@ body:has(.app-stage[data-capture="true"])
 /* A row that opens GitHub says so with a plain link's ↗ after its words. */
 .factory-external {
   display: inline-flex;
-  flex: none;
-  margin-left: calc(-1 * var(--luke-space-6));
+  margin-inline-start: var(--luke-space-2);
   color: var(--luke-color-text-subtle);
+  vertical-align: middle;
 }
 
 @container factory (width < 960px) {
@@ -7492,7 +7446,7 @@ body:has(.app-stage[data-capture="true"])
 
 /* A label cut short fades out over its last `--label-fade` rather than
    ending in an ellipsis, as a browser's tab does, and so do a searchable
-   menu's words, a subagent's job, and a pull request's title. Only a label measured cut short (use-clipped.ts) fades, so
+   menu's words, and a subagent's job. Only a label measured cut short (use-clipped.ts) fades, so
    a short one ends on its last letter. The mask fades the words themselves,
    so it reads alike over every fill a tab or a row wears, at rest, hovered,
    chosen, or dragged. */
@@ -7500,8 +7454,7 @@ body:has(.app-stage[data-capture="true"])
 .task-summary-label[data-overflow="true"],
 :is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-name[data-overflow="true"],
 :is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-detail[data-overflow="true"],
-.subagent-job[data-overflow="true"],
-.agent-published-title[data-overflow="true"] {
+.subagent-job[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 

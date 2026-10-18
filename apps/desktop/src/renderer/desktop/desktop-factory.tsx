@@ -10,6 +10,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  List,
+  ListRow,
   PAGE_FRAME,
   PAGE_WIDTH,
   TEXT_ELEMENT,
@@ -49,7 +51,7 @@ import { useMinute } from "../tasks/task-time";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
@@ -212,8 +214,10 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
     const timing = paneTiming(root);
     const seen = last.current;
     const next = new Map<string, { step: string | undefined; rect: DOMRect }>();
-    for (const row of root.querySelectorAll<HTMLElement>("[data-factory-row]")) {
-      const key = row.dataset.factoryRow ?? "";
+    for (const mark of root.querySelectorAll<HTMLElement>("[data-factory-row]")) {
+      // Note that the key rides the row's glyph, so the item around it is what slides.
+      const row = mark.closest<HTMLElement>("li") ?? mark;
+      const key = mark.dataset.factoryRow ?? "";
       const step = row.closest<HTMLElement>("[data-step]")?.dataset.step;
       const rect = row.getBoundingClientRect();
       const was = seen.get(key);
@@ -263,12 +267,12 @@ function useFocusFollows(root: HTMLElement | null, board: FactoryBoard): void {
     const was = held.current;
     if (root === null || was === null || was.isConnected) return;
     const lost = document.activeElement === null || document.activeElement === document.body;
-    const key = was.closest<HTMLElement>("[data-factory-row]")?.dataset.factoryRow;
+    const key = was.querySelector<HTMLElement>("[data-factory-row]")?.dataset.factoryRow;
     if (!lost || key === undefined) return;
-    const row = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
+    const mark = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
       (each) => each.dataset.factoryRow === key,
     );
-    row?.querySelector<HTMLElement>(".sidebar-task")?.focus();
+    mark?.closest("li")?.querySelector<HTMLElement>(":scope > button")?.focus();
   }, [root, board]);
 }
 
@@ -317,39 +321,48 @@ function FactoryRow({
   const menu = useMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
-    <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>
-      <Tooltip label={words} card={card}>
-        <button
-          type="button"
-          className="sidebar-task"
-          data-unread={String(waiting)}
-          onClick={onOpen}
-          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-        >
-          <span className="sidebar-task-line">
-            <span className="home-row-picture">{glyph}</span>
-            <span className="sidebar-task-name">{words}</span>
-            {external ? (
-              <span className="factory-external">
-                <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
-                <span className="visually-hidden">(opens on GitHub)</span>
-              </span>
-            ) : null}
-            {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            {actor === undefined ? null : <CreatorHeard actor={actor} />}
-            <span className="sidebar-task-time">
+    <>
+      <RowHintOptions card={card}>
+        <ListRow
+          leading={
+            <span className="home-row-picture" data-factory-row={slide}>
+              {glyph}
+            </span>
+          }
+          title={
+            <>
+              {words}
+              {external ? (
+                <span className="factory-external">
+                  <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                  <span className="visually-hidden">(opens on GitHub)</span>
+                </span>
+              ) : null}
+              {actor === undefined ? null : <CreatorHeard actor={actor} />}
+            </>
+          }
+          meta={
+            <span className="home-row-meta">
+              {context === undefined ? null : <span className="home-row-context">{context}</span>}
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
               <RelativeTime at={at} now={now} hint={false} />
-            </span>
-            {waiting ? (
-              <span className="inbox-row-dot">
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+              {/* Note that the dot's place stands on every row, so the times line up whether a row wears one or not. */}
+              <span className="inbox-row-dot-place">
+                {waiting ? (
+                  <span className="inbox-row-dot">
+                    <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  </span>
+                ) : null}
               </span>
-            ) : null}
-          </span>
-        </button>
-      </Tooltip>
+            </span>
+          }
+          unread={waiting}
+          hint={{ Hint: RowHint, label: words }}
+          onPress={onOpen}
+          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+        />
+      </RowHintOptions>
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label="Row actions"
@@ -358,7 +371,7 @@ function FactoryRow({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }
 
@@ -398,11 +411,15 @@ function Station({
         </Text>
       ) : null}
       {needs.length === 0 ? null : (
-        <ul className="sidebar-tasks factory-rows" data-needs="">
-          {needs}
-        </ul>
+        <div className="factory-rows" data-needs="">
+          <List label={`${name}, ${NEEDS_YOU.LABEL}`}>{needs}</List>
+        </div>
       )}
-      {rows.length === 0 ? null : <ul className="sidebar-tasks factory-rows">{rows}</ul>}
+      {rows.length === 0 ? null : (
+        <div className="factory-rows">
+          <List label={name}>{rows}</List>
+        </div>
+      )}
     </section>
   );
 }
