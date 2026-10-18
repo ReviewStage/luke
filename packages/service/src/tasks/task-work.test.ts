@@ -27,7 +27,7 @@ import {
   TURN_ENDING,
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
-import { planConversationLiveRowsSchema } from "@luke/features/live-wire";
+import { taskConversationLiveRowsSchema } from "@luke/features/live-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import {
   TASK_WORK_BOUNDS,
@@ -59,7 +59,7 @@ import {
   brainTitleAwaited,
   brainTurnsPage,
   brainWorkerSession,
-  planConversationLiveStatements,
+  taskConversationLiveStatements,
 } from "./brain-transcript.js";
 import { SHOW_CODE_TOOL } from "./show-code.js";
 import { taskWorkOf } from "./task-work.js";
@@ -1019,10 +1019,10 @@ test("a planner page's journal of a turn longer than the bound says its older pa
 function liveMarkOf(reader: string, taskId: string) {
   return database.run(
     Effect.gen(function* () {
-      const statement = Option.getOrThrow(planConversationLiveStatements(reader, taskId));
+      const statement = Option.getOrThrow(taskConversationLiveStatements(reader, taskId));
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql.unsafe(statement.mark.sql, [...statement.mark.params]);
-      return (yield* Schema.decodeUnknownEffect(planConversationLiveRowsSchema)({ mark: rows }))
+      return (yield* Schema.decodeUnknownEffect(taskConversationLiveRowsSchema)({ mark: rows }))
         .mark;
     }),
   );

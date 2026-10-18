@@ -113,10 +113,10 @@ import {
 import {
   type AccountInboxLiveAnswer,
   accountInboxLiveAnswerSchema,
-  type PlanConversationLiveAnswer,
-  planConversationLiveAnswerSchema,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveAnswerSchema,
+  type TaskConversationLiveAnswer,
+  taskConversationLiveAnswerSchema,
 } from "./live-wire.js";
 import {
   codingAgentDefaultWriteSchema,
@@ -871,13 +871,13 @@ export class HostedCodingAgentClient {
    */
   taskConversationLive(
     taskId: string,
-  ): Effect.Effect<PlanConversationLiveAnswer | Failed, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskConversationLiveAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.GET,
         path: `${HOSTED_SERVICE_PATH.LIVE_TASK_CONVERSATION}?${new URLSearchParams({ id: taskId })}`,
       }),
-      (answer) => readAnswer(answer, planConversationLiveAnswerSchema, ROW_REFUSALS),
+      (answer) => readAnswer(answer, taskConversationLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 

@@ -444,19 +444,19 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * `unavailable` where its deployment has no Realtime, and the desktop holds
  * its read open as before.
  */
-export const planConversationLiveAnswerSchema = EffectSchema.Struct({
+export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema }),
 });
 
-export type PlanConversationLiveAnswer = typeof planConversationLiveAnswerSchema.Type;
+export type TaskConversationLiveAnswer = typeof taskConversationLiveAnswerSchema.Type;
 
 /**
  * Where the conversation stands as its row delivers it: the highest message
  * sequence and the journal revision, the newest turn and its status (null
  * before the first), and the running workers' turns, by id.
  */
-const planConversationMarkSchema = EffectSchema.Struct({
+const taskConversationMarkSchema = EffectSchema.Struct({
   seq: EffectSchema.Finite,
   revision: EffectSchema.Finite,
   turnId: EffectSchema.NullOr(EffectSchema.String),
@@ -465,6 +465,6 @@ const planConversationMarkSchema = EffectSchema.Struct({
 });
 
 /** The conversation's mark as Realtime delivers it: one row, or none for a plan the account no longer reaches. */
-export const planConversationLiveRowsSchema = EffectSchema.Struct({
-  mark: EffectSchema.Array(planConversationMarkSchema),
+export const taskConversationLiveRowsSchema = EffectSchema.Struct({
+  mark: EffectSchema.Array(taskConversationMarkSchema),
 });

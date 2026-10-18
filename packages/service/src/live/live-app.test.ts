@@ -8,8 +8,8 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
   accountInboxLiveAnswerSchema,
-  planConversationLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
+  taskConversationLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
@@ -206,11 +206,11 @@ it.layer(getTestDB())("the live reads", (it) => {
         const owner = yield* openUser;
         const stranger = yield* openUser;
         const task = yield* startTask(owner, { name: "Teammate invitations" });
-        const path = `/api/live/plan-conversation?id=${task.id}`;
+        const path = `/api/live/task-conversation?id=${task.id}`;
 
         const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
         assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(planConversationLiveAnswerSchema)(sealed.body);
+        const answer = Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(sealed.body);
         assert.equal(answer.url, REALTIME_URL);
         assert.ok(answer.queries.mark.capability.includes(`"${owner}"`), "read for the bearer");
         assert.ok(answer.queries.mark.capability.includes(`"${task.id}"`), "read of the plan");

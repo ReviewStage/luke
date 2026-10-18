@@ -18,8 +18,8 @@ import {
 } from "@luke/database/models/message-reads";
 import { reachableTask } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { task } from "@luke/database/schemas/task";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -356,7 +356,7 @@ export function brainPagePast(
 /**
  * The planner's conversation past the cursor as it stands now, in one look
  * and never held: what a reader asks once the conversation's mark moved
- * (`planConversationLiveStatements`), since the mark is what it would
+ * (`taskConversationLiveStatements`), since the mark is what it would
  * otherwise have looked again for.
  */
 export function brainPageNow(
@@ -367,7 +367,7 @@ export function brainPageNow(
 }
 
 /** The statement a plan's planning conversation is followed by live: its mark, one row. */
-export interface PlanConversationLiveStatements {
+export interface TaskConversationLiveStatements {
   readonly mark: LiveStatement;
 }
 
@@ -387,10 +387,10 @@ const workerConversation = alias(conversations, "worker_conversation");
  * and one never planned on is the start, until its conversation opens.
  * None where the statement names a value Realtime cannot carry.
  */
-export function planConversationLiveStatements(
+export function taskConversationLiveStatements(
   userId: string,
   taskId: string,
-): Option.Option<PlanConversationLiveStatements> {
+): Option.Option<TaskConversationLiveStatements> {
   const highestSeq = queryBuilder
     .select({ seq: max(messages.seq) })
     .from(messages)

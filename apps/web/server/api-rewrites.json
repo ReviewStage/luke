@@ -404,8 +404,8 @@
     "dest": "/api/default.js?route=live/inbox"
   },
   {
-    "src": "/api/live/plan-conversation",
-    "dest": "/api/default.js?route=live/plan-conversation"
+    "src": "/api/live/task-conversation",
+    "dest": "/api/default.js?route=live/task-conversation"
   },
   {
     "src": "/api/live/task-inbox",

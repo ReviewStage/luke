@@ -27,7 +27,7 @@ import {
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import type { PlanConversationLiveAnswer } from "@luke/features/live-wire";
+import type { TaskConversationLiveAnswer } from "@luke/features/live-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import {
@@ -829,7 +829,7 @@ interface FakeConversations extends TasksConversationClient {
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
   /** What the service seals for following a plan's conversation; none answers unanswered, as a service without Realtime does. */
-  sealed: PlanConversationLiveAnswer | undefined;
+  sealed: TaskConversationLiveAnswer | undefined;
   /** Every plan a seal was asked for, in order. */
   readonly seals: string[];
 }
@@ -929,7 +929,7 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 const NOW = 1_800_000_100_000;
 
 /** A task's conversation mark sealed as the service answers it. */
-const SEALED_CONVERSATION: PlanConversationLiveAnswer = {
+const SEALED_CONVERSATION: TaskConversationLiveAnswer = {
   url: "wss://realtime.example/v1",
   queries: {
     mark: {

@@ -22,7 +22,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { planConversationLiveStatements } from "../tasks/brain-transcript.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { type LiveSealer, LiveSealing } from "./realtime.js";
 
 /**
@@ -44,7 +44,7 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * more, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
  *
- * `GET /api/live/plan-conversation?id=` answers one plan's planning
+ * `GET /api/live/task-conversation?id=` answers one plan's planning
  * conversation the same way, after the plan is read as the account: its
  * mark, one row that moves whenever a read past the cursor would answer
  * something new, which the desktop asks the conversation on rather than
@@ -155,7 +155,7 @@ const taskConversationLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskConversa
     const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
     if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const sealing = yield* LiveSealing;
-    const statements = planConversationLiveStatements(userId, taskId);
+    const statements = taskConversationLiveStatements(userId, taskId);
     if (Option.isNone(sealing) || Option.isNone(statements)) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }

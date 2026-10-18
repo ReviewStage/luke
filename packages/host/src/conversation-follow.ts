@@ -1,7 +1,6 @@
-import { isDeepStrictEqual } from "node:util";
 import {
-  type PlanConversationLiveAnswer,
-  planConversationLiveRowsSchema,
+  type TaskConversationLiveAnswer,
+  taskConversationLiveRowsSchema,
 } from "@luke/features/live-wire";
 import { Effect, Option, Schema, type Scope, Stream, SubscriptionRef } from "effect";
 import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
@@ -19,17 +18,22 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  */
 
 /** The conversation's mark before its first row, as its row last delivered it, or stopped for good. */
+/** Whether two deliveries carry the same rows: decoded JSON under one schema, so their text says it, as the host loads where no `node:` module does. */
+function sameRows<Rows>(one: Rows, other: Rows): boolean {
+  return JSON.stringify(one) === JSON.stringify(other);
+}
+
 export type ConversationMark =
   | { readonly kind: "waiting" }
   | {
       readonly kind: "standing";
-      readonly rows: (typeof planConversationLiveRowsSchema.Type)["mark"];
+      readonly rows: (typeof taskConversationLiveRowsSchema.Type)["mark"];
     }
   | { readonly kind: "broken" };
 
 export interface ConversationMarkDependencies {
   /** The conversation sealed again, for renewing; a failure where the service sealed none. */
-  readonly seal: () => Effect.Effect<PlanConversationLiveAnswer | { readonly failure: string }>;
+  readonly seal: () => Effect.Effect<TaskConversationLiveAnswer | { readonly failure: string }>;
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
 }
@@ -42,9 +46,9 @@ export interface ConversationMarkDependencies {
  */
 export function conversationMark(
   dependencies: ConversationMarkDependencies,
-  first: PlanConversationLiveAnswer,
+  first: TaskConversationLiveAnswer,
 ): Effect.Effect<SubscriptionRef.SubscriptionRef<ConversationMark>, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(planConversationLiveRowsSchema);
+  const decode = Schema.decodeUnknownOption(taskConversationLiveRowsSchema);
   return Effect.gen(function* () {
     const mark = yield* SubscriptionRef.make<ConversationMark>({ kind: "waiting" });
     const rows = liveRows(
@@ -79,7 +83,7 @@ export function markMoved(
         (state) =>
           state.kind === "broken" ||
           (state.kind === "standing" &&
-            (seen.kind !== "standing" || !isDeepStrictEqual(state.rows, seen.rows))),
+            (seen.kind !== "standing" || !sameRows(state.rows, seen.rows))),
       ),
       Stream.runHead,
     ),
