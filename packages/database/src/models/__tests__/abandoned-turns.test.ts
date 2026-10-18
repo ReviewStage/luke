@@ -132,11 +132,11 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const db = yield* Database;
         const writer = yield* storeWriter({ tools: {} });
         const ended = [TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
-        const endOf = (session: string) => settleEndedSession(writer, session, STARTED_AT + 10);
+        const endOf = (session: string) =>
+          settleEndedSession(writer, session, { now: STARTED_AT + 10 });
 
         const session = `wrun_${randomUUID()}`;
         const agent = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, session);
-        yield* turnIn(writer, agent, TURN_STATUS.SETTLED);
         yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
         yield* turnIn(writer, agent, TURN_STATUS.QUEUED);
         assert.equal(yield* endOf(`wrun_${randomUUID()}`), 0, "an unknown session settles nothing");
@@ -170,6 +170,38 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
         assert.equal(yield* endOf(brainSession), 0);
         assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
+      }),
+  );
+
+  it.effect(
+    "the end of a session settles a turn a Stop was asked of as cancelled, and reads on past one batch until every open turn is settled",
+    () =>
+      Effect.gen(function* () {
+        const writer = yield* storeWriter({ tools: {} });
+
+        const stoppedSession = `wrun_${randomUUID()}`;
+        const stopped = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, stoppedSession);
+        const turnId = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
+        yield* writer.requestTurnCancel(stopped, { turnId, at: new Date(STARTED_AT + 5) });
+        assert.equal(
+          yield* settleEndedSession(writer, stoppedSession, { now: STARTED_AT + 10 }),
+          1,
+        );
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
+
+        const busySession = `wrun_${randomUUID()}`;
+        const busy = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, busySession);
+        yield* turnIn(writer, busy, TURN_STATUS.RUNNING);
+        yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
+        yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
+        assert.equal(
+          yield* settleEndedSession(writer, busySession, { now: STARTED_AT + 10, limit: 2 }),
+          3,
+        );
+        assert.deepEqual(yield* newestTurnOf(busy), [
+          TURN_STATUS.FAILED,
+          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        ]);
       }),
   );
 

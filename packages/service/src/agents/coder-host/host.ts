@@ -292,7 +292,8 @@ export interface CoderHost extends HostAdmission {
   /**
    * Settles failed for its session's end the turn still queued or running
    * of the coding agent whose conversation records the session eve said
-   * ended, failed or completed (`abandoned-turns.ts`'s `settleEndedSession`),
+   * ended, failed or completed, or cancelled where a Stop was asked of it
+   * (`abandoned-turns.ts`'s `settleEndedSession`),
    * so the agent reads as failed at once rather than running until the
    * sweep's day-long bound. eve names the session itself, from inside its
    * own run, so nothing is admitted: a session no agent's conversation
@@ -789,7 +790,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     sessionEnded: (sessionId) =>
       Effect.gen(function* () {
         const writer = yield* seams.writer();
-        yield* settleEndedSession(writer, sessionId, seams.now());
+        yield* settleEndedSession(writer, sessionId, { now: seams.now() });
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning(

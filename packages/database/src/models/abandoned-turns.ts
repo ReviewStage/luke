@@ -121,13 +121,14 @@ export type LostTurn = typeof LostTurnSchema.Type;
 
 /**
  * The turns still queued or running of the standing coding agent's
- * conversation that records the runtime session, oldest first. A
+ * conversation that records the runtime session, oldest first, each with
+ * when a Stop was asked of it. A
  * conversation that has since recorded a newer session no longer names this
  * one, so its turns, which are the newer session's, are never read here.
  */
 const endedSessionTurns = SqlSchema.findAll({
   Request: Schema.Struct({ runtimeSessionId: Schema.String, limit: Schema.Int }),
-  Result: LostTurnSchema,
+  Result: AbandonedTurnRowSchema,
   execute: (request) =>
     Database.use((db) =>
       db
@@ -135,6 +136,7 @@ const endedSessionTurns = SqlSchema.findAll({
           id: turns.id,
           userId: turns.userId,
           conversationId: turns.conversationId,
+          cancelRequestedAt: turns.cancelRequestedAt,
         })
         .from(turns)
         .innerJoin(conversations, eq(conversations.id, turns.conversationId))
@@ -252,25 +254,48 @@ export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEnded
   },
 );
 
+export interface EndedSessionOptions {
+  readonly now: number;
+  /** The most turns one read takes; `TURN_ABANDON.LIMIT` otherwise. Reads go on until none is left. */
+  readonly limit?: number | undefined;
+}
+
 /**
- * Settles failed for its session's end every turn still queued or running
- * of the coding agent's conversation that records the runtime session eve
- * said ended, at `now`; answers how many this call settled. A session no
- * standing coding agent's conversation records, such as an unknown one or
- * one its conversation rotated away from, settles nothing, and each turn is
- * settled through `settleEndedSessionTurn`, so a turn that ended between the
- * read and the write keeps its own end and a repeat of the same end settles
- * nothing again.
+ * Settles every turn still queued or running of the coding agent's
+ * conversation that records the runtime session eve said ended; answers how
+ * many this call settled. A turn a Stop was asked of is settled cancelled,
+ * as the developer asked and as the sweep would settle it, and every other
+ * one failed for its session's end. A session no standing coding agent's
+ * conversation records, such as an unknown one or one its conversation
+ * rotated away from, settles nothing. Each turn is settled through the
+ * relay's own end, so a turn that ended between the read and the write
+ * keeps its own end and a repeat of the same end settles nothing again.
+ * The turns are read a bounded batch at a time until a batch comes back
+ * short or settles nothing, the second guarding against a batch whose turns
+ * all ended meanwhile being read again for ever.
  */
 export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSession")(function* (
   writer: Pick<StoreWriter, "consume">,
   runtimeSessionId: string,
-  now: number,
+  options: EndedSessionOptions,
 ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
-  const lost = yield* endedSessionTurns({ runtimeSessionId, limit: TURN_ABANDON.LIMIT });
+  const limit = options.limit ?? TURN_ABANDON.LIMIT;
   let settled = 0;
-  for (const turn of lost) {
-    if (yield* settleEndedSessionTurn(writer, turn, now)) settled += 1;
+  for (;;) {
+    const lost = yield* endedSessionTurns({ runtimeSessionId, limit });
+    let settledNow = 0;
+    for (const { cancelRequestedAt, ...turn } of lost) {
+      const written = yield* settledLost(
+        writer,
+        turn,
+        cancelRequestedAt === null
+          ? { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED }
+          : { status: BRAIN_REQUEST_STATUS.CANCELLED },
+        options.now,
+      );
+      if (written) settledNow += 1;
+    }
+    settled += settledNow;
+    if (lost.length < limit || settledNow === 0) return settled;
   }
-  return settled;
 });
