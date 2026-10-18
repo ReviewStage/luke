@@ -56,6 +56,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
+import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -393,18 +394,35 @@ interface Asked {
   readonly shownAutomations: string[];
   /** How many times it was asked to close. */
   closed: number;
+  /** Each task it was asked to mark, by the mark, in order. */
+  readonly marks: [string, TaskMark][];
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read. */
-function mount(firstTaskless: readonly AppInboxTasklessItem[] = [], { listUnread = false } = {}) {
-  const asked: Asked = { shownTasks: [], shownAgents: [], shownAutomations: [], closed: 0 };
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks and archived tasks given. */
+function mount(
+  firstTaskless: readonly AppInboxTasklessItem[] = [],
+  {
+    listUnread = false,
+    standing = [BILLING, INVITES],
+    archived = [],
+  }: {
+    listUnread?: boolean;
+    standing?: readonly TaskSummary[];
+    archived?: readonly TaskSummary[];
+  } = {},
+) {
+  const asked: Asked = {
+    shownTasks: [],
+    shownAgents: [],
+    shownAutomations: [],
+    closed: 0,
+    marks: [],
+  };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
-    const [listed, setListed] = useState<readonly TaskSummary[]>(
-      listUnread ? [] : [BILLING, INVITES],
-    );
+    const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
     const [listRead, setRead] = useState(!listUnread);
     setListRead = setRead;
     setHolding = setHeld;
@@ -416,6 +434,7 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = [], { listUnread
         me: READER.userId,
         workspace: listedWorkspace,
         tasks: listed,
+        archived,
         listRead,
         inbox: [
           { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
@@ -435,6 +454,7 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = [], { listUnread
           onRereadPages: () => undefined,
         },
         onShowTask: (taskId) => asked.shownTasks.push(taskId),
+        onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
         onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
         automationsView: {
           open: false,
@@ -1678,7 +1698,13 @@ test("each tab counts what it lists, filtered out or not: Needs you's count in t
   await settle();
   const tone = () =>
     showTab(page, "Needs you").querySelector("[data-tone]")?.getAttribute("data-tone");
-  assert.deepEqual(showTabs(page), ["Needs you 0", "Unread 0", "All open 0", "[Everything 2]"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 0",
+    "Unread 0",
+    "All open 0",
+    "[Everything 2]",
+    "Archived 0",
+  ]);
   assert.equal(tone(), "quiet");
 
   // Another task's agent asks again, unread, as main says that task changed.
@@ -1690,15 +1716,78 @@ test("each tab counts what it lists, filtered out or not: Needs you's count in t
     ]),
   );
   await settle();
-  assert.deepEqual(showTabs(page), ["Needs you 1", "Unread 1", "All open 1", "[Everything 2]"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 1",
+    "Unread 1",
+    "All open 1",
+    "[Everything 2]",
+    "Archived 0",
+  ]);
   assert.equal(tone(), "attention");
+});
+
+test("an archived task's items stand on the Archived tab alone, counted there and nowhere else: each drawn as it stood, needing nobody, read but not answered, the box giving way to Unarchive, which brings the task back; the tab is never where a relaunch opens", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const { page, asked } = mount([], { standing: [BILLING], archived: [archivedInvites] });
+  await settle();
+  assert.deepEqual(showTabs(page), [
+    "Needs you 1",
+    "Unread 0",
+    "All open 1",
+    "[Everything 2]",
+    "Archived 1",
+  ]);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+  ]);
+
+  act(() => showTab(page, "Archived").click());
+  await settle();
+  assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Archived", false]);
+  const pane =
+    page.querySelector<HTMLElement>(".inbox-view-items:not([hidden])") ??
+    assert.fail("the item is shown beside the list");
+  const options = [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  assert.equal(options.length, 2, "what it asks still stands");
+  assert.ok(
+    options.every((option) => option.disabled),
+    "its options take no pick",
+  );
+  assert.equal(pane.querySelector(".inbox-answer"), null, "no box takes an answer");
+  assert.match(pane.textContent ?? "", /Unarchive the task to answer or reply/u);
+  const unarchive =
+    [...pane.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Unarchive",
+    ) ?? assert.fail("the pane offers Unarchive");
+  act(() => unarchive.click());
+  assert.deepEqual(asked.marks, [[INVITES.id, TASK_MARK.UNARCHIVE]]);
+  assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
+});
+
+test("a link to an archived task's item opens it on the Archived tab, which lists it, rather than saying it is not found", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
+  await settle();
+  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  assert.equal(showTab(page, "Archived").getAttribute("aria-selected"), "true");
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Archived", false]);
 });
 
 test("a fresh profile opens the Inbox on All open, grouped by task, a settled item left out until Everything is pressed", async () => {
   window.localStorage.clear();
   const { page } = mount();
   await settle();
-  assert.deepEqual(showTabs(page), ["Needs you 2", "Unread 0", "[All open 2]", "Everything 3"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 2",
+    "Unread 0",
+    "[All open 2]",
+    "Everything 3",
+    "Archived 0",
+  ]);
   assert.deepEqual(listed(page), [
     "# Invites",
     "▸ *Expire after 7 days?",
@@ -1720,20 +1809,38 @@ test("a Needs you press kept before the tabs opens the Inbox on the Needs you ta
   window.localStorage.setItem(EARLIER_SHOW_KEY, JSON.stringify(true));
   let { page } = mount();
   await settle();
-  assert.deepEqual(showTabs(page), ["[Needs you 2]", "Unread 0", "All open 2", "Everything 3"]);
+  assert.deepEqual(showTabs(page), [
+    "[Needs you 2]",
+    "Unread 0",
+    "All open 2",
+    "Everything 3",
+    "Archived 0",
+  ]);
   act(() => root?.unmount());
 
   window.localStorage.setItem(EARLIER_SHOW_KEY, JSON.stringify(false));
   ({ page } = mount());
   await settle();
-  assert.deepEqual(showTabs(page), ["Needs you 2", "Unread 0", "All open 2", "[Everything 3]"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 2",
+    "Unread 0",
+    "All open 2",
+    "[Everything 3]",
+    "Archived 0",
+  ]);
   act(() => showTab(page, "Unread").click());
   act(() => root?.unmount());
   root = undefined;
 
   ({ page } = mount());
   await settle();
-  assert.deepEqual(showTabs(page), ["Needs you 2", "[Unread 0]", "All open 2", "Everything 3"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 2",
+    "[Unread 0]",
+    "All open 2",
+    "Everything 3",
+    "Archived 0",
+  ]);
 });
 
 test("grouped by person or by nothing, each row names its task in a chip before its preview, never on its title's line, which the title keeps whole; grouped by task, the header names it and the rows wear no chip", async () => {
@@ -4689,7 +4796,13 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   await settle();
   assert.deepEqual(listed(page), ["# Billing usage alerts", "Alert at 80%?"]);
   assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
-  assert.deepEqual(showTabs(page), ["Needs you 0", "Unread 0", "All open 1", "[Everything 1]"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 0",
+    "Unread 0",
+    "All open 1",
+    "[Everything 1]",
+    "Archived 0",
+  ]);
 
   act(() => root?.unmount());
   root = undefined;
@@ -4710,7 +4823,13 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   assert.ok(clear, "the chip offers its ×");
   act(() => clear.click());
   assert.equal(whoseChip(page), null);
-  assert.deepEqual(showTabs(page), ["Needs you 1", "Unread 0", "All open 2", "[Everything 3]"]);
+  assert.deepEqual(showTabs(page), [
+    "Needs you 1",
+    "Unread 0",
+    "All open 2",
+    "[Everything 3]",
+    "Archived 0",
+  ]);
 });
 
 test("a teammate chosen in Whose with nothing in the tab shown says so, and offers everyone's items again where no tab holds any of theirs", async () => {
