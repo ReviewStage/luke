@@ -1,7 +1,9 @@
 import {
   clearedIssueFilter,
   filteredIssues,
+  ISSUE_GROUPING,
   ISSUE_PRIORITY_WORDS,
+  type IssueGrouping,
   issueFilterAnyPriority,
   issueFilterChanged,
   issueFilterCreatedBy,
@@ -36,6 +38,7 @@ import {
 import { Schema } from "effect";
 import {
   CircleCheckIcon,
+  CircleDotIcon,
   ListFilterIcon,
   ListIcon,
   ListTodoIcon,
@@ -79,9 +82,10 @@ import { useRowKeys } from "./use-row-keys";
  * ↑ and ↓ move through the rows from anywhere on the
  * page, and Return opens the one reached on its own page
  * (`issue-detail.tsx`), from which Escape comes back to the list with that
- * row holding the keyboard. Board or List, as View options last chose, is
- * kept in the renderer's own storage as the Inbox's view choices are
- * (`folded-groups.ts`), so the page opens in it again on this Mac. View
+ * row holding the keyboard. Board or List, as View options last chose, and
+ * whether the List groups by status or by priority, are kept in the
+ * renderer's own storage as the Inbox's view choices are
+ * (`folded-groups.ts`), so the page opens in them again on this Mac. View
  * options also filters the issues, by priority, by who filed them, and past
  * settled ones gone quiet (`issue-list-model.ts`), kept per workspace the
  * same way (`issue-filter-view.ts`); a filter that keeps none of a
@@ -109,6 +113,18 @@ const LAYOUT_KEY = "luke.issuesLayout";
 
 /** The layout last chosen. */
 const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_LAYOUT)));
+
+/** Where the List's grouping last chosen is kept in the renderer's storage. */
+const GROUPING_KEY = "luke.issuesGrouping";
+
+/** The List's grouping last chosen. */
+const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(ISSUE_GROUPING)));
+
+/** How the List groups its issues, and the press that changes it. */
+interface GroupingControl {
+  readonly grouping: IssueGrouping;
+  readonly onGrouping: (grouping: IssueGrouping) => void;
+}
 
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
@@ -197,6 +213,7 @@ function ListPage({
   focused,
   layout,
   onLayout,
+  grouping,
   filter,
   onFocus,
   onCompose,
@@ -210,6 +227,7 @@ function ListPage({
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  grouping: GroupingControl;
   /** What the page leaves out of the workspace's issues, and the press that changes it. */
   filter: IssueFilterControl;
   /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
@@ -261,6 +279,7 @@ function ListPage({
               workspace={workspace}
               layout={layout}
               onLayout={onLayout}
+              grouping={grouping}
               filter={filter}
             />
             <Button
@@ -325,6 +344,7 @@ function ListPage({
       ) : (
         <div className="issue-groups">
           <IssueList
+            grouping={grouping.grouping}
             issues={listed}
             workspaceName={workspaceName}
             now={now}
@@ -342,7 +362,8 @@ function ListPage({
 /**
  * The toolbar's button that drops the menu of how the page lays its issues
  * out and what it leaves out, each choice checked, as the sidebar's tasks
- * View options does: Board or List; Priority, every one or those chosen;
+ * View options does: Board or List, and while the List stands, Group by
+ * Status or Priority; Priority, every one or those chosen;
  * Created by, in a shared workspace or while it filters, Anyone, Me, or a
  * member by face; and Show completed, whether a Done or Canceled issue
  * last changed over a week ago stands, off at first. While the filter
@@ -354,6 +375,7 @@ function ViewOptions({
   workspace,
   layout,
   onLayout,
+  grouping,
   filter: { filter, onFilter },
 }: {
   shown: boolean;
@@ -361,6 +383,7 @@ function ViewOptions({
   workspace: TasksControl["workspace"];
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  grouping: GroupingControl;
   filter: IssueFilterControl;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -381,6 +404,26 @@ function ViewOptions({
       onSelect: () => onLayout(ISSUES_LAYOUT.LIST),
     },
   ];
+  const groupBy = (label: string, icon: React.JSX.Element, value: IssueGrouping): MenuAction => ({
+    label,
+    icon,
+    checked: grouping.grouping === value,
+    onSelect: () => grouping.onGrouping(value),
+  });
+  // Note that only the List groups: the board's columns are its statuses.
+  const groupings: MenuEntry[] =
+    layout === ISSUES_LAYOUT.LIST
+      ? [
+          {
+            label: "Group by",
+            icon: <ListIcon />,
+            items: [
+              groupBy("Status", <CircleDotIcon />, ISSUE_GROUPING.STATUS),
+              groupBy("Priority", <SignalHighIcon />, ISSUE_GROUPING.PRIORITY),
+            ],
+          },
+        ]
+      : [];
   const priorities: MenuEntry = {
     label: "Priority",
     icon: <SignalHighIcon />,
@@ -436,7 +479,7 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={[layouts, [priorities, ...createdBy], [completed]]}
+          groups={[[...layouts, ...groupings], [priorities, ...createdBy], [completed]]}
           onClose={menu.close}
         />
       )}
@@ -580,6 +623,9 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
+  const [grouping, setGrouping] = useState<IssueGrouping>(() =>
+    readKept(GROUPING_KEY, storedGrouping, ISSUE_GROUPING.STATUS),
+  );
   const filter = useIssueFilter(tasks.me, workspace?.id);
   const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
@@ -629,6 +675,15 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
               setCameFrom(undefined);
               setLayout(chosen);
               writeKept(LAYOUT_KEY, storedLayout, chosen);
+            }}
+            grouping={{
+              grouping,
+              onGrouping: (chosen) => {
+                // As with a layout, the row the page came back from takes no keyboard from the menu.
+                setCameFrom(undefined);
+                setGrouping(chosen);
+                writeKept(GROUPING_KEY, storedGrouping, chosen);
+              },
             }}
             filter={{
               filter: filter.filter,
