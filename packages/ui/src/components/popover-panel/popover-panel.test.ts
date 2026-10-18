@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement, type ReactElement, type ReactNode, useRef } from "react";
+import { act, createElement, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { POPOVER_PANEL_LOOK, PopoverPanel, type PopoverPanelLook } from "./popover-panel.js";
+import {
+  POPOVER_PANEL_LOOK,
+  PopoverPanel,
+  type PopoverPanelHint,
+  type PopoverPanelLook,
+} from "./popover-panel.js";
 
 /**
  * popover-panel.test.ts -- a hung panel is a dialog named by its title,
@@ -40,31 +45,30 @@ function Stage({
   look?: PopoverPanelLook;
   closeLabel?: string;
   focusField?: boolean;
-  hint?: (props: { label: string; children: ReactElement }) => ReactNode;
+  hint?: PopoverPanelHint;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   return createElement(
     "div",
     null,
     createElement("button", { type: "button" }, "Outside"),
-    createElement(
-      PopoverPanel,
-      {
-        id: "panel",
-        title: "Diff settings",
-        look,
-        closeLabel,
-        hint: hint === undefined ? undefined : (props) => hint(props),
-        initialFocus: focusField === true ? field : undefined,
-        onDismiss: () => {
-          heard.dismissed += 1;
-        },
-        onLeave: (left) => heard.left.push(left),
-        onKeyDown: (event) => heard.keys.push(event.key),
+    createElement(PopoverPanel, {
+      id: "panel",
+      title: "Diff settings",
+      look,
+      closeLabel,
+      hint,
+      initialFocus: focusField === true ? field : undefined,
+      onDismiss: () => {
+        heard.dismissed += 1;
       },
-      createElement("input", { ref: field, "aria-label": "Search" }),
-      createElement("button", { type: "button" }, "Inside"),
-    ),
+      onLeave: (left) => heard.left.push(left),
+      onKeyDown: (event) => heard.keys.push(event.key),
+      children: [
+        createElement("input", { key: "field", ref: field, "aria-label": "Search" }),
+        createElement("button", { key: "inside", type: "button" }, "Inside"),
+      ],
+    }),
   );
 }
 
