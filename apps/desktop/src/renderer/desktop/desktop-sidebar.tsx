@@ -16,6 +16,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BUTTON_SIZE,
+  Button,
   ComposeIcon,
   EllipsisIcon,
   ErrorState,
@@ -1716,13 +1717,7 @@ function SidebarColumn({
           !tasks.listFailed ? (
             <p className="sidebar-note">
               {createdBy === tasks.me ? "None of your tasks here." : "None of their tasks here."}{" "}
-              <button
-                type="button"
-                className="toolbar-button quiet-button"
-                onClick={() => taskView.onCreatedBy(undefined)}
-              >
-                Show all
-              </button>
+              <Button onClick={() => taskView.onCreatedBy(undefined)}>Show all</Button>
             </p>
           ) : null}
           {tasks.listFailed ? (
@@ -1748,13 +1743,7 @@ function SidebarColumn({
           (tasks.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
             <p className="sidebar-note">
               Every task is archived.{" "}
-              <button
-                type="button"
-                className="toolbar-button quiet-button"
-                onClick={() => archive.onShown(true)}
-              >
-                Show archived
-              </button>
+              <Button onClick={() => archive.onShown(true)}>Show archived</Button>
             </p>
           ) : null}
           {tasks.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}

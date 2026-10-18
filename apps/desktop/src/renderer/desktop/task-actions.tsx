@@ -23,7 +23,13 @@ import {
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  RENAME_FAILED_NOTE,
+  TASK_MARK,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
@@ -52,7 +58,6 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
-import { useTaskRename } from "./task-name-field";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -479,7 +484,7 @@ export function SidebarTask({
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const rename = useTaskRename(task.id, tasks.onRenameTask);
+  const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -558,9 +563,9 @@ export function SidebarTask({
           onContextMenu={showMenu}
         />
       )}
-      {rename.note !== undefined ? (
+      {rename.refused ? (
         <p className="sidebar-note" role="alert">
-          {rename.note}
+          {RENAME_FAILED_NOTE}
         </p>
       ) : null}
       {actions.menu}

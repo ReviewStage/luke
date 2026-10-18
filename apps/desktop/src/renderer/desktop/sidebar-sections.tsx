@@ -15,6 +15,7 @@ import {
   EllipsisIcon,
   IconButton,
   PencilIcon,
+  TextField,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -154,17 +155,16 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           tone: DIALOG_TONE.PRIMARY,
         }}
       >
-        <input
+        <TextField
           ref={field}
-          className="dialog-name-field"
-          aria-label="Section title"
+          label="Section title"
           spellCheck={false}
           placeholder="Section title"
           maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
           value={title}
           disabled={confirm.busy}
-          onChange={(event) => {
-            setTitle(event.target.value);
+          onChange={(next) => {
+            setTitle(next);
             // Note that a refused answer has settled, so the refusal alone holds
             // the card up: the question is asked again rather than cleared, or
             // the first key typed after it would close the card.
