@@ -3497,7 +3497,7 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
       press.dispatchEvent(at("pointermove", 30));
       press.dispatchEvent(at("pointermove", 10 + to));
       press.dispatchEvent(at("pointerup", 10 + to));
-      press.click();
+      press.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
     });
   swipe(220);
   await settle();

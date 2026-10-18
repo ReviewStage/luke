@@ -315,6 +315,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       onClickCapture: (event) => {
         if (!swallow.current) return;
         swallow.current = false;
+        // Note that only a pointer's click is a swipe's to swallow; a click the keyboard makes, which no press came before, always lands.
+        if (event.detail === 0) return;
         event.preventDefault();
         event.stopPropagation();
       },

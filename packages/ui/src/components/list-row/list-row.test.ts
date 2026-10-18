@@ -396,11 +396,16 @@ function drag(target: HTMLElement, ...steps: number[]): void {
   }
 }
 
+/** The click a pointer's release makes, a press's first, which a keyboard's click is not. */
+function pointerClick(): MouseEvent {
+  return new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 });
+}
+
 /** The pointer let go at `dx` right of where it pressed, and the click its release makes on `target`. */
 function release(target: HTMLElement, dx: number): void {
   act(() => {
     target.dispatchEvent(pointer("pointerup", 10 + dx));
-    target.click();
+    target.dispatchEvent(pointerClick());
   });
 }
 
@@ -583,7 +588,7 @@ test("an open row's own acts take their click, the row's swipe doing nothing", (
   act(() => {
     mark.dispatchEvent(pointer("pointerdown", 250));
     mark.dispatchEvent(pointer("pointerup", 250));
-    mark.click();
+    mark.dispatchEvent(pointerClick());
   });
   expect([acted, opened]).toEqual([["hover mark"], []]);
 });
@@ -637,4 +642,17 @@ test("a pointer's swipe interrupted by a press or a wheel elsewhere does nothing
     release(press, 200);
     expect([acted, opened]).toEqual([[], []]);
   }
+});
+
+test("a pointer's swipe interrupted and let go off the row leaves no click to swallow, so the keyboard still opens the row", () => {
+  const { item, press, acted, opened } = swiped();
+  drag(press, 20, 200);
+  act(() => {
+    document.body.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaX: 0, deltaY: 30 }));
+    document.body.dispatchEvent(pointer("pointerup", 500));
+  });
+  expect(standing(item)).toEqual(["rest", "0px", false]);
+  // Note that a keyboard's click comes with no press before it, and a detail of 0.
+  act(() => press.click());
+  expect([acted, opened]).toEqual([[], ["open"]]);
 });
