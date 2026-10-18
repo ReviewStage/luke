@@ -60,6 +60,7 @@ function taskOf(n: number, name: string, repository: string | null = "acme/facto
 const INVITES = taskOf(1, "Invite your teammates");
 const SEARCH = taskOf(2, "Improve search ranking");
 const ELSEWHERE = taskOf(3, "Another repository's task", "acme/other");
+const SHIPPED = taskOf(4, "Polish empty states");
 
 /** A web app over a core: an agent at work on invites with its pull request open, one on search going up, a merge, and an issue planned. */
 const WORLD: FactoryWorld = factoryWorldOf({
@@ -77,7 +78,10 @@ const WORLD: FactoryWorld = factoryWorldOf({
     factoryAgentOf(2, { taskId: SEARCH.id }),
   ],
   shipped: [
-    factoryShippedOf(3400, FACTORY_NOW - HOUR_MS, { areas: [areaOf("packages/core", 40)] }),
+    factoryShippedOf(3400, FACTORY_NOW - HOUR_MS, {
+      taskId: SHIPPED.id,
+      areas: [areaOf("packages/core", 40)],
+    }),
   ],
   planned: [factoryPlannedOf(1, { title: "Invite by link", zonePaths: ["apps/web"] })],
 });
@@ -126,7 +130,7 @@ function Page({ tasks }: { tasks: TasksControl }): React.JSX.Element {
 /** Draws the campus, its Three.js scene's importer counting every load it is asked for. */
 async function mount(): Promise<HTMLElement> {
   const tasks = tasksControl({
-    tasks: [INVITES, SEARCH, ELSEWHERE],
+    tasks: [INVITES, SEARCH, ELSEWHERE, SHIPPED],
     workspace: WORKSPACE,
     shown: true,
     onSelect: (taskId) => opened.push(`task ${taskId}`),
@@ -178,6 +182,7 @@ test("the campus stands a building for each listed task of the snapshot's reposi
   assert.deepEqual(labels(page, ".factory-campus-building").sort(), [
     "Improve search ranking: at work",
     "Invite your teammates: waiting on you",
+    "Polish empty states: shipped",
   ]);
   assert.deepEqual(labels(page, ".factory-campus-container").sort(), [
     "Pull request #3400: 40 additions, 0 deletions",
@@ -231,13 +236,14 @@ test("Districts stand each zone with something in it as a district, and Town lay
   const page = await mount();
   assert.deepEqual(labels(page, ".factory-campus-district").sort(), [
     "Not in code yet",
+    "core district",
     "web district",
   ]);
   act(() => page.querySelector<HTMLElement>('[role="radio"][aria-checked="false"]')?.click());
   assert.equal(page.querySelectorAll(".factory-campus-district").length, 0);
-  assert.equal(page.querySelectorAll(".factory-campus-building").length, 2);
+  assert.equal(page.querySelectorAll(".factory-campus-building").length, 3);
   act(() => page.querySelector<HTMLElement>('[role="radio"][aria-checked="false"]')?.click());
-  assert.equal(page.querySelectorAll(".factory-campus-district").length, 2);
+  assert.equal(page.querySelectorAll(".factory-campus-district").length, 3);
 });
 
 test("held still, a working building's smoke stands rather than loops", async () => {
@@ -262,4 +268,28 @@ test("Esc closes an open building first, and leaves Factory only from the overvi
   assert.equal(left, 0);
   act(() => runAppCommand(APP_COMMAND.EXIT_FACTORY));
   assert.equal(left, 1);
+});
+
+test("a shipped task's card says shipped, as its building does", async () => {
+  const page = await mount();
+  press(page.querySelector('[aria-label="Polish empty states: shipped"]'));
+  assert.match(page.querySelector(".factory-world-card")?.textContent ?? "", /Shipped · 0 agents/u);
+});
+
+test("a press that leaves the campus before it drags, and is let go outside, never pans it once the pointer comes back", async () => {
+  const page = await mount();
+  const svg = scene(page);
+  const camera = page.querySelector<SVGGElement>(".factory-campus-camera");
+  const before = camera?.style.transform;
+  const pointer = (type: string, x: number, buttons: number) =>
+    act(() =>
+      svg.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, clientX: x, clientY: 10, button: 0, buttons }),
+      ),
+    );
+  pointer("pointerdown", 10, 1);
+  pointer("pointerout", 12, 1);
+  act(() => svg.dispatchEvent(new MouseEvent("pointerleave", { clientX: 12, clientY: 10 })));
+  pointer("pointermove", 200, 0);
+  assert.equal(camera?.style.transform, before);
 });

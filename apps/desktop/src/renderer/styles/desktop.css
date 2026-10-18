@@ -4596,20 +4596,21 @@ polygon.factory-campus-edge[data-edge="selected"] {
   filter: url(#factory-campus-glow-filter);
 }
 
-/* Loops, each answering --loop-motion, so reduced motion and a capture run
-   hold them still; they rest while the campus is off screen, and a big
-   campus or one far out is a still frame, its smoke drawn standing. */
+/* Loops, each answering --loop-motion after its own shorthand (which would
+   reset it), so reduced motion and a capture run hold them still; they rest
+   while the campus is off screen, and a big campus or one far out is a still
+   frame, its smoke drawn standing. */
 .factory-campus-smoke,
 .factory-campus-pulse,
 .factory-campus-flag,
 .factory-campus-belt {
-  animation-play-state: var(--loop-motion);
   transform-box: fill-box;
   transform-origin: center;
 }
 
 .factory-campus-smoke {
   animation: factory-campus-smoke 4.8s linear infinite;
+  animation-play-state: var(--loop-motion);
 }
 
 .factory-campus-smoke:nth-child(2) {
@@ -4630,15 +4631,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .factory-campus-pulse {
   animation: factory-campus-pulse 1.6s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
 }
 
 .factory-campus-flag {
   animation: factory-campus-flag 2.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
   transform-origin: left center;
 }
 
 .factory-campus-belt {
   animation: factory-campus-belt 0.6s linear infinite;
+  animation-play-state: var(--loop-motion);
 }
 
 .factory-campus-scene[data-big]

@@ -153,6 +153,9 @@ const WHEEL_ZOOM = { WHEEL: 0.0022, PINCH: 0.01 } as const;
 const CULL_MARGIN = 0.3;
 const NAME_REFIT = 0.12;
 
+/** How far, on screen at a scale of one, the largest building or a lot's stack reaches from the point it is culled by. */
+const CULL_REACH = 180;
+
 /** A big campus names only buildings where something happens; a smaller one names them all. */
 const NAME_ALL_UP_TO = 12;
 
@@ -346,7 +349,9 @@ function sameLine(left: CampusTask, right: CampusTask): boolean {
         other.id === agent.id &&
         other.state === agent.state &&
         other.agent.pullRequest?.number === agent.agent.pullRequest?.number &&
-        other.agent.pullRequest?.state === agent.agent.pullRequest?.state
+        other.agent.pullRequest?.state === agent.agent.pullRequest?.state &&
+        other.agent.pullRequest?.additions === agent.agent.pullRequest?.additions &&
+        other.agent.pullRequest?.deletions === agent.agent.pullRequest?.deletions
       );
     })
   );
@@ -676,8 +681,14 @@ function seen(
   point: { readonly x: number; readonly y: number; readonly z: number },
 ): boolean {
   if (window === null) return true;
+  // Note that a thing is culled by its middle, so the window is widened by the most the largest building stands out from its own.
   const [x, y] = campusProject(point.x, point.y, point.z);
-  return x > window.x0 && x < window.x1 && y > window.y0 && y < window.y1;
+  return (
+    x > window.x0 - CULL_REACH &&
+    x < window.x1 + CULL_REACH &&
+    y > window.y0 - CULL_REACH &&
+    y < window.y1 + CULL_REACH
+  );
 }
 
 /** How wide a name's words are drawn, measured once each on a canvas in the scene's own font. */
@@ -1081,7 +1092,8 @@ export function CampusScene({
     onHover({ target: next, at: { x: clientX - box.left, y: clientY - box.top } });
   };
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    const held = drag.current;
+    const held = event.buttons === 0 ? undefined : drag.current;
+    if (held === undefined) drag.current = undefined;
     if (held !== undefined) {
       const dx = event.clientX - held.x;
       const dy = event.clientY - held.y;
@@ -1112,6 +1124,8 @@ export function CampusScene({
     event.currentTarget.toggleAttribute("data-dragging", false);
   };
   const onPointerLeave = () => {
+    // Note that a press that left before it became a drag is not captured, so its release is never heard here: it ends now.
+    if (drag.current !== undefined && !drag.current.moved) drag.current = undefined;
     if (hoverFrame.current !== undefined) cancelAnimationFrame(hoverFrame.current);
     hoverFrame.current = undefined;
     lastHover.current = undefined;

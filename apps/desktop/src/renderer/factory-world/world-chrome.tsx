@@ -79,6 +79,9 @@ const STATE_WORDS = {
   [AGENT_STATE.IDLE]: "Idle",
 } as const satisfies Record<AgentState, string>;
 
+/** How a task at rest whose work merged is said. */
+const SHIPPED_WORDS = "Shipped";
+
 /** The signal an agent's card is edged in, by its state. */
 const STATE_COLOR = {
   [AGENT_STATE.WORKING]: SIGNAL_COLOR.BUILDING,
@@ -202,6 +205,18 @@ function taskNaming(
   const state =
     STATE_RANK.find((each) => agents.some((agent) => agent.state === each)) ?? AGENT_STATE.IDLE;
   const count = `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`;
+  // Note that a task at rest with merged work and nothing open is shipped, as its building says.
+  const states = agents.flatMap((agent) =>
+    agent.agent.pullRequest === null ? [] : [agent.agent.pullRequest.state],
+  );
+  const merged =
+    states.includes(PULL_REQUEST_STATE.MERGED) ||
+    view.timeline.some((entry) => entry.taskId === taskId && entry.mergedAt <= view.snapshotAt);
+  const open =
+    states.includes(PULL_REQUEST_STATE.OPEN) || states.includes(PULL_REQUEST_STATE.DRAFT);
+  if (state === AGENT_STATE.IDLE && merged && !open) {
+    return { title: name, detail: `${SHIPPED_WORDS} · ${count}`, color: SIGNAL_COLOR.SHIPPED };
+  }
   return { title: name, detail: `${STATE_WORDS[state]} · ${count}`, color: STATE_COLOR[state] };
 }
 

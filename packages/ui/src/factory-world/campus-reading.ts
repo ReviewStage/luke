@@ -152,14 +152,15 @@ function zoneOfAgents(agents: readonly AgentView[]): string | null {
 function taskOf(
   input: CampusTaskInput,
   agents: readonly AgentView[],
-  mergedZones: readonly string[],
+  /** The zones its merges within the window landed in; none where it merged nothing there, empty where what it merged landed in no zone. */
+  mergedZones: readonly string[] | undefined,
 ): CampusTask {
   const states = new Set<CampusSignal>(agents.map((agent) => SIGNAL_OF_STATE[agent.state]));
   const pullRequests = agents.flatMap((agent) =>
     agent.agent.pullRequest === null ? [] : [agent.agent.pullRequest],
   );
   const merged =
-    mergedZones.length > 0 ||
+    mergedZones !== undefined ||
     pullRequests.some((pullRequest) => pullRequest.state === PULL_REQUEST_STATE.MERGED);
   const open = pullRequests.some(
     (pullRequest) =>
@@ -179,7 +180,7 @@ function taskOf(
     working,
     underway: working && pullRequests.length === 0 && !merged,
     shipped,
-    zone: zoneOfAgents(agents) ?? agents[0]?.primaryZone ?? mergedZones[0] ?? null,
+    zone: zoneOfAgents(agents) ?? agents[0]?.primaryZone ?? mergedZones?.[0] ?? null,
   };
 }
 
@@ -230,7 +231,7 @@ export function campusReadingOf(
   }
   const read = [...tasks]
     .sort((left, right) => left.createdAt - right.createdAt || (left.id < right.id ? -1 : 1))
-    .map((task) => taskOf(task, agentsOf.get(task.id) ?? [], mergedZones.get(task.id) ?? []));
+    .map((task) => taskOf(task, agentsOf.get(task.id) ?? [], mergedZones.get(task.id)));
   const lot = view.timeline
     .filter((entry) => entry.mergedAt <= view.snapshotAt)
     .map(

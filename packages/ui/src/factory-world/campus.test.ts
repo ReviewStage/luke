@@ -151,6 +151,22 @@ test("a building says the most pressing of its agents' states: failed, then work
   );
 });
 
+test("a task whose merge landed in no zone of the snapshot is still shipped", () => {
+  const task = taskOf(1);
+  const world = factoryWorldOf({
+    zones: ZONES,
+    shipped: [
+      factoryShippedOf(7, FACTORY_NOW - HOUR_MS, {
+        taskId: task.id,
+        areas: [areaOf("gone/away", 30)],
+      }),
+    ],
+  });
+  const { campus } = campusOf(world, [task]);
+  assert.equal(campus.taskById.get(task.id)?.signal, CAMPUS_SIGNAL.SHIPPED);
+  assert.equal(campus.taskById.get(task.id)?.zone, null);
+});
+
 test("a task goes up while an agent works on it with nothing opened or merged yet", () => {
   const task = taskOf(1);
   const { campus } = campusOf(factoryWorldOf({ agents: [agentOn(1, task)] }), [task]);
