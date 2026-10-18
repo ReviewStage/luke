@@ -81,6 +81,9 @@ const WOUND = {
   STORM: "storm",
   VOLCANO: "volcano",
   CRATER: "crater",
+  /** A vent on the floor of the core shell it is placed in, where it is placed on no crust. */
+  VENT: "vent",
+  /** A burning rock in orbit, for one placed on nothing the planet holds. */
   METEOR: "meteor",
 } as const;
 
@@ -439,7 +442,9 @@ export function createDefects(
     const draw = rng(seedOf(defect.id));
     const zones = defect.zonePaths.flatMap((path) => layout.byPath.get(path) ?? []);
     const crust = zones.find((zone): zone is CrustZone => zone.place === ZONE_PLACE.CRUST);
+    const shell = zones.find((zone): zone is CoreZone => zone.place === ZONE_PLACE.CORE);
     const events = defect.events;
+    if (crust === undefined && shell !== undefined) return ventOf(defect, shell, draw);
     if (crust === undefined) {
       const up = new Vector3(draw() - 0.5, draw() * 0.8 - 0.4, draw() - 0.5).normalize();
       return {
@@ -470,6 +475,18 @@ export function createDefects(
           ? 0.18 + 0.075 * Math.sqrt(events)
           : 0.12 + 0.07 * Math.sqrt(events);
     return { defect, kind, up, base, radius, seed: draw(), fallIn: draw() * 5 };
+  };
+
+  /** A defect in the core alone: a vent on its shell's floor, or on the heart's face for the heart. */
+  const ventOf = (defect: FactoryDefect, shell: CoreZone, draw: () => number): Wound => {
+    const heart = shell.shell === 0;
+    const up = heart ? new Vector3(1, 1, 1).normalize() : new Vector3(0, 1, 0);
+    const angle = ((20 + draw() * 50) * Math.PI) / 180;
+    const radius = mix(shell.inner, shell.outer, 0.5);
+    const base = heart
+      ? up.clone().multiplyScalar(shell.outer)
+      : new Vector3(radius * Math.cos(angle), 0.03, radius * Math.sin(angle));
+    return { defect, kind: WOUND.VENT, up, base, radius: 0.3, seed: draw(), fallIn: draw() * 5 };
   };
 
   const plumesOf = (layout: PlanetLayout) => {
@@ -511,6 +528,27 @@ export function createDefects(
           speed: 0.15,
           count: 10,
           glow: [0.13, 0.1, 0.1],
+        });
+      } else if (wound.kind === WOUND.VENT) {
+        dark.push({
+          at: wound.base,
+          up: wound.up,
+          height: 1.6,
+          spread: 0.15,
+          size: 0.25,
+          speed: 0.14,
+          count: 16 + Math.round(events / 2),
+          glow: [0.14, 0.09, 0.09],
+        });
+        hot.push({
+          at: wound.base,
+          up: wound.up,
+          height: 1.2,
+          spread: 0.1,
+          size: 0.06,
+          speed: 0.35,
+          count: 12 + Math.round(events / 2),
+          glow: ember,
         });
       }
     }

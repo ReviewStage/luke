@@ -22,7 +22,14 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
-import { type PlanetLayout, type PlanetZone, type Site, sampleSite, siteInScene } from "./globe";
+import {
+  campSite,
+  type PlanetLayout,
+  type PlanetZone,
+  type Site,
+  sampleSite,
+  siteInScene,
+} from "./globe";
 import {
   clamp,
   ease,
@@ -278,7 +285,11 @@ function instanced(
   return mesh;
 }
 
-/** A working astronaut's loop: work, stroll round the rig, work, and hop to each other zone it touches and back. */
+/**
+ * A working astronaut's loop: work, stroll round the rig, work, hop to each
+ * other zone it touches and back to where it left, and stroll back to where
+ * it began, so every step starts where the one before it ended.
+ */
 function planOf(sites: number, draw: () => number): Step[] {
   const start = draw() * Math.PI * 2;
   const across = start + 1.4 + draw() * 2;
@@ -292,17 +303,10 @@ function planOf(sites: number, draw: () => number): Step[] {
     plan.push(
       { motion: MOTION.HOP, from: 0, to: site, fromAngle: across, toAngle: there, seconds: 3.6 },
       { motion: MOTION.WORK, site, angle: there, seconds: 6 + draw() * 3 },
-      { motion: MOTION.HOP, from: site, to: 0, fromAngle: there, toAngle: start, seconds: 3.6 },
+      { motion: MOTION.HOP, from: site, to: 0, fromAngle: there, toAngle: across, seconds: 3.6 },
     );
   }
-  if (sites === 1)
-    plan.push({
-      motion: MOTION.WALK,
-      site: 0,
-      from: across,
-      to: start + Math.PI * 2,
-      seconds: 3.2,
-    });
+  plan.push({ motion: MOTION.WALK, site: 0, from: across, to: start + Math.PI * 2, seconds: 3.2 });
   return plan;
 }
 
@@ -502,14 +506,18 @@ export function createCast(
     let cranes = 0;
     let sliders = 0;
     actors = [];
+    const camp: Vector3[] = [];
     for (const agent of agents) {
       const zone = agent.primaryZone === null ? undefined : layout.byPath.get(agent.primaryZone);
-      if (zone === undefined) continue;
       const draw = rng(seedOf(agent.id));
       const rover = agent.kind === AGENT_KIND.REFACTOR;
       const height = 0.2 + 1.2 * agent.buildSize ** 2.5;
       const width = 0.15 + 0.126 * agent.buildSize;
-      const sites = [sampleSite(layout, zone, draw, taken, { apart: 0.62, spread: 0.72 })];
+      const sites = [
+        zone === undefined
+          ? campSite(draw, camp)
+          : sampleSite(layout, zone, draw, taken, { apart: 0.62, spread: 0.72 }),
+      ];
       for (const touched of agent.touched.slice(1)) {
         const there = layout.byPath.get(touched.path);
         if (
@@ -939,7 +947,7 @@ export function createCast(
     place,
     cheer: (zone, until) => {
       for (const actor of actors)
-        if (actor.sites[0]?.zone.view.path === zone) actor.cheerUntil = until;
+        if (actor.sites[0]?.zone?.view.path === zone) actor.cheerUntil = until;
     },
   };
 }

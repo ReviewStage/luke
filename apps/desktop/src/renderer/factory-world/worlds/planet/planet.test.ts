@@ -21,7 +21,20 @@ import {
   HOUR_MS,
   uuidOf,
 } from "@luke/ui/testing";
-import { type InstancedMesh, type Object3D, PerspectiveCamera, Scene } from "three";
+import {
+  Box3,
+  type EventDispatcher,
+  InstancedMesh,
+  type Material,
+  Matrix4,
+  Mesh,
+  type Object3D,
+  PerspectiveCamera,
+  Scene,
+  ShaderMaterial,
+  Texture,
+  Vector3,
+} from "three";
 import { test } from "vitest";
 import {
   PICK_KIND,
@@ -89,7 +102,29 @@ function standInHost() {
     }
     return [...ids].sort();
   };
-  return { host, pickable };
+  /** Where each registered instance of `target` stands in the scene, as the host aims at it. */
+  const anchorsOf = (target: PickTarget): Vector3[] => {
+    host.scene.updateMatrixWorld(true);
+    const found: Vector3[] = [];
+    const matrix = new Matrix4();
+    for (const registration of registrations) {
+      if ("target" in registration) {
+        if (registration.target.kind === target.kind && registration.target.id === target.id) {
+          found.push(new Box3().setFromObject(registration.object).getCenter(new Vector3()));
+        }
+        continue;
+      }
+      const mesh = registration.object;
+      for (let at = 0; at < mesh.count; at += 1) {
+        const each = registration.targetOf(at);
+        if (each?.kind !== target.kind || each.id !== target.id) continue;
+        mesh.getMatrixAt(at, matrix);
+        found.push(new Vector3().setFromMatrixPosition(matrix).applyMatrix4(mesh.matrixWorld));
+      }
+    }
+    return found;
+  };
+  return { host, pickable, anchorsOf };
 }
 
 const ZONES = [
@@ -115,6 +150,17 @@ function snapshot(): FactoryWorld {
       factoryAgentOf(2, {
         status: CODING_AGENT_STATUS.FAILED,
         pullRequest: factoryPullRequestOf({ number: 12, areas: [areaOf("packages/service", 90)] }),
+      }),
+      factoryAgentOf(4),
+      factoryAgentOf(5, {
+        pullRequest: factoryPullRequestOf({
+          number: 15,
+          areas: [
+            areaOf("apps/desktop", 200),
+            areaOf("packages/service", 150),
+            areaOf("apps/web", 150),
+          ],
+        }),
       }),
       factoryAgentOf(3, {
         status: CODING_AGENT_STATUS.COMPLETED,
@@ -157,13 +203,16 @@ function stateOf(world: FactoryWorld, fields: Partial<WorldState> = {}): WorldSt
   };
 }
 
-test("every zone, agent at work, merged pull request, planned issue, and defect is offered to be picked", () => {
+test("every zone, agent (placed in a zone or not), merged pull request, planned issue, and defect is offered to be picked", () => {
   const { host, pickable } = standInHost();
   const planet = world.create(host);
   planet.update(stateOf(snapshot()));
 
   assert.deepEqual(pickable(PICK_KIND.ZONE), ZONES.map((zone) => zone.path).sort());
-  assert.deepEqual(pickable(PICK_KIND.AGENT), [uuidOf(1), uuidOf(2), uuidOf(3)]);
+  assert.deepEqual(
+    pickable(PICK_KIND.AGENT),
+    [1, 2, 3, 4, 5].map((n) => uuidOf(n)),
+  );
   assert.deepEqual(pickable(PICK_KIND.SHIPPED), [
     "https://github.com/acme/factory/pull/21",
     "https://github.com/acme/factory/pull/22",
@@ -194,7 +243,7 @@ test("each layer switched off takes what it names out of reach, and leaves the r
   assert.equal(pickable(PICK_KIND.ZONE).length, ZONES.length, "the zones stand under every layer");
 
   planet.update(stateOf(world0));
-  assert.equal(pickable(PICK_KIND.AGENT).length, 3);
+  assert.equal(pickable(PICK_KIND.AGENT).length, 5);
   assert.equal(pickable(PICK_KIND.SHIPPED).length, 2);
   planet.dispose();
 });
@@ -225,7 +274,7 @@ test("an agent selected, its blast radius drawn, and selection moved on keep eve
   planet.frame?.(0.016, 1);
   planet.update(stateOf(world0, { hovered: { kind: PICK_KIND.ZONE, id: "packages/wire" } }));
 
-  assert.equal(pickable(PICK_KIND.AGENT).length, 3);
+  assert.equal(pickable(PICK_KIND.AGENT).length, 5);
   assert.equal(pickable(PICK_KIND.ZONE).length, ZONES.length);
   planet.dispose();
 });
@@ -239,4 +288,104 @@ test("a world with no zones yet draws nothing to pick, and draws them once they 
   planet.update(stateOf(snapshot()));
   assert.equal(pickable(PICK_KIND.ZONE).length, ZONES.length);
   planet.dispose();
+});
+
+test("an agent whose work lands in no zone yet waits at the camp on the cutaway's floor, between the core and the sea", () => {
+  const { host, anchorsOf } = standInHost();
+  const planet = world.create(host);
+  planet.update(stateOf(snapshot()));
+
+  const [rig] = anchorsOf({ kind: PICK_KIND.AGENT, id: uuidOf(4) });
+  assert.ok(rig, "the unplaced agent stands somewhere");
+  const outward = Math.hypot(rig.x, rig.z);
+  assert.ok(rig.x > 0 && rig.z > 0 && Math.abs(rig.y) < 1, "on the cutaway's floor");
+  assert.ok(outward > 7 && outward < 10, "past the core, short of the sea");
+  planet.dispose();
+});
+
+test("a defect placed in the core alone vents from its shell, and one placed on nothing circles in orbit", () => {
+  const { host, anchorsOf } = standInHost();
+  const planet = world.create(host);
+  planet.update(stateOf(snapshot()));
+
+  const inCore = anchorsOf({ kind: PICK_KIND.DEFECT, id: "3" });
+  assert.ok(inCore.length > 0);
+  assert.ok(
+    inCore.every((at) => at.length() < 7),
+    "inside the core, not in orbit",
+  );
+  const nowhere = anchorsOf({ kind: PICK_KIND.DEFECT, id: "4" });
+  assert.ok(nowhere.length > 0 && nowhere.every((at) => at.length() > 10));
+  planet.dispose();
+});
+
+test("an astronaut working in three zones never leaps: each step of its loop starts where the last one ended", () => {
+  const { host, anchorsOf } = standInHost();
+  const planet = world.create(host);
+  planet.update(stateOf(snapshot(), { still: false }));
+  const step = 0.02;
+  const moves: number[] = [];
+  let last: Vector3 | undefined;
+  for (let elapsed = step; elapsed < 90; elapsed += step) {
+    planet.frame?.(step, elapsed);
+    const astronaut = anchorsOf({ kind: PICK_KIND.AGENT, id: uuidOf(5) }).at(-1);
+    assert.ok(astronaut);
+    if (last !== undefined) moves.push(astronaut.distanceTo(last));
+    last = astronaut.clone();
+  }
+  // Note that a leap is a frame's move far past both its neighbours', where a hop by jetpack eases in and out.
+  const leaps = moves.filter(
+    (move, at) => move > 0.1 && move > 4 * Math.max(moves[at - 1] ?? 0, moves[at + 1] ?? 0),
+  );
+  assert.deepEqual(leaps, []);
+  planet.dispose();
+});
+
+test("a crowded world, its cities asking for more towers than are allocated, draws no instance past its allocation", () => {
+  const { host, pickable } = standInHost();
+  const planet = world.create(host);
+  // Note that 60 small and 140 large cities ask for 6,100 towers once each share is rounded.
+  const zones = Array.from({ length: 200 }, (_, at) =>
+    factoryZoneOf(`apps/city-${String(at).padStart(3, "0")}`, [], {
+      bytes: at < 60 ? 400 : 10000,
+    }),
+  );
+  planet.update(stateOf(factoryWorldOf({ zones })));
+  assert.equal(pickable(PICK_KIND.ZONE).length, 200);
+  const overdrawn: string[] = [];
+  host.scene.traverse((object) => {
+    if (object instanceof InstancedMesh && object.count > object.instanceMatrix.count) {
+      overdrawn.push(`${object.count} of ${object.instanceMatrix.count}`);
+    }
+  });
+  assert.deepEqual(
+    overdrawn,
+    [],
+    "the renderer is never asked for an instance it has no matrix for",
+  );
+  planet.dispose();
+});
+
+test("taken down, the world lets go of what the host's sweep of the scene cannot reach", () => {
+  const { host } = standInHost();
+  const planet = world.create(host);
+  planet.update(stateOf(snapshot()));
+  const outside = new Set<EventDispatcher<{ dispose: object }>>();
+  host.scene.traverse((object) => {
+    if (object instanceof Mesh && object.customDepthMaterial !== undefined) {
+      outside.add(object.customDepthMaterial);
+    }
+    const materials: Material[] = object instanceof Mesh ? [object.material].flat() : [];
+    for (const material of materials) {
+      if (!(material instanceof ShaderMaterial)) continue;
+      for (const uniform of Object.values(material.uniforms)) {
+        if (uniform.value instanceof Texture) outside.add(uniform.value);
+      }
+    }
+  });
+  assert.ok(outside.size > 0);
+  const released = new Set<unknown>();
+  for (const item of outside) item.addEventListener("dispose", () => released.add(item));
+  planet.dispose();
+  assert.equal(released.size, outside.size);
 });

@@ -295,7 +295,18 @@ export function createShipped(
     flush(fresh);
   };
 
+  const ground = () => {
+    for (const rocket of rockets) {
+      rocket.age = -1;
+      rocket.merge = undefined;
+    }
+    for (let rocket = 0; rocket < ROCKETS; rocket += 1) rocketMesh.setMatrixAt(rocket, HIDDEN);
+    rocketMesh.instanceMatrix.needsUpdate = true;
+  };
+
   const show: Shipped["show"] = (layout, timeline, now, taken) => {
+    // Note that a rocket in flight carries a merge of the timeline it was launched from, so a new timeline lets every one go.
+    ground();
     const recent = timeline.slice(-MAX);
     merges = recent.map((entry, slot) => {
       const zone = landingsOf(layout, entry).find((landing) => landing.place === ZONE_PLACE.CRUST);
@@ -487,10 +498,6 @@ export function createShipped(
       flush(dots);
       rocketMesh.instanceMatrix.needsUpdate = true;
     },
-    ground: () => {
-      for (const rocket of rockets) rocket.age = -1;
-      for (let rocket = 0; rocket < ROCKETS; rocket += 1) rocketMesh.setMatrixAt(rocket, HIDDEN);
-      rocketMesh.instanceMatrix.needsUpdate = true;
-    },
+    ground,
   };
 }

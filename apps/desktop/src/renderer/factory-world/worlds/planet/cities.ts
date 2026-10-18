@@ -142,7 +142,7 @@ export function placeTower(mesh: InstancedMesh, at: number, building: Building, 
     ),
   );
   mesh.setMatrixAt(at, placing);
-  mesh.geometry.getAttribute("aZone").setX(at, site.zone.index);
+  mesh.geometry.getAttribute("aZone").setX(at, site.zone?.index ?? -1);
   mesh.geometry.getAttribute("aSeed").setX(at, building.seed);
 }
 
@@ -157,7 +157,8 @@ function buildingsOf(layout: PlanetLayout, taken: Map<PlanetZone, Vector3[]>): B
   const share = Math.min(1, MAX_BUILDINGS / Math.max(1, wanted));
   const buildings: Building[] = [];
   for (const zone of layout.crust) {
-    const count = Math.round(towersOf(zone) * share);
+    // Note that each zone's share is rounded down and the whole capped, so the towers never pass the instances allocated for them.
+    const count = Math.min(Math.floor(towersOf(zone) * share), MAX_BUILDINGS - buildings.length);
     for (let tower = 0; tower < count; tower += 1) {
       const site = sampleSite(layout, zone, draw, taken, {
         apart: zone.city ? 0.16 : 0.2,

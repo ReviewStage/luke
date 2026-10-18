@@ -160,9 +160,9 @@ export interface PlanetLayout {
   readonly neighbours: ReadonlyMap<CrustZone, readonly CrustZone[]>;
 }
 
-/** Where a thing stands: on the crust, on a shell's floor, or on a moon (in the moon's own frame). */
+/** Where a thing stands: on the crust, on a shell's floor, on a moon (in the moon's own frame), or at the camp, in no zone. */
 export interface Site {
-  readonly zone: PlanetZone;
+  readonly zone: PlanetZone | undefined;
   readonly position: Vector3;
   readonly up: Vector3;
 }
@@ -453,6 +453,23 @@ export interface SiteSpacing {
   readonly spread: number;
 }
 
+/**
+ * Draws a place at the camp for one more agent whose work lands in no zone
+ * yet, apart from those `taken` holds: the cutaway's floor between the core
+ * and the sea, which no zone owns and the establishing shot looks onto.
+ */
+export function campSite(draw: () => number, taken: Vector3[]): Site {
+  let position = new Vector3();
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const radius = mix(CORE_RADIUS + 0.5, PLANET_RADIUS - 0.8, draw());
+    const angle = (mix(14, 76, draw()) * Math.PI) / 180;
+    position = new Vector3(radius * Math.cos(angle), 0, radius * Math.sin(angle));
+    if (!taken.some((other) => other.distanceTo(position) < 0.62)) break;
+  }
+  taken.push(position);
+  return { zone: undefined, position, up: new Vector3(0, 1, 0) };
+}
+
 /** Draws a place in `zone` for one more thing, apart from what `taken` holds there, and records it. */
 export function sampleSite(
   layout: PlanetLayout,
@@ -554,7 +571,7 @@ const siteFrame = new Matrix4();
 
 /** Where `site` stands in the scene at `t`, written into `position` and `up`. */
 export function siteInScene(site: Site, t: number, position: Vector3, up: Vector3): void {
-  if (site.zone.place !== ZONE_PLACE.MOON) {
+  if (site.zone?.place !== ZONE_PLACE.MOON) {
     position.copy(site.position);
     up.copy(site.up);
     return;
