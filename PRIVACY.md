@@ -904,7 +904,10 @@ yours.
 
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
-and renderer code, process-session status, and native minidumps when an
+and renderer code, and of the errors it caught but could not recover from: a
+launch that could not start, a window whose state could not be read, and an
+internal error in an action, a background task, or a part of Luke shutting
+down. It also sends process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
 traces for about one launch or page load in ten: how long Luke took to start,
 how each window's page loaded, and the requests each made. Luke uses Sentry's

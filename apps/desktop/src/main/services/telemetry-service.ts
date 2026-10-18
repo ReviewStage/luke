@@ -5,12 +5,13 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
-import { Effect } from "effect";
+import { Effect, type Layer } from "effect";
 import {
   eventWithoutAccessTokens,
   transactionWithoutAccessTokens,
@@ -55,6 +56,22 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     beforeSendTransaction: transactionWithoutAccessTokens,
   });
 }
+
+/**
+ * Main's Sentry, as a failed launch reports through it. What it captures
+ * passes the `beforeSend` above, so the token filters hold on it too.
+ */
+export const mainSentry: SentryCapture = {
+  captureException: Sentry.captureException,
+  flush: Sentry.flush,
+};
+
+/**
+ * Every Effect failure a boundary of main's runtime reports, captured
+ * through main's Sentry: the composition provides it beneath every service
+ * and the host, so their fibers and the acts' runs all report through it.
+ */
+export const mainErrorReporting: Layer.Layer<never> = sentryReporterLayer(mainSentry);
 
 export interface TelemetryService extends EffectDesktopService {
   /**

@@ -4,6 +4,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { Deferred, Effect, Exit, Layer, Scope } from "effect";
 import { AgentNoticeDoors } from "../agent-notices.js";
 import { runModeFor } from "../run-mode.js";
+import { recordingReporter } from "../testing/recording-reporter.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
 import { linkClientNotices } from "./client-notices.js";
 
@@ -102,8 +103,9 @@ it.effect(
     }),
 );
 
-it.effect("a workspaces read that dies is reported rather than lost", () =>
-  Effect.gen(function* () {
+it.effect("a workspaces read that dies is reported, to Sentry as well, rather than lost", () => {
+  const sentry = recordingReporter();
+  return Effect.gen(function* () {
     const reported: string[] = [];
     const scope = yield* Scope.make();
     const { focus } = yield* linked(
@@ -116,6 +118,7 @@ it.effect("a workspaces read that dies is reported rather than lost", () =>
     yield* Effect.yieldNow;
 
     assert.deepEqual(reported, ["the workspaces refresh failed: the gateway went away"]);
+    assert.deepEqual(sentry.reported, ["the gateway went away"]);
     yield* Scope.close(scope, Exit.void);
-  }),
-);
+  }).pipe(Effect.provide(sentry.layer));
+});
