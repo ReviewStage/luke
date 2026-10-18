@@ -64,7 +64,7 @@ export function PanelAvatarVoice(): React.JSX.Element {
  * Restart video ask main to take the avatar down or put it up again on the
  * call standing.
  */
-export function CallTabVideo({ planId }: { planId: string }): React.JSX.Element | null {
+export function CallTabVideo({ planId: taskId }: { planId: string }): React.JSX.Element | null {
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
@@ -73,7 +73,7 @@ export function CallTabVideo({ planId }: { planId: string }): React.JSX.Element 
   return (
     <CallVideoTile
       video={useAvatarTracks().video}
-      status={callTabVideoStatus({ view, avatar, planId, videoCalls })}
+      status={callTabVideoStatus({ view, avatar, planId: taskId, videoCalls })}
       onSetVideo={(on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on })}
     />
   );

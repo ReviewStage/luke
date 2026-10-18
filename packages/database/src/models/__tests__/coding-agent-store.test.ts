@@ -1174,11 +1174,11 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const teammate = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
         yield* joinWorkspace(workspace, teammate);
-        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
         const source = Option.getOrThrow(
           yield* createCodingAgent(starter, {
-            taskId: plan.id,
+            taskId: task.id,
             planSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
@@ -1194,7 +1194,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         };
         const forked = Option.getOrThrow(
           yield* createCodingAgent(teammate, {
-            taskId: plan.id,
+            taskId: task.id,
             planSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
@@ -1222,7 +1222,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const outsider = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
         yield* joinWorkspace(workspace, teammate);
-        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const startOn = (
           by: string,
           createdAt: string,
@@ -1231,7 +1231,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           Effect.gen(function* () {
             const { agent } = Option.getOrThrow(
               yield* createCodingAgent(by, {
-                taskId: plan.id,
+                taskId: task.id,
                 planSnapshot: "# Billing",
                 prompt: null,
                 idempotencyKey: randomUUID(),
@@ -1285,12 +1285,12 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
       Effect.gen(function* () {
         const starter = yield* openAccount;
         const workspace = yield* openWorkspace(starter);
-        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const startOn = (createdAt: Date, agentId?: string) =>
           Effect.gen(function* () {
             const { agent } = Option.getOrThrow(
               yield* createCodingAgent(starter, {
-                taskId: plan.id,
+                taskId: task.id,
                 planSnapshot: "# Billing",
                 prompt: null,
                 idempotencyKey: randomUUID(),

@@ -471,13 +471,13 @@ export function taskRestorePath(taskId: string, seq: number): string {
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
-export function planAttachmentsPath(planId: string): string {
-  return `${taskPath(planId)}/attachments`;
+export function planAttachmentsPath(taskId: string): string {
+  return `${taskPath(taskId)}/attachments`;
 }
 
 /** One picture of one plan, as its bytes (GET). */
-export function planAttachmentPath(planId: string, attachmentId: string): string {
-  return `${planAttachmentsPath(planId)}/${encodeURIComponent(attachmentId)}`;
+export function planAttachmentPath(taskId: string, attachmentId: string): string {
+  return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
 /** One plan's pages (GET): each page's newest version, the most recently written first. */

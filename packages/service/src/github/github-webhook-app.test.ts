@@ -665,12 +665,12 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const repositoryName = `Acme/agents-${randomUUID()}`;
-        const plan = yield* startTask(owner, { name: "Reviews", repository: null });
+        const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const hearing = (senders: readonly GitHubSender[]) =>
           Effect.map(
             createAutomation(owner, {
               taskId: null,
-              organizationId: plan.workspaceId,
+              organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
               trigger: {

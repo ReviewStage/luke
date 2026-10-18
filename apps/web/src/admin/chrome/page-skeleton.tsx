@@ -14,6 +14,7 @@ import { AdminPage, type ViewerAccount } from "./page-header";
  */
 export function PageSkeleton({
   title,
+  description,
   account,
   onSignOut,
   controls,
@@ -21,6 +22,7 @@ export function PageSkeleton({
   shapes,
 }: {
   title: string;
+  description?: string | undefined;
   account: ViewerAccount | undefined;
   onSignOut: () => void;
   controls: React.ReactNode;
@@ -30,6 +32,7 @@ export function PageSkeleton({
   return (
     <AdminPage
       title={title}
+      description={description}
       account={account}
       accountSkeleton
       onSignOut={onSignOut}

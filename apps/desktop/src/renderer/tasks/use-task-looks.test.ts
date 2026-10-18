@@ -142,30 +142,30 @@ function windowOn(summary: TaskSummary): TestWindow {
 }
 
 test("a plan opened is read at once, and still lights what changed since the last look for that visit alone", () => {
-  const plan: Task = {
+  const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: EDITS.map((edit) => ({ ...edit, at: LOOKED_AT + 1, duringCall: false })),
   };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
   window.localStorage.setItem("luke.planLooksSeeded", "1");
-  const { drawn, draw } = windowOn(plan);
+  const { drawn, draw } = windowOn(task);
 
   draw(undefined);
   assert.deepEqual(drawn, { changed: [], unread: true });
 
-  draw(plan);
+  draw(task);
   assert.deepEqual(drawn, { changed: ["Approach", "Context"], unread: false });
 
   draw(undefined);
   assert.deepEqual(drawn, { changed: [], unread: false });
 
-  draw(plan);
+  draw(task);
   assert.deepEqual(drawn, { changed: [], unread: false });
 });
 
 test("a plan marked unread lights, as it next opens, what changed since its last look and nothing before it", () => {
-  const plan: Task = {
+  const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [
@@ -173,24 +173,24 @@ test("a plan marked unread lights, as it next opens, what changed since its last
       { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 1 },
     ].map((edit) => ({ ...edit, duringCall: false })),
   };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
   window.localStorage.setItem("luke.planLooksSeeded", "1");
-  const { drawn, draw, mark } = windowOn(plan);
+  const { drawn, draw, mark } = windowOn(task);
 
   draw(undefined);
   mark(true);
   assert.deepEqual(drawn, { changed: [], unread: true });
 
-  draw(plan);
+  draw(task);
   assert.deepEqual(drawn, { changed: ["Context"], unread: false });
 });
 
 test("a save landing while the plan stays open is read as it lands, and stays read once the plan is left", () => {
-  const plan: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
-  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+  const task: Task = { ...DOCUMENT_TASK, updatedAt: LOOKED_AT };
+  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
   window.localStorage.setItem("luke.planLooksSeeded", "1");
   const saved: Task = {
-    ...plan,
+    ...task,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [
       { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 1, duringCall: false },
@@ -198,7 +198,7 @@ test("a save landing while the plan stays open is read as it lands, and stays re
   };
   const { drawn, draw } = windowOn(saved);
 
-  draw(plan);
+  draw(task);
   draw(saved);
   assert.deepEqual(drawn, { changed: [], unread: false });
 
@@ -208,13 +208,13 @@ test("a save landing while the plan stays open is read as it lands, and stays re
 
 test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
   const charles = { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES };
-  const plan: Task = {
+  const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT + 1,
     sectionEdits: [{ ...charles, at: LOOKED_AT + 1, duringCall: false }],
   };
   const saved: Task = {
-    ...plan,
+    ...task,
     updatedAt: LOOKED_AT + 2,
     sectionEdits: [
       { ...charles, at: LOOKED_AT + 1, duringCall: false },
@@ -222,7 +222,7 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
     ],
   };
   const stay = (dismissing: boolean) => {
-    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [task.id]: LOOKED_AT }));
     let looks = NO_LOOKS;
     function Reader({ open, readerId }: { open: Task; readerId: string | undefined }) {
       looks = useTaskLooks(open, readerId);
@@ -233,7 +233,7 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
     const registry = AtomRegistry.make();
     const draw = (open: Task, readerId: string | undefined) =>
       act(() => root.render(onRegistry(registry, createElement(Reader, { open, readerId }))));
-    draw(plan, undefined);
+    draw(task, undefined);
     if (dismissing) act(() => looks.dismiss());
     draw(saved, undefined);
     draw(saved, DEAN.userId);

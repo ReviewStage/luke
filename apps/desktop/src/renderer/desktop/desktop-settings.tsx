@@ -11,7 +11,7 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { BackIcon, SettingsPage, useMenu } from "@luke/ui";
+import { BackIcon, NAV_CURRENT, NavItem, SettingsPage, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
@@ -68,17 +68,15 @@ function SettingsPageRow({
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
   return (
     <li>
-      <button
-        type="button"
-        className="sidebar-item"
-        aria-current={current ? "page" : undefined}
+      <NavItem
+        icon={page.icon}
+        current={current ? NAV_CURRENT.PAGE : undefined}
+        mark={note ? <AttentionMark note={note} /> : undefined}
         onClick={onOpen}
         onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
       >
-        {page.icon}
         {page.title}
-        {note ? <AttentionMark note={note} /> : null}
-      </button>
+      </NavItem>
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={PAGE_ACTIONS}
@@ -245,19 +243,14 @@ export function DesktopSettings({
       <nav className="settings-pages" aria-label="Settings pages">
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
-        <button
-          type="button"
-          className="sidebar-item settings-pages-back"
+        <NavItem
+          icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
           onClick={onExit}
         >
-          <BackIcon />
           Back
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord}
-            className="row-shortcut"
-          />
-        </button>
+        </NavItem>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
           find={!pageSearched}

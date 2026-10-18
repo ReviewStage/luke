@@ -20,21 +20,3 @@ body:has(.app-stage[data-capture="true"]) .luke-tooltip {
 .luke-tooltip .shortcut {
   --shortcut-ink: var(--luke-color-tooltip-chord);
 }
-
-/* A row's own shortcut at its right end, shown while the row is hovered or
-   has the keyboard. It sits in the row's spare width either way, so showing
-   it moves nothing. */
-.row-shortcut {
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-:hover > .row-shortcut,
-:root[data-keyboard="true"] :focus-visible > .row-shortcut {
-  opacity: 1;
-}
-
-:disabled > .row-shortcut {
-  opacity: 0;
-}
