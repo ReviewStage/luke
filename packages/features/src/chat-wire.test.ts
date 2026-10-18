@@ -7,9 +7,12 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_NOTICE_CLOSING,
+  CHAT_NOTICE_LEAD,
   CHAT_REPLY,
   chatChannelNameSchema,
   chatHandleSchema,
+  chatNoticeWords,
   chatTargetSchema,
   chatWriteRequestSchema,
   mentionedHandles,
@@ -172,4 +175,15 @@ test("a window's write is a post with its words one way and one place, an answer
   ]) {
     assert.equal(takes(chatWriteRequestSchema, write), false, JSON.stringify(write));
   }
+});
+
+test("a notice's words as a person reads them keep the message alone, without the head the card says or the lines telling the agent how to answer, and leave any other text as it is", () => {
+  const notice = [
+    `${CHAT_NOTICE_LEAD} · @billing-agent in #invoices (m 41):`,
+    "Is the refund export\n\nready for review?",
+    `${CHAT_NOTICE_CLOSING.ASKS} (approval): answer it in its thread.`,
+    `${CHAT_NOTICE_CLOSING.REPLY} chat_post({ replyTo: 41, text }).`,
+  ].join("\n\n");
+  assert.equal(chatNoticeWords(notice), "Is the refund export\n\nready for review?");
+  assert.equal(chatNoticeWords("Reply with care."), "Reply with care.");
 });

@@ -11,6 +11,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
+import { inboxLineWords } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
@@ -357,11 +358,18 @@ function NoticeRow({
   const now = useMinute();
   const notice = chatNoticeOf(message);
   if (notice === undefined) return null;
+  // Another coding agent who posted is named by its own chip, which opens it, as its line's sender is.
+  const sender = lineSender(message.sentBy, undefined, undefined);
+  const from =
+    sender?.kind === ACTOR_KIND.AGENT && sender.agentId !== undefined ? (
+      <SendingAgent actor={sender} agentId={sender.agentId} />
+    ) : undefined;
   return (
     <ChatNoticeCard
       messageId={message.id}
       notice={notice}
       words={messageWords(message)}
+      from={from}
       doors={doors}
       now={now}
     />
@@ -1104,13 +1112,15 @@ export function AgentMessage({
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     const sentAt = message.sentAt;
+    // An inbox answer or thread message reads back without the item's key, which is the agent's.
+    const shown = inboxLineWords(words);
     return (
       <Message from={message.role} data-message-id={message.id}>
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
-              <SentWords text={words} />
+              <SentWords text={shown} />
             </SentToAgent>
           </MessageContent>
         )}
@@ -1119,7 +1129,7 @@ export function AgentMessage({
           <div className="message-meta">
             {words === "" ? null : (
               <CopyMessageAction
-                words={words}
+                words={shown}
                 messageId={message.id}
                 placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
               />

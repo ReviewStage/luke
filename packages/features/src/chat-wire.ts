@@ -261,6 +261,29 @@ export const CHAT_TARGET_SIGIL = {
  */
 export const CHAT_NOTICE_LEAD = "Chat";
 
+/** How a notice's closing lines open, which tell the agent how to answer: what a message asks, and how to reply. */
+export const CHAT_NOTICE_CLOSING = {
+  ASKS: "It asks you",
+  REPLY: "Reply with",
+} as const;
+
+/**
+ * A notice's own words as a person reads them: the message, without the head
+ * naming who said it where, which the card says in its own head, and without
+ * the closing lines telling the agent how to answer, which are the model's
+ * alone. A text of no notice's shape is answered as it is.
+ */
+export function chatNoticeWords(text: string): string {
+  const paragraphs = text.split("\n\n");
+  const [head, ...rest] = paragraphs;
+  if (head === undefined || !head.startsWith(`${CHAT_NOTICE_LEAD} · @`)) return text;
+  const closings = Object.values(CHAT_NOTICE_CLOSING);
+  const words = rest.filter(
+    (paragraph) => !closings.some((closing) => paragraph.startsWith(closing)),
+  );
+  return words.join("\n\n").trim();
+}
+
 /** A handle's grammar: a slug opening on a letter. */
 const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
 
