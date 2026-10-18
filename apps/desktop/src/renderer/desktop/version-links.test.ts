@@ -63,7 +63,7 @@ afterEach(() => {
 /** The plan's version history over the window, its versions read. */
 function drawn(): HTMLElement {
   const base = tasksControl();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
@@ -96,7 +96,7 @@ function drawn(): HTMLElement {
             staged: false,
           },
           history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-          subject: taskVersionSubject(plans),
+          subject: taskVersionSubject(tasks),
           account: {
             status: ACCOUNT_STATUS.SIGNED_IN,
             email: "dev@example.com",

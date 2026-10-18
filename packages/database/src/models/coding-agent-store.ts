@@ -830,7 +830,15 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
     limit: Schema.Number,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, organizationId, repository, planId, words, includeArchived, limit }) =>
+  execute: ({
+    userId,
+    organizationId,
+    repository,
+    planId: taskId,
+    words,
+    includeArchived,
+    limit,
+  }) =>
     Database.use((db) =>
       db
         .select(CODING_AGENT_COLUMNS)
@@ -840,7 +848,7 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
             agentReachableBy(userId),
             eq(AGENT_WORKSPACE, organizationId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
-            planId === null ? undefined : eq(codingAgent.taskId, planId),
+            taskId === null ? undefined : eq(codingAgent.taskId, taskId),
             words === null ? undefined : agentNamed(words),
             // Note that a repository is matched as GitHub matches one, its case aside.
             repository === null
@@ -977,7 +985,7 @@ const findAgentsOfTasks = SqlSchema.findAll({
     ...CodingAgentRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
-  execute: ({ userId, planIds, includeArchived }) =>
+  execute: ({ userId, planIds: taskIds, includeArchived }) =>
     Database.use((db) =>
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
@@ -985,7 +993,7 @@ const findAgentsOfTasks = SqlSchema.findAll({
         .innerJoin(task, eq(task.id, codingAgent.taskId))
         .where(
           and(
-            inArray(task.id, [...planIds]),
+            inArray(task.id, [...taskIds]),
             taskReachableBy(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
@@ -1329,7 +1337,7 @@ export interface AgentTaskName {
 const findTaskNames = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
-  execute: ({ userId, planIds }) =>
+  execute: ({ userId, planIds: taskIds }) =>
     Database.use((db) =>
       db
         .select({
@@ -1338,16 +1346,16 @@ const findTaskNames = SqlSchema.findAll({
           archived: sql<boolean>`${task.archivedAt} is not null`,
         })
         .from(task)
-        .where(and(inArray(task.id, [...planIds]), taskReachableBy(userId))),
+        .where(and(inArray(task.id, [...taskIds]), taskReachableBy(userId))),
     ),
 });
 
 /** The plans named, by id, each with its name and whether it is archived; a plan of a workspace the account is not in names nothing. None asked, none read. */
 export function taskNamesOf(
   userId: string,
-  planIds: readonly string[],
+  taskIds: readonly string[],
 ): CodingAgentStoreEffect<ReadonlyMap<string, AgentTaskName>> {
-  const ids = [...new Set(planIds)];
+  const ids = [...new Set(taskIds)];
   if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findTaskNames({ userId, planIds: ids }),
@@ -1364,12 +1372,12 @@ export interface PublishedCodingAgent {
 /** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
-  planIds: readonly string[],
+  taskIds: readonly string[],
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
-  if (planIds.length === 0) return Effect.succeed([]);
+  if (taskIds.length === 0) return Effect.succeed([]);
   const includeArchived = options.includeArchived === true;
-  return Effect.map(findAgentsOfTasks({ userId, planIds, includeArchived }), (rows) =>
+  return Effect.map(findAgentsOfTasks({ userId, planIds: taskIds, includeArchived }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }

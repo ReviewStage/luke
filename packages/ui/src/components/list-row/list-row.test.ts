@@ -4,7 +4,14 @@ import { act, cloneElement, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
-import { ACTIONS_SHOWN, LIST_ROW_CURRENT, List, ListRow, type ListRowHint } from "./list-row.js";
+import {
+  ACTIONS_SHOWN,
+  LIST_ROW_CURRENT,
+  LIST_ROW_META,
+  List,
+  ListRow,
+  type ListRowHint,
+} from "./list-row.js";
 
 /**
  * list-row.test.ts -- a row's press and its acts are separate buttons, never
@@ -15,12 +22,14 @@ import { ACTIONS_SHOWN, LIST_ROW_CURRENT, List, ListRow, type ListRowHint } from
  * keyboard-driven list can hand focus back to a row through its ref, hear
  * the keys pressed on it, and hear a right-click anywhere on it. A row
  * current as the page beside the list is announced so, and the app's hint
- * hung from a row's press raises its words for the press. A row that keeps
- * focus leaves it on the field that held it; one out of the tab order still
- * takes the focus it is handed; one unavailable refuses its press; one a
- * field drives is found by its id; a chevron says nothing to a reader; acts
- * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short. Synthetic members.
+ * hung from a row's press raises its words for the press. A row whose
+ * metadata stands on its title's line reads it after the title and before
+ * the line under it. A row that keeps focus leaves it on the field that held
+ * it; one out of the tab order still takes the focus it is handed; one
+ * unavailable refuses its press; one a field drives is found by its id; a
+ * chevron says nothing to a reader; acts shown on hover are still a Tab stop
+ * after the row; and an app hears whether the title is cut short. Synthetic
+ * members.
  */
 
 declare global {
@@ -142,6 +151,22 @@ test("a row reads as its words, title first, its leading mark hidden from a read
     null,
     null,
   ]);
+});
+
+test("a row whose metadata ends its title's line reads it after the title and before the line under it, as a mail app's row is read", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        description: "ada@example.com",
+        meta: "Owner",
+        metaAt: LIST_ROW_META.TITLE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  expect(button(container, "Ada LovelaceOwnerada@example.com")).toBeTruthy();
 });
 
 test("Tab meets a row, then its acts, then the next row, none taken out of the order", () => {

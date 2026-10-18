@@ -190,6 +190,15 @@ function pointerCross(from: Element, to: Element): void {
   });
 }
 
+/** The sidebar's row named `name`: the button whose first words a reader hears are it. */
+function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefined {
+  return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) =>
+      [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true")
+        ?.textContent === name,
+  );
+}
+
 test("a window narrowed past the line folds the pinned sidebar without forgetting it: within the band it stays as it is, and widened past it the sidebar is pinned again", () => {
   const page = mount(1450);
   assert.equal(standing(page), "pinned");
@@ -226,7 +235,7 @@ test("in a narrow window the toggle and its chord float the sidebar over the wor
   assert.equal(button.getAttribute("aria-label"), "Hide sidebar");
   assert.equal(sidebarOf(page).querySelector('[role="separator"]'), null);
   assert.ok(
-    document.activeElement === sidebarOf(page).querySelector("button.sidebar-home"),
+    document.activeElement === rowNamed(sidebarOf(page), "Home"),
     "the keyboard lands on the place shown",
   );
 
@@ -252,7 +261,7 @@ test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab wal
   assert.ok(work, "the work offers a press to hold the keyboard");
   button.focus();
   act(() => button.click());
-  const home = sidebarOf(page).querySelector("button.sidebar-home");
+  const home = rowNamed(sidebarOf(page), "Home");
   assert.ok(document.activeElement === home, "the keyboard lands on the place shown");
 
   // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
@@ -283,7 +292,7 @@ test("the floating sidebar stays for a press inside it and goes at a press outsi
   assert.equal(standing(page), "away");
 
   act(() => toggle(page).click());
-  const homeRow = sidebarOf(page).querySelector<HTMLButtonElement>("button.sidebar-home");
+  const homeRow = rowNamed(sidebarOf(page), "Home");
   assert.ok(homeRow);
   act(() => homeRow.click());
   assert.deepEqual([home, standing(page)], [1, "away"]);
@@ -330,7 +339,7 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
-  const back = page.querySelector<HTMLButtonElement>("button.settings-pages-back");
+  const back = rowNamed(page.querySelector('nav[aria-label="Settings pages"]') ?? page, "Back");
   assert.ok(back, "Settings has its way back");
   act(() => back.click());
   assert.equal(standing(page), "away");

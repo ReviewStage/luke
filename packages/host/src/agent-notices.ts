@@ -240,7 +240,7 @@ export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNot
 
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
-  listAgents: (planId: string) => Effect.Effect<CodingAgentListAnswer>;
+  listAgents: (taskId: string) => Effect.Effect<CodingAgentListAnswer>;
   /** One agent as its own page reads it: the watch's read of an agent with no plan. */
   readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
@@ -443,10 +443,10 @@ function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): A
 /** What a chat message's announcement says: who and why, under the plan of its channel, and nothing of what was said. */
 function chatNoticeText(
   entry: AccountChatEntry,
-  planName: string | undefined,
+  taskName: string | undefined,
 ): Pick<AgentNotice, "title" | "body"> {
   return {
-    title: planName ?? CHAT_NOTICE_TITLE,
+    title: taskName ?? CHAT_NOTICE_TITLE,
     body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
 }
@@ -696,7 +696,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function sliceOf(answer: InboxAnswered): AppInboxSlice {
       return {
         waiting: waitingTasks(answer.items),
-        tasks: answer.plans.map(({ planId, ...holding }) => ({ ...holding, taskId: planId })),
+        tasks: answer.plans.map(({ planId: taskId, ...holding }) => ({
+          ...holding,
+          taskId: taskId,
+        })),
         taskless: waitingTaskless(answer.planless ?? []),
         automations: answer.automations ?? [],
         failedRuns: answer.failedRuns ?? [],
@@ -961,11 +964,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** The plans with an agent watched, each listed again on the watch's clock. */
     function watchedTasks(): readonly string[] {
-      const plans = new Set<string>();
+      const tasks = new Set<string>();
       for (const agent of ledger.values()) {
-        if (agent.taskId !== null && watched(agent)) plans.add(agent.taskId);
+        if (agent.taskId !== null && watched(agent)) tasks.add(agent.taskId);
       }
-      return [...plans];
+      return [...tasks];
     }
 
     /** The agents with no plan watched, each read again by itself on the watch's clock. */
@@ -1074,11 +1077,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Effect.andThen(
         Effect.forEach(
           watchedTasks(),
-          (planId) =>
-            Effect.map(listAgents(planId), (answer) => {
+          (taskId) =>
+            Effect.map(listAgents(taskId), (answer) => {
               if ("agents" in answer) notices.observeAgents(answer.agents);
               else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-                notices.observeTaskGone(planId);
+                notices.observeTaskGone(taskId);
               }
             }),
           { discard: true },

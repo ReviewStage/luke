@@ -463,7 +463,7 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
     const includeArchived = listsArchived(request);
-    const plans = yield* hostedStoreOrUnavailable(
+    const tasks = yield* hostedStoreOrUnavailable(
       Effect.flatMap(listTasks(userId, { includeArchived }), (listed) =>
         withTaskAgents(userId, listed),
       ),
@@ -471,7 +471,10 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     const tasklessAgents = yield* hostedStoreOrUnavailable(
       listTasklessAgents(userId, { includeArchived }),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans, planlessAgents: tasklessAgents });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      plans: tasks,
+      planlessAgents: tasklessAgents,
+    });
   }
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(taskCreateRequestSchema)(body);

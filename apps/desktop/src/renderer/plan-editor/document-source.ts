@@ -1,4 +1,5 @@
 import { type AnyExtension, type Editor, type JSONContent, Node } from "@tiptap/core";
+import { BulletList, TaskList } from "@tiptap/extension-list";
 import { MarkdownManager } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { diffArrays } from "diff";
@@ -36,6 +37,9 @@ const FOOTNOTE = /\[\^[^\]\s]+\]/u;
 /** What separates a re-printed block from the next. */
 const BLOCK_GAP = "\n\n";
 
+/** The blocks a bullet list opens as, a run of plain items or of task items (`tokenSources`). */
+const LIST_BLOCKS = new Set([BulletList.name, TaskList.name]);
+
 /** The locked block a source the editor cannot draw faithfully opens as. */
 export const RawBlock = Node.create({
   name: "rawBlock",
@@ -54,6 +58,28 @@ export const RawBlock = Node.create({
 
 /** One top-level token of the lexer TipTap's Markdown reads with. */
 type LexedToken = ReturnType<MarkdownManager["instance"]["lexer"]>[number];
+
+/**
+ * A token's source as the blocks it opens as. A bullet list mixing task
+ * items with plain ones, which Markdown reads as one list and TipTap as a
+ * list of each kind, is cut into its runs of one kind, each its own block
+ * keeping its own source, so it opens editable rather than raw; the runs'
+ * sources join back into the list's exactly.
+ */
+function tokenSources(token: LexedToken): string[] {
+  if (token.type !== "list" || token.ordered === true || !("items" in token)) return [token.raw];
+  const runs: string[] = [];
+  let task: boolean | undefined;
+  for (const item of token.items) {
+    if (runs.length > 0 && item.task === task) runs[runs.length - 1] += item.raw;
+    else runs.push(item.raw);
+    task = item.task;
+  }
+  const joined = runs.join("");
+  if (runs.length < 2 || !token.raw.startsWith(joined)) return [token.raw];
+  runs[runs.length - 1] += token.raw.slice(joined.length);
+  return runs;
+}
 
 /** Whether a token's source would not survive TipTap's Markdown, so it stays raw. */
 function keptRaw(token: LexedToken): boolean {
@@ -94,15 +120,17 @@ export function documentOpened(manager: MarkdownManager, markdown: string): Open
       else sources[sources.length - 1] += token.raw;
       continue;
     }
-    const parsed = keptRaw(token) ? [] : (manager.parse(token.raw.trimEnd()).content ?? []);
-    // Note that a token read as anything but one block stays raw, so every block has exactly one source.
-    const [block] = parsed;
-    blocks.push(
-      parsed.length === 1 && block !== undefined
-        ? withMentions(block)
-        : { type: RawBlock.name, attrs: { source: token.raw } },
-    );
-    sources.push(token.raw);
+    for (const source of tokenSources(token)) {
+      const parsed = keptRaw(token) ? [] : (manager.parse(source.trimEnd()).content ?? []);
+      // Note that a source read as anything but one block stays raw, so every block has exactly one source.
+      const [block] = parsed;
+      blocks.push(
+        parsed.length === 1 && block !== undefined
+          ? withMentions(block)
+          : { type: RawBlock.name, attrs: { source } },
+      );
+      sources.push(source);
+    }
   }
   const content = blocks.length === 0 ? [{ type: "paragraph" }] : blocks;
   return {
@@ -149,6 +177,13 @@ export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: He
     if (held.sources.get(node) === undefined && block.trim() === "") return;
     if (index === doc.childCount - 1) {
       out += block.trimEnd() + held.ending;
+      return;
+    }
+    // Note that a run of a list goes on into the next run with no blank line
+    // laid between them, so a tight list stays tight; a kept run keeps its own,
+    // and one kept from the text's end gains the line break it lacks.
+    if (LIST_BLOCKS.has(node.type.name) && LIST_BLOCKS.has(doc.child(index + 1).type.name)) {
+      out += held.sources.has(node) && block.endsWith("\n") ? block : `${block.trimEnd()}\n`;
       return;
     }
     // Note that the text's last block kept its source without the blank line after it, which a block laid in after it needs.

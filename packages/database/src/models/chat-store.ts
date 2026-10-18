@@ -439,7 +439,7 @@ const findReachableTask = SqlSchema.findOneOption({
     name: Schema.String,
     archivedAt: Schema.NullOr(InstantColumnSchema),
   }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, planId: taskId }) =>
     Database.use((db) =>
       db
         .select({
@@ -448,16 +448,16 @@ const findReachableTask = SqlSchema.findOneOption({
           archivedAt: task.archivedAt,
         })
         .from(task)
-        .where(and(eq(task.id, planId), taskReachableBy(userId))),
+        .where(and(eq(task.id, taskId), taskReachableBy(userId))),
     ),
 });
 
 const findTaskWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationKeySchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
-      db.select({ organizationId: task.organizationId }).from(task).where(eq(task.id, planId)),
+      db.select({ organizationId: task.organizationId }).from(task).where(eq(task.id, taskId)),
     ),
 });
 
@@ -564,12 +564,12 @@ const findChannelByName = SqlSchema.findOneOption({
 const findTaskChannel = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ChatChannelRowSchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
       db
         .select(CHANNEL_COLUMNS)
         .from(chatChannel)
-        .where(and(eq(chatChannel.planId, planId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
+        .where(and(eq(chatChannel.planId, taskId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
     ),
 });
 
@@ -1233,11 +1233,11 @@ function namedMember(
   userId: string,
   organizationId: string,
   handle: string,
-  planId: Option.Option<string>,
+  taskId: Option.Option<string>,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   if (handle !== LUKE_HANDLE) return findMemberByHandle({ organizationId, handle });
-  if (Option.isNone(planId)) return Effect.succeed(Option.none());
-  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, planId: planId.value });
+  if (Option.isNone(taskId)) return Effect.succeed(Option.none());
+  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, planId: taskId.value });
 }
 
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
@@ -1362,17 +1362,17 @@ export function ensureGeneral(
  */
 export function ensureTaskChannel(
   userId: string,
-  planId: string,
+  taskId: string,
 ): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return transaction(
     Effect.gen(function* () {
-      const reached = yield* findReachableTask({ userId, planId });
+      const reached = yield* findReachableTask({ userId, planId: taskId });
       if (Option.isNone(reached)) return Option.none();
-      const standing = yield* findTaskChannel(planId);
+      const standing = yield* findTaskChannel(taskId);
       if (Option.isSome(standing)) return standing;
       const { organizationId } = reached.value;
       yield* lockWorkspace(organizationId);
-      const again = yield* findTaskChannel(planId);
+      const again = yield* findTaskChannel(taskId);
       if (Option.isSome(again)) return again;
       const held = new Set(
         (yield* findChannels({ organizationId })).flatMap((row) =>
@@ -1389,7 +1389,7 @@ export function ensureTaskChannel(
         organizationId,
         kind: CHANNEL_KIND.PLAN,
         name,
-        planId,
+        planId: taskId,
         dmAMemberId: null,
         dmBMemberId: null,
         createdByMemberId: null,
@@ -1397,7 +1397,7 @@ export function ensureTaskChannel(
         archivedAt: reached.value.archivedAt,
         now,
       });
-      return yield* madeOrStanding(made, findTaskChannel(planId));
+      return yield* madeOrStanding(made, findTaskChannel(taskId));
     }),
   );
 }
@@ -1495,12 +1495,12 @@ export function findOrMakeDm(
 
 const stampTaskChannelArchive = SqlSchema.void({
   Request: Schema.Struct({ planId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
-  execute: ({ planId, archivedAt }) =>
+  execute: ({ planId: taskId, archivedAt }) =>
     Database.use((db) =>
       db
         .update(chatChannel)
         .set({ archivedAt })
-        .where(and(eq(chatChannel.planId, planId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
+        .where(and(eq(chatChannel.planId, taskId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
     ),
 });
 
@@ -1510,8 +1510,8 @@ const stampTaskChannelArchive = SqlSchema.void({
  * plan's lock, so an archived plan's channel takes no post until the plan
  * returns. Nothing where the plan has no channel.
  */
-export function followTaskArchive(planId: string, archivedAt: Date | null): ChatStoreEffect<void> {
-  return stampTaskChannelArchive({ planId, archivedAt });
+export function followTaskArchive(taskId: string, archivedAt: Date | null): ChatStoreEffect<void> {
+  return stampTaskChannelArchive({ planId: taskId, archivedAt });
 }
 
 /**
@@ -1538,11 +1538,11 @@ export function memberNamed(
   userId: string,
   organizationId: string,
   handle: string,
-  planId?: string,
+  taskId?: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
-    return yield* namedMember(userId, organizationId, handle, Option.fromNullishOr(planId));
+    return yield* namedMember(userId, organizationId, handle, Option.fromNullishOr(taskId));
   });
 }
 
@@ -1598,9 +1598,9 @@ function placePost(
     if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-    const planId = yield* taskOfContext(channel.value, author.value);
+    const taskId = yield* taskOfContext(channel.value, author.value);
     const named = yield* Effect.forEach(post.mentions, (handle) =>
-      Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
+      Effect.map(namedMember(userId, organizationId, handle, taskId), (found) => ({
         handle,
         found,
       })),
@@ -2505,7 +2505,7 @@ export function openAsksOf(
 /** Every ask that waits on the account across its workspaces, as `waitingOnAccount` reads them, the latest changed first. */
 export function waitingOn(userId: string): ChatStoreEffect<readonly WaitingAsk[]> {
   return Effect.map(findWaiting({ userId }), (rows) =>
-    rows.map(({ planId, ...message }) => ({ message, planId })),
+    rows.map(({ planId: taskId, ...message }) => ({ message, planId: taskId })),
   );
 }
 
@@ -2773,7 +2773,7 @@ const findChannelMessages = SqlSchema.findAll({
 const findTaskMembers = SqlSchema.findAll({
   Request: Schema.Struct({ planId: Schema.String, organizationId: Schema.String }),
   Result: ChatMemberRowSchema,
-  execute: ({ planId, organizationId }) =>
+  execute: ({ planId: taskId, organizationId }) =>
     Database.use((db) =>
       db
         .select(MEMBER_COLUMNS)
@@ -2782,13 +2782,13 @@ const findTaskMembers = SqlSchema.findAll({
           and(
             eq(chatMember.organizationId, organizationId),
             or(
-              eq(chatMember.planId, planId),
+              eq(chatMember.planId, taskId),
               inArray(
                 chatMember.agentId,
                 queryBuilder
                   .select({ id: codingAgent.id })
                   .from(codingAgent)
-                  .where(eq(codingAgent.taskId, planId)),
+                  .where(eq(codingAgent.taskId, taskId)),
               ),
             ),
           ),
@@ -2912,7 +2912,7 @@ const advanceSequence = SqlSchema.void({
 function memberAcross(
   member: ChatMemberRow,
   ofTask: boolean,
-  planId: string,
+  taskId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
@@ -2931,7 +2931,7 @@ function memberAcross(
     const subject = !ofTask
       ? undefined
       : member.kind === MEMBER_KIND.LUKE
-        ? ({ kind: MEMBER_KIND.LUKE, planId } as const)
+        ? ({ kind: MEMBER_KIND.LUKE, planId: taskId } as const)
         : member.agentId === null
           ? undefined
           : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
@@ -3019,10 +3019,10 @@ const forgetChannelReads = SqlSchema.void({
  * go of, since their places are the old sequence's. DMs, threads, and posts elsewhere stay where they were. Nothing where the
  * plan has no channel or it stands in that workspace already.
  */
-export function moveTaskChat(planId: string, organizationId: string): ChatStoreEffect<void> {
+export function moveTaskChat(taskId: string, organizationId: string): ChatStoreEffect<void> {
   return transaction(
     Effect.gen(function* () {
-      const channel = yield* findTaskChannel(planId);
+      const channel = yield* findTaskChannel(taskId);
       if (Option.isNone(channel) || channel.value.organizationId === organizationId) return;
       const from = channel.value.organizationId;
       // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a planner takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
@@ -3037,7 +3037,7 @@ export function moveTaskChat(planId: string, organizationId: string): ChatStoreE
           ...(row.answeredByMemberId === null ? [] : [row.answeredByMemberId]),
         ]),
       );
-      const ours = yield* findTaskMembers({ planId, organizationId: from });
+      const ours = yield* findTaskMembers({ planId: taskId, organizationId: from });
       const others = yield* findMembersByIds({
         ids: [...named].filter((id) => !ours.some((row) => row.id === id)),
       });
@@ -3046,7 +3046,7 @@ export function moveTaskChat(planId: string, organizationId: string): ChatStoreE
         ...ours.map((row) => [row, true] as const),
         ...others.map((row) => [row, false] as const),
       ]) {
-        const moved = yield* memberAcross(member, ofTask, planId, organizationId);
+        const moved = yield* memberAcross(member, ofTask, taskId, organizationId);
         if (Option.isSome(moved)) across.set(member.id, moved.value.id);
       }
       const held = new Set(

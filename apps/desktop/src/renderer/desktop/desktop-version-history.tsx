@@ -18,6 +18,7 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  NavItem,
   RetryRowLabel,
   Skeleton,
   SkeletonRegion,
@@ -298,10 +299,9 @@ function SectionsHead({
   );
   return (
     <>
-      <button type="button" className="sidebar-item version-sections-back" onClick={onBack}>
-        <BackIcon />
+      <NavItem icon={<BackIcon />} onClick={onBack}>
         All versions
-      </button>
+      </NavItem>
       {source === undefined ? (
         <p className="version-sections-head">{who}</p>
       ) : (
@@ -718,19 +718,14 @@ export function DesktopVersionHistory({
       <nav className="version-log ph-no-capture" aria-label="Versions">
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
-        <button
-          type="button"
-          className="sidebar-item version-log-back"
+        <NavItem
+          icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
           onClick={onExit}
         >
-          <BackIcon />
           Back
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord}
-            className="row-shortcut"
-          />
-        </button>
+        </NavItem>
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>

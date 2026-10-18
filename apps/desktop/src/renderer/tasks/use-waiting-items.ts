@@ -56,19 +56,19 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   // Note that every plan holding an item is read, not only those main counts as waiting on the
   // account, because those are its own agents' alone, and the Inbox lists every member's.
   const holdings = useMemo(
-    () => inboxTasks.filter((holding) => listed.some((plan) => plan.id === holding.taskId)),
+    () => inboxTasks.filter((holding) => listed.some((task) => task.id === holding.taskId)),
     [inboxTasks, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const planless = useTasklessInboxItems(tasks.inboxTaskless);
+  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
   const entries = [
     ...holdings.flatMap((holding) => {
-      const plan = listed.find((each) => each.id === holding.taskId);
-      return plan === undefined
+      const task = listed.find((each) => each.id === holding.taskId);
+      return task === undefined
         ? []
-        : [{ holder: taskHolder(plan), items: read.items.get(holding.taskId) ?? [] }];
+        : [{ holder: taskHolder(task), items: read.items.get(holding.taskId) ?? [] }];
     }),
-    ...tasklessGroups(tasks.inboxTaskless, planless.items, tasks.workspace?.id),
+    ...tasklessGroups(tasks.inboxTaskless, taskless.items, tasks.workspace?.id),
   ];
   // Note that no reader is named, so every open item is kept as one that waits, whoever started its agent.
   const items = listedItems(
@@ -81,17 +81,17 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   );
   // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
   const reading =
-    read.pending || tasks.inboxTaskless.some((each) => !planless.items.has(each.agentId));
+    read.pending || tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
   const onRetry = () => {
     read.onRetry();
-    planless.onRetry();
+    taskless.onRetry();
   };
   return {
     items,
     readTasks: read.current,
-    readAgents: planless.current,
+    readAgents: taskless.current,
     reading,
-    failed: read.failed || planless.failed,
+    failed: read.failed || taskless.failed,
     onRetry,
   };
 }

@@ -130,11 +130,11 @@ interface Opened {
 function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> = {}) {
   const opened: Opened = { tasks: [], inbox: [], github: [], agents: [], feedback: [] };
   const base = tasksControl();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     tasks: listed,
     listed: { tasks: listed, archived: [], inbox: [], inboxTasks: [] },
-    onSelect: (planId) => opened.tasks.push(planId),
-    onShowAgent: (_planId, agentId) => opened.agents.push(agentId),
+    onSelect: (taskId) => opened.tasks.push(taskId),
+    onShowAgent: (_taskId, agentId) => opened.agents.push(agentId),
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
     inboxView: {
       open: false,
@@ -165,12 +165,12 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
         ),
       ),
     );
-  draw(plans);
+  draw(tasks);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
-  const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
+  const redraw = (patch: Partial<TasksControl>) => draw({ ...tasks, ...patch });
   /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
-    draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
+    draw({ ...tasks, tasks: next, listed: { ...tasks.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
 }
 
@@ -527,7 +527,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
 });
 
 /** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
-function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
+function answerInbox(answer: (taskId: string) => readonly InboxItem[] | undefined) {
   const counted = { reads: 0 };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -598,7 +598,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 });
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
-  const counted = answerInbox((planId) => (planId === BILLING.id ? [] : undefined));
+  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [] : undefined));
   const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [

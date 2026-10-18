@@ -135,8 +135,8 @@ test("the call bar is on screen only on a plan's document, and not under its ver
 
 test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the experiment is on", () => {
   const live: AvatarState = { status: AVATAR_STATUS.LIVE };
-  const drawn = (view: VoiceView, avatar: AvatarState, planId: string, videoCalls = true) =>
-    callTabVideoStatus({ view, avatar, planId, videoCalls });
+  const drawn = (view: VoiceView, avatar: AvatarState, taskId: string, videoCalls = true) =>
+    callTabVideoStatus({ view, avatar, planId: taskId, videoCalls });
   assert.equal(drawn(LISTENING, live, INVITES), AVATAR_STATUS.LIVE);
   assert.equal(
     drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, INVITES),

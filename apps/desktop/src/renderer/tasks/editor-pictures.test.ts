@@ -31,7 +31,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
-const PLAN: Task = {
+const TASK: Task = {
   ...DOCUMENT_TASK,
   id: TASK_ID,
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
@@ -42,7 +42,7 @@ const PAGE: TaskMentionsValue = {
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
-  text: () => PLAN.document.body,
+  text: () => TASK.document.body,
   doors: {
     taskId: TASK_ID,
     place: { workspace: "acme", repository: null },
@@ -111,7 +111,7 @@ function drawn(node: ReactNode): HTMLElement {
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(PlanBody, {
-      task: PLAN,
+      task: TASK,
       live: false,
       onEdit: (request) => {
         saved.push(request.document.value);
@@ -205,7 +205,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
   const reading = drawn(
-    createElement(PlanBody, { task: PLAN, live: false, sectionLinks: SECTION_LINKS }),
+    createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS }),
   );
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());

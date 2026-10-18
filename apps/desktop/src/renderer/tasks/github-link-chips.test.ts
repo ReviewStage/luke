@@ -34,7 +34,7 @@ import { TranscriptWords } from "./transcript-blocks";
  * counts. Synthetic workspace, plan, pull requests, and issues.
  */
 
-const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
 const UNREACHED = "https://github.com/acme/secret/pull/7";
@@ -139,7 +139,7 @@ const ACME: Workspace = {
 const ACME_WITH_GITHUB: Workspace = { ...ACME, github: { login: "acme", active: true } };
 
 const TASK: TaskSummary = {
-  id: PLAN,
+  id: TASK_ID,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
   createdAt: AT,
@@ -158,14 +158,14 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 
 /** The plan's page, as its words' chips stand on it. */
 const PAGE: TaskMentionsValue = {
-  taskId: PLAN,
+  taskId: TASK_ID,
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: PLAN,
+    taskId: TASK_ID,
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,

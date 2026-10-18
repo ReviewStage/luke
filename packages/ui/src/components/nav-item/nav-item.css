@@ -1,0 +1,217 @@
+/* nav-item.css -- NavItem: a place in a column, a fold's head, or who and
+   where, each with its glyph, its name, and its end; the keyboard's ring is
+   the app's reset's, as it is for every control. */
+
+@layer components {
+  .luke-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    width: 100%;
+    min-width: 0;
+    height: var(--luke-control-height);
+    margin: 0;
+    padding: 0 var(--luke-space-8);
+    border: 0;
+    border-radius: var(--luke-control-radius);
+    background: none;
+    /* Note that the rest ink is the sidebar's, a step under the primary,
+       as the task rows it heads are. */
+    color: var(--luke-color-sidebar-ink);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-regular);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-hover) ease,
+      color var(--duration-hover) ease;
+  }
+
+  /* A desktop control answers a press the way a Mac's does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-nav-item {
+    cursor: default;
+  }
+
+  .luke-nav-item:hover:not(:disabled),
+  .luke-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text);
+  }
+
+  .luke-nav-item:is([aria-current="page"], [aria-current="location"]) {
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+  }
+
+  .luke-nav-item:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .luke-nav-item[data-unread="true"] {
+    color: var(--luke-color-text);
+  }
+
+  .luke-nav-item[data-unread="true"] .luke-nav-item-name {
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* A fold's head speaks in the headings' voice and draws no fill, since
+     the container around it and its actions draws one. */
+  .luke-nav-item[data-variant="head"] {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-nav-item[data-variant="head"]:hover:not(:disabled) {
+    background: none;
+  }
+
+  /* Who or where stands tall enough for a face, in the primary ink. */
+  .luke-nav-item[data-variant="identity"] {
+    color: var(--luke-color-text);
+    height: auto;
+    min-height: calc(var(--luke-control-height) + var(--luke-space-12));
+    padding-block: var(--luke-space-6);
+  }
+
+  .luke-nav-item[data-variant="identity"] .luke-nav-item-name {
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* The glyph and, on a fold's head, the chevron share one cell, only one
+     of them drawn, so the swap crossfades in place and the name never moves. */
+  .luke-nav-item-glyph {
+    display: grid;
+    flex: none;
+    place-items: center;
+    min-width: var(--luke-control-icon);
+    min-height: var(--luke-control-icon);
+  }
+
+  .luke-nav-item-glyph > * {
+    display: grid;
+    grid-area: 1 / 1;
+    place-items: center;
+    transition:
+      opacity var(--duration-hover) ease,
+      transform var(--duration-hover) ease;
+  }
+
+  .luke-nav-item-icon > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-nav-item-chevron {
+    opacity: 0;
+  }
+
+  .luke-nav-item-chevron > svg {
+    width: 12px; /* off-scale: the muted chevron a fold and a field share */
+    height: 12px; /* off-scale: the muted chevron a fold and a field share */
+  }
+
+  .luke-nav-item[aria-expanded="true"] .luke-nav-item-chevron {
+    transform: rotate(90deg);
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible)
+    .luke-nav-item-glyph:has(.luke-nav-item-chevron)
+    > .luke-nav-item-icon {
+    opacity: 0;
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-chevron {
+    opacity: 1;
+  }
+
+  .luke-nav-item-name {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-nav-item-detail {
+    min-width: 0;
+    flex: 1 1 0;
+    overflow: hidden;
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A place's end stands at the row's end; a fold's head says its count
+     and mark right after its name. */
+  .luke-nav-item-rest,
+  .luke-nav-item-shortcut {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-space-6);
+  }
+
+  .luke-nav-item:not([data-variant="head"]) > :is(.luke-nav-item-rest, .luke-nav-item-shortcut) {
+    margin-left: auto;
+  }
+
+  /* A menu's chevron at the end is the small, muted one a chip's is. */
+  .luke-nav-item-mark > svg.settings-chevron {
+    width: 12px; /* off-scale: the muted chevron a fold and a field share */
+    height: 12px; /* off-scale: the muted chevron a fold and a field share */
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-nav-item-mark {
+    display: inline-flex;
+  }
+
+  .luke-nav-item-count {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    font-variant-numeric: tabular-nums;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-nav-item-count[data-shown="on-hover"] {
+    opacity: 0;
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-count[data-shown="on-hover"] {
+    opacity: 1;
+  }
+
+  /* The chord sits in the row's spare width at rest, unseen, so showing it
+     moves nothing; where a count or a mark stands, it takes their place
+     while the row is hovered or has the keyboard. */
+  .luke-nav-item-shortcut {
+    opacity: 0;
+    transition: opacity var(--duration-quick, 0s) ease;
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible):not(:disabled) > .luke-nav-item-shortcut {
+    opacity: 1;
+  }
+
+  .luke-nav-item-rest + .luke-nav-item-shortcut {
+    display: none;
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
+    > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+    display: none;
+  }
+
+  .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
+    > .luke-nav-item-rest
+    + .luke-nav-item-shortcut {
+    display: inline-flex;
+  }
+}

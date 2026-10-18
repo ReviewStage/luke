@@ -102,8 +102,8 @@ export function callTabVideoStatus(input: {
   planId: string;
   videoCalls: boolean;
 }): AvatarStatus | undefined {
-  const { view, avatar, planId, videoCalls } = input;
-  if (!callInProgress(view) || view.callTaskId !== planId) return undefined;
+  const { view, avatar, planId: taskId, videoCalls } = input;
+  if (!callInProgress(view) || view.callTaskId !== taskId) return undefined;
   if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
 }

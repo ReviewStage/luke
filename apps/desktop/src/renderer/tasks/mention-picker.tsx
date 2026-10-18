@@ -397,8 +397,8 @@ function pathRow(entry: RepositoryPath): MentionRow {
 }
 
 /** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself; none where no plan stands. */
-function taskRows(planId: string, taskName: string, text: string): MentionRow[] {
-  if (planId === NO_TASK) return [];
+function taskRows(taskId: string, taskName: string, text: string): MentionRow[] {
+  if (taskId === NO_TASK) return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
@@ -407,7 +407,7 @@ function taskRows(planId: string, taskName: string, text: string): MentionRow[] 
       if (anchor === "") return [];
       return [
         {
-          mention: { kind: MENTION_KIND.SECTION, taskId: planId, anchor },
+          mention: { kind: MENTION_KIND.SECTION, taskId: taskId, anchor },
           name: heading,
           detail: "Section",
           terms: heading,
@@ -415,7 +415,7 @@ function taskRows(planId: string, taskName: string, text: string): MentionRow[] 
       ];
     }),
     {
-      mention: { kind: MENTION_KIND.TASK, taskId: planId },
+      mention: { kind: MENTION_KIND.TASK, taskId: taskId },
       name: taskName,
       detail: "The whole plan",
       terms: taskName,
@@ -424,10 +424,10 @@ function taskRows(planId: string, taskName: string, text: string): MentionRow[] 
 }
 
 /** Each of the plan's pages' rows, by its title; none where no plan stands. */
-function pageRows(planId: string, pages: readonly MentionablePage[]): MentionRow[] {
-  if (planId === NO_TASK) return [];
+function pageRows(taskId: string, pages: readonly MentionablePage[]): MentionRow[] {
+  if (taskId === NO_TASK) return [];
   return pages.map((page) => ({
-    mention: { kind: MENTION_KIND.PAGE, taskId: planId, pageId: page.id },
+    mention: { kind: MENTION_KIND.PAGE, taskId: taskId, pageId: page.id },
     name: page.title,
     detail: PAGE_DETAIL,
     terms: page.title,
@@ -435,11 +435,11 @@ function pageRows(planId: string, pages: readonly MentionablePage[]): MentionRow
 }
 
 /** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
-function agentDetail(agent: MentionableAgent, planId: string): string {
+function agentDetail(agent: MentionableAgent, taskId: string): string {
   const task =
     agent.task === undefined
       ? AGENT_DETAIL.NO_TASK
-      : agent.task.id === planId
+      : agent.task.id === taskId
         ? AGENT_DETAIL.THIS_TASK
         : (agent.task.name ?? AGENT_DETAIL.OTHER_TASK);
   return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
@@ -452,7 +452,7 @@ function agentDetail(agent: MentionableAgent, planId: string): string {
  * the agent whose box it is left out.
  */
 function agentRows(
-  planId: string,
+  taskId: string,
   own: readonly MentionableAgent[],
   workspace: readonly MentionableAgent[],
   self: string | undefined,
@@ -460,13 +460,13 @@ function agentRows(
 ): MentionRow[] {
   const seen = new Set<string>(self === undefined ? [] : [self]);
   const typed = query.trim() !== "";
-  const mine = planId === NO_TASK ? [] : own.map((agent) => ({ ...agent, task: { id: planId } }));
+  const mine = taskId === NO_TASK ? [] : own.map((agent) => ({ ...agent, task: { id: taskId } }));
   const rows: MentionRow[] = [];
   for (const agent of [...mine, ...workspace]) {
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
     const task = agent.task;
-    const detail = agentDetail(agent, planId);
+    const detail = agentDetail(agent, taskId);
     rows.push({
       mention:
         task === undefined
@@ -505,10 +505,10 @@ function personRows(
  * no plan stands.
  */
 function pullRequestRows(
-  planId: string,
+  taskId: string,
   pullRequests: readonly MentionablePullRequest[],
 ): MentionRow[] {
-  if (planId === NO_TASK) return [];
+  if (taskId === NO_TASK) return [];
   return pullRequests.map((pullRequest) => {
     const name = `#${pullRequest.number} ${pullRequest.title}`;
     const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
@@ -924,11 +924,11 @@ export interface MentionSource {
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
 function treeKey(
-  planId: string,
+  taskId: string,
   workspaceId: string | undefined,
   repository: string | null,
 ): { planId: string } | { workspaceId: string; repository: string } | undefined {
-  if (planId !== NO_TASK) return { planId };
+  if (taskId !== NO_TASK) return { planId: taskId };
   if (workspaceId === undefined || repository === null) return undefined;
   return { workspaceId, repository };
 }
@@ -949,18 +949,18 @@ function kindsOf(
   servers: readonly NamedServer[],
   people: number,
 ): readonly MentionKind[] {
-  const { taskId: planId, repository } = source;
-  const pages = planId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
-  const pullRequests = planId === NO_TASK ? 0 : (source.pullRequests ?? NO_PULL_REQUESTS).length;
+  const { taskId, repository } = source;
+  const pages = taskId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
+  const pullRequests = taskId === NO_TASK ? 0 : (source.pullRequests ?? NO_PULL_REQUESTS).length;
   const agents =
     source.readAgents !== undefined ||
-    (planId !== NO_TASK && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
+    (taskId !== NO_TASK && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
   const known = skills?.known ?? [];
   const own: MentionKind[] = [
-    ...(repository === null || treeKey(planId, source.workspaceId, repository) === undefined
+    ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
       ? []
       : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
-    ...(planId === NO_TASK
+    ...(taskId === NO_TASK
       ? []
       : [
           {
@@ -1069,7 +1069,7 @@ export function useMentionPicker({
     paths: readonly RepositoryPath[];
   }>();
 
-  const planId = source?.taskId ?? NO_TASK;
+  const taskId = source?.taskId ?? NO_TASK;
   const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
   const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
@@ -1085,12 +1085,12 @@ export function useMentionPicker({
 
   // The repository's paths are read the first time the list opens on the task, and again once its repository changes.
   const read =
-    paths?.planId === planId && paths.workspaceId === workspaceId && paths.repository === repository
+    paths?.planId === taskId && paths.workspaceId === workspaceId && paths.repository === repository
       ? paths.paths
       : undefined;
   useEffect(() => {
     if (!open || read !== undefined) return;
-    const key = treeKey(planId, workspaceId, repository);
+    const key = treeKey(taskId, workspaceId, repository);
     if (key === undefined) return;
     let live = true;
     act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then(
@@ -1098,7 +1098,7 @@ export function useMentionPicker({
         if (!live) return;
         const entries = "folder" in answer ? answer.folder.entries : [];
         setPaths({
-          planId,
+          planId: taskId,
           workspaceId,
           repository,
           paths: entries.map((entry) => ({
@@ -1112,7 +1112,7 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [open, read, act, planId, workspaceId, repository]);
+  }, [open, read, act, taskId, workspaceId, repository]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -1167,17 +1167,17 @@ export function useMentionPicker({
           scope,
           read,
           {
-            plan: taskRows(planId, source.taskName, source.text()),
-            pages: pageRows(planId, source.pages ?? NO_PAGES),
+            plan: taskRows(taskId, source.taskName, source.text()),
+            pages: pageRows(taskId, source.pages ?? NO_PAGES),
             agents: agentRows(
-              planId,
+              taskId,
               source.agents ?? NO_AGENTS,
               agentsRead?.agents ?? NO_AGENTS,
               self,
               term,
             ),
             people: personRows(members ?? NO_MEMBERS, readerId),
-            pullRequests: pullRequestRows(planId, source.pullRequests ?? NO_PULL_REQUESTS),
+            pullRequests: pullRequestRows(taskId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             // A list narrowed to one server offers its tools before a word is typed.
             servers:

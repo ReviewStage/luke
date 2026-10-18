@@ -127,12 +127,12 @@ const BILLING = { id: "2b2b2b2b-0000-4000-8000-000000000000", name: "Billing" };
 function workspaceAgent(
   id: string,
   title: string,
-  planId: string | null,
+  taskId: string | null,
   archivedAt?: number,
 ): CodingAgentSummary {
   return {
     id,
-    planId,
+    planId: taskId,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,

@@ -93,11 +93,11 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
  */
 
 /** A task as the list or the open document holds it, archived or not; nothing for a task neither holds. */
-export function taskOf(tasks: TasksControl, planId: string): TaskSummary | undefined {
-  const listed = [...tasks.tasks, ...tasks.archived].find((plan) => plan.id === planId);
+export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
+  const listed = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
-  return region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+  return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
     ? region.task
     : undefined;
 }
@@ -333,27 +333,27 @@ function useTaskMenu(
   name: string,
   doors: { rename: () => void; drawn: boolean; unread: boolean },
 ) {
-  const plan = taskOf(tasks, taskId);
+  const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
-  const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: tasks.shown }, () =>
+  const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
-  const moving = useMoveTaskDialog(tasks, plan);
+  const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    sectionsOn && plan !== undefined && plan.archivedAt === undefined
-      ? moveToSectionEntry(tasks, plan, sections.askNew)
+    sectionsOn && task !== undefined && task.archivedAt === undefined
+      ? moveToSectionEntry(tasks, task, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
         label="Task actions"
         menu={drawn}
-        footer={plan === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={plan} />}
+        footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
         groups={taskActionGroups(tasks, taskId, {
           rename: doors.rename,
           askDelete: deletion.ask,
@@ -363,7 +363,7 @@ function useTaskMenu(
           read: {
             unread: doors.unread,
             onMark: (unread) => {
-              if (plan !== undefined) reads.mark(plan, unread);
+              if (task !== undefined) reads.mark(task, unread);
             },
           },
         })}
@@ -374,7 +374,7 @@ function useTaskMenu(
     <>
       <ConfirmDialog
         confirm={deletion}
-        question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+        question={deleteQuestion(name, task?.archivedAt !== undefined)}
       />
       {moving.dialog}
       {sections.dialog}

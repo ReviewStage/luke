@@ -429,10 +429,10 @@ function withCards(
  * settled, or its tab is open, as a panel's kind stands once the plan has
  * used it; then the panel's kinds and what they hold, then the agents.
  */
-function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
-  const { sidePanel, mainTabs, agents, work } = plans;
+function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
+  const { sidePanel, mainTabs, agents, work } = tasks;
   const workers = taskWorkers(workRowsOf(work.conversation, work.callLive));
-  const files = shownFiles(plans.shownCode ?? []);
+  const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
@@ -447,7 +447,7 @@ function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
       workers,
       files,
       changes,
-      pages: plans.pages ?? [],
+      pages: tasks.pages ?? [],
     }),
     ...agentEntries(mainTabs, agents),
   ];
@@ -492,8 +492,8 @@ function summarySections(
 }
 
 /** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
-export function summaryHolds(plans: TasksControl, inbox: InboxBoardView): boolean {
-  return sectionsOf(summaryRows(plans, inbox).rows, plans.agents).length > 0;
+export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
+  return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
 }
 
 /**
