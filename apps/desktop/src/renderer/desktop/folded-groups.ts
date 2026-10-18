@@ -28,9 +28,10 @@ import {
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
  * and so are its view choices, the tab it shows, how it groups and sorts,
- * and whose items it lists, a teammate by their account's id, and its
- * list's width; a task's own Inbox keeps a tab of its own, one for every
- * task, apart from the window's. A tab kept before the tabs were, the Needs
+ * whose items it lists, a teammate by their account's id, and whether its
+ * rows show their media, and its list's width; a task's own Inbox keeps a
+ * tab of its own, one for every task, apart from the window's, and shows
+ * no media. A tab kept before the tabs were, the Needs
  * you button's press, is read as the Needs you tab where it was pressed and
  * Everything where it was not, which is what that list then held; a fixture run draws no inbox, so it has nothing staged to
  * keep apart. An automation's Runs panel keeps its width and whether it
@@ -55,6 +56,7 @@ const STORAGE_KEY = {
   INBOX_GROUPING: "luke.inboxGrouping",
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
+  INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
 } as const;
@@ -82,7 +84,7 @@ export const INBOX_LIST_WIDTH = {
 /** The folded groups, each by its repository, or its creator, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
-/** Whether Pinned is folded. */
+/** Whether Pinned is folded, or the Inbox's rows show their media. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The Inbox's folded tasks, by id. */
@@ -279,6 +281,9 @@ export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   onGrouping: (grouping: InboxGrouping) => void;
   sort: InboxSort;
   onSort: (sort: InboxSort) => void;
+  /** Whether each row shows the pictures and pages its item carries, drawn small under its preview. */
+  mediaPreviews: boolean;
+  onMediaPreviews: (mediaPreviews: boolean) => void;
 }
 
 /** Whose items the window's Inbox lists, and the press that lists another's. */
@@ -333,7 +338,7 @@ export function useTaskInboxShow(): InboxShowChoice {
   return useKeptShow(STORAGE_KEY.TASK_INBOX_SHOW, STORAGE_KEY.TASK_INBOX_WAITING_ONLY);
 }
 
-/** The Inbox's view choices, All open of everyone's, grouped by task, the latest first, until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, All open of everyone's, grouped by task, the latest first, with no media shown, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
   const [grouping, onGrouping] = useKeptChoice<InboxGrouping>(
@@ -351,7 +356,22 @@ export function useInboxViewChoices(): InboxViewChoices {
     storedWhose,
     EVERYONES,
   );
-  return { ...shown, grouping, onGrouping, sort, onSort, whose, onWhose };
+  const [mediaPreviews, onMediaPreviews] = useKeptChoice<boolean>(
+    STORAGE_KEY.INBOX_MEDIA_PREVIEWS,
+    storedFlag,
+    false,
+  );
+  return {
+    ...shown,
+    grouping,
+    onGrouping,
+    sort,
+    onSort,
+    whose,
+    onWhose,
+    mediaPreviews,
+    onMediaPreviews,
+  };
 }
 
 /** A width held within the list's bounds, in whole pixels. */

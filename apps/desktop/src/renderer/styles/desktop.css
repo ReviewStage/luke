@@ -3178,6 +3178,57 @@ ul.actor-stack {
   height: 12px;
 }
 
+/* The pictures and pages an Inbox item carries, drawn small under its row's
+   preview where the view's menu shows them (`inbox-row-media.tsx`): each a
+   tile of a page's shape, a picture filling it and a page laid out four
+   times its width and scaled down to it, as a page's card draws its
+   preview; a quiet ground holds its place until it lands. */
+.inbox-row-media-tile {
+  position: relative;
+  display: inline-flex;
+  height: var(--inbox-row-media-height);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+
+  --inbox-row-media-height: 48px;
+}
+
+.inbox-row-media-tile[data-missing] svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.inbox-row-media-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inbox-row-media-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.inbox-row-media-tile[data-loaded="true"] .inbox-row-media-frame {
+  opacity: 1;
+}
+
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title at a document heading's size,
    then a muted line of its agent, when it asked, and where it stands, over a
