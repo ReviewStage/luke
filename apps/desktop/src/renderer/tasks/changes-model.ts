@@ -481,18 +481,14 @@ export function listPatch(file: CodingAgentChangedFile): string {
   );
 }
 
-/** The files whose path, or the path it moved from, holds `query`, whatever its case; every file for a query of nothing but spaces. */
+/** The files whose path holds `query`, whatever its case, as the tree's search narrows its rows; every file for a query of nothing but spaces. */
 export function filterFiles(
   files: readonly CodingAgentChangedFile[],
   query: string,
 ): readonly CodingAgentChangedFile[] {
   const asked = query.trim().toLowerCase();
   if (asked === "") return files;
-  return files.filter(
-    (file) =>
-      file.path.toLowerCase().includes(asked) ||
-      (file.previousPath?.toLowerCase().includes(asked) ?? false),
-  );
+  return files.filter((file) => file.path.toLowerCase().includes(asked));
 }
 
 /** One step of a path as the tree sorts its rows: folders before files, a dotted name before the rest, then by name whatever its case. */

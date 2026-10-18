@@ -234,7 +234,7 @@ test("the files are listed as the tree lists them: folders first at each level, 
   );
 });
 
-test("a filter keeps the files whose path, or the path it moved from, holds it whatever its case, and nothing but spaces keeps every file", () => {
+test("a filter keeps the files whose path holds it whatever its case, as the tree's search does, not the path one moved from, and nothing but spaces keeps every file", () => {
   const files = [
     changed("src/seats.ts"),
     changed("src/plan.ts", {
@@ -249,9 +249,10 @@ test("a filter keeps the files whose path, or the path it moved from, holds it w
     ["src/seats.ts"],
   );
   assert.deepEqual(
-    filterFiles(files, "billing").map((file) => file.path),
+    filterFiles(files, "PLAN").map((file) => file.path),
     ["src/plan.ts"],
   );
+  assert.deepEqual(filterFiles(files, "billing"), []);
   assert.equal(filterFiles(files, "  ").length, 3);
 });
 
