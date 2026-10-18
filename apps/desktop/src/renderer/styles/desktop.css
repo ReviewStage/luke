@@ -4400,6 +4400,12 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text-subtle);
 }
 
+/* A placeholder row while the list is read stands in a row's own box, as
+   `.sidebar-task` pads it, but is no control: nothing to press or reach. */
+.factory-skeleton-row {
+  padding: var(--luke-space-8) var(--row-inset);
+}
+
 @container factory (width < 960px) {
   .factory-line-up {
     flex-direction: column;
