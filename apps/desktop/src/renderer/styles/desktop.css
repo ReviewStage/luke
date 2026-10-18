@@ -8335,11 +8335,13 @@ button.automation-run:hover {
   gap: var(--luke-control-gap);
 }
 
-/* A refused start stands left of the button, as wide as a sentence and its
-   presses want and no wider than the toolbar can spare. */
+/* A refused start stands left of the button on the toolbar's one line, as
+   wide as its sentence and presses want and at most half the toolbar, so
+   the tabs keep the rest and the sentence gives way first. */
 .start-agent-note {
+  display: flex;
   min-width: 0;
-  flex: 0 1 360px;
+  max-width: 50cqi;
 }
 
 .start-agent-split {

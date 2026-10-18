@@ -1,8 +1,9 @@
 /**
  * error-states.tsx -- a failed read among rows with Retry beside it, one
  * alone in its region with Retry under it, one with no Retry, ones with a
- * remedy, Remove, or Dismiss beside Retry, long words in a pane narrower
- * than the line, and a list's foot that is itself the retry.
+ * remedy, Remove, or Dismiss beside Retry, one on a toolbar short of
+ * room, long words in a pane narrower than the line, and a list's foot
+ * that is itself the retry.
  */
 
 import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
@@ -50,6 +51,17 @@ function ErrorStates(): React.JSX.Element {
         <div className="catalog-frame">
           <ErrorState remedy={{ label: "Sign in with GitHub", onClick: stay }} onDismiss={stay}>
             GitHub needs you to sign in again before it takes this change.
+          </ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-toolbar" title="On a toolbar, short of room">
+        <div className="catalog-frame catalog-error-narrow">
+          <ErrorState
+            placement={ERROR_STATE_PLACEMENT.TOOLBAR}
+            remedy={{ label: "Connect GitHub", onClick: stay }}
+            onRetry={stay}
+          >
+            This workspace has no GitHub connected.
           </ErrorState>
         </div>
       </CatalogSection>

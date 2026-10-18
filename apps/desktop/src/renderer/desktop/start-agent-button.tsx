@@ -1,6 +1,6 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ChevronDownIcon, ErrorState, PlayIcon } from "@luke/ui";
+import { ChevronDownIcon, ERROR_STATE_PLACEMENT, ErrorState, PlayIcon } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { BusyLabel } from "../spinner";
@@ -126,6 +126,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
         // beside it where it is finished elsewhere, and a move presses Start again by itself.
         <div className="start-agent-note">
           <ErrorState
+            placement={ERROR_STATE_PLACEMENT.TOOLBAR}
             remedy={
               remedyWords === undefined || remedy === undefined
                 ? undefined

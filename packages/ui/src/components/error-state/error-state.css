@@ -1,7 +1,8 @@
 /* error-state.css -- a failure among the rows, laid out as a row: the
    fault's glyph in red where a row's glyph stands, the sentence in the muted
    ink of the words around it, and its presses at the row's end, Retry's
-   glyph alone where the row is narrow. Alone in a region it is `EmptyState`,
+   glyph alone where the row is narrow; on a toolbar, one line whose
+   sentence gives way to its presses. Alone in a region it is `EmptyState`,
    and draws nothing here. A row that is itself the retry (`RetryRowLabel`)
    draws the glyph and word after its sentence in the row's own type, held
    together. */
@@ -60,6 +61,28 @@
 
   .luke-error-state-retry {
     display: contents;
+  }
+
+  /* On a toolbar it is one line as wide as it says, and no container, so the
+     toolbar can size it: the glyph and the presses stay whole, and the
+     sentence gives way to them, cut short with an ellipsis. */
+  .luke-error-state[data-placement="toolbar"] {
+    width: auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    container-type: normal;
+  }
+
+  .luke-error-state[data-placement="toolbar"] > .luke-error-state-words {
+    overflow: hidden;
+    min-width: 0;
+    flex: 0 1 auto;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-error-state[data-placement="toolbar"] > .luke-error-state-actions {
+    margin-inline-start: 0;
   }
 
   /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's

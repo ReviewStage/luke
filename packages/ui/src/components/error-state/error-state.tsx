@@ -24,8 +24,12 @@
  * then Remove, which lets go of what failed, then Dismiss, a cross at the
  * row's end, which puts the line away. Where they would take more than half
  * the row they go onto the line under the sentence, at its end, whole.
- * Alone in a region it would have
- * filled, a tab or a page, it is that region's empty state (`EmptyState`):
+ *
+ * On a toolbar's one line it keeps to that line and is as wide as it says:
+ * the presses stay whole, and where the toolbar has less room the sentence
+ * gives way to them, cut short with an ellipsis, still said whole to a
+ * reader and as its hint to the pointer, so it never runs under what stands
+ * beside it. Alone in a region it would have filled, a tab or a page, it is that region's empty state (`EmptyState`):
  * the glyph large and faint over the sentence, and Retry under it, standing
  * a little above the room's middle. The container places it and lends it no
  * colour of its own.
@@ -43,10 +47,11 @@ import { AlertIcon, CloseIcon, RetryIcon } from "../../face/glyphs.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
 
-/** Where a failure stands: among the rows it failed to draw, or alone in the region it would have filled. */
+/** Where a failure stands: among the rows it failed to draw, alone in the region it would have filled, or on one line of a toolbar. */
 export const ERROR_STATE_PLACEMENT = {
   INLINE: "inline",
   CENTRED: "centred",
+  TOOLBAR: "toolbar",
 } as const;
 
 export type ErrorStatePlacement =
@@ -59,9 +64,8 @@ export interface ErrorStateRemedy {
   readonly onClick: () => void;
 }
 
-/** The presses only a failure among rows offers, since a region's empty state has room for one. */
-interface InlineActions {
-  placement?: typeof ERROR_STATE_PLACEMENT.INLINE;
+/** The presses only a failure on a line offers, since a region's empty state has room for one. */
+interface LineActions {
   /** The remedy, drawn first. */
   remedy?: ErrorStateRemedy | undefined;
   /** Remove's press, which lets go of what failed. */
@@ -70,12 +74,25 @@ interface InlineActions {
   onDismiss?: (() => void) | undefined;
 }
 
-interface CentredActions {
-  placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
-  remedy?: undefined;
-  onRemove?: undefined;
-  onDismiss?: undefined;
-}
+/** Where a failure stands, with what it says and the presses it may offer there. */
+type Placed =
+  | (LineActions & {
+      placement?: typeof ERROR_STATE_PLACEMENT.INLINE;
+      /** What did not land, as "The inbox could not be read." */
+      children: ReactNode;
+    })
+  | (LineActions & {
+      placement: typeof ERROR_STATE_PLACEMENT.TOOLBAR;
+      /** What did not land, words alone, since a sentence cut short is said whole as its hint. */
+      children: string;
+    })
+  | {
+      placement: typeof ERROR_STATE_PLACEMENT.CENTRED;
+      children: ReactNode;
+      remedy?: undefined;
+      onRemove?: undefined;
+      onDismiss?: undefined;
+    };
 
 const WORDS = {
   RETRY: "Retry",
@@ -89,19 +106,14 @@ const WORDS = {
  * `placement`; among rows, with the remedy, Remove, and Dismiss where each
  * is given.
  */
-export function ErrorState({
-  placement = ERROR_STATE_PLACEMENT.INLINE,
-  onRetry,
-  remedy,
-  onRemove,
-  onDismiss,
-  children,
-}: {
-  /** Retry's press; with none, the failure says its sentence alone. */
-  onRetry?: (() => void) | undefined;
-  /** What did not land, as "The inbox could not be read." */
-  children: ReactNode;
-} & (InlineActions | CentredActions)): React.JSX.Element {
+export function ErrorState(
+  props: {
+    /** Retry's press; with none, the failure says its sentence alone. */
+    onRetry?: (() => void) | undefined;
+  } & Placed,
+): React.JSX.Element {
+  const { onRetry, remedy, onRemove, onDismiss, children } = props;
+  const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
     return (
       <EmptyState
@@ -118,11 +130,16 @@ export function ErrorState({
     );
   }
   return (
-    <p className="luke-error-state" role="alert">
+    <p className="luke-error-state" data-placement={placement} role="alert">
       <span className="luke-error-state-glyph">
         <AlertIcon />
       </span>
-      <span className="luke-error-state-words">{children}</span>
+      <span
+        className="luke-error-state-words"
+        title={props.placement === ERROR_STATE_PLACEMENT.TOOLBAR ? props.children : undefined}
+      >
+        {children}
+      </span>
       {remedy === undefined &&
       onRetry === undefined &&
       onRemove === undefined &&

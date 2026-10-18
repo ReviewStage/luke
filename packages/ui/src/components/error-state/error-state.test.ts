@@ -3,7 +3,8 @@
  * Retry; Retry is a button the keyboard can stand on and a press of it
  * tries again; a failure with no Retry says its sentence alone; among rows
  * it offers the remedy, Retry, Remove, and Dismiss in that order, each
- * press doing its own; the glyph that marks it as a fault says nothing to a
+ * press doing its own; on a toolbar it is the same one alert, its whole
+ * sentence its hint; the glyph that marks it as a fault says nothing to a
  * reader; a row that is itself the retry says its failure as an alert and
  * is named by it and Retry.
  */
@@ -143,4 +144,20 @@ test("a row that is itself the retry says its failure as an alert, is named by i
   ).toBe(true);
   act(() => row?.click());
   expect(pressed).toEqual(["retry"]);
+});
+
+test("a failure on a toolbar is one alert with its sentence and presses, its whole sentence its hint", () => {
+  const pressed: string[] = [];
+  const alert = mountAlert(
+    createElement(ErrorState, {
+      placement: ERROR_STATE_PLACEMENT.TOOLBAR,
+      remedy: { label: "Connect GitHub", onClick: () => pressed.push("remedy") },
+      onRetry: () => pressed.push("retry"),
+      children: LINE,
+    }),
+  );
+  expect(alert.textContent).toBe(`${LINE}Connect GitHubRetry`);
+  expect(alert.querySelector(`[title="${LINE}"]`)?.textContent).toBe(LINE);
+  for (const button of alert.querySelectorAll("button")) act(() => button.click());
+  expect(pressed).toEqual(["remedy", "retry"]);
 });
