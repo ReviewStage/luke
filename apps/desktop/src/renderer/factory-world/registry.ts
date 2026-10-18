@@ -9,6 +9,7 @@ import {
   ShellIcon,
   ShovelIcon,
   TrainFrontIcon,
+  TreeDeciduousIcon,
 } from "lucide-react";
 import type { WorldModule } from "./world";
 
@@ -51,6 +52,12 @@ const FACTORY_WORLDS = [
     name: "Factory",
     icon: FactoryIcon,
     load: () => import("./worlds/factory/index"),
+  },
+  {
+    key: "tree",
+    name: "World Tree",
+    icon: TreeDeciduousIcon,
+    load: () => import("./worlds/tree/index"),
   },
   {
     key: "station",
