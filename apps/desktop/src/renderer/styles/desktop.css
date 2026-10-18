@@ -8094,6 +8094,13 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: auto;
 }
 
+/* Note that the × must let the pointer through under a modal too, because
+   one already under the pointer as the modal opens keeps its card hovered
+   by taking the pointer itself, past the card's own `none` above. */
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
+  pointer-events: none;
+}
+
 @keyframes toast-fade {
   from {
     opacity: 0;
