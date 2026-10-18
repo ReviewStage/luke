@@ -98,7 +98,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `Card` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef` |
-| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `Switch`, `Segmented`, `Select`, `Combobox` |
+| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `SettingsRow`, `SettingsSection`, `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` |
