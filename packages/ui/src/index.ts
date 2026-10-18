@@ -18,6 +18,7 @@ export * from "./components/folding-button/folding-button.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/form-section/form-section.js";
 export * from "./components/hover-card/hover-card.js";
+export * from "./components/inline-edit/inline-edit.js";
 export * from "./components/layout/layout.js";
 export * from "./components/list-row/list-row.js";
 export * from "./components/menu/menu.js";
