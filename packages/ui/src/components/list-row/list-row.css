@@ -200,6 +200,13 @@
     color: var(--luke-color-text-muted);
   }
 
+  /* A provider's mark keeps the text's colour: a brand mark is the
+     provider's identity, not a muted glyph, so one drawn in currentColor
+     reads as it does everywhere else. */
+  .luke-list-row-leading > .luke-provider-mark {
+    color: var(--luke-color-text);
+  }
+
   /* A glyph stands at a control's glyph size; an avatar brings its own. */
   .luke-list-row-leading > svg {
     width: var(--luke-control-icon);
