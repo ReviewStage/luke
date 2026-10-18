@@ -49,8 +49,6 @@ export interface AgentTranscriptControl {
   failure: CodingAgentFailure | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
   usage: CodingAgentUsage | undefined;
-  /** What its newest turn cost, as the last page said; nothing until that turn settled. */
-  turnUsage: CodingAgentUsage | undefined;
   /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
   context: CodingAgentContext | undefined;
   /** When the run under way began, as the last page said; nothing where it did not, which is where a worker's tab counts from. */
@@ -82,7 +80,6 @@ interface Held {
   cursor: string;
   failure: CodingAgentFailure | undefined;
   usage: CodingAgentUsage | undefined;
-  turnUsage: CodingAgentUsage | undefined;
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
   pageStatus: CodingAgentStatus | undefined;
@@ -104,7 +101,6 @@ function fresh(agentId: string): Held {
     cursor: CODING_AGENT_CURSOR_START,
     failure: undefined,
     usage: undefined,
-    turnUsage: undefined,
     context: undefined,
     runStartedAt: undefined,
     pageStatus: undefined,
@@ -177,7 +173,6 @@ export function useAgentTranscript(input: {
           cursor: answer.cursor,
           failure: answer.failureReason,
           usage: answer.usage,
-          turnUsage: answer.turnUsage,
           context: answer.context,
           runStartedAt: answer.runStartedAt,
           pageStatus: answer.status,
@@ -229,7 +224,6 @@ export function useAgentTranscript(input: {
     messages: held.messages,
     failure: held.failure,
     usage: held.usage,
-    turnUsage: held.turnUsage,
     context: held.context,
     runStartedAt: held.runStartedAt,
     pageStatus: held.pageStatus,

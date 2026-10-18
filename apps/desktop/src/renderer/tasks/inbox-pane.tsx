@@ -25,6 +25,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  CHOICE_LOOK,
   CHOICE_SELECT,
   ChevronRightIcon,
   ChoiceList,
@@ -42,7 +43,6 @@ import {
   Switch,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
-  TEXT_VARIANT,
   Text,
   TextField,
 } from "@luke/ui";
@@ -83,8 +83,10 @@ import {
   codeWindow,
   fieldValueOf,
   INBOX_HOLDER,
+  INBOX_MISSING,
   type InboxDraft,
   type InboxHolder,
+  type InboxMissing,
   inboxFileChips,
   itemWorkspaceId,
   NEEDS_YOU,
@@ -98,6 +100,7 @@ import {
   THREAD_ENTRY,
   threadCut,
   threadEntries,
+  withChoice,
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
@@ -133,9 +136,13 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * picture is (`picture-block.tsx`), up to the pane's width and no taller
  * than theirs, and opened larger over the window by a press, in the viewer
  * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
- * message: a choice's options, one perhaps recommended, pressed one at a
- * time or several where the choice allows; a form's fields, each the
- * control Settings draws for its type; nothing for the rest. While the item
+ * message: a choice's options, one perhaps recommended, a radio list where
+ * it takes one and a checkbox list where it takes several, each numbered
+ * for the key that picks it from anywhere in the Inbox but a field; a
+ * form's fields, each the control Settings draws for its type; nothing for
+ * the rest. Enter on an option or in a field sends the answer as the box's
+ * Send does, and never presses the option, Space and the arrow keys being
+ * an option's own. While the item
  * waits, the agent composer's box, its card and its field, with its `@`
  * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
  * docked under the thread for the note: an approval, a task, and an item
@@ -492,19 +499,37 @@ export function choiceOptions(
   }));
 }
 
-/** A choice's options, each pressed to pick it and pressed again to let it go; several stay picked where the choice allows. */
+/** Where a choice's open options stand, which a number key and Enter's way to what is missing find them by. */
+const OPTIONS_ATTRIBUTE = "data-inbox-options";
+
+/** The options of the open item's choice, in their order. */
+function optionRows(pane: HTMLElement): HTMLButtonElement[] {
+  return [
+    ...pane.querySelectorAll<HTMLButtonElement>(
+      `[${OPTIONS_ATTRIBUTE}] [role="radio"], [${OPTIONS_ATTRIBUTE}] [role="checkbox"]`,
+    ),
+  ];
+}
+
+/**
+ * A choice's options, a radio list where it takes one and a checkbox list
+ * where it takes several, each pressed to pick it and pressed again to let
+ * it go. Where `numbered`, each of the first nine wears the number that
+ * picks it, which the Inbox's pane answers (`useOptionNumbers`).
+ */
 export function ChoiceOptions({
   choice,
   draft,
   disabled,
+  numbered = false,
   onDraft,
 }: {
   choice: InboxChoice;
   draft: InboxDraft;
   disabled: boolean;
+  numbered?: boolean;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
-  const multiple = choice.multiple === true;
   const options = choiceOptions(
     choice.options.map((option) => ({
       ...option,
@@ -512,22 +537,19 @@ export function ChoiceOptions({
     })),
   );
   return (
-    <Stack gap={GAP.TIGHT}>
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
       <ChoiceList
         legend={CHOICE_LEGEND}
         options={options}
         value={draft.choices}
-        select={multiple ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
+        select={choice.multiple === true ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
+        look={CHOICE_LOOK.MARKED}
+        numbered={numbered}
         clearable
         disabled={disabled}
         onChange={(choices) => onDraft({ ...draft, choices: [...choices] })}
       />
-      {multiple ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          Pick any that apply.
-        </Text>
-      ) : null}
-    </Stack>
+    </div>
   );
 }
 
@@ -564,7 +586,7 @@ function InboxFormField({
   switch (field.type) {
     case INBOX_FIELD.TEXT:
       return (
-        <div data-inbox-field={field.type}>
+        <div data-inbox-field={field.type} data-inbox-field-label={field.label}>
           <FormField label={field.label} description={requiredWords(field)}>
             {(control) => (
               <TextField
@@ -580,7 +602,7 @@ function InboxFormField({
       );
     case INBOX_FIELD.NUMBER:
       return (
-        <div data-inbox-field={field.type}>
+        <div data-inbox-field={field.type} data-inbox-field-label={field.label}>
           <FormField label={field.label} description={requiredWords(field)}>
             {(control) => (
               <TextField
@@ -597,7 +619,11 @@ function InboxFormField({
       );
     case INBOX_FIELD.SELECT:
       return (
-        <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
+        <div
+          className="settings-row settings-row-wrapping"
+          data-inbox-field={field.type}
+          data-inbox-field-label={field.label}
+        >
           <FieldName field={field} />
           {/* An optional field's choice is taken back by pressing it again, its only way to be left unanswered. */}
           <Segmented
@@ -612,7 +638,11 @@ function InboxFormField({
       );
     case INBOX_FIELD.BOOLEAN:
       return (
-        <div className="settings-row" data-inbox-field={field.type}>
+        <div
+          className="settings-row"
+          data-inbox-field={field.type}
+          data-inbox-field-label={field.label}
+        >
           <FieldName field={field} />
           <Switch checked={value === true} label={field.label} disabled={disabled} onChange={set} />
         </div>
@@ -664,13 +694,144 @@ function ResponseControls({
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
       return (
-        <ChoiceOptions choice={response} draft={draft} disabled={disabled} onDraft={onDraft} />
+        <ChoiceOptions
+          choice={response}
+          draft={draft}
+          disabled={disabled}
+          numbered
+          onDraft={onDraft}
+        />
       );
     case INBOX_RESPONSE.FORM:
       return <FormFields form={response} draft={draft} disabled={disabled} onDraft={onDraft} />;
     default:
       return null;
   }
+}
+
+/** What an editor's own element matches, its words written in place, and a field of several lines. */
+const WRITES_LINES = 'textarea, [contenteditable]:not([contenteditable="false"])';
+
+/** Whether a key goes to whatever takes typing: a field, a select, or an editor. */
+function takesTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches(`input, select, ${WRITES_LINES}`);
+}
+
+/** Whether a key goes to something written in lines, whose own Enter breaks one: an editor or a field of several lines. */
+function writesLines(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches(WRITES_LINES);
+}
+
+/** Whether a key comes alone, with no modifier but perhaps Shift. */
+function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
+  return !event.metaKey && !event.ctrlKey && !event.altKey;
+}
+
+/**
+ * Sends the open item's answer from wherever in its pane the developer
+ * pressed Enter, through its box's own send, so the box's checks stand: an
+ * answer complete goes, and one that is not takes the keyboard to what it
+ * lacks (`InboxAnswerBox`).
+ */
+function sendFromPane(pane: HTMLElement | null): void {
+  pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
+}
+
+/**
+ * Enter in an open item's question, on an option or in a form's field,
+ * sends the answer, and never presses the option it stands on; Shift+Enter
+ * is no send, and an editor's Enter is the editor's own to hand on.
+ */
+function onResponseKey(
+  pane: React.RefObject<HTMLElement | null>,
+  event: React.KeyboardEvent,
+): void {
+  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
+  if (event.key !== "Enter" || event.shiftKey || !bareKey(event) || event.nativeEvent.isComposing) {
+    return;
+  }
+  if (writesLines(event.target)) return;
+  event.preventDefault();
+  sendFromPane(pane.current);
+}
+
+/**
+ * Takes the keyboard to what the answer lacks: the option a reader's Tab
+ * lands on, the field's first control, or the box's words.
+ */
+function focusMissing(pane: HTMLElement | null, missing: InboxMissing): void {
+  if (pane === null) return;
+  if (missing.kind === INBOX_MISSING.OPTION) {
+    const rows = optionRows(pane);
+    (rows.find((row) => row.tabIndex === 0) ?? rows[0])?.focus();
+    return;
+  }
+  if (missing.kind === INBOX_MISSING.WORDS) {
+    pane.querySelector<HTMLElement>('.inbox-answer [contenteditable="true"]')?.focus();
+    return;
+  }
+  const field = [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+    (each) => each.dataset.inboxFieldLabel === missing.label,
+  );
+  field
+    ?.querySelector<HTMLElement>(
+      'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)',
+    )
+    ?.focus();
+}
+
+/** The keys 1 to 9, each the option of its number. */
+const OPTION_NUMBER = /^[1-9]$/u;
+
+/**
+ * The number keys pick an open choice's options, 1 the first, as a press on
+ * the option would, and take the keyboard to it, wherever in the Inbox the
+ * developer stands but a field or an editor, whose keys are its own, and
+ * never under a dialog. Note that the keys are heard on the document,
+ * because a reader stepping the list with J and K holds the keyboard on its
+ * row rather than in the pane.
+ */
+function useOptionNumbers(
+  pane: React.RefObject<HTMLElement | null>,
+  item: InboxItem,
+  draft: InboxDraft,
+  control: TaskInboxControl,
+): void {
+  const latest = useRef({ item, draft, control });
+  latest.current = { item, draft, control };
+  const choice = item.status === INBOX_STATUS.OPEN && item.response.type === INBOX_RESPONSE.CHOICE;
+  useEffect(() => {
+    if (!choice) return;
+    const onKey = (event: KeyboardEvent) => {
+      const { item, draft, control } = latest.current;
+      const shown = pane.current;
+      if (!OPTION_NUMBER.test(event.key) || !bareKey(event) || event.shiftKey) return;
+      if (event.defaultPrevented || event.isComposing || takesTyping(event.target)) return;
+      if (
+        shown === null ||
+        shown.hidden ||
+        document.querySelector('[aria-modal="true"]') !== null
+      ) {
+        return;
+      }
+      const inbox = shown.parentElement;
+      const from = event.target;
+      if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
+        return;
+      const response = item.response;
+      if (!knownResponse(response) || response.type !== INBOX_RESPONSE.CHOICE) return;
+      const at = Number(event.key) - 1;
+      const option = response.options[at];
+      if (option === undefined || control.sending.has(item.id)) return;
+      event.preventDefault();
+      control.onDraft(item, withChoice(response, draft, option.label));
+      optionRows(shown)[at]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [choice, pane]);
 }
 
 /** The item's agent as the pane names it, the catalog its card names the model from, and the press that opens its tab. */
@@ -1453,6 +1614,7 @@ export function InboxPane({
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
+  const pane = useRef<HTMLElement>(null);
   // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
   useLayoutEffect(() => {
     if (board.current !== null) board.current.scrollTop = 0;
@@ -1466,10 +1628,16 @@ export function InboxPane({
   };
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
+  useOptionNumbers(pane, item, draft, control);
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
   return (
-    <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
+    <section
+      ref={pane}
+      className="inbox-view-items"
+      aria-label={cardTitle(item.title)}
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
           <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
@@ -1513,12 +1681,15 @@ export function InboxPane({
                   code={doors.code}
                 />
                 {open ? (
-                  <ResponseControls
-                    item={item}
-                    draft={draft}
-                    disabled={control.sending.has(item.id)}
-                    onDraft={(next) => control.onDraft(item, next)}
-                  />
+                  // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
+                  <div className="inbox-response" onKeyDown={(event) => onResponseKey(pane, event)}>
+                    <ResponseControls
+                      item={item}
+                      draft={draft}
+                      disabled={control.sending.has(item.id)}
+                      onDraft={(next) => control.onDraft(item, next)}
+                    />
+                  </div>
                 ) : (
                   // Keyed by its item, so the fold opened on one item stands closed on the next.
                   <Offered key={item.id} item={item} />
@@ -1540,6 +1711,7 @@ export function InboxPane({
             agentName={by.subject.name}
             skills={agents.readSkills}
             keywords={answerKeywords(holder, item)}
+            onMissing={(missing) => focusMissing(pane.current, missing)}
           />
         </AnswerMentions>
       </div>

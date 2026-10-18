@@ -108,8 +108,11 @@ const PREPARE_SCRIPT = [
   ...PREPARE_TMUX,
   // Playwright and its Chromium, so a coding agent opens what it built and screenshots it; the
   // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
+  // Note that we install only the headless shell, because nothing here launches headed Chromium
+  // (`playwright screenshot` runs headless, Electron ships its own), and the full browser
+  // would be hundreds of megabytes in every snapshot for nothing.
   `npm install -g playwright@${PLAYWRIGHT_VERSION}`,
-  "playwright install --with-deps chromium",
+  "playwright install --with-deps --only-shell chromium",
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
   ...INSTALL_GH_STACK,

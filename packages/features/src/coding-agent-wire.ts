@@ -1801,6 +1801,11 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  /**
+   * What the newest turn alone cost. No service sends it any more, since a
+   * price the window draws means the whole run's (`usage`); it stays an
+   * optional key so the answer's shape is the one older desktops read.
+   */
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
 });
