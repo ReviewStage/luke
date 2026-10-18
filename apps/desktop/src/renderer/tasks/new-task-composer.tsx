@@ -294,6 +294,8 @@ export function NewTaskComposer({
   };
   // ⌘L from the card opens the Linear chip's menu, where the chip stands.
   const onCardKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Note that a key an input method is composing with is its own, Safari's last one (229) among them.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (starting || linearIssuesIn(workspaceId) === undefined) return;
     if (!shortcutMatches(LINEAR_CHORD, event)) return;
     event.preventDefault();

@@ -1,7 +1,7 @@
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { useAutomations } from "./desktop/use-automations";
 
 /**
  * automation-directory.tsx -- the automations of the workspace a place stands in, read for the agents in it that an automation started, so an agent's card names the one that did.

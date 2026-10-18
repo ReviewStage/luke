@@ -1,11 +1,11 @@
 import { PAGE_SHOWER, type PageLine, type PageShower } from "@luke/features/page-wire";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { HoverCard, HoverCardHead } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
 import { PAGE_SANDBOX } from "./page-pane";
 import { RelativeTime } from "./relative-time";
-import { useMinute } from "./task-time";
 import { useKnownNames } from "./use-known-names";
 
 /**

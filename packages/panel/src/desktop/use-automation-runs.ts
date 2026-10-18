@@ -1,9 +1,9 @@
 import { AUTOMATION_CALL_FAILURE, type AutomationRunView } from "@luke/features/automation-view";
 import type { AutomationRunSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMinute } from "../tasks/task-time";
+import { useAct } from "../act.js";
+import { useMinute } from "../tasks/task-time.js";
 
 /**
  * use-automation-runs.ts -- one automation's runs as its page's panel draws them, read when the page opens and each minute after, and its Run now.

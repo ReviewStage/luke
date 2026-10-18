@@ -333,13 +333,20 @@ export function SearchableMenu(props: {
   const foot = props.foot ?? [];
   // Until the arrows or the pointer move it, the highlight follows the chosen
   // row, which may arrive after the menu opened, so Enter keeps what stands.
-  const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  // The row moved to is held by its id as well as its place, so rows an
+  // owner hands anew, such as a search answering after the arrows moved,
+  // keep the highlight on that row rather than on whatever took its place.
+  const [highlight, setHighlightAt] = useState<{ index: number; id: string | undefined }>();
+  const setHighlight = (index: number | undefined) =>
+    setHighlightAt(index === undefined ? undefined : { index, id: matches[index]?.id });
+  const movedRow =
+    highlight?.id === undefined ? -1 : matches.findIndex((row) => row.id === highlight.id);
   const chosen = matches.findIndex((row) => row.id === value);
   // A row that cannot be picked takes no highlight, from the arrows or from a moment ago.
   const blocked = (index: number) =>
     (matches[index] ?? foot[index - matches.length])?.disabled !== undefined;
   const at = highlightOver({
-    moved: highlight,
+    moved: movedRow >= 0 ? movedRow : highlight?.index,
     chosen,
     first: firstOpen(matches),
     count: matches.length + foot.length,
@@ -356,7 +363,7 @@ export function SearchableMenu(props: {
     setWasLeaving(leaving);
     if (!leaving) {
       setQuery("");
-      setHighlight(undefined);
+      setHighlightAt(undefined);
       setSubmenu(undefined);
     }
   }

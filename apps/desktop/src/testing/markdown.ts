@@ -1,7 +1,7 @@
+import { markdownHtmlParserAtom } from "@luke/panel/markdown-html-parser";
+import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { markdownHtmlParserAtom } from "../renderer/markdown-html-parser";
-import { rendererRegistry } from "../renderer/renderer-runtime";
 
 /**
  * markdown.ts -- the HTML parser a reply's markdown is drawn through, landed as the panel lands it after its first paint.

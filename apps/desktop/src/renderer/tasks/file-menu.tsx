@@ -1,4 +1,5 @@
 import { appPlatform } from "@luke/panel/app-platform";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
@@ -7,7 +8,6 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
-import { useFileViewSettings } from "./file-view-settings";
 
 /**
  * file-menu.tsx -- the File view bar's ⋯: what is done with the file shown, then how every File tab draws its lines.

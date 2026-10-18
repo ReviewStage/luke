@@ -20,6 +20,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { SettingsPage } from "@luke/ui";
@@ -35,7 +36,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import { GitHubConnectProvider } from "../github-connect";
 import { OpenSettingsProvider } from "../open-settings";
-import { rendererRuntime } from "../renderer-runtime";
 import { IntegrationsSection } from "./integrations-page";
 
 /**

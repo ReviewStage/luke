@@ -1,6 +1,6 @@
+import { useAppState } from "@luke/panel/use-app-state";
 import { WifiOffIcon } from "lucide-react";
 import { Tooltip } from "../tooltip";
-import { useAppState } from "../use-app-state";
 
 /**
  * offline-mark.tsx -- the pill that says this Mac is offline, in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar.

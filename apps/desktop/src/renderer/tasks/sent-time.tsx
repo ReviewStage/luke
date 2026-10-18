@@ -1,4 +1,4 @@
-import { callHeading, useMinute } from "./task-time";
+import { callHeading, useMinute } from "@luke/panel/tasks/task-time";
 
 /**
  * sent-time.tsx -- when a line sent to an agent was sent, set after who sent it in the line under its bubble or card: "Dean · Today, 3:42 PM", or the time alone for the reader's own.

@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
+import { agoText } from "@luke/panel/tasks/task-time";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -21,7 +22,6 @@ import { useMemberDirectory } from "../member-directory";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
-import { agoText } from "./task-time";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**

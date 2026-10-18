@@ -4,14 +4,14 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { useAppState } from "@luke/panel/use-app-state";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
 import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader";
-import { rendererRuntime } from "../renderer-runtime";
 import { SpinnerRegion } from "../spinner";
-import { useAppState } from "../use-app-state";
 import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract";
 
 /**

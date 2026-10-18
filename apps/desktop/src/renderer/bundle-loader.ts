@@ -1,4 +1,5 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -10,7 +11,6 @@ import type { WorldEntry } from "./factory-world/registry";
 import type { WorldModule } from "./factory-world/world";
 import type { FileTreeModule } from "./file-tree/contract";
 import type { PlanEditorModule } from "./plan-editor/contract";
-import { rendererRuntime } from "./renderer-runtime";
 import type { TerminalModule } from "./terminal/contract";
 import type { WhiteboardModule } from "./whiteboard/contract";
 

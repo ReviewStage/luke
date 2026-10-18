@@ -32,6 +32,8 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -94,7 +96,6 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
-import { useFileViewSettings } from "./file-view-settings";
 import type { PendingReview } from "./line-comment";
 import { blockedWords, MergeActions } from "./merge-box";
 import {
@@ -122,7 +123,6 @@ import {
   usePullRequestWrites,
 } from "./pull-request-writes";
 import { RelativeTime } from "./relative-time";
-import { useMinute } from "./task-time";
 import {
   type GitHubPictureDrawer,
   GitHubPictureLink,

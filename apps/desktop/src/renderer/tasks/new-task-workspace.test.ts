@@ -356,3 +356,49 @@ test("a switch of workspace closes the Linear search, and the chip then lists th
   assert.deepEqual(afterSwitch, []);
   assert.deepEqual(listed(), ["Rotate the deploy keyACME-1"]);
 });
+
+test("Linear let go while its search stands closes the search, and its coming back draws none until the chip is pressed", async () => {
+  const issues: readonly LinearIssueSummary[] = [
+    {
+      id: "acme-1",
+      identifier: "ACME-1",
+      title: "Rotate the deploy key",
+      url: "https://linear.app/x/issue/1",
+    },
+  ];
+  const control = tasksControl();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const draw = (connected: boolean) =>
+    act(() =>
+      root.render(
+        createElement(NewTaskDialog, {
+          newTask: {
+            ...control.newTask,
+            open: true,
+            workspaces: [ACME],
+            workspaceId: ACME.id,
+            repositoriesIn: chooserFor,
+            linearIssuesIn: () => (connected ? () => Promise.resolve(issues) : undefined),
+          },
+        }),
+      ),
+    );
+  const search = () => document.querySelector('[role="dialog"][aria-label="Linear issues"]');
+  draw(true);
+  await settle();
+  const chip =
+    document.querySelector<HTMLButtonElement>('[aria-label="Choose from Linear"]') ??
+    assert.fail("the Linear chip stands");
+  act(() => chip.click());
+  await settle();
+  const opened = search() !== null;
+
+  draw(false);
+  await settle();
+  draw(true);
+  await settle();
+
+  assert.equal(opened, true);
+  assert.equal(search() !== null, false, "no search is drawn");
+});
