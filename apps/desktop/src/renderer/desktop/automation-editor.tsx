@@ -62,6 +62,11 @@ import {
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import {
+  type AgentsRead,
+  type RunChoices,
+  useRunChoices,
+} from "@luke/panel/desktop/use-run-choices";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -130,7 +135,6 @@ import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
 import { PaneGlide } from "./pane-motion";
 import { useAutomationRuns } from "./use-automation-runs";
-import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.

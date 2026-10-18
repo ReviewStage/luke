@@ -1,8 +1,8 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
 import { Segmented } from "../segmented";
 
 /**

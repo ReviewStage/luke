@@ -21,6 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { opensAsLink, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   Disclosure,
   DisclosureBody,
@@ -117,7 +118,6 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown";
-import { opensAsLink, useOpenLink } from "./use-open-link";
 import { WorkingTime } from "./working-time";
 
 /**

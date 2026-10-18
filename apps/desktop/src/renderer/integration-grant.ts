@@ -8,8 +8,8 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useCallback } from "react";
-import { useAct } from "./act";
 import { useGitHubConnection } from "./github-connect";
 import type { IntegrationStatuses } from "./integration-statuses";
 

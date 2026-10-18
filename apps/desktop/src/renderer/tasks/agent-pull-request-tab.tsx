@@ -30,6 +30,9 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -76,9 +79,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useState } from "react";
-import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -123,7 +124,6 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 import { useWorkingNow, workingTime } from "./working-time";
 

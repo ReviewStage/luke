@@ -1,7 +1,7 @@
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
 import { SettingsSection } from "@luke/ui";
 import { SchemaSettingRows } from "./schema-rows";
-import type { SettingsWrites } from "./writes";
 
 /**
  * mac-commands-section.tsx -- whether Luke and coding agents may run shell commands on this Mac, the This Mac page's one group.

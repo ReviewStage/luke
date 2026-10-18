@@ -8,6 +8,7 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   BUTTON_TYPE,
@@ -27,7 +28,6 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import { dayText } from "../tasks/task-time";
 import { MenuRow } from "./menu-row";

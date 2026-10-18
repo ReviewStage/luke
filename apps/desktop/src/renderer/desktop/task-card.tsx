@@ -3,6 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -25,7 +26,6 @@ import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-mod
 import { PullRequestMark } from "../tasks/pull-request-mark";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
-import { useOpenLink } from "../tasks/use-open-link";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { strandedHome } from "./move-task-dialog";

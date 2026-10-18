@@ -232,7 +232,8 @@ fi
 # the bundle, so a `node:assert` import is its whole point. The main-process
 # door stays shut for it either way — a renderer test that needs main is
 # testing the wrong side.
-renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
+renderer_escapes=$(grep -ranE 'from "(#main/|node:)' \
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
     printf 'error: the renderer is sandboxed — it reaches the main process only through the shared bridge and wire modules:\n%s\n' \
@@ -252,13 +253,26 @@ if [[ -n "$ui_app_reaches" ]]; then
     exit 1
 fi
 
+# `@luke/panel` is the panel every client mounts, the desktop's window and the
+# web's page alike, so it reaches neither shell: no preload global, no alias of
+# the desktop's, and no Electron. The shell installs its bridge and platform
+# into the panel's doors (`app-bridge.ts`, `app-platform.ts`), and the panel
+# reads them there.
+panel_shell_reaches=$(grep -rnaE 'window\.luke|"#(shared|renderer|main|preload|testing)/|from "(electron|electron-updater|@sentry/electron)(/[^"]*)?"' \
+    "$LUKE_REPO_ROOT/packages/panel/src" || true)
+if [[ -n "$panel_shell_reaches" ]]; then
+    printf 'error: @luke/panel reaches into a shell (read the bridge or the platform through the doors the shell installs):\n%s\n' \
+        "$panel_shell_reaches" >&2
+    exit 1
+fi
+
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
 # reset time. The diagnostics the renderer receives carry the members, so the
 # rule is that nothing drawn reads them.
 drawn_hosted_quota=$(grep -rnaE --include='*.ts' --include='*.tsx' \
     'requestHostedUsage|hostedUsage|<meter\b|quota\.(used|limit|remaining|resetsAt)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" |
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" |
     grep -vE '\.test\.tsx?:' || true)
 if [[ -n "$drawn_hosted_quota" ]]; then
     printf 'error: hosted quota values must not reach the customer-facing renderer:\n%s\n' \
@@ -278,7 +292,8 @@ fi
 # export.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
     'mkdtemp' \
-    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src" "$LUKE_REPO_ROOT/packages/host/src" \
+    "$LUKE_REPO_ROOT/packages/panel/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory from @luke/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
@@ -471,12 +486,10 @@ node --input-type=module -e '
     "apps/web/server/preview-*.ts",
     "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
-    // The doors the window root installs its platform bridge and platform
-    // services into. Step 16 of the web plan moves them into the panel
-    // package, together with renderer/act.ts and the hooks above them, and
-    // removes these rows.
-    "apps/desktop/src/renderer/app-bridge.ts",
-    "apps/desktop/src/renderer/app-platform.ts",
+    // What the desktop answers the platform door of the panel with, which
+    // the window root installs: each capability as the act or the preload
+    // event main serves, so it names nothing but the panel and the act table.
+    "apps/desktop/src/renderer/desktop-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -614,7 +627,7 @@ node --input-type=module -e '
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
     '"(@effect/platform-node|effect/sql)' \
-    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" || true)
+    "$LUKE_REPO_ROOT/apps/desktop/src/renderer" "$LUKE_REPO_ROOT/packages/panel/src" || true)
 if [[ -n "$node_reaching_effect" ]]; then
     printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2

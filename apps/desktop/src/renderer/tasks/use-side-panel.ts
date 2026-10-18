@@ -1,5 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
@@ -28,7 +29,6 @@ import {
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**
