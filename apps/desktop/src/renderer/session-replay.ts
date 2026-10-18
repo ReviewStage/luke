@@ -273,6 +273,8 @@ let loading = false;
 let client: PostHog | undefined;
 /** The run's latest word on recording, which a recorder that finishes loading starts under. */
 let latest: SessionReplayBootstrap | undefined;
+/** The account the running recording is filed under, cleared with the person on a stop. */
+let identified: string | undefined;
 
 /** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
 const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
@@ -280,7 +282,10 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 /**
  * Brings recording into line with what the run allows, in either direction.
  * Called at bootstrap and again on every account transition, so a deletion
- * stops the recording where it stands rather than at the next launch. The
+ * stops the recording where it stands rather than at the next launch, and a
+ * sign-in that lands while a recording runs files it under the account then
+ * rather than at the next launch: being signed out is no reason to stop, so a
+ * sign-in leaves the answer where it was and only the account moves. The
  * recorder's bundle is reached through `importRecorder`, its own entry
  * unless a test stands one in.
  */
@@ -290,9 +295,13 @@ export function applySessionReplay(
 ): void {
   latest = bootstrap;
   const wanted = sessionReplayWanted(bootstrap);
-  if (wanted === started) return;
-  if (wanted) startSessionReplay(bootstrap, importRecorder);
-  else stopSessionReplay();
+  if (wanted !== started) {
+    if (wanted) startSessionReplay(bootstrap, importRecorder);
+    else stopSessionReplay();
+    return;
+  }
+  // A client still loading starts under `latest`, which already names the account.
+  if (started && initialized && client !== undefined) identifyAccount(client, bootstrap);
 }
 
 /**
@@ -417,9 +426,16 @@ function record(posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap
  * later calls this, which is where the library joins that anonymous session
  * to the person. What never reaches a sign-in stays anonymous, and so cannot
  * be erased with an account — `PRIVACY.md` says so, because it is now true.
+ * Note that an account already identified is not identified again, because
+ * every account transition re-answers recording, most of them for nothing
+ * that moved. The build registered at the start stands: `identify` keeps the
+ * registered properties, and only the stop's `reset` clears them.
  */
 function identifyAccount(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
-  if (bootstrap.accountId) posthog.identify(bootstrap.accountId);
+  const accountId = bootstrap.accountId;
+  if (!accountId || accountId === identified) return;
+  identified = accountId;
+  posthog.identify(accountId);
 }
 
 /**
@@ -452,6 +468,7 @@ function registerBuild(posthog: PostHog, bootstrap: SessionReplayBootstrap): voi
 
 function stopSessionReplay(): void {
   started = false;
+  identified = undefined;
   const posthog = initialized ? client : undefined;
   if (posthog === undefined) return;
   posthog.stopSessionRecording();
