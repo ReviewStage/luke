@@ -9,8 +9,10 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
@@ -49,7 +51,6 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
-import { useMinute } from "../tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
@@ -57,7 +58,6 @@ import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks"
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
-import { useExperiment } from "../use-app-state";
 import { type InboxWaitingOnly, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
 import {
   COLUMN,

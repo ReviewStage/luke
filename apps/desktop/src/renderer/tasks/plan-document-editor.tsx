@@ -6,6 +6,7 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { Button } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -22,7 +23,6 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract";
-import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import { useEditorPictures } from "./editor-pictures";
 import {

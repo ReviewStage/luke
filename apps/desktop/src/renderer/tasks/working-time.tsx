@@ -1,14 +1,14 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { callHeading, useMinute } from "@luke/panel/tasks/task-time";
 import { cn } from "@luke/ui";
 import { Clock, Duration, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { ReactNode } from "react";
 import { Shimmer } from "../ai-elements/shimmer";
-import { rendererRuntime } from "../renderer-runtime";
 import { Tooltip } from "../tooltip";
-import { callHeading, useMinute } from "./task-time";
 import { TurnCard } from "./turn-card";
 
 /**

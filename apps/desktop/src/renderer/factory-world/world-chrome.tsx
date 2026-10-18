@@ -1,5 +1,6 @@
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -37,7 +38,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published";
-import { dayAndTimeText } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import type { SceneHover } from "./contract";

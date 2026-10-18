@@ -9,6 +9,9 @@ import {
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -81,14 +84,11 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
-import { useChatOn } from "../tasks/chat-gate";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
-import { useMinute } from "../tasks/task-time";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";

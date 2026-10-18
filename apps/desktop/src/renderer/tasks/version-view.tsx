@@ -1,3 +1,4 @@
+import { dayAndTimeText, momentText } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
@@ -19,7 +20,6 @@ import { DocumentScroll } from "./document-frame";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
-import { dayAndTimeText, momentText } from "./task-time";
 import { TaskTitle } from "./task-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 

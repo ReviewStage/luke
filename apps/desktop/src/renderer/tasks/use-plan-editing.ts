@@ -16,11 +16,11 @@ import {
   pendingSave,
 } from "@luke/features/plan-edit-model";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 import type { PlanEditorPlacement } from "../plan-editor/contract";
-import { rendererRuntime } from "../renderer-runtime";
 
 /**
  * use-plan-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.

@@ -1,6 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -82,7 +83,6 @@ import {
 import { ReadAgentModel } from "./mentioned-agent-card";
 import { RelativeTime } from "./relative-time";
 import { markReadItem } from "./task-menu-items";
-import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 
 /**

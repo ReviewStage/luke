@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { AUTOMATION_SCOPE, type AutomationScope } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useAppState } from "@luke/panel/use-app-state";
 import { ACTOR_KIND, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { useAppState } from "../use-app-state";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**

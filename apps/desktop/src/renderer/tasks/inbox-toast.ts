@@ -15,9 +15,9 @@
 
 import type { AppInboxTask } from "@luke/host/app-state";
 import { appBridge } from "@luke/panel/app-bridge";
+import { appStateNow } from "@luke/panel/use-app-state";
 import { useEffect, useRef } from "react";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
-import { appStateNow } from "../use-app-state";
 
 /** What an opened item's toast offers, to open its task's Inbox. */
 const VIEW_LABEL = "View";
