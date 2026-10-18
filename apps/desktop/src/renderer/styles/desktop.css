@@ -2230,6 +2230,14 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
+/* A picker's check, in a combobox option's end slot, is the text's colour
+   at the slot's size, as a menu's is, not Settings' green connected mark. */
+.luke-combobox-option-end .credential-check {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  color: var(--luke-color-text);
+}
+
 .luke-menu-item-end .settings-chevron {
   width: 14px;
   height: 14px;
@@ -5139,6 +5147,8 @@ body:has(.app-stage[data-capture="true"])
 /* The list an `@` or `#` opens stands over the box at its left. */
 .chat-mention-menu {
   position: absolute;
+  /* It stands over the box, so the searchable menu's own top is let go. */
+  top: auto;
   bottom: calc(100% + var(--luke-space-4));
   left: 0;
   width: 320px;
