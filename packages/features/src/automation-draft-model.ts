@@ -509,7 +509,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     (one.guards === null ||
       other.guards === null ||
       (one.guards.maxConcurrentRuns === other.guards.maxConcurrentRuns &&
-        one.guards.dailyRunCap === other.guards.dailyRunCap)) &&
+        one.guards.dailyRunCap === other.guards.dailyRunCap &&
+        one.guards.subjectCooldownHours === other.guards.subjectCooldownHours)) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&

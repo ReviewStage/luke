@@ -569,3 +569,14 @@ test("a Sentry trigger opens and writes back as it was given, and moves only whe
   assert.ok(sameDraft(draft, reordered), "the same levels in another order are no change");
   assert.deepEqual(changeOf(moved, saved, DEFAULTS), { trigger: moved.integrationTrigger });
 });
+
+test("two drafts whose guards differ only in their subject cooldown are not the same", () => {
+  const draft = automationDraft(
+    { ...SAVED, guards: { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 24 } },
+    DEFAULTS,
+  );
+  const longer = { ...draft, guards: { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 48 } };
+
+  assert.ok(sameDraft(draft, draft));
+  assert.ok(!sameDraft(draft, longer));
+});

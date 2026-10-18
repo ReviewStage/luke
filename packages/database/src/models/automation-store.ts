@@ -1005,7 +1005,8 @@ const findSubjectRun = SqlSchema.findAll({
         .where(
           and(
             eq(automationRun.automationId, automationId),
-            gte(automationRun.firedAt, since),
+            // Note that a run is dated by when it started, because one queued may start up to an hour after it fired.
+            gte(automationRun.settledAt, since),
             eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
             sql`${automationRun.firing}->>'kind' = ${AUTOMATION_FIRING.INTEGRATION}`,
             sql`${automationRun.firing}->'subject'->>'id' = ${subjectId}`,
@@ -1500,7 +1501,7 @@ export function integrationAutomationsOn(
 
 /**
  * Whether the automation started a run on the integration subject named
- * (one Sentry issue, by the provider's id) that fired at or after `since`:
+ * (one Sentry issue, by the provider's id) at or after `since`:
  * what its per-subject cooldown holds a new delivery back by. A run that was
  * skipped or failed started nothing, so it holds nothing back.
  */

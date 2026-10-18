@@ -13,7 +13,7 @@ import {
 } from "@luke/features/automation-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
@@ -611,7 +611,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a run started on a Sentry issue holds its cooldown for that issue alone, and a skipped one holds nothing",
+    "a run started on a Sentry issue holds its cooldown for that issue alone from when it started, however late after it fired, and a skipped one holds nothing",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -641,8 +641,10 @@ it.layer(getTestDB())("the automation store", (it) => {
             }),
             Option.getOrThrow,
           );
+        yield* TestClock.setTime(Date.parse("2026-10-15T12:00:00Z"));
         const started = yield* fireOn("4001");
-        // A claim is a start, with its agent still to come, so it holds the cooldown already.
+        // The sweep starts it three quarters of an hour after it fired; a claim is a start, its agent still to come.
+        yield* TestClock.adjust(Duration.minutes(45));
         yield* claimAutomationRun(started.id);
         const skipped = yield* fireOn("4002");
         yield* settleAutomationRun(skipped.id, {
@@ -655,10 +657,15 @@ it.layer(getTestDB())("the automation store", (it) => {
           "4001",
           new Date("2026-10-15T00:00:00Z"),
         );
+        const startedAfterFiring = yield* subjectRunStartedSince(
+          made.id,
+          "4001",
+          new Date("2026-10-15T12:30:00Z"),
+        );
         const after = yield* subjectRunStartedSince(
           made.id,
           "4001",
-          new Date("2026-10-15T12:00:01Z"),
+          new Date("2026-10-15T12:45:01Z"),
         );
         const skippedIssue = yield* subjectRunStartedSince(
           made.id,
@@ -672,7 +679,12 @@ it.layer(getTestDB())("the automation store", (it) => {
         );
 
         assert.equal(within, true);
-        assert.equal(after, false, "a run fired before the instant holds nothing");
+        assert.equal(
+          startedAfterFiring,
+          true,
+          "a run that fired earlier but started since holds it",
+        );
+        assert.equal(after, false, "a run started before the instant holds nothing");
         assert.equal(skippedIssue, false);
         assert.equal(otherIssue, false);
       }),
