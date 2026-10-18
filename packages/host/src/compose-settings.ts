@@ -152,6 +152,20 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
       refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
+      // The day each once-a-day count was last sent, kept in the settings
+      // file so a relaunch the same day does not count it again.
+      recordedDays: {
+        lastRecordedDay: (name, discriminator, account) =>
+          store
+            .lastProductEventDay(name, discriminator, account)
+            .pipe(Effect.orElseSucceed(() => undefined)),
+        keepRecordedDay: (recorded) =>
+          Effect.catch(store.keepProductEventDay(recorded), (error) =>
+            Effect.sync(() => {
+              report(`Keeping the day a usage count was sent failed: ${error.message}`);
+            }),
+          ),
+      },
     });
     const accountPreferencesClient = new AccountPreferencesClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -525,10 +539,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           Effect.sync(() => {
             productEvents.arm();
             productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
-            productEvents.markDayActive();
           }),
           productEvents.drop,
         );
+        // Forked, because marking the day reads the account and the day kept
+        // in the settings file, which no composer built after this one waits on.
+        yield* Effect.forkScoped(productEvents.markDayActive());
         // A live launch removes the SQLite store an earlier build left under
         // the agent's directory; a removal that fails is reported and stops
         // nothing else. A fixture or capture run keeps nothing on disk and

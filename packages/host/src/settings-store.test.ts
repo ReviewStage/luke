@@ -42,6 +42,7 @@ import {
   settingsOverrides,
 } from "./effect/settings-overrides.js";
 import {
+  type KeptProductEventDay,
   type SecretCipher,
   SettingsStore,
   type SettingsStoreOptions,
@@ -126,6 +127,12 @@ interface PromisedSettingsStore {
   cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
   macRepositories(): Promise<readonly MacRepository[]>;
   setMacRepository(entry: MacRepository): Promise<void>;
+  lastProductEventDay(
+    name: string,
+    discriminator: string,
+    account: string,
+  ): Promise<string | undefined>;
+  keepProductEventDay(kept: KeptProductEventDay): Promise<void>;
 }
 
 function awaitedStoreOf(
@@ -155,6 +162,9 @@ function awaitedStoreOf(
       awaited(store.cacheExperiments(accountEmail, choices)),
     macRepositories: () => awaited(store.macRepositories()),
     setMacRepository: (entry) => awaited(store.setMacRepository(entry)),
+    lastProductEventDay: (name, discriminator, account) =>
+      awaited(store.lastProductEventDay(name, discriminator, account)),
+    keepProductEventDay: (kept) => awaited(store.keepProductEventDay(kept)),
   };
 }
 
@@ -329,6 +339,40 @@ test("a repository's run command on this Mac survives a reopen, by name in any c
 
   await store.setMacRepository({ repository: "acme/site", command: null });
   assert.deepEqual(await storeIn(directory).macRepositories(), [renamed]);
+});
+
+test("the day a usage count was sent survives a reopen and a sign-out, by account, and only the newest day stays", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  const dayActive = { name: "app:day_active", discriminator: "day" } as const;
+
+  await store.setAccount(TEST_ACCOUNT);
+  await store.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-19" });
+  await store.keepProductEventDay({ ...dayActive, account: "grace@luke.test", day: "2026-08-19" });
+  await store.clearAccount();
+
+  const reopened = storeIn(directory);
+  assert.equal(
+    await reopened.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    "2026-08-19",
+  );
+  assert.equal(
+    await reopened.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    "2026-08-19",
+  );
+  assert.equal(await reopened.lastProductEventDay("app:launch", "day", "ada@luke.test"), undefined);
+
+  await reopened.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-20" });
+  const nextDay = storeIn(directory);
+  assert.equal(
+    await nextDay.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    "2026-08-20",
+  );
+  assert.equal(
+    await nextDay.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    undefined,
+  );
+  assert.ok(!(await readSettingsFile(directory)).includes("grace@luke.test"));
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
