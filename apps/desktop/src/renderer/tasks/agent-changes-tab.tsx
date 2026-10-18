@@ -76,7 +76,7 @@ import { useFileViewSettings } from "./file-view-settings";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
-import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
+import { OpenedBy, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
 
 /**
@@ -92,12 +92,11 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * panel keys the tab by its agent, so one agent's answer is never drawn in
  * another's tab.
  *
- * Under its bar the view says who the pull request names, who opened it,
- * its reviewers, and who authored its commits (`pull-request-people.tsx`);
- * what the reviews said stands in the tab's overview, whole, in its
- * conversation.
+ * Who opened the pull request and its reviewers stand in the Pull request
+ * tab's header above it, and what the reviews said in its overview's
+ * conversation, so the view leads with its files.
  *
- * Otherwise the tab is a File view (`file-view.tsx`) over its files' diffs,
+ * The tab is a File view (`file-view.tsx`) over its files' diffs,
  * every file in one list as stage-cli draws them (`diff-list.tsx`), each
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
@@ -743,14 +742,8 @@ export function AgentChangesTab({
   if (pullRequest === null) {
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
   }
-  // A pull request that changes no file still names its people, over the line saying so.
   if (shownFile === undefined) {
-    return (
-      <div className="file-view ph-no-capture">
-        <PullRequestPeople people={pullRequest} />
-        <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
-      </div>
-    );
+    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   const count = pullRequest.files.length;
   const total = linesChanged(pullRequest.files);
@@ -789,7 +782,6 @@ export function AgentChangesTab({
         }
         tree={room.toggles}
       />
-      <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>

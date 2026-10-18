@@ -818,7 +818,7 @@ export const CHANGES_BOUNDS = {
   MAX_FILES: 300,
   /** The most characters one file's patch may spell before it is left out as too large. */
   MAX_PATCH_CHARS: 100_000,
-  /** The most reviewers, commit authors, or review comments one read names; a pull request with more names its first. */
+  /** The most reviewers or review comments one read names; a pull request with more names its first. */
   MAX_PEOPLE: 50,
   /** The most characters of a review comment's words a read carries. */
   MAX_EXCERPT_CHARS: 280,
@@ -898,11 +898,10 @@ const reviewCommentSchema = EffectSchema.Struct({
  * list was cut short at the bound; or null where it has opened none yet,
  * which is not the same as a pull request that changes nothing. Who opened
  * it, who the agent writes as on GitHub (`CODING_AGENT_AUTHOR`), its
- * reviewers and where each stands, who authored its commits, and its
- * reviews that said something ride beside the files, each absent from a
- * service before them, and who the agent writes as absent too for an agent
- * whose first session never settled it. The commits a changed image is read
- * at ride beside them too (`headSha`, the pull request's head, and
+ * reviewers and where each stands, and its reviews that said something
+ * ride beside the files, each absent from a service before them, and who
+ * the agent writes as absent too for an agent whose first session never
+ * settled it. The commits a changed image is read at ride beside them too (`headSha`, the pull request's head, and
  * `baseSha`, where its head and base branch part, which GitHub's diff is
  * counted from), each absent where it could not be read, and `baseSha`
  * absent where no image the files change stood before them.
@@ -926,11 +925,6 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
           EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
         ),
       ),
-      commitAuthors: EffectSchema.optionalKey(
-        EffectSchema.Array(githubPersonSchema).check(
-          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
-        ),
-      ),
       comments: EffectSchema.optionalKey(
         EffectSchema.Array(reviewCommentSchema).check(
           EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
@@ -945,7 +939,7 @@ type CodingAgentChanges = NonNullable<(typeof codingAgentChangesAnswerSchema.Typ
 /** Who an agent's pull request names, as its changes carry them; every key absent from a service before them, or where they could not be read. */
 export type CodingAgentChangesPeople = Pick<
   CodingAgentChanges,
-  "author" | "writtenAs" | "reviewers" | "commitAuthors" | "comments"
+  "author" | "writtenAs" | "reviewers" | "comments"
 >;
 
 /**

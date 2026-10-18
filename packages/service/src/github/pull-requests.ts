@@ -36,11 +36,7 @@
  * wait.
  */
 
-import {
-  githubAppAvatarUrl,
-  githubAvatarUrl,
-  githubUserAvatarUrl,
-} from "@luke/features/account-picture";
+import { githubAppAvatarUrl, githubAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -267,25 +263,6 @@ const ReviewsSchema = Schema.Array(
   }),
 );
 
-/** A pull request's commits, as GitHub lists them: the GitHub account each is by, where GitHub links its address to one. */
-/** A pull request's commits, as much of each as names who made it: its author's account, and its message for the co-authors it names. */
-const CommitsSchema = Schema.Array(
-  Schema.Struct({
-    author: Schema.NullOr(GitHubAccountSchema),
-    commit: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
-  }),
-);
-
-/**
- * A `Co-authored-by` trailer naming an account by the noreply address
- * GitHub links to it, `<id>+<login>@users.noreply.github.com`, which is how
- * a coding agent that writes as its developer names the Luke GitHub App's
- * bot beside them; a trailer at any other address names no account GitHub
- * would show, and is left unread.
- */
-const CO_AUTHOR_TRAILER =
-  /^co-authored-by:[^<\n]*<(\d+)\+([^@>\s]+)@users\.noreply\.github\.com>\s*$/gimu;
-
 /** GitHub's own words for a review's standing; a pending review is its author's draft, which nobody else sees. */
 const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
   ["APPROVED", REVIEW_STATE.APPROVED],
@@ -300,7 +277,7 @@ const GITHUB_BOT_TYPE = "Bot";
 /** The suffix GitHub gives an App's bot's login. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
-/** How many reviews and commits a page asks for: GitHub's most. */
+/** How many reviews a page asks for: GitHub's most. */
 const PEOPLE_PER_PAGE = 100;
 
 /**
@@ -308,10 +285,9 @@ const PEOPLE_PER_PAGE = 100;
  * reviews oldest first, and a reviewer stands by their newest, so its
  * reviews are read to their end, bounded only where no pull request goes,
  * three thousand reviews, rather than holding the changes on a history that
- * does not end; GitHub lists at most 250 commits of a pull request, so three
- * pages hold every one.
+ * does not end.
  */
-const PEOPLE_MAX_PAGES = { REVIEWS: 30, COMMITS: 3 } as const;
+const PEOPLE_MAX_PAGES = { REVIEWS: 30 } as const;
 
 /** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
@@ -660,11 +636,10 @@ export interface GitHubReviewComment {
   readonly at: number;
 }
 
-/** Who a pull request names: who opened it, its reviewers, who authored its commits or is named their co-author, and its reviews that said something, each up to the bound. */
+/** Who a pull request names: who opened it, its reviewers, and its reviews that said something, each up to the bound. */
 export interface PullRequestPeople {
   readonly author: GitHubAccount | undefined;
   readonly reviewers: readonly GitHubReviewer[];
-  readonly commitAuthors: readonly GitHubAccount[];
   readonly comments: readonly GitHubReviewComment[];
 }
 
@@ -676,60 +651,6 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
     bot: record.type === GITHUB_BOT_TYPE || record.login.endsWith(BOT_LOGIN_SUFFIX),
     avatarUrl: githubAvatarUrl(record.avatar_url),
   };
-}
-
-/** An App's bot whose avatar a caller knows without asking GitHub, by its login: Luke's own App's, by its App's id. */
-export interface KnownBot {
-  readonly login: string;
-  readonly avatarUrl: string;
-}
-
-/** A login as GitHub matches one, whatever its case, since a trailer may spell it otherwise than GitHub's own read. */
-function loginKey(login: string): string {
-  return login.toLowerCase();
-}
-
-/**
- * The avatar of each App's bot by its login, whatever its case: the bots known beforehand,
- * then every bot the read names elsewhere with the avatar GitHub gave it,
- * which is its App's.
- */
-function botAvatarsOf(
-  known: readonly KnownBot[],
-  named: readonly GitHubAccount[],
-): ReadonlyMap<string, string> {
-  const avatars = new Map(known.map((bot) => [loginKey(bot.login), bot.avatarUrl]));
-  for (const account of named) {
-    if (account.bot && account.avatarUrl !== undefined)
-      avatars.set(loginKey(account.login), account.avatarUrl);
-  }
-  return avatars;
-}
-
-/**
- * The accounts a commit's message names as co-authors by their noreply
- * addresses, in the order it names them. Note that only the message's last
- * paragraph is read, because that is where git reads trailers from, so a
- * trailer-shaped line quoted in the body names nobody.
- */
-function coAuthorsOf(
-  message: string | undefined,
-  botAvatars: ReadonlyMap<string, string>,
-): readonly GitHubAccount[] {
-  if (message === undefined) return [];
-  const trailers =
-    message
-      .trimEnd()
-      .split(/\n[ \t]*\n/u)
-      .at(-1) ?? "";
-  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
-    const bot = login.endsWith(BOT_LOGIN_SUFFIX);
-    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author wears its App's avatar only where it is known, and its robot otherwise.
-    const avatarUrl = bot
-      ? botAvatars.get(loginKey(login))
-      : githubUserAvatarUrl({ id: Number(id) });
-    return { id: Number(id), login, bot, avatarUrl };
-  });
 }
 
 /** Each account once, the first time it stands, up to the bound. */
@@ -792,7 +713,6 @@ function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewCo
 const NOBODY: PullRequestPeople = {
   author: undefined,
   reviewers: [],
-  commitAuthors: [],
   comments: [],
 };
 
@@ -818,54 +738,30 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
 });
 
 /**
- * Who the pull request names, read on the token in three asks at once: the
+ * Who the pull request names, read on the token in two asks at once: the
  * pull request itself, for who opened it and who it still asks for a
- * review; every page of its reviews, since a reviewer stands by their
- * newest; and every page of its commits, since a later commit may be by
- * someone new, each commit naming its author and the co-authors its
- * message's trailers name by their noreply addresses. A bot co-author
- * wears the avatar of a bot `known` names, or of the same bot named
- * anywhere else in the read, and asks GitHub nothing more. Each list is cut
- * at the bound only once read whole. Nobody where the repository holds no
- * such pull request.
+ * review; and every page of its reviews, since a reviewer stands by their
+ * newest. Each list is cut at the bound only once read whole. Nobody where
+ * the repository holds no such pull request.
  */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
   token: Redacted.Redacted,
   fullName: string,
   number: number,
-  known: readonly KnownBot[] = [],
 ): Effect.fn.Return<PullRequestPeople, PullRequestReadFailure, HttpClient.HttpClient> {
   const path = `${repositoryPath(fullName)}/pulls/${number}`;
-  const [pull, reviews, commits] = yield* Effect.all(
+  const [pull, reviews] = yield* Effect.all(
     [
       readOptional(githubRead(path, token), PullRequestPeopleSchema),
       everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS),
-      everyPage(token, `${path}/commits`, CommitsSchema, PEOPLE_MAX_PAGES.COMMITS),
     ],
     { concurrency: "unbounded" },
   );
   if (Option.isNone(pull)) return NOBODY;
   const requested = (pull.value.requested_reviewers ?? []).map(accountOf);
-  const author = pull.value.user === null ? undefined : accountOf(pull.value.user);
-  const reviewers = reviewersOf(reviews, requested);
-  const committers = commits.flatMap((commit) =>
-    commit.author === null ? [] : [accountOf(commit.author)],
-  );
-  const botAvatars = botAvatarsOf(known, [
-    ...(author === undefined ? [] : [author]),
-    ...requested,
-    ...reviews.flatMap((review) => (review.user === null ? [] : [accountOf(review.user)])),
-    ...committers,
-  ]);
   return {
-    author,
-    reviewers,
-    commitAuthors: distinctAccounts(
-      commits.flatMap((commit) => [
-        ...(commit.author === null ? [] : [accountOf(commit.author)]),
-        ...coAuthorsOf(commit.commit?.message, botAvatars),
-      ]),
-    ),
+    author: pull.value.user === null ? undefined : accountOf(pull.value.user),
+    reviewers: reviewersOf(reviews, requested),
     comments: commentsOf(reviews),
   };
 });

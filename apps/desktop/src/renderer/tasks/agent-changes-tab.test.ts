@@ -109,7 +109,6 @@ const control = codingAgentsControl({
         truncated: false,
         files,
         reviewers: [],
-        commitAuthors: [],
         comments: [],
       },
     }),
