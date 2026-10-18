@@ -282,9 +282,40 @@ test("the task on the call stands in Talk however old, and with nothing standing
   );
 });
 
-test("until the plan list is read nothing stands, not even the empty state", () => {
-  const { page } = mount([], { listRead: false });
-  assert.equal(page.querySelector(".factory-board")?.childElementCount, 0);
+test("until the plan list is read the line stands in placeholder blocks, each station named and holding rows to come, saying to a reader that the tasks are being read, with nothing to press and no empty state; once the list lands, the rows stand in their place", () => {
+  const { page, redraw } = mount([DRAFT, SEARCH, INVITES], {
+    callTaskId: DRAFT.id,
+    listRead: false,
+  });
+  const board = page.querySelector<HTMLElement>(".factory-board");
+  assert.ok(board, "the board is drawn");
+  const wait = board.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.ok(wait, "the board says it is being read");
+  assert.equal(wait.querySelector(":scope > .luke-visually-hidden")?.textContent, "Reading tasks…");
+  const stations = [...wait.querySelectorAll<HTMLElement>(".factory-step")];
+  assert.deepEqual(
+    stations.map((each) => each.textContent),
+    ["Talk", "Build", "Ship"],
+  );
+  for (const station of stations) {
+    assert.ok(
+      station.querySelectorAll("li .luke-skeleton").length > 0,
+      "placeholder rows stand in each station",
+    );
+  }
+  assert.equal(page.querySelector("section[data-step]"), null, "no real station stands yet");
+  assert.equal(page.querySelector(".luke-empty-state"), null);
+  assert.deepEqual(
+    [...page.querySelectorAll("button")].filter(
+      (each) => each.closest(".desktop-toolbar") === null,
+    ),
+    [],
+  );
+
+  redraw({ listRead: true });
+  assert.equal(page.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(rows(page, "talk"), ["Usage alerts · On a call with Luke"]);
+  assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
 });
 
 test("a plan list that could not be read says so, and Retry reads it again", () => {

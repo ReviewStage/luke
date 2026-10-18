@@ -97,8 +97,8 @@
 }
 
 /* Who filed the issue and when, and when it last changed, under its title:
-   the quiet words of the plan's own line over its document
-   (`.plan-edit-note`). Each phrase wraps whole onto the next line rather
+   the quiet words of the plan's own line under its title
+   (`.plan-byline`). Each phrase wraps whole onto the next line rather
    than leaving a name cut from its time. */
 .issue-byline {
   display: flex;
@@ -110,38 +110,35 @@
   line-height: var(--luke-type-caption-leading);
 }
 
+/* An issue with no description says so in the words the empty editor
+   says it in, at the text's own size, so opening it moves nothing. */
 .issue-description-empty {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-body-size);
 }
 
-/* The description at rest is a press away from its field: the Markdown it
-   is, washed on hover so the press is found. */
+/* The description at rest is drawn as the plan's text is
+   (`.plan-document-block`): the words take the text cursor and nothing
+   else marks them, since a click into them edits them in place, and the
+   keyboard's focus wears the plan's soft tint a little past its words. */
 .issue-description {
-  margin: 0 calc(var(--luke-space-8) * -1);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
+  position: relative;
+  isolation: isolate;
   cursor: text;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.issue-description:hover {
-  background: var(--luke-color-input);
+.issue-description:focus-visible {
+  outline: none; /* no ring: the tint below marks it */
 }
 
-.issue-description-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-}
-
-/* The field stands at least a few lines tall and grows by the developer's hand. */
-.issue-description-field {
-  min-height: 160px;
-  font-family: var(--luke-font-mono);
-  line-height: 1.5;
-  resize: vertical;
+.issue-description:focus-visible::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .issue-description-refused {
@@ -290,4 +287,39 @@
 /* A card's time ends its line, wherever the identifier and mark leave off. */
 .issue-board .sidebar-task-time {
   margin-left: auto;
+}
+
+/* The board while its issues are read (`IssueBoardSkeleton`): the reading
+   region and the box around it hold to the page's height as the board
+   does, so its columns stand as tall as the board's will. */
+.issue-board-reading,
+.issue-board-reading > [role="status"] {
+  display: flex;
+  min-width: min-content;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+/* A placeholder column's name takes what its glyph's block leaves, as the
+   name does. */
+.issue-column-head > .luke-skeleton + .luke-text {
+  flex: 1;
+}
+
+/* A placeholder card stands a card's room: its identifier and time on a
+   caption's line over its title on the body's, at the card's own inset. */
+.issue-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-8) var(--row-inset);
+  font-size: var(--luke-type-body-size);
+}
+
+.issue-card-skeleton-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  font-size: var(--luke-type-caption-size);
 }

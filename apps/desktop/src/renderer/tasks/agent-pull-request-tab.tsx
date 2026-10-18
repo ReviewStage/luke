@@ -31,6 +31,9 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
   Badge,
   Button,
   CopyIcon,
@@ -56,6 +59,7 @@ import {
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
+  BotIcon,
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
@@ -75,7 +79,7 @@ import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
+import { AgentChangesTab, THREAD_PLACE, type ThreadPlace, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import {
@@ -86,6 +90,8 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
+import { useFileViewSettings } from "./file-view-settings";
+import { blockedWords, MergeActions } from "./merge-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
@@ -188,6 +194,8 @@ const PULL_REQUEST_WORDS = {
   earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
   /** What a review thread says of the replies a read left on GitHub, by how many. */
   moreReplies: (count: number) => `${count} more ${count === 1 ? "reply" : "replies"} on GitHub`,
+  /** What a thread drawn on its line says of how many comments it holds. */
+  commentCount: (count: number) => `${count} ${count === 1 ? "comment" : "comments"}`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
   /** What the folded checks' control says while folded, by how many checks there are in all. */
@@ -201,6 +209,14 @@ function threadLines(thread: ReviewThread): string | undefined {
   const start = thread.line === null ? thread.originalStartLine : thread.startLine;
   if (line === null) return undefined;
   return start === null || start === line ? `line ${line}` : `lines ${start}–${line}`;
+}
+
+/** What a review thread's head says of it: that it was resolved, and that a later push outdated it. */
+function threadLabels(thread: ReviewThread): readonly string[] {
+  return [
+    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
+    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
+  ];
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
@@ -323,7 +339,7 @@ const CHECK_ORDER: readonly CheckState[] = [
 /** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
 const CHECKS_UNFOLDED = 5;
 
-/** The size, in CSS pixels, a check's avatar is drawn at, and the density GitHub is asked for it at. */
+/** The size, in CSS pixels, a check's avatar is drawn at (`AVATAR_SIZE.INLINE`), and the density GitHub is asked for it at. */
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
 
@@ -533,25 +549,53 @@ function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | 
   );
 }
 
-/** A check's avatar read through the service's image proxy as the agent's, drawn once read and an empty square until then or where it answered none. */
-function ProxiedCheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+/** The App's square at a check's size: its picture once it loads, and its robot on the quiet tile until then and where there is none. */
+function CheckSquare({ name, src }: { name: string; src: string | undefined }): React.JSX.Element {
+  return (
+    <Avatar
+      name={name}
+      {...(src === undefined ? {} : { src })}
+      glyph={<BotIcon />}
+      shape={AVATAR_SHAPE.SQUARE}
+      size={AVATAR_SIZE.INLINE}
+      tiled
+      decorative
+    />
+  );
+}
+
+/** A check's avatar read through the service's image proxy as the agent's, drawn once read and the App's robot until then or where it answered none. */
+function ProxiedCheckAvatar({
+  agentId,
+  name,
+  src,
+}: {
+  agentId: string;
+  name: string;
+  src: string;
+}): React.JSX.Element {
   const state = usePicture(agentId, src, useGitHubImageRead());
-  return state.kind === PICTURE_STATE.READY ? (
-    <img className="pull-request-check-avatar" src={state.url} alt="" />
-  ) : (
-    <span className="pull-request-check-avatar" aria-hidden="true" />
+  return (
+    <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
 }
 
 /** The picture of the App that runs a check, or of whoever posted it: one GitHub's avatar host serves drawn as it is, at its size, and any other through the service's image proxy. */
-function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+function CheckAvatar({
+  agentId,
+  name,
+  src,
+}: {
+  agentId: string;
+  name: string;
+  src: string;
+}): React.JSX.Element {
   const hosted = githubAvatarUrl(src);
-  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} src={src} />;
+  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} name={name} src={src} />;
   return (
-    <img
-      className="pull-request-check-avatar"
+    <CheckSquare
+      name={name}
       src={githubAvatarAt(hosted, CHECK_AVATAR_PIXELS * CHECK_AVATAR_DENSITY)}
-      alt=""
     />
   );
 }
@@ -560,10 +604,13 @@ function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.
 function CheckLead({
   tone,
   agentId,
+  name,
   avatarUrl,
 }: {
   tone: CheckState;
   agentId: string;
+  /** Who the avatar is of, the App or what it deploys, which its picture is named by. */
+  name: string;
   avatarUrl: string | undefined;
 }): React.JSX.Element {
   return (
@@ -571,7 +618,9 @@ function CheckLead({
       <span className="pull-request-check-glyph" data-check-state={tone}>
         {CHECK_GLYPHS[tone]}
       </span>
-      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
+      {avatarUrl === undefined ? null : (
+        <CheckAvatar agentId={agentId} name={name} src={avatarUrl} />
+      )}
     </span>
   );
 }
@@ -599,7 +648,14 @@ function CheckRow({
   const running = check.state === CHECK_STATE.PENDING && startedAt !== null;
   return (
     <ListRow
-      leading={<CheckLead tone={check.state} agentId={agentId} avatarUrl={avatarUrl} />}
+      leading={
+        <CheckLead
+          tone={check.state}
+          agentId={agentId}
+          name={check.app ?? check.name}
+          avatarUrl={avatarUrl}
+        />
+      }
       title={
         <>
           {check.name}
@@ -669,17 +725,23 @@ function Checks({
 /** Whether the pull request would merge as it stands, in its tone's colour; drawn only while it is open. */
 function MergeLine({
   pullRequest,
+  actions,
 }: {
   pullRequest: CodingAgentOverviewPullRequest;
+  /** The merge box's presses at the line's end (`merge-box.tsx`). */
+  actions: ReactNode;
 }): React.JSX.Element {
   const { line, tone } = mergeWords(pullRequest.merge, pullRequest.base);
+  const blocked =
+    pullRequest.merge === MERGE_STATE.BLOCKED ? blockedWords(pullRequest.merging) : undefined;
   return (
-    <p className="pull-request-merge" data-merge-tone={tone}>
+    <div className="pull-request-merge" data-merge-tone={tone}>
       {tone === MERGE_TONE.READY ? <CheckIcon aria-hidden="true" /> : null}
       {tone === MERGE_TONE.BLOCKED ? <XIcon aria-hidden="true" /> : null}
       {tone === MERGE_TONE.WAITING ? <CircleDotIcon aria-hidden="true" /> : null}
-      {line}
-    </p>
+      <span className="pull-request-merge-words">{blocked ?? line}</span>
+      {actions}
+    </div>
   );
 }
 
@@ -794,14 +856,9 @@ function ThreadCard({
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
-  const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);
-  const labels = [
-    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
-    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
-  ];
-  const last = thread.comments.at(-1);
+  const labels = threadLabels(thread);
   return (
     <li className="pull-request-thread">
       <Fold defaultOpen={labels.length === 0}>
@@ -827,30 +884,98 @@ function ThreadCard({
               className="diff-view pull-request-thread-lines"
             />
           )}
-          <ol className="pull-request-thread-comments">
-            {thread.comments.map((comment) => (
-              <li key={comment.url} className="pull-request-thread-comment">
-                <span className="changes-comment-head">
-                  <PersonRef person={comment.by} />
-                  <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-                </span>
-                <EntryWords entry={comment} picture={picture} />
-              </li>
-            ))}
-          </ol>
-          {thread.more === 0 || last === undefined ? null : (
-            <button
-              type="button"
-              className="pull-request-more pull-request-thread-more"
-              onClick={() => openLink(last.url)}
-            >
-              {PULL_REQUEST_WORDS.moreReplies(thread.more)}
-            </button>
-          )}
-          <ThreadActions thread={thread} />
+          <ThreadComments thread={thread} now={now} picture={picture} />
         </FoldBody>
       </Fold>
     </li>
+  );
+}
+
+/** A review thread's comments, oldest first, as the conversation draws an entry, with the replies a read left on GitHub counted after them, then its Reply and Resolve (`pull-request-thread-actions.tsx`), wherever the thread is drawn. */
+function ThreadComments({
+  thread,
+  now,
+  picture,
+}: {
+  thread: ReviewThread;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const last = thread.comments.at(-1);
+  return (
+    <>
+      <ol className="pull-request-thread-comments">
+        {thread.comments.map((comment) => (
+          <li key={comment.url} className="pull-request-thread-comment">
+            <span className="changes-comment-head">
+              <PersonRef person={comment.by} />
+              <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
+            </span>
+            <EntryWords entry={comment} picture={picture} />
+          </li>
+        ))}
+      </ol>
+      {thread.more === 0 || last === undefined ? null : (
+        <button
+          type="button"
+          className="pull-request-more pull-request-thread-more"
+          onClick={() => openLink(last.url)}
+        >
+          {PULL_REQUEST_WORDS.moreReplies(thread.more)}
+        </button>
+      )}
+      <ThreadActions thread={thread} />
+    </>
+  );
+}
+
+/**
+ * A review thread drawn on its line in Files changed, as GitHub's own diff
+ * draws one: whether it was resolved or a later push outdated it, at its
+ * head, which folds it closed until opened, as Minimize inline comments
+ * folds every one; then its comments. An outdated one, whose line is gone,
+ * names the line it was made on.
+ */
+function InlineThread({
+  thread,
+  place,
+  now,
+  picture,
+}: {
+  thread: ReviewThread;
+  /** Under its line, or above the diff, where it names the lines it is on. */
+  place: ThreadPlace;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const { settings } = useFileViewSettings();
+  const labels = threadLabels(thread);
+  const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
+  const folded = labels.length > 0 || settings.diffMinimizeComments;
+  const first = thread.comments[0];
+  return (
+    <div className="diff-inline-thread">
+      {/* Note that the fold is drawn anew as the setting changes, so minimizing folds every thread at once. */}
+      <Fold key={String(settings.diffMinimizeComments)} defaultOpen={!folded}>
+        <FoldSummary className="pull-request-thread-head">
+          {first === undefined ? null : <PersonRef person={first.by} />}
+          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
+          {labels.map((label) => (
+            <span key={label} className="pull-request-thread-label">
+              {label}
+            </span>
+          ))}
+          <span className="pull-request-quiet">
+            {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
+          </span>
+          <FoldChevron />
+        </FoldSummary>
+        <FoldBody>
+          <ThreadComments thread={thread} now={now} picture={picture} />
+        </FoldBody>
+      </Fold>
+    </div>
   );
 }
 
@@ -903,7 +1028,18 @@ interface OverviewParts {
 }
 
 /** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
-function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
+function PullRequestHead({
+  parts,
+  now,
+  repository,
+  writes,
+}: {
+  parts: OverviewParts;
+  now: number;
+  /** The agent's repository, which the merge box keeps the method chosen by. */
+  repository: string | null;
+  writes: PullRequestWrites;
+}): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
     return (
@@ -948,7 +1084,14 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
         </span>
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
       </div>
-      {open ? <MergeLine pullRequest={pullRequest} /> : null}
+      {open ? (
+        <MergeLine
+          pullRequest={pullRequest}
+          actions={
+            <MergeActions pullRequest={pullRequest} repository={repository} writes={writes} />
+          }
+        />
+      ) : null}
     </>
   );
 }
@@ -965,7 +1108,14 @@ function DeploymentRow({
   const { url, avatarUrl, state } = deployment;
   return (
     <ListRow
-      leading={<CheckLead tone={DEPLOYMENT_TONE[state]} agentId={agentId} avatarUrl={avatarUrl} />}
+      leading={
+        <CheckLead
+          tone={DEPLOYMENT_TONE[state]}
+          agentId={agentId}
+          name={deployment.environment}
+          avatarUrl={avatarUrl}
+        />
+      }
       title={deployment.environment}
       description={DEPLOYMENT_WORDS[state]}
       meta={
@@ -1378,6 +1528,13 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
   return read.answer !== undefined || read.out;
 }
 
+/** Every review thread a read's conversation holds, in its order; none before a read lands or where it failed. */
+function reviewThreadsOf(
+  conversation: CodingAgentOverviewConversation | undefined,
+): readonly ReviewThread[] {
+  return conversation?.conversation.flatMap((entry) => entry.threads ?? []) ?? [];
+}
+
 /**
  * One agent's Pull request tab, laid out as stage-cli's pull request page:
  * a fixed header that stays put while what is under it scrolls (the bar
@@ -1391,7 +1548,8 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
  * where each reviewer stands, are asked as the tab is shown; the checks and
  * the files as their tab is first shown. Only a read saying there is no
  * pull request yet takes the header and the tabs away; a read that failed
- * says so in its own part, with its own Retry, the others standing.
+ * says so in its own part, with its own Retry, the others standing. Files
+ * changed draws the conversation's review threads on their lines.
  */
 export function AgentPullRequestTab({
   agentId,
@@ -1473,6 +1631,7 @@ export function AgentPullRequestTab({
   const written = refresh;
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  const picture = usePictureDrawer(agentId);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1493,7 +1652,7 @@ export function AgentPullRequestTab({
           <>
             <header className="pull-request-header">
               <HeaderTitle title={title} />
-              <PullRequestHead parts={parts} now={now} />
+              <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
             </header>
             <Tabs<PullRequestView>
               label="Pull request"
@@ -1542,6 +1701,13 @@ export function AgentPullRequestTab({
             shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
             repository={repository}
             tree={tree}
+            threads={{
+              list: reviewThreadsOf(landed(parts.conversation)),
+              draw: (thread, place) => (
+                <InlineThread thread={thread} place={place} now={now} picture={picture} />
+              ),
+              refresh: ask.conversation,
+            }}
           />
         </div>
       </div>

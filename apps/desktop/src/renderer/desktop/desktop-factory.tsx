@@ -15,6 +15,9 @@ import {
   ListRow,
   PAGE_FRAME,
   PAGE_WIDTH,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -102,10 +105,12 @@ import { useRowKeys } from "./use-row-keys";
  * build offers a world, shows one of the Factory's worlds in the board's
  * place (`../factory-world/`); the board is its first entry and what the
  * page opens on, and Escape in a world steps back to its overview before it
- * leaves. Until the plan list is read nothing stands, a list that could not
- * be read says so with Retry, above the line where an earlier read still
- * stands, and with nothing on a call, built, or shipped the page is the
- * app's empty state. It is an experiment
+ * leaves. Until the plan list is read the line stands in blocks, its
+ * stations named and holding placeholder rows in a row's own shape, so the
+ * rows land where the blocks stood; a list that could not be read says so
+ * with Retry, above the line where an earlier read still stands, and with
+ * nothing on a call, built, or shipped the page is the app's empty state.
+ * It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -711,7 +716,36 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
 }
 
 /** What the line's page is read as while the list is. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = "Reading tasks…";
+
+/** One placeholder row: how wide its words and the task it is about stand, so the rows read as rows of their own. */
+interface SkeletonRowShape {
+  readonly words: string;
+  readonly context: string;
+}
+
+/** The placeholder rows each station holds while the list is read, a few apiece as a working day's line holds. */
+const SKELETON_ROWS = {
+  [FACTORY_STEP.TALK]: [{ words: "136px", context: "60%" }],
+  [FACTORY_STEP.BUILD]: [
+    { words: "168px", context: "72%" },
+    { words: "120px", context: "56%" },
+    { words: "148px", context: "64%" },
+  ],
+  [FACTORY_STEP.SHIP]: [
+    { words: "96px", context: "68%" },
+    { words: "112px", context: "52%" },
+  ],
+} as const satisfies Record<FactoryStep, readonly SkeletonRowShape[]>;
+
+/** How wide the summary's placeholder parts stand: what waits, what works, and what shipped. */
+const SKELETON_SUMMARY = ["104px", "112px", "96px"] as const;
+
+/** How wide a placeholder row's glyph stands, a row's picture at its size (`.home-row-picture`). */
+const SKELETON_GLYPH = "16px";
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
 
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
@@ -719,12 +753,82 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
+/** A placeholder row in a row's own line: a block for its glyph, its words, the task it is about, and its time. It opens nothing. */
+function SkeletonRow({ shape }: { shape: SkeletonRowShape }): React.JSX.Element {
+  return (
+    <li className="home-row inbox-row factory-skeleton-row">
+      <span className="sidebar-task-line">
+        <span className="home-row-picture">
+          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />
+        </span>
+        <span className="sidebar-task-name">
+          <Skeleton width={shape.words} />
+        </span>
+        <span className="home-row-context">
+          <Skeleton width={shape.context} />
+        </span>
+        <span className="sidebar-task-time">
+          <Skeleton width={SKELETON_TIME} />
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/**
+ * The line while the plan list is first read: the summary in blocks over
+ * the three stations, each named as it will be and holding placeholder
+ * rows, laid out by the line's own rules, so the line stands side by side
+ * or stacked as the room has it and the rows land where the blocks stood.
+ * The region says what is being read and nothing else to a reader.
+ */
+function LineSkeleton(): React.JSX.Element {
+  const station = (step: FactoryStep) => {
+    const { name, Icon } = STEPS[step];
+    return (
+      <div className="factory-step">
+        <div className="factory-head">
+          <Icon className="factory-glyph" />
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
+            {name}
+          </Text>
+        </div>
+        <ul className="sidebar-tasks factory-rows">
+          {SKELETON_ROWS[step].map((shape) => (
+            <SkeletonRow key={shape.words} shape={shape} />
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  return (
+    <SkeletonRegion label={READING_LINE}>
+      <div aria-hidden="true">
+        <p className="factory-summary">
+          {SKELETON_SUMMARY.map((width) => (
+            <Text key={width} as={TEXT_ELEMENT.SPAN}>
+              <Skeleton width={width} />
+            </Text>
+          ))}
+        </p>
+        <div className="factory-line-up">
+          {station(FACTORY_STEP.TALK)}
+          <Arrow />
+          {station(FACTORY_STEP.BUILD)}
+          <Arrow />
+          {station(FACTORY_STEP.SHIP)}
+        </div>
+      </div>
+    </SkeletonRegion>
+  );
+}
+
 /**
  * What the line's page stands. Note that until the list is read it stands
- * nothing, since what the line says hangs on it and the page's loading rows
- * are a list's shape, not the line's; a read that failed with nothing
- * listed says so in the line's place, and one that failed over a list read
- * before says so above the line.
+ * the line's own placeholder (`LineSkeleton`) rather than the page's loading
+ * rows, since those are a list's shape, not the line's; a read that failed
+ * with nothing listed says so in the line's place, and one that failed over
+ * a list read before says so above the line.
  */
 function lineState(tasks: TasksControl, empty: boolean): CollectionState {
   if (tasks.listFailed && empty) return COLLECTION_STATE.ERROR;
@@ -808,7 +912,9 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
         >
           <div className="factory-board">
             {questionsUnread}
-            {!tasks.listRead && !tasks.listFailed ? null : (
+            {!tasks.listRead && !tasks.listFailed ? (
+              <LineSkeleton />
+            ) : (
               <>
                 {tasks.listFailed ? (
                   <ErrorState onRetry={tasks.onRetryList}>{UNREAD_LINE}</ErrorState>

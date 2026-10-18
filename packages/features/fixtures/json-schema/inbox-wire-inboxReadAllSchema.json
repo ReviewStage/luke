@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "marked": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "marked"
+  ],
+  "additionalProperties": false
+}

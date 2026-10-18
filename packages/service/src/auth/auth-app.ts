@@ -14,8 +14,11 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * versions, and the first one to drift would be the one Luke ships.
  */
 
-/** The path set `vercel.json`'s `/api/auth/(.*)` entry sends to this function. */
-const AUTH_PATH_SET = "/api/auth/*";
+/** What every path `vercel.json`'s `/api/auth/(.*)` entry sends to this function begins with. */
+export const AUTH_PATH_PREFIX = "/api/auth/";
+
+/** The path set that entry sends to this function. */
+const AUTH_PATH_SET = `${AUTH_PATH_PREFIX}*`;
 
 /**
  * The method the web handler answers with no body, taking the status and the

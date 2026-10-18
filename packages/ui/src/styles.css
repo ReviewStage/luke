@@ -39,11 +39,14 @@
 @import "./components/inline-edit/inline-edit.css";
 @import "./components/inline-ref/inline-ref.css";
 @import "./components/pagination/pagination.css";
+@import "./components/prose/prose.css";
+@import "./components/provider-button/provider-button.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
+@import "./components/choice-list/choice-list.css";
 @import "./components/switch/switch.css";
 @import "./components/tabs/tabs.css";
 @import "./components/segmented/segmented.css";

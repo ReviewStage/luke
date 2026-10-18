@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { DIFF_SIDE } from "@luke/features/coding-agent-wire";
+import { CHANGED_FILE_STATUS, DIFF_SIDE, PATCH_OMITTED } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
-import { threadPreview } from "./changes-model";
+import { threadPreview, threadsOn } from "./changes-model";
 
 /**
  * changes-model.test.ts -- a review thread previews the end of the hunk
@@ -107,4 +107,88 @@ test("a line the hunk does not hold previews the hunk's end, where GitHub ends i
   assert.equal(previewOf({ originalLine: 99 })?.patch.split("\n").at(-2), " }");
   assert.equal(previewOf({ diffHunk: "" }), undefined);
   assert.equal(previewOf({ diffHunk: "not a diff" }), undefined);
+});
+
+/** A thread on `path` at `line` on the new side, keyed by its one comment's page. */
+function threadAt(path: string, line: number | null, url: string) {
+  return {
+    path,
+    line,
+    startLine: null,
+    originalLine: 7,
+    originalStartLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    diffHunk: HUNK,
+    resolved: false,
+    outdated: line === null,
+    comments: [
+      {
+        by: { login: "octo", bot: false },
+        html: null,
+        body: "Why?",
+        at: 1,
+        url,
+      },
+    ],
+    more: 0,
+  };
+}
+
+/** The changed file the threads are on: one hunk, old lines 3 to 5 and new lines 3 to 6, line 4 changed and a line added. */
+const FILE_A = {
+  path: "src/a.ts",
+  previousPath: null,
+  status: CHANGED_FILE_STATUS.MODIFIED,
+  additions: 2,
+  deletions: 1,
+  omitted: null,
+  patch:
+    "@@ -3,3 +3,4 @@\n const c = 3;\n-const d = 4;\n+const d = 5;\n+const e = 6;\n const f = 7;",
+};
+
+const R = "https://github.com/acme/relay/pull/7#r";
+
+test("a file's threads stand under the lines its diff draws, on the side they count on, and every other above its diff", () => {
+  const { placed, above } = threadsOn(
+    [
+      { ...threadAt("src/a.ts", 4, `${R}1`), side: DIFF_SIDE.LEFT },
+      threadAt("src/a.ts", 5, `${R}2`),
+      threadAt("src/a.ts", null, `${R}3`),
+      threadAt("src/a.ts", 120, `${R}4`),
+      threadAt("src/b.ts", 2, `${R}5`),
+      { ...threadAt("src/a.ts", 5, "unused"), comments: [] },
+    ],
+    FILE_A,
+  );
+
+  assert.deepEqual(
+    placed.map(({ key, side, line }) => [key, side, line]),
+    [
+      [`${R}1`, "deletions", 4],
+      [`${R}2`, "additions", 5],
+    ],
+  );
+  assert.deepEqual(
+    above.map(({ key, line }) => [key, line]),
+    [
+      [`${R}3`, 7],
+      [`${R}4`, 120],
+    ],
+    "an outdated thread, and one on a line no hunk shows",
+  );
+});
+
+test("every thread on a file whose diff is not drawn stands above where its diff would", () => {
+  const { placed, above } = threadsOn([threadAt("src/a.ts", 4, `${R}1`)], {
+    ...FILE_A,
+    patch: null,
+    omitted: PATCH_OMITTED.BINARY,
+  });
+
+  assert.deepEqual(placed, []);
+  assert.deepEqual(
+    above.map(({ key }) => key),
+    [`${R}1`],
+  );
 });

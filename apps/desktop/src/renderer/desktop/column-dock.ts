@@ -4,8 +4,8 @@
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list and composer, and a task's call bar, whichever stand. */
-const DOCKED = ".agent-todos-dock, .agent-composer, .desktop-call-bar";
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desktop-call-bar";
 
 /** The card that floats over the column while the sidebar is folded. */
 const FLOATING_CARD = '.call-card[data-surface="floating"]';

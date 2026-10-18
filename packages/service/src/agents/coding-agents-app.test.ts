@@ -113,6 +113,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   PULL_REQUEST_STATE,
@@ -131,6 +132,8 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxMessagedSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -189,6 +192,7 @@ import { tasksApp } from "../tasks/tasks-app.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
@@ -1280,6 +1284,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
 const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
 
 /** The GraphQL id GitHub gives the published pull request. */
 const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
@@ -1316,13 +1321,43 @@ function graphqlAnswering(
   };
 }
 
-/** A change to the agent's pull request as the bearer given. */
-function actionAs(bearer: string, agentId: string, action: string): Request {
+/** A change to the agent's pull request as the bearer given, with the fields beside its action given. */
+function actionAs(
+  bearer: string,
+  agentId: string,
+  action: string,
+  fields: Readonly<Record<string, string>> = {},
+): Request {
   return request(AGENT_PULL_REQUEST_ACTION, bearer, {
     method: "POST",
     id: agentId,
-    body: { action },
+    body: { action, ...fields },
   });
+}
+
+/** How the published pull request may be merged, as GitHub's GraphQL answers the merge box's read. */
+const MERGING_ANSWER = {
+  data: {
+    repository: {
+      mergeCommitAllowed: false,
+      squashMergeAllowed: true,
+      rebaseMergeAllowed: true,
+      autoMergeAllowed: true,
+      pullRequest: {
+        headRefOid: PUBLISHED.headSha,
+        isMergeQueueEnabled: false,
+        mergeQueueEntry: null,
+        autoMergeRequest: { mergeMethod: "SQUASH" },
+        reviewDecision: "REVIEW_REQUIRED",
+        commits: { nodes: [{ commit: { statusCheckRollup: { state: "PENDING" } } }] },
+      },
+    },
+  },
+} as const;
+
+/** The mutation a GraphQL call made, by the field it named; none for a read. */
+function mutationOf(call: GraphqlCall): string | undefined {
+  return /mutation[^{]*\{\s*(\w+)/u.exec(call.query)?.[1];
 }
 
 /** A review submitted on the agent's pull request as the bearer given. */
@@ -1440,6 +1475,110 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           name: RELAY.name,
           number: PUBLISHED.number,
         });
+      }),
+  );
+
+  it.effect(
+    "a merge, auto-merge on and off, and leaving the merge queue are each made on GitHub as the member, a merge and auto-merge against the head they saw",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+        const head = { headSha: PUBLISHED.headSha };
+
+        const answers = [
+          yield* ask(actionAs(other, agent.id, "merge", { method: "squash", ...head })),
+          yield* ask(actionAs(other, agent.id, "enable-auto-merge", { method: "rebase", ...head })),
+          yield* ask(actionAs(other, agent.id, "enable-auto-merge", head)),
+          yield* ask(actionAs(other, agent.id, "disable-auto-merge")),
+          yield* ask(actionAs(other, agent.id, "dequeue")),
+        ];
+
+        assert.deepEqual(
+          answers.map((answer) => answer.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const id = PULL_REQUEST_NODE_ID;
+        assert.deepEqual(
+          calls.flatMap((call) => {
+            const mutation = mutationOf(call);
+            return mutation === undefined ? [] : [[mutation, call.variables]];
+          }),
+          [
+            ["mergePullRequest", { id, method: "SQUASH", head: PUBLISHED.headSha }],
+            ["enablePullRequestAutoMerge", { id, head: PUBLISHED.headSha, method: "REBASE" }],
+            ["enablePullRequestAutoMerge", { id, head: PUBLISHED.headSha }],
+            ["disablePullRequestAutoMerge", { id }],
+            ["dequeuePullRequest", { id }],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a merge naming no head, or a head that is no commit, is refused before anything reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({});
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          yield* ask(actionAs(other, agent.id, "merge", { method: "squash" })),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(
+            actionAs(other, agent.id, "merge", { method: "squash", headSha: "main; drop" }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "the pull request's header read says how it may be merged, read on the App's token, and stands without it where GitHub would not say",
+    () =>
+      Effect.gen(function* () {
+        let answering = true;
+        const { owner, agent, calls, ask } = yield* published({
+          answer: () =>
+            answering
+              ? Response.json(MERGING_ANSWER)
+              : Response.json({ message: "Server Error" }, { status: 502 }),
+        });
+        const header = () =>
+          Effect.map(
+            ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewPullRequestAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest,
+          );
+
+        const read = yield* header();
+        answering = false;
+        const without = yield* header();
+
+        assert.deepEqual(read?.merging, {
+          methods: ["squash", "rebase"],
+          autoMergeAllowed: true,
+          queue: false,
+          queued: null,
+          autoMerge: { method: "squash" },
+          headSha: PUBLISHED.headSha,
+          review: "review-required",
+          checks: "pending",
+        });
+        assert.ok(
+          calls.every(
+            (call) => call.authorization === `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+          ),
+        );
+        assert.equal(without?.title, read?.title);
+        assert.equal(without?.merging, undefined);
       }),
   );
 
@@ -3093,6 +3232,7 @@ const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const INBOX_MESSAGES = "/api/inbox/messages";
+const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -3486,6 +3626,71 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.equal(kept?.messages, undefined);
+      }),
+  );
+
+  it.effect(
+    "a member marks an item read and unread for themselves alone, or every item of a workspace's Inbox read, and an outsider, another method, and a malformed request are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, post, read, waiting } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const { id } = asked.success;
+        const unread = () =>
+          Effect.map(read(), (page) => page.items.find((item) => item.id === id)?.unread);
+        const mark = (method: string, bearer = owner) =>
+          ask(request(INBOX_READ, bearer, { method, id }));
+        assert.equal(yield* unread(), true, "a new item is unread");
+        assert.deepEqual(
+          (yield* waiting()).items.map((entry) => [entry.id, entry.unread]),
+          [[id, true]],
+        );
+
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
+          { id, unread: false },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
+          { id, unread: true },
+        );
+        assert.equal(yield* unread(), true);
+
+        assert.deepEqual(
+          yield* mark("PUT", other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "an account outside the workspace reaches no item",
+        );
+        assert.deepEqual(
+          yield* mark("POST"),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+        assert.deepEqual(
+          yield* ask(request(INBOX_READ, owner, { method: "DELETE", body: {} })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+          "nothing marks every item unread",
+        );
+
+        const all = (body: WireBoundaryInput) =>
+          ask(request(INBOX_READ, owner, { method: "PUT", body }));
+        assert.deepEqual(
+          yield* all({ workspaceId: "" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          readAnswer(
+            inboxReadAllSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* all({ workspaceId: task.workspaceId }),
+          ),
+          { marked: 1 },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
+          marked: 0,
+        });
       }),
   );
 
