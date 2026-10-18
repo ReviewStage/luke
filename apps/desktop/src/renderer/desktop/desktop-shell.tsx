@@ -20,6 +20,7 @@ import {
   ComposeIcon,
   IconButton,
   PAGE_FRAME,
+  ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
   SidebarIcon,
@@ -490,21 +491,23 @@ export function DesktopShell({
   };
   if (gated) {
     return (
-      <div className="desktop-onboarding">
-        <div className="desktop-drag-strip" />
-        <SignInGate
-          account={account}
-          {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
-          {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
-          {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
-          onBegin={gates.onBeginSignIn}
-          onCancel={gates.onCancelSignIn}
-        />
-        {/* Signing in needs the network, so the gate says when there is none. */}
-        <div className="title-bar-controls">
-          <OfflineMark />
+      <ScrollArea>
+        <div className="desktop-onboarding">
+          <div className="desktop-drag-strip" />
+          <SignInGate
+            account={account}
+            {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
+            {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
+            {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
+            onBegin={gates.onBeginSignIn}
+            onCancel={gates.onCancelSignIn}
+          />
+          {/* Signing in needs the network, so the gate says when there is none. */}
+          <div className="title-bar-controls">
+            <OfflineMark />
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     );
   }
   // Settings takes the whole window, its pages listed where the tasks were.

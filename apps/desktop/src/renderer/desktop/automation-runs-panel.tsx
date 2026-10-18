@@ -25,6 +25,8 @@ import {
   List,
   ListRow,
   ProviderMark,
+  SCROLL_FADE,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -258,37 +260,41 @@ export function AutomationRunsPanel({
       style={{ width: panel.width }}
     >
       <div className="side-panel-resize" {...edge} />
-      <aside className="automation-runs scroll-fade-top" aria-label="Runs">
-        <div className="automation-runs-head">
-          <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
-            Runs
-          </Text>
-        </div>
-        {!created ? (
-          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
-        ) : runs === undefined ? (
-          <RunsSkeleton />
-        ) : "failed" in runs ? (
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            Its runs could not be read.
-          </ErrorState>
-        ) : runs.runs.length === 0 ? (
-          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
-        ) : (
-          <List label="Runs" density={LIST_DENSITY.COMPACT}>
-            {runs.runs.map((run) => (
-              <RunRow
-                key={run.id}
-                run={run}
-                keyHolder={mine ? undefined : CREATOR}
-                automationId={automationId}
-                linked={run.id === linkedRun}
-                now={now}
-                onOpenAgent={onOpenAgent}
-              />
-            ))}
-          </List>
-        )}
+      <aside className="automation-runs" aria-label="Runs">
+        <ScrollArea fade={SCROLL_FADE.START}>
+          <div className="automation-runs-body">
+            <div className="automation-runs-head">
+              <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+                Runs
+              </Text>
+            </div>
+            {!created ? (
+              <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
+            ) : runs === undefined ? (
+              <RunsSkeleton />
+            ) : "failed" in runs ? (
+              <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                Its runs could not be read.
+              </ErrorState>
+            ) : runs.runs.length === 0 ? (
+              <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
+            ) : (
+              <List label="Runs" density={LIST_DENSITY.COMPACT}>
+                {runs.runs.map((run) => (
+                  <RunRow
+                    key={run.id}
+                    run={run}
+                    keyHolder={mine ? undefined : CREATOR}
+                    automationId={automationId}
+                    linked={run.id === linkedRun}
+                    now={now}
+                    onOpenAgent={onOpenAgent}
+                  />
+                ))}
+              </List>
+            )}
+          </div>
+        </ScrollArea>
       </aside>
     </div>
   );

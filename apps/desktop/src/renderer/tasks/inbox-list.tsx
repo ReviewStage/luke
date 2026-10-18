@@ -21,6 +21,8 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  SCROLL_FADE,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -1233,39 +1235,41 @@ export function InboxList({
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} />
-      <div
+      <ScrollArea
         id={panel}
-        className="inbox-tasks-scroll scroll-fade-top"
         role="tabpanel"
         aria-labelledby={showTabId(tabs, head.show.show)}
+        fade={SCROLL_FADE.START}
       >
-        {view.grouping === INBOX_GROUPING.NONE ? (
-          <ul className="sidebar-tasks">{view.items.map(row)}</ul>
-        ) : view.grouping === INBOX_GROUPING.PERSON ? (
-          view.groups.map(personSection)
-        ) : view.grouping === INBOX_GROUPING.STATUS ? (
-          view.groups.map(statusSection)
-        ) : (
-          view.groups.map(({ holder, items }) => {
-            const key = holderKey(holder);
-            const folded = head.view?.folds.folded(key) ?? false;
-            return (
-              <div key={key} className="sidebar-repository">
-                <HolderHeader
-                  holder={holder}
-                  folded={folded}
-                  count={needingYou(items)}
-                  onToggle={() => head.view?.folds.toggle(key)}
-                />
-                {folded ? null : (
-                  <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
-                )}
-              </div>
-            );
-          })
-        )}
-        {note}
-      </div>
+        <div className="inbox-tasks-body">
+          {view.grouping === INBOX_GROUPING.NONE ? (
+            <ul className="sidebar-tasks">{view.items.map(row)}</ul>
+          ) : view.grouping === INBOX_GROUPING.PERSON ? (
+            view.groups.map(personSection)
+          ) : view.grouping === INBOX_GROUPING.STATUS ? (
+            view.groups.map(statusSection)
+          ) : (
+            view.groups.map(({ holder, items }) => {
+              const key = holderKey(holder);
+              const folded = head.view?.folds.folded(key) ?? false;
+              return (
+                <div key={key} className="sidebar-repository">
+                  <HolderHeader
+                    holder={holder}
+                    folded={folded}
+                    count={needingYou(items)}
+                    onToggle={() => head.view?.folds.toggle(key)}
+                  />
+                  {folded ? null : (
+                    <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
+                  )}
+                </div>
+              );
+            })
+          )}
+          {note}
+        </div>
+      </ScrollArea>
       {columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );

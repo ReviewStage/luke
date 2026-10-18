@@ -1983,9 +1983,12 @@ ul.actor-stack {
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
-   fills, while it holds one. */
-.inbox-tasks-scroll:has(.luke-empty-state) {
+   fills, while it holds one. The Inbox's list is the body inside its
+   `ScrollArea`, so it stands at least the area's height to give the state
+   the room. */
+.inbox-tasks-body:has(.luke-empty-state) {
   display: flex;
+  min-height: 100%;
   flex-direction: column;
 }
 
@@ -2825,17 +2828,12 @@ ul.actor-stack {
   user-select: text;
 }
 
+/* A tool's page, inside the `ScrollArea` that scrolls it and takes the focus. */
 .integration-tool-detail-body {
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
 }
 
 .integration-tool-hints {
@@ -3113,11 +3111,8 @@ ul.actor-stack {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-.inbox-tasks-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
+.inbox-tasks-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
@@ -4727,11 +4722,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--luke-space-8);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
+}
+
+/* The panel's head and runs, inside the `ScrollArea` that scrolls them, at
+   least its height so an empty state or a failure fills the room. */
+.automation-runs-body {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-16);
 }
 
 /* Chat ----------------------------------------------------------------------- */
@@ -4761,11 +4762,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-.chat-rail-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The rail's places, inside the `ScrollArea` that scrolls them. */
+.chat-rail-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
@@ -4846,11 +4844,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   white-space: nowrap;
 }
 
-.chat-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
+/* The stream's body, inside the `ScrollArea` that scrolls it. */
+.chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
@@ -5524,13 +5519,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* Onboarding ----------------------------------------------------------------- */
 
 /* The sign-in's whole window: the plain ground under a drag strip, the column
-   sitting a little above the middle. */
+   sitting a little above the middle. It stands at least the height of the
+   `ScrollArea` it scrolls in, so a short window scrolls it rather than
+   cutting it. */
 .desktop-onboarding {
   display: flex;
-  height: 100%;
+  min-height: 100%;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
   padding-bottom: 8vh;
 }
 
@@ -5999,13 +5994,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* With every tab closed, the panel offers all that the "+" menu offers, as
    the same rows under the same headings, at the top of its well, in a column
    300px wide at most. A plan offering more than the well holds scrolls it,
-   the scroller spanning the panel so its bar stands at the panel's edge. */
+   in a `ScrollArea` spanning the panel so its bar stands at the panel's
+   edge; this is the column inside it. */
 .side-panel-no-tabs {
   display: flex;
-  min-height: 0;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
     max(var(--luke-space-16), calc((100% - 300px) / 2 + var(--luke-space-16))); /* off-scale */

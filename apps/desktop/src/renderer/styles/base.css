@@ -119,7 +119,8 @@
   /* How a scroller the app moves itself, a tab strip bringing a tab into
      view, gets there: a glide, held still where the durations are. */
   --scroll-glide: smooth;
-  --scroll-fade: 26px;
+  /* The depth `@luke/ui`'s `ScrollArea` fades by, so the two fades agree. */
+  --scroll-fade: var(--luke-scroll-fade);
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
 }
