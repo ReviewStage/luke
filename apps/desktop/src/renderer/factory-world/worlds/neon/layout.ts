@@ -212,14 +212,14 @@ function clampToBand(seat: Seat): void {
 /**
  * One ring's seats, each at the layout's own angle and its own offset
  * within the band, a district's width following its footprint and shrunk
- * where the ring holds more than it can seat in two staggered rows.
+ * so the districts round a crowded ring fit its circumference side by side.
  */
 function ringSeats(ring: number, members: readonly ZoneView[]): Seat[] {
   const inner = ring === 0 ? CITY.PLAZA + 6 : ringRadius(ring) + 6;
   const outer = ringRadius(ring + 1) - 6;
   const wanted = members.map((zone) => 7 + 21 * zone.footprint);
   const need = wanted.reduce((sum, r) => sum + 2 * r + CITY.GAP, 0);
-  const room = 2 * Math.PI * ((inner + outer) / 2) * 2;
+  const room = 2 * Math.PI * ((inner + outer) / 2);
   const shrink = Math.min(1, room / need);
   return members.map((zone, index) => {
     // Note that the layout's point is mapped outward past the plaza, keeping its bearing from the centre.
