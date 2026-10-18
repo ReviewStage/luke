@@ -36,12 +36,18 @@ export function playMotions() {
       return animation;
     },
   });
+  // Note that a motion recorded is never running, so an exit that stops what runs first finds nothing to stop.
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [],
+  });
   return {
     played,
     remove: () => {
       root.removeProperty("--duration-pane");
       root.removeProperty("--motion-pane");
       Reflect.deleteProperty(Element.prototype, "animate");
+      Reflect.deleteProperty(Element.prototype, "getAnimations");
     },
   };
 }

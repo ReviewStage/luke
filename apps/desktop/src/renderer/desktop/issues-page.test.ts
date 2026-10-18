@@ -36,6 +36,7 @@ import { playMotions } from "#testing/pane-motion";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { type SideBundles, sideBundles } from "../bundle-loader";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
 
@@ -316,6 +317,9 @@ afterEach(() => {
   for (const sheet of document.head.querySelectorAll("style[data-laid-out]")) sheet.remove();
 });
 
+/** The window's side panel as the pages last drew it. */
+let panelNow: SidePanelControl | undefined;
+
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
@@ -334,6 +338,15 @@ function Pages({
   start?: IssuesPlace | undefined;
 }): React.JSX.Element {
   const [place, setPlace] = useState<IssuesPlace>(start);
+  const [peeked, setPeeked] = useState<string | undefined>(undefined);
+  // The window's own side panel, which the peek stands in, beside no task.
+  const sidePanel = useSidePanel(undefined, {
+    id: undefined,
+    holds: {},
+    bare: true,
+    drawsOwn: true,
+  });
+  panelNow = sidePanel;
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
@@ -344,6 +357,7 @@ function Pages({
     onSelect: (taskId) => tasksOpened.push(taskId),
     onOpenLink: (link) => linksOpened.push(link),
     repositories: { ...control.repositories, openGitHub: (url) => githubOpened.push(url) },
+    sidePanel,
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -353,6 +367,8 @@ function Pages({
         setPlace(to);
       },
       onClose: () => (closed += 1),
+      peeked,
+      onPeek: setPeeked,
     },
   });
   return createElement(
@@ -2403,7 +2419,7 @@ test("Group by Priority in the List's View options heads its issues by priority,
 
 /** What the window's Issues page measures across: room for the peek beside a column of the board, or too little. */
 const ROOMY = 1280;
-const CRAMPED = 600;
+const CRAMPED = 500;
 
 /** The Issues page laid out `width` wide, as the window lays it; jsdom lays nothing out. */
 function layPagesAt(width: number): void {
@@ -2414,7 +2430,7 @@ function layPagesAt(width: number): void {
 
 /** The peek standing beside the board or list, if one does. */
 function peekOf(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>(".issue-peek-pane:not([data-leaving]) .issue-peek");
+  return page.querySelector<HTMLElement>(".side-panel:not([data-leaving]) .side-panel-content");
 }
 
 /** What a peek reads: its issue's title, and the identifiers of the cards or rows marked as the one it reads. */
@@ -2503,7 +2519,7 @@ test("while a peek stands the arrows move through the cards and the peek follows
   assert.equal(closed, 1, "the second Escape leaves the Issues page");
 });
 
-test("Close puts the peek away and hands the keyboard back to its card", async () => {
+test("the tab's × puts the peek away and hands the keyboard back to its card", async () => {
   standing = [issue(1, { title: "Fix login" })];
   const page = mount();
   await settle();
@@ -2511,8 +2527,10 @@ test("Close puts the peek away and hands the keyboard back to its card", async (
 
   act(() => cardOf(page, issue(1).id).click());
   await settle();
-  const close = peekOf(page)?.querySelector<HTMLButtonElement>("button[aria-label='Close']");
-  assert.ok(close, "the peek offers Close");
+  const close = page.querySelector<HTMLButtonElement>(
+    ".side-panel button[aria-label='Close ACME-1']",
+  );
+  assert.ok(close, "the peek's tab offers its ×");
   act(() => close.focus());
   act(() => close.click());
   await settle();
@@ -2539,7 +2557,8 @@ test("⌘-press and ⌘Return on a card, and Open as page from the peek, open th
   await settle();
   act(() => cardOf(page, issue(1).id).click());
   await settle();
-  act(() => button("Open as page").click());
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Open as page").click());
   await settle();
 
   assert.deepEqual(opened, [
@@ -2657,10 +2676,7 @@ test("Archive's question asked in a peek goes with the peek as it slides out, an
     await settle();
 
     assert.ok(asked, "Archive asked first");
-    assert.ok(
-      page.querySelector(".issue-peek-pane[data-leaving]"),
-      "the peek is still sliding out",
-    );
+    assert.ok(page.querySelector(".side-panel[data-leaving]"), "the peek is still sliding out");
     assert.ok(
       document.querySelector("[role=alertdialog], [role=dialog]") === null,
       "its question went with it",
@@ -2681,7 +2697,7 @@ test("as the peek opens and closes, the board's columns glide from where they st
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const narrowed = document.querySelector(".issue-peek-pane:not([data-leaving])") !== null;
+    const narrowed = document.querySelector(".side-panel:not([data-leaving])") !== null;
     const width = narrowed ? COLUMN.NARROW : COLUMN.WIDE;
     return new DOMRect(at < 0 ? 0 : at * width, 0, at < 0 ? 0 : width, 0);
   });
@@ -2954,4 +2970,56 @@ test("an issue's page counts a task's pull requests the list did not carry, in a
   assert.deepEqual(workOf(page), ["Fix login", "#4", "#3", "#2", "2 more"]);
   act(() => button("Open Fix login for 2 more pull requests").click());
   assert.deepEqual(tasksOpened, ["task-busy"]);
+});
+
+test("the peek stands in the window's own side panel: its row's tab for the issue, its width, and its Expand panel, which fills the page until Escape brings it back, and Escape again puts it away", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const pane = page.querySelector<HTMLElement>(".side-panel");
+  const tab = pane?.querySelector(".side-panel-bar [role=tab][aria-selected='true']")?.textContent;
+  const width = pane?.style.width;
+  act(() => button("Expand panel").click());
+  const filled = page.querySelector(".side-panel")?.getAttribute("data-full-screen");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  const back = page.querySelector(".side-panel")?.getAttribute("data-full-screen");
+  const stillPeeked = peeking(page).title;
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  assert.equal(tab, "ACME-1 Fix login");
+  assert.equal(width, "400px", "the side panel's own width");
+  assert.equal(filled, "true");
+  assert.equal(back, "false", "Escape brings it back beside the board first");
+  assert.equal(stillPeeked, "Fix login");
+  assert.ok(peekOf(page) === null, "then puts it away");
+  assert.equal(closed, 0);
+});
+
+test("Open as page from a peek filling the page brings the panel back from full screen, so no page after it draws one full screen", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  act(() => button("Expand panel").click());
+  const filled = panelNow?.fullScreen;
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Open as page").click());
+  await settle();
+
+  assert.equal(filled, true);
+  assert.equal(titleOf(page), "Fix login");
+  assert.equal(panelNow?.fullScreen, false);
 });

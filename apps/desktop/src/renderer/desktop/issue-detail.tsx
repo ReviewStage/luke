@@ -7,6 +7,7 @@ import { usePerson } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ArrowUpRightIcon,
   BREADCRUMBS_VARIANT,
   Breadcrumbs,
   ConfirmDialog,
@@ -25,7 +26,7 @@ import { ExperimentTag } from "../experiment-marks";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   archiveAnswered,
   archiveItem,
@@ -86,8 +87,9 @@ export function IssueCrumbs({
 }
 
 /**
- * The issue's ⋯ menu, on its page's toolbar and on its peek's head: Start
- * task… and Start agent…, Copy link, and Archive, which asks first and, once kept, hands back to
+ * The issue's ⋯ menu, on its page's toolbar and in its peek's top row: Open
+ * as page where it stands in the peek, Start task… and Start agent…, Copy
+ * link, and Archive, which asks first and, once kept, hands back to
  * `onArchived`, since the issue no longer stands where it was drawn.
  */
 export function IssueMenu({
@@ -96,6 +98,7 @@ export function IssueMenu({
   surfaceOpen = true,
   onChange,
   onArchived,
+  onOpenPage,
 }: {
   issue: Issue;
   identifier: string;
@@ -104,8 +107,14 @@ export function IssueMenu({
   /** Sends a change, answering whether it was kept. */
   onChange: (change: IssueChange) => Promise<boolean>;
   onArchived: () => void;
+  /** Opens the issue on its own page, from the peek; none on the page itself. */
+  onOpenPage?: (() => void) | undefined;
 }): React.JSX.Element {
   const menu = useMenu(surfaceOpen);
+  const openPage: MenuAction | undefined =
+    onOpenPage === undefined
+      ? undefined
+      : { label: "Open as page", icon: <ArrowUpRightIcon />, onSelect: onOpenPage };
   const starts = useStartItems(issue, identifier);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
   const archiving = useConfirmDialog({ subject: true, surfaceOpen }, () =>
@@ -125,6 +134,7 @@ export function IssueMenu({
           label={ISSUE_ACTIONS_LABEL}
           menu={menu.drawn}
           groups={[
+            ...(openPage === undefined ? [] : [[openPage]]),
             ...(starts.length === 0 ? [] : [starts]),
             ...(copyLink === undefined ? [] : [[copyLink]]),
             [archive],
