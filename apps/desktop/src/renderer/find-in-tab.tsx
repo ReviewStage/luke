@@ -1,13 +1,5 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import {
-  CloseIcon,
-  IconButton,
-  SearchIcon,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@luke/ui";
+import { CloseIcon, IconButton, SearchField } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -145,14 +137,6 @@ function sameSubject(a: FindSubject, b: FindSubject): boolean {
   return "page" in b && a.page === b.page && a.at === b.at;
 }
 
-/** The words the bar says of the matches: where the find is among them, or how many there are while it is at none counted. */
-function tallyLine(query: string, tally: FindTally): string {
-  if (query.length === 0) return "";
-  if (tally.count === 0) return "No results";
-  const count = tally.more === true ? `${tally.count}+` : String(tally.count);
-  return tally.at < 0 ? `${count} results` : `${tally.at + 1} of ${count}`;
-}
-
 /**
  * The matches of `query` under `root`, painted and kept as the tab's text
  * changes, and the step that moves through them. A query typed further, or
@@ -243,7 +227,7 @@ function BarButton({
 }
 
 /**
- * The bar: the field in a search well with the tally at its end, then the
+ * The bar: the shared search field with the tally at its end, then the
  * previous and next matches and the close. Each summons puts the caret in
  * the field with its text selected.
  */
@@ -267,40 +251,25 @@ function FindBar({
     field.current?.focus({ preventScroll: true });
     field.current?.select();
   }, [summons]);
-  const line = tallyLine(query, tally);
   return (
     <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-      <label className="settings-search-well field-well find-bar-well">
-        <SearchIcon />
-        <input
+      <div className="find-bar-field">
+        <SearchField
           ref={field}
-          className="settings-search-input"
-          aria-label="Find"
+          label="Find"
           placeholder="Find"
-          autoComplete="off"
-          spellCheck={false}
           value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={(event) => {
-            // Note that an Escape is stopped even mid-composition, because the
-            // input method spends that press dismissing its candidates, and
-            // the window's own Escape would turn the page behind the bar.
-            if (event.key === "Escape") event.stopPropagation();
-            if (event.nativeEvent.isComposing) return;
-            if (event.key === "Escape") onClose();
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            onStep(event.shiftKey ? FIND_STEP.PREVIOUS : FIND_STEP.NEXT);
-          }}
+          onChange={onQuery}
+          tally={
+            query.length === 0
+              ? undefined
+              : { count: tally.count, at: tally.at < 0 ? undefined : tally.at, more: tally.more }
+          }
+          onEnter={() => onStep(FIND_STEP.NEXT)}
+          onShiftEnter={() => onStep(FIND_STEP.PREVIOUS)}
+          onEscape={onClose}
         />
-        {line.length === 0 ? null : (
-          <span className="find-bar-tally" aria-live="polite">
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {line}
-            </Text>
-          </span>
-        )}
-      </label>
+      </div>
       <BarButton
         label="Previous match"
         command={APP_COMMAND.FIND_PREVIOUS}

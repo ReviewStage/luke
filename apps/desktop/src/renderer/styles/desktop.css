@@ -6335,67 +6335,11 @@ button.automation-run:hover {
   letter-spacing: -0.015em;
 }
 
-/* The search field: a well the height of a sidebar row, holding the
-   magnifier, the field, and a clear button while a query stands. Every part
-   has a fixed size, so typing, clearing, and focusing never move the list
-   beneath it. */
+/* The search field at the sidebar's head (`SearchField`), apart from the
+   list beneath it. */
 .settings-search {
   flex: 0 0 auto;
   margin-bottom: var(--luke-section-gap);
-}
-
-.settings-search-well {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: 30px;
-  padding: 0 var(--luke-space-2) 0 calc(var(--row-inset) - 1px); /* off-scale: less the well's edge */
-  border: 1px solid var(--luke-color-border);
-  border-radius: 8px;
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-subtle);
-  cursor: text;
-  transition: border-color var(--duration-hover) ease;
-}
-
-.settings-search-well .search-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
-}
-
-.settings-search-input {
-  min-width: 0;
-  height: 100%;
-  flex: 1;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: 13px;
-  outline: none; /* no ring: its well rings */
-}
-
-.settings-search-input::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
-/* The search's chord, printed in the empty field until the caret arrives. */
-.settings-search-shortcut {
-  padding-right: var(--luke-space-6);
-}
-
-.settings-search-well:focus-within .settings-search-shortcut {
-  display: none;
-}
-
-.settings-search-clear {
-  /* An icon button nested in the well: as far inside the well's edge on
-     every side as it is from the end, with the corner that inset leaves. */
-  width: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
-  height: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
-  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
 }
 
 /* Find in a tab --------------------------------------------------------- */
@@ -6416,7 +6360,7 @@ button.automation-run:hover {
     left: var(--column-inset);
   }
 
-  .find-scope > .find-bar > .find-bar-well {
+  .find-scope > .find-bar > .find-bar-field {
     width: auto;
     min-width: 0;
     flex: 1 1 auto;
@@ -6427,7 +6371,7 @@ button.automation-run:hover {
    than drawn, as `.visually-hidden` says words; the matches stay marked in
    the tab. */
 @container find-scope (max-width: 300px) {
-  .find-scope > .find-bar .find-bar-tally {
+  .find-scope > .find-bar .luke-search-field-tally {
     position: absolute;
     overflow: hidden;
     width: 1px;
@@ -6488,16 +6432,9 @@ button.automation-run:hover {
 
 /* The field keeps one width whatever is typed or tallied, so the buttons
    beside it never move. */
-.find-bar-well {
+.find-bar-field {
   width: 240px;
   margin-right: var(--luke-space-2);
-}
-
-.find-bar-tally {
-  flex: none;
-  padding-right: var(--luke-space-6);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */

@@ -1100,7 +1100,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector(".find-bar-tally")?.textContent;
+  return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
 }
 
 test("⌘F finds in the shell's scrollback, which the terminal draws on a canvas, from the newest match up, every match counted and stepped through", async () => {
