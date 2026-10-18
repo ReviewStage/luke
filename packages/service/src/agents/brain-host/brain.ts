@@ -96,6 +96,7 @@ import {
   runDeleteSection,
   runMoveTask,
 } from "../task-section-tools.js";
+import { READ_TASK_TOOL, runReadTask } from "../task-tools.js";
 import {
   type BrainChatCall,
   type ChatSince,
@@ -260,7 +261,7 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 
 ### Coding agents
 
-Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
+Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks and read with read_task. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
 
 On a status question, read the agent and summarise its progress in a sentence or two in your return: what it is doing now, what it has published, and whether it is stuck. Never read its transcript out.
 
@@ -314,6 +315,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
 - update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
+- read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
 - update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
@@ -658,6 +660,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...READ_TASK_TOOL,
+    run: (call, input) => runReadTask(call.agents, input),
   },
   {
     ...CREATE_SECTION_TOOL,

@@ -1136,7 +1136,7 @@ export function callerUserId(caller: AgentCaller): string {
 }
 
 /** The task the caller works on: the call's, or the coding agent's own, which may be none. */
-function callerTask(caller: AgentCaller): string | null {
+export function callerTask(caller: AgentCaller): string | null {
   return caller.kind === AGENT_CALLER.LUKE ? caller.plan.taskId : caller.agent.taskId;
 }
 
@@ -2306,12 +2306,24 @@ interface PageCut {
   readonly leftOutChars: number;
 }
 
+/** A text as a read answers it, cut to a bound, and how many characters of it were left out. */
+export interface TextCut {
+  readonly text: string;
+  readonly leftOutChars: number;
+}
+
+/** A text cut on a line to a bound, and how many characters were left out; whole where it fits. */
+export function cutOnLine(text: string, maximumChars: number): TextCut {
+  if (text.length <= maximumChars) return { text, leftOutChars: 0 };
+  const lineEnd = text.lastIndexOf("\n", maximumChars);
+  const kept = text.slice(0, lineEnd > 0 ? lineEnd : maximumChars);
+  return { text: kept, leftOutChars: text.length - kept.length };
+}
+
 /** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */
 function pageCut(html: string): PageCut {
-  if (html.length <= READ_PAGE_CHARS) return { html, leftOutChars: 0 };
-  const lineEnd = html.lastIndexOf("\n", READ_PAGE_CHARS);
-  const kept = html.slice(0, lineEnd > 0 ? lineEnd : READ_PAGE_CHARS);
-  return { html: kept, leftOutChars: html.length - kept.length };
+  const cut = cutOnLine(html, READ_PAGE_CHARS);
+  return { html: cut.text, leftOutChars: cut.leftOutChars };
 }
 
 /** One call of `read_page`: a version of a page of a task of the caller's workspace, its HTML cut to the bound, or why there is none. */

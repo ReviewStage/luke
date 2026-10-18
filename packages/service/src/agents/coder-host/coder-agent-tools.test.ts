@@ -15,7 +15,13 @@ import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
-import { createTask, listTasks, readTask } from "@luke/database/models/task-store";
+import {
+  createTask,
+  listTasks,
+  readTask,
+  savePlanText,
+  updateTask,
+} from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { task } from "@luke/database/schemas/task";
@@ -88,6 +94,7 @@ import {
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
+import { READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
@@ -2583,4 +2590,51 @@ test("update_agent renames a teammate's agent, moves it to a model the catalog o
     await database.run(readCodingAgent(otherWorkspaces.userId, otherWorkspaces.id)),
   );
   assert.equal(theirs.title, null);
+});
+
+test("read_task reads a teammate's task of the caller's workspace with its plan as saved, an archived one too, cuts a long plan on a line, and reads no task of another workspace", async () => {
+  const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const plan = "# Billing\n\nCharge by seat.";
+  assert.ok(
+    Option.isSome(await database.run(savePlanText(teammates.userId, taskIds.billing, plan))),
+  );
+
+  const home = `https://tryluke.dev/workspace-${workspaceId}/plan`;
+  const read = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
+  assert.ok(isRecord(read.task) && isRecord(read.plan));
+  assert.deepEqual(
+    [read.task.name, read.task.archived, read.task.isYourTask, read.task.mention],
+    ["Billing", false, false, `[@Billing](${home}/${taskIds.billing})`],
+  );
+  assert.deepEqual(read.plan, { text: plan, saved: true, leftOutChars: 0 });
+  const own = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.invitations });
+  assert.equal(isRecord(own.task) && own.task.isYourTask, true, JSON.stringify(own));
+
+  // A plan past the bound is cut on a line, and what was left out is counted.
+  const line = `${"x".repeat(999)}\n`;
+  const long = line.repeat(41);
+  await database.run(savePlanText(teammates.userId, taskIds.billing, long));
+  const cut = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
+  assert.ok(isRecord(cut.plan) && isWireString(cut.plan.text), JSON.stringify(cut).slice(0, 200));
+  assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
+  assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
+
+  await database.run(updateTask(teammates.userId, taskIds.billing, { archived: true }));
+  const archived = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
+  assert.equal(isRecord(archived.task) && archived.task.archived, true, JSON.stringify(archived));
+
+  for (const taskId of [taskIds.elsewhere, randomUUID()]) {
+    assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId }), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: READ_TASK_REFUSAL.NO_TASK,
+    });
+  }
+  assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId: "not-an-id" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: READ_TASK_REFUSAL.UNREADABLE,
+  });
 });
