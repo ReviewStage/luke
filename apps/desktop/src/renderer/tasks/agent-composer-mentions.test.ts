@@ -1059,11 +1059,14 @@ function highlighted(container: HTMLElement): [string | null, string] | undefine
   ];
 }
 
-test("End and Home take the highlight to the last row and the first, and Shift+Enter writes no mention", async () => {
+test("a bare End and Home take the highlight to the last row and the first, a modified one is left to the editor, and Shift+Enter writes no mention", async () => {
   const { container } = await box(taskPage());
 
   typeInComposer(container, "See @");
   await settle();
+  pressInComposer(container, "End", { shiftKey: true });
+  pressInComposer(container, "Home", { metaKey: true });
+  const held = highlighted(container);
   pressInComposer(container, "End");
   const last = highlighted(container);
   pressInComposer(container, "Home");
@@ -1071,6 +1074,7 @@ test("End and Home take the highlight to the last row and the first, and Shift+E
   pressInComposer(container, "Enter", { shiftKey: true });
   await settle();
 
+  assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
   assert.deepEqual(last, ["Mention from", "Linear"]);
   assert.deepEqual(first, ["Plan", "Goal"]);
   assert.equal(composerEditor(container).querySelector(".mention-chip"), null);

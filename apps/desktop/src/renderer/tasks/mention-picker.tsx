@@ -56,8 +56,8 @@ import { AgentMark } from "./tab-look";
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
  * editor throughout, its keys steered as any combobox's are
- * (`@luke/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, Home and
- * End take it to the first row and the last, Enter or Tab write the
+ * (`@luke/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, a bare Home
+ * and End take it to the first row and the last, Enter or Tab write the
  * highlighted row as its mention, and Escape closes the list until the caret
  * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
@@ -1262,7 +1262,8 @@ export function useMentionPicker({
   });
 
   // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
-  // Shift+Enter is the editor's line break; with no row only Escape is the list's.
+  // Shift+Enter is the editor's line break, as a modified Home or End is
+  // its own; with no row only Escape is the list's.
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shown) return false;
     const bare = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
@@ -1282,6 +1283,8 @@ export function useMentionPicker({
       return true;
     }
     if (event.key === "Enter" && event.shiftKey) return false;
+    // A Home or End held with a modifier selects or travels in the editor's words.
+    if ((event.key === "Home" || event.key === "End") && !bare) return false;
     return field.onKeyDown(event);
   };
 
