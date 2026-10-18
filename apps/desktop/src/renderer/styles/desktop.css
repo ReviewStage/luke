@@ -5323,54 +5323,18 @@ button.integration-tool-head:hover,
   margin-top: var(--luke-space-16);
 }
 
-/* One automation's row: its clock wearing its newest run's state, its name
-   over what fires it, its owner, when it runs next in the tertiary ink, a
-   failure's mark, and its switch, divided by the card's hairlines. */
-.automation-row {
-  position: relative;
-  display: flex;
-  min-height: 52px; /* off-scale */
+/* An automation's or a run's metadata at its row's end (`ListRow`'s meta):
+   its owner, when it runs next or when it fired, and a failure's mark, in a
+   line of their own. */
+.automation-row-meta {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-space-12);
-  padding-right: var(--luke-space-16);
-}
-
-.automation-row-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.automation-row-name,
-.automation-row-detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The name in the body role, what fires it and when it runs next in the
-   caption role's quietest ink. */
-.automation-row-name {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
-.automation-row-detail,
-.automation-row-when {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.automation-row-when {
-  flex: none;
-  font-variant-numeric: tabular-nums;
+  vertical-align: top;
 }
 
 /* An automation turned off reads as set aside: its name in the muted ink. */
-.automation-row[data-enabled="false"] .automation-row-name {
+.automation-row-name[data-enabled="false"] {
   color: var(--luke-color-text-muted);
 }
 
@@ -5399,61 +5363,6 @@ button.integration-tool-head:hover,
 
 .automation-owner[data-owner="workspace"] {
   color: var(--luke-color-text);
-}
-
-/* A row is its press, which opens its page, from its edge to its switch, as
-   a sidebar task's row is: the owner, the next run, and the failure's mark
-   stand in it, and the switch stands beside it, so the switch stays a
-   switch. */
-.automation-row-open {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-self: stretch;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8) 0 var(--luke-space-8) var(--luke-space-16);
-  border-radius: inherit;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-/* Note that the press reaches past its own box to the row's, because the
-   gap before the switch and the inset after it would otherwise be filled
-   by the hover yet answer no press. */
-.automation-row-open::after {
-  position: absolute;
-  border-radius: inherit;
-  content: "";
-  inset: 0;
-}
-
-/* The row's cells and its switch stand above that reach, so the owner's and
-   the next run's titles still answer the pointer; a press on a cell still
-   reaches the button it stands in. */
-.automation-row-open > *,
-.automation-row > .luke-switch {
-  position: relative;
-  z-index: 1;
-}
-
-.automation-row-open > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
-.automation-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.automation-row-open:focus-visible {
-  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
-}
-
-:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* The suggested automations, each a card of its own in a grid that wraps
@@ -5744,32 +5653,6 @@ button.integration-tool-head:hover,
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
-}
-
-.automation-runs-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.automation-run {
-  display: flex;
-  width: 100%;
-  min-height: 44px; /* off-scale */
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.automation-run > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-button.automation-run:hover {
-  background: var(--luke-color-fill-hover);
 }
 
 /* Chat ----------------------------------------------------------------------- */
@@ -8557,6 +8440,26 @@ button.automation-run:hover {
   justify-content: flex-end;
   gap: var(--luke-space-6);
   margin-left: auto;
+}
+
+/* A ListRow's metadata on Home, the Issues list, and a person's page: what
+   the row is about, a teammate's face, the row's mark, and its time, set
+   apart by the line's own gap and centred on it. */
+.home-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+/* Note that the context gives way before the marks and the time, because
+   the metadata's slot clips at its end and the time is what ends it. */
+.home-row-meta > .home-row-context {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.home-row-meta > :not(.home-row-context) {
+  flex: none;
 }
 
 .home-row-picture {

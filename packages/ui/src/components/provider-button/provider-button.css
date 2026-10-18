@@ -76,16 +76,16 @@
      through to the button. */
   .luke-provider-button-last-used {
     position: absolute;
-    top: -8px;
-    right: -6px;
+    top: calc(-1 * var(--luke-space-8));
+    right: calc(-1 * var(--luke-space-6));
     padding: 0 var(--luke-space-6);
     border: 1px solid transparent;
     border-radius: var(--luke-radius-full);
     background: color-mix(in srgb, var(--luke-color-ground) 16%, var(--luke-color-text));
     color: color-mix(in srgb, var(--luke-color-ground) 72%, transparent);
-    font-size: 10.5px;
-    font-weight: 560;
-    line-height: 16px;
+    font-size: var(--luke-type-caption-size);
+    font-weight: var(--luke-weight-medium);
+    line-height: var(--luke-type-caption-leading);
     white-space: nowrap;
     pointer-events: none;
     transition: opacity var(--duration-hover) ease;

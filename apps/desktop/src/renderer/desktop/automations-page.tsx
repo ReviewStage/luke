@@ -24,6 +24,10 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  SETTINGS_SECTION_FRAME,
   SettingsSection,
   Switch,
   TEXT_ELEMENT,
@@ -33,12 +37,12 @@ import {
   useMenu,
 } from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { StateGlyph, stateEndMark } from "../state-glyph";
+import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
@@ -113,7 +117,10 @@ function OwnerCell({
  * stands, its name over what fires it, its owner, when it runs next, a
  * failure's mark, and its switch. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
- * it is pressed and the switch beside the press only switches.
+ * it is pressed and the switch beside the press only switches. Its
+ * right-click offers Copy link, and hands focus back to its press as the
+ * menu closes; a right-click on the switch is the switch's own and opens
+ * nothing.
  */
 function AutomationRow({
   automation,
@@ -131,39 +138,54 @@ function AutomationRow({
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
   const menu = useMenu(true);
+  const press = useRef<HTMLElement | null>(null);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  // Note that the glyph is the row's decoration, so its working word is said beside the owner instead.
+  const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   return (
-    <div className="automation-row" data-enabled={String(automation.enabled)}>
-      <button
-        type="button"
-        className="automation-row-open"
-        onClick={onOpen}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-      >
-        <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
-        <span className="automation-row-copy">
-          <span className="automation-row-name">{automation.name}</span>
-          <span className="automation-row-detail">
-            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+    <>
+      <ListRow
+        ref={(node) => {
+          press.current = node;
+        }}
+        leading={
+          <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+        }
+        title={
+          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+            {automation.name}
           </span>
-        </span>
-        <OwnerCell
-          owner={automationOwner(automation)}
-          mine={automation.mine === true}
-          workspace={workspace}
-        />
-        <span
-          className="automation-row-when"
-          title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-        >
-          {automationNextText(automation, now)}
-        </span>
-        {stateEndMark(state, true)}
-      </button>
-      <Switch
-        checked={automation.enabled}
-        label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-        onChange={(enabled) => onToggle(enabled)}
+        }
+        description={automationTriggerText(automation.trigger, automation.repositories ?? [])}
+        meta={
+          <span className="automation-row-meta">
+            {working === undefined ? null : <span className="luke-visually-hidden">{working}</span>}
+            <OwnerCell
+              owner={automationOwner(automation)}
+              mine={automation.mine === true}
+              workspace={workspace}
+            />
+            <span
+              className="automation-row-when"
+              title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+            >
+              {automationNextText(automation, now)}
+            </span>
+            {stateEndMark(state, true)}
+          </span>
+        }
+        actions={
+          <Switch
+            checked={automation.enabled}
+            label={
+              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+            }
+            onChange={(enabled) => onToggle(enabled)}
+            onContextMenu={(event) => event.stopPropagation()}
+          />
+        }
+        onPress={onOpen}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
       />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
@@ -173,7 +195,7 @@ function AutomationRow({
           onClose={menu.close}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -201,17 +223,22 @@ function AutomationList({
       {groups.map((group) => {
         const name = automationOwnerName(group.owner, workspace?.name);
         const card = (
-          <SettingsSection title={groups.length > 1 ? name : undefined}>
-            {group.automations.map((automation) => (
-              <AutomationRow
-                key={automation.id}
-                automation={automation}
-                workspace={workspace}
-                now={now}
-                onOpen={() => onOpen(automation)}
-                onToggle={(enabled) => onToggle(automation, enabled)}
-              />
-            ))}
+          <SettingsSection
+            title={groups.length > 1 ? name : undefined}
+            frame={SETTINGS_SECTION_FRAME.NONE}
+          >
+            <List label={name} variant={LIST_VARIANT.CARD}>
+              {group.automations.map((automation) => (
+                <AutomationRow
+                  key={automation.id}
+                  automation={automation}
+                  workspace={workspace}
+                  now={now}
+                  onOpen={() => onOpen(automation)}
+                  onToggle={(enabled) => onToggle(automation, enabled)}
+                />
+              ))}
+            </List>
           </SettingsSection>
         );
         return groups.length > 1 ? (

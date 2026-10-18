@@ -18,7 +18,7 @@
   width: 56px;
   height: 56px;
   margin-bottom: var(--luke-space-24);
-  border-radius: 16px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-strong);
 }
 
