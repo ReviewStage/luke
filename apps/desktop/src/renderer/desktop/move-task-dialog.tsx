@@ -10,6 +10,8 @@ import {
   Dialog,
   type DialogConfirm,
   ErrorState,
+  SCROLL_SIZE,
+  ScrollArea,
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
@@ -123,7 +125,7 @@ function WorkspaceChoices({
     disabled: !reaches(workspace, repository),
   }));
   return (
-    <div className="move-list">
+    <ScrollArea size={SCROLL_SIZE.CONTENT}>
       <ChoiceList
         legend="Workspace"
         options={options}
@@ -134,7 +136,7 @@ function WorkspaceChoices({
           if (workspaceId !== undefined) onChoose(workspaceId);
         }}
       />
-    </div>
+    </ScrollArea>
   );
 }
 

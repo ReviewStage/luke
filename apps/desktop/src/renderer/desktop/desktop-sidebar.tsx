@@ -56,6 +56,8 @@ import {
   PinIcon,
   PlusIcon,
   ProviderMark,
+  SCROLL_FADE,
+  ScrollArea,
   SearchIcon,
   Skeleton,
   SkeletonRegion,
@@ -1654,126 +1656,136 @@ function SidebarColumn({
 
       {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column. */}
-      <div className="sidebar-section scroll-fade">
-        {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin. */}
-        {tasks.signedIn && (pinnedSection.length > 0 || sectionsShown) && !archive.shown ? (
-          <PinnedSection
-            rows={pinnedSection}
-            folds={folds}
-            shown={pinnedShown}
-            context={context}
-            onOpenTab={chosen(openPinnedTab)}
-            onDropOut={sectionsShown ? dropPinned : undefined}
-          />
-        ) : null}
-        {sectioned.sections.length > 0 ? (
-          <SidebarSections
-            sections={sectioned.sections}
-            context={{
-              tasks,
-              dialogs: sectionDialogs,
-              current,
-              inSight: overlay.inSight,
-              folded: folds.sectionFolded,
-              onToggle: folds.toggleSection,
-              row: (task) => (
-                <SidebarTask
-                  key={task.id}
-                  tasks={tasks}
-                  task={task}
-                  current={context.marked(task.id, undefined)}
-                  open={current(task.id)}
-                  unread={unread(task)}
-                  now={now}
-                  face={context.faces}
-                  onOpen={() => context.onOpen(task.id)}
-                />
-              ),
-              onDropTask: dropTask,
-            }}
-          />
-        ) : null}
-        <nav
-          className="sidebar-group"
-          aria-label={archive.shown ? "Archived tasks" : "Tasks"}
-          data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
-        >
-          {tasks.signedIn ? (
-            <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
-              {sectionsShown && tasks.workspace !== undefined ? (
-                <NewSectionButton
-                  onNew={chosen(() => {
-                    const { workspace } = tasks;
-                    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-                  })}
+      <div className="sidebar-section">
+        <ScrollArea fade={SCROLL_FADE.BOTH}>
+          <div className="sidebar-section-body">
+            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin. */}
+            {tasks.signedIn && (pinnedSection.length > 0 || sectionsShown) && !archive.shown ? (
+              <PinnedSection
+                rows={pinnedSection}
+                folds={folds}
+                shown={pinnedShown}
+                context={context}
+                onOpenTab={chosen(openPinnedTab)}
+                onDropOut={sectionsShown ? dropPinned : undefined}
+              />
+            ) : null}
+            {sectioned.sections.length > 0 ? (
+              <SidebarSections
+                sections={sectioned.sections}
+                context={{
+                  tasks,
+                  dialogs: sectionDialogs,
+                  current,
+                  inSight: overlay.inSight,
+                  folded: folds.sectionFolded,
+                  onToggle: folds.toggleSection,
+                  row: (task) => (
+                    <SidebarTask
+                      key={task.id}
+                      tasks={tasks}
+                      task={task}
+                      current={context.marked(task.id, undefined)}
+                      open={current(task.id)}
+                      unread={unread(task)}
+                      now={now}
+                      face={context.faces}
+                      onOpen={() => context.onOpen(task.id)}
+                    />
+                  ),
+                  onDropTask: dropTask,
+                }}
+              />
+            ) : null}
+            <nav
+              className="sidebar-group"
+              aria-label={archive.shown ? "Archived tasks" : "Tasks"}
+              data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
+            >
+              {tasks.signedIn ? (
+                <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
+                  {sectionsShown && tasks.workspace !== undefined ? (
+                    <NewSectionButton
+                      onNew={chosen(() => {
+                        const { workspace } = tasks;
+                        if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                      })}
+                    />
+                  ) : null}
+                  <TaskViewOptions
+                    shown={tasks.shown && overlay.inSight}
+                    control={taskView}
+                    shared={shared}
+                    archive={archive}
+                    filtered={createdBy !== undefined || archive.shown}
+                  />
+                </SidebarSectionHead>
+              ) : null}
+              {tasks.signedIn ? (
+                <ViewChips
+                  createdBy={createdBy}
+                  tasks={unpinnedTasks}
+                  onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
+                  archive={archive}
                 />
               ) : null}
-              <TaskViewOptions
-                shown={tasks.shown && overlay.inSight}
-                control={taskView}
-                shared={shared}
-                archive={archive}
-                filtered={createdBy !== undefined || archive.shown}
-              />
-            </SidebarSectionHead>
-          ) : null}
-          {tasks.signedIn ? (
-            <ViewChips
-              createdBy={createdBy}
-              tasks={unpinnedTasks}
-              onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
-              archive={archive}
-            />
-          ) : null}
-          {archive.shown && unpinned.length === 0 && tasks.listRead && !tasks.listFailed ? (
-            <p className="sidebar-note">No archived tasks.</p>
-          ) : null}
-          {createdBy !== undefined &&
-          rows.length === 0 &&
-          !unlisted &&
-          !(archive.shown && unpinned.length === 0) &&
-          tasks.listRead &&
-          !tasks.listFailed ? (
-            <p className="sidebar-note">
-              {createdBy === tasks.me ? "None of your tasks here." : "None of their tasks here."}{" "}
-              <Button onClick={() => taskView.onCreatedBy(undefined)}>Show all</Button>
-            </p>
-          ) : null}
-          {tasks.listFailed ? (
-            <div className="sidebar-note sidebar-failure">
-              <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
-            </div>
-          ) : null}
-          {/* The list is empty before its first read lands, so that it
+              {archive.shown && unpinned.length === 0 && tasks.listRead && !tasks.listFailed ? (
+                <p className="sidebar-note">No archived tasks.</p>
+              ) : null}
+              {createdBy !== undefined &&
+              rows.length === 0 &&
+              !unlisted &&
+              !(archive.shown && unpinned.length === 0) &&
+              tasks.listRead &&
+              !tasks.listFailed ? (
+                <p className="sidebar-note">
+                  {createdBy === tasks.me
+                    ? "None of your tasks here."
+                    : "None of their tasks here."}{" "}
+                  <Button onClick={() => taskView.onCreatedBy(undefined)}>Show all</Button>
+                </p>
+              ) : null}
+              {tasks.listFailed ? (
+                <div className="sidebar-note sidebar-failure">
+                  <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
+                </div>
+              ) : null}
+              {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}
-          {tasks.signedIn && unlisted && !tasks.listRead && !tasks.listFailed ? (
-            <ListSkeleton />
-          ) : null}
-          {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed && !archive.shown ? (
-            <p className="sidebar-note">No tasks yet.</p>
-          ) : null}
-          {/* Every task and agent archived, the list would stand empty with no word of where they went. */}
-          {tasks.signedIn &&
-          !archive.shown &&
-          tasks.listRead &&
-          !tasks.listFailed &&
-          tasks.listed.tasks.length === 0 &&
-          listedAgents.standing.length === 0 &&
-          (tasks.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
-            <p className="sidebar-note">
-              Every task is archived.{" "}
-              <Button onClick={() => archive.onShown(true)}>Show archived</Button>
-            </p>
-          ) : null}
-          {tasks.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
-          <TaskGroups
-            sections={sections}
-            repositoryOf={repositoryOf}
-            folds={folds}
-            onNewTaskIn={chosen(newTaskIn)}
-            context={context}
-          />
-        </nav>
+              {tasks.signedIn && unlisted && !tasks.listRead && !tasks.listFailed ? (
+                <ListSkeleton />
+              ) : null}
+              {tasks.signedIn &&
+              unlisted &&
+              tasks.listRead &&
+              !tasks.listFailed &&
+              !archive.shown ? (
+                <p className="sidebar-note">No tasks yet.</p>
+              ) : null}
+              {/* Every task and agent archived, the list would stand empty with no word of where they went. */}
+              {tasks.signedIn &&
+              !archive.shown &&
+              tasks.listRead &&
+              !tasks.listFailed &&
+              tasks.listed.tasks.length === 0 &&
+              listedAgents.standing.length === 0 &&
+              (tasks.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
+                <p className="sidebar-note">
+                  Every task is archived.{" "}
+                  <Button onClick={() => archive.onShown(true)}>Show archived</Button>
+                </p>
+              ) : null}
+              {tasks.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
+              <TaskGroups
+                sections={sections}
+                repositoryOf={repositoryOf}
+                folds={folds}
+                onNewTaskIn={chosen(newTaskIn)}
+                context={context}
+              />
+            </nav>
+          </div>
+        </ScrollArea>
       </div>
 
       <ColumnFoot call={call}>

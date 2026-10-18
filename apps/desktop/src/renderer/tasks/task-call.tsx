@@ -19,6 +19,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   RetryRowLabel,
+  SCROLL_FADE_INSET,
   TEXT_BUTTON_LINES,
   TextButton,
 } from "@luke/ui";
@@ -456,7 +457,7 @@ export function TaskCall({
       {drawn ? (
         <Conversation>
           {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; lines fade beneath it. */}
-          <ConversationContent className="checkpoint-log scroll-fade">
+          <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--luke-section-gap)">

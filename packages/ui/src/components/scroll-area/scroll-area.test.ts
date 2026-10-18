@@ -1,16 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, createElement, createRef, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../../index.js";
+import {
+  SCROLL_FADE,
+  SCROLL_FADE_INSET,
+  SCROLL_GUTTER,
+  SCROLL_SIZE,
+  ScrollArea,
+} from "../../index.js";
 
 /**
  * scroll-area.test.ts -- an area is the scroller its caller reaches: the
  * caller's ref, its scroll and key handlers, and its focus land on the
  * area itself, and a tab panel drawn as one is named by its tab and holds
- * what the caller put in it.
+ * what the caller put in it; and every value of an option past its default
+ * is drawn by the area's sheet.
  */
 
 declare global {
@@ -94,4 +103,44 @@ test("an area drawn as a tab panel is named by its tab and holds the caller's el
     "Mine",
   );
   assert.equal(panel.querySelector('ul[aria-label="Items"]')?.textContent, "Review #42");
+});
+
+/** The selectors of `scroll-area.css`'s rules, comments dropped, read as the sheet is written. */
+function sheetSelectors(): string[] {
+  const sheet = readFileSync(join(import.meta.dirname, "scroll-area.css"), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  return [...sheet.matchAll(/([^{};]+)\{/g)].map(([, selector = ""]) => selector.trim());
+}
+
+test("every value of an area's fade inset and gutter but the default is drawn by a rule of its own", () => {
+  const options = [
+    { prop: "fadeInset", values: SCROLL_FADE_INSET, initial: SCROLL_FADE_INSET.NONE },
+    { prop: "gutter", values: SCROLL_GUTTER, initial: SCROLL_GUTTER.AUTO },
+  ] as const;
+  const selectors = sheetSelectors();
+  const undrawn: string[] = [];
+  for (const { prop, values, initial } of options) {
+    for (const value of Object.values(values)) {
+      if (value === initial) continue;
+      const area = createRef<HTMLDivElement>();
+      render(
+        createElement(ScrollArea, {
+          ref: area,
+          [prop]: value,
+          children: createElement("p", null, "A line."),
+        }),
+      );
+      const scroller = area.current ?? assert.fail("the ref reaches the area");
+      const worn = [...scroller.attributes].find(
+        (attribute) => attribute.name.startsWith("data-") && attribute.value === value,
+      );
+      const rule = worn === undefined ? undefined : `.luke-scroll-area[${worn.name}="${value}"]`;
+      if (rule === undefined || !selectors.some((selector) => selector.includes(rule))) {
+        undrawn.push(`${prop}: ${value}`);
+      }
+    }
+  }
+  assert.deepEqual(undrawn, []);
 });

@@ -2414,7 +2414,8 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
   const next = () =>
     page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board");
+  // Note that the thread's scroller is the area its board stands in.
+  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board")?.parentElement;
   assert.ok(board, "the item's thread");
   board.scrollTop = 600;
   next()?.focus();
@@ -3987,7 +3988,8 @@ test("a message written on a settled item's thread from its box goes as a messag
   const answers = heldAnswers();
   const sent = heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000010"));
   const pane = itemPane(page);
-  const board = pane.querySelector<HTMLElement>(".inbox-board") ?? assert.fail("the thread");
+  const board =
+    pane.querySelector<HTMLElement>(".inbox-board")?.parentElement ?? assert.fail("the thread");
   // The thread is taller than its board, so the new comment lands under its foot.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this === board) return DOMRect.fromRect({ y: 0, height: 400 });

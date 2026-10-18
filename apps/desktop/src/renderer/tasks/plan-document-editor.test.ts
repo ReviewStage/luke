@@ -365,7 +365,7 @@ function pressAt(target: Element, x: number, y: number): boolean {
 
 function scrollerOf(container: HTMLElement): HTMLElement {
   return (
-    container.querySelector<HTMLElement>(".plan-document-scroll") ??
+    container.querySelector<HTMLElement>(".plan-document-body")?.parentElement ??
     assert.fail("the document scrolls")
   );
 }

@@ -737,7 +737,7 @@ test("a plan's document opens on its title, with who created it and last edited 
       ),
     ),
   );
-  const body = container.querySelector(".desktop-document .plan-document-scroll .plan-body");
+  const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   const first = body?.firstElementChild;
   const byline = first?.nextElementSibling;
 
