@@ -2555,13 +2555,13 @@ button.pull-request-check:hover {
 .pull-request-comment-box {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .pull-request-comment-note {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-comment-note .failure-note-words {
