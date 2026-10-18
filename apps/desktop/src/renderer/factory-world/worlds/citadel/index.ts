@@ -302,11 +302,13 @@ export const world: WorldModule = {
           chosen,
           current.gates,
         );
-        if (!sameBlast(blast, state.blast)) {
+        const blastChanged = !sameBlast(blast, state.blast);
+        if (blastChanged) {
           blast = state.blast;
           rippleFrom = elapsed;
-          roads.light(state.blast);
         }
+        // Note that roads laid anew by a rebuild start dark, so the blast is run down them again even where it is unchanged.
+        if (blastChanged || rebuilt) roads.light(state.blast);
         signals.beacon(
           current.sites,
           state.blast,

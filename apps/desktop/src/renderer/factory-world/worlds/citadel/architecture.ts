@@ -576,7 +576,7 @@ function buildFrame(mason: Mason): void {
 }
 
 /** The keep's donjon: a great square tower with four turrets, a lantern, a pyramid roof, and the core's flag. */
-function buildHeart(mason: Mason, site: ZoneSite): void {
+function buildHeart(mason: Mason, site: ZoneSite, damaged: boolean): void {
   const width = 4.6 + site.zone.footprint * 1.8;
   const height = 6.6 + site.zone.footprint * 8;
   const face = Math.PI / 2 + 0.62;
@@ -587,12 +587,18 @@ function buildHeart(mason: Mason, site: ZoneSite): void {
     mason.round(PART.STONE_DRUM, x, PLATFORM_LEVEL + height - 2.2, z, 0.75, 2.9);
     mason.round(PART.ROOF_CONE, x, PLATFORM_LEVEL + height + 0.7, z, 0.95, 2, HUE.SLATE);
   }
-  mason.box(PART.STONE_BOX, 0, top - 0.6, 0, 2.6, 2.2, 2.6, yaw);
-  mason.box(PART.ROOF_PYRAMID, 0, top + 1.6, 0, 3.4, 3.2, 3.4, yaw, HUE.SLATE);
-  mason.flag(0, top + 4.8, 0, LAYER_FLAG.CORE, 1.4, 2.6);
   site.base = PLATFORM_LEVEL;
-  site.top = top + 5;
-  site.crown = { x: 0, y: top + 1.6, z: 0 };
+  // Note that a defect burning in the heart takes its lantern and roof, leaving a broken crown round embers.
+  if (damaged) {
+    site.top = brokenCrown(mason, 0, top - 0.6, 0, 1.6, 2.2, face);
+    site.crown = { x: 0, y: site.top - 0.4, z: 0 };
+  } else {
+    mason.box(PART.STONE_BOX, 0, top - 0.6, 0, 2.6, 2.2, 2.6, yaw);
+    mason.box(PART.ROOF_PYRAMID, 0, top + 1.6, 0, 3.4, 3.2, 3.4, yaw, HUE.SLATE);
+    mason.flag(0, top + 4.8, 0, LAYER_FLAG.CORE, 1.4, 2.6);
+    site.top = top + 5;
+    site.crown = { x: 0, y: top + 1.6, z: 0 };
+  }
   for (let k = 0; k < 8; k += 1) {
     const [x, z] = polar(
       HILL.PLATFORM_RADIUS,
@@ -1136,7 +1142,7 @@ export function buildStonework(
   const fields = sites.filter((site) => site.layer === ZONE_LAYER.TOOLING);
   const largestField = [...fields].sort((left, right) => right.zone.bytes - left.zone.bytes)[0];
   for (const site of sites) {
-    if (site.heart) buildHeart(mason, site);
+    if (site.heart) buildHeart(mason, site, damaged.has(site.zone.path));
     else if (site.layer === ZONE_LAYER.CORE) buildCore(mason, site, damaged.has(site.zone.path));
     else if (site.layer === ZONE_LAYER.DOMAIN)
       buildDomain(mason, site, damaged.has(site.zone.path));
