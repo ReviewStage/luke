@@ -90,7 +90,7 @@ import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import { cancelledTurn, standsStopped, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
   AGENT_LIST_INPUT,
@@ -295,6 +295,10 @@ export const UPDATE_TASK_REFUSAL = {
   ARCHIVED:
     "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
     "the same call with archived false, or leave it as it is.",
+  AGENTS_WORKING:
+    "Not archived: an agent on that task is still starting or working, and archiving the task " +
+    "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
+    "idle, or ask the developer, who can archive it and stop them.",
   NOT_REACHABLE:
     "Not changed: the GitHub installation connected to the workspace does not reach that " +
     "repository; name one it reaches, or null for none.",
@@ -1873,12 +1877,18 @@ export function runUpdateTask(
         ...(repository === undefined ? undefined : { repository: repository.success }),
       };
       const already = changesStand(read.value.task, asWritten);
-      const changed = yield* updateTask(userId, taskId, asWritten).pipe(
+      // Note that the task's agents are archived with it, so one still at work, read under its
+      // conversation's lock, refuses the archive rather than being stopped from here.
+      const guard = changes.archived === true ? standsStopped : undefined;
+      const changed = yield* updateTask(userId, taskId, asWritten, undefined, guard).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
         Effect.catchTag("TaskArchived", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
+        ),
+        Effect.catchTag("TaskAgentUnstopped", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.AGENTS_WORKING)),
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);

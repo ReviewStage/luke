@@ -126,7 +126,8 @@ it.effect("an exception and a rejection nothing in the process caught are each c
       sentry.throwUncaught(new RangeError("thrown on a timer"));
       sentry.rejectUnhandled(new TypeError("rejected unawaited"));
     }).pipe(Effect.provide(sentry.layer));
-    assert.deepEqual(exceptionTypes(sentry.sent), ["RangeError", "TypeError"]);
+    // Note that the two reports are processed concurrently, so they may leave in either order.
+    assert.deepEqual(exceptionTypes(sentry.sent).toSorted(), ["RangeError", "TypeError"]);
   }),
 );
 

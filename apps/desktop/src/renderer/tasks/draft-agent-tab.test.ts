@@ -582,3 +582,42 @@ test("a continue's draft names its source alone over the box, stands on a workin
   await tab.press("Drop the continue");
   assert.equal(dropped, 1);
 });
+
+test("a draft New task handed over sends itself once the task can start an agent, and a Start refused leaves its words in the box with why and Retry", async () => {
+  const handed: AgentDraft = {
+    ...DRAFT,
+    prompt: "Make the sidebar keep its folds.",
+    sendsOnOpen: true,
+  };
+  const marks: unknown[] = [];
+  const unready = mount([], handed, {
+    onDraftChange: (change) => marks.push(change),
+  });
+  await settle();
+  assert.deepEqual(unready.starts, [], "nothing is sent before the task can start an agent");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const tab = mount(
+    [startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID), undefined],
+    handed,
+    {
+      start: {
+        available: true,
+        reason: undefined,
+        busy: false,
+        note: undefined,
+        onPress: () => {},
+      },
+      onDraftChange: (change) => marks.push(change),
+    },
+  );
+  await settle();
+
+  assert.deepEqual(tab.starts, [handed.prompt]);
+  assert.deepEqual(marks, [{ sendsOnOpen: undefined }], "the mark is let go as it sends");
+  assert.match(tab.note() ?? "", /could not be started/u);
+  assert.equal(tab.draft(), handed.prompt);
+  await tab.press("Retry");
+  assert.deepEqual(tab.starts, [handed.prompt, handed.prompt]);
+});

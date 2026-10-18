@@ -101,6 +101,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * outlast a relaunch too, and a plan holding them opens on its draft's tab
  * again, under the same key.
  *
+ * New task's Agent mode starts its agent through a draft too: the task it
+ * started is handed a draft holding the words, the files, and the model
+ * New task's chip named (`onHandDraft`), whose tab opens and sends it as
+ * soon as the task can start an agent, so an agent the service refuses
+ * leaves the words in that tab's box with why and Retry, as any draft's.
+ *
  * An archived task starts no agent and sends none a message: Start is
  * unavailable and says why, and `onUnarchive` stands, which every place
  * that would have taken words offers instead. An agent already running
@@ -186,10 +192,17 @@ export interface CodingAgentsControl {
   ) => string;
   /** Lets the open task's draft's fork go, leaving an ordinary draft with its words and chips. */
   onDropFork: () => void;
-  /** Writes the open task's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
+  /** Writes the open task's draft: the words in its box, the choice on its chip, the MCP servers it switched off, or that it no longer sends as its tab opens. */
   onDraftChange: (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "sendsOnOpen">>,
   ) => void;
+  /**
+   * Hands a task New task just started a draft agent, under the key given,
+   * holding the words, the files, and the choice made on New task's chip,
+   * which its tab sends as soon as the task can start an agent: so an agent
+   * refused leaves the words in that tab's box with why and Retry.
+   */
+  onHandDraft: (taskId: string, handed: HandedDraft) => void;
   /** Changes the open task's draft's files from those it holds as the change lands. */
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
@@ -316,10 +329,12 @@ export interface AgentDraft {
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
+  /** Set on a draft New task handed over (`onHandDraft`), whose tab sends it as soon as the task can start an agent, once. */
+  readonly sendsOnOpen?: true | undefined;
 }
 
-/** What a draft agent holds beside its words and files: its key, what its chips chose, and the fork it is. */
-type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork">;
+/** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and whether it sends as its tab opens. */
+type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "sendsOnOpen">;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
@@ -336,7 +351,16 @@ function taskDraft(
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
     ...forkOf(held === undefined ? kept?.place.fork : held.fork),
+    ...(held?.sendsOnOpen === true ? { sendsOnOpen: true } : undefined),
   };
+}
+
+/** What New task hands a task it started for its draft agent: the key the agent starts under, its prompt, its files, and the choice its chip made, none for the account's default. */
+interface HandedDraft {
+  readonly id: string;
+  readonly prompt: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly choice: ModelChoice | undefined;
 }
 
 /** A draft's fork as an optional key, absent where it forks nothing. */
@@ -789,7 +813,7 @@ export function useCodingAgents(input: {
   };
 
   const onDraftChange = (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "sendsOnOpen">>,
   ) => {
     if (taskId === undefined || draft === undefined) return;
     const { prompt, ...choices } = change;
@@ -800,7 +824,25 @@ export function useCodingAgents(input: {
       choice: draft.choice,
       disabledServers: draft.disabledServers,
       ...(draft.fork === undefined ? undefined : { fork: draft.fork }),
+      ...(draft.sendsOnOpen === true ? { sendsOnOpen: true } : undefined),
       ...choices,
+    });
+  };
+
+  // Note that the words are kept as any draft's are, under the task New
+  // task started and the key handed, so they outlast the tab, and the task
+  // opens on the draft's tab until the agent starts.
+  const onHandDraft = (on: string, handed: HandedDraft) => {
+    writer.update(wordsPlace(on, handed.id, undefined), (was) => ({
+      ...was,
+      text: handed.prompt,
+      attachments: handed.attachments,
+    }));
+    withDraft(on, {
+      id: handed.id,
+      choice: handed.choice,
+      disabledServers: [],
+      sendsOnOpen: true,
     });
   };
 
@@ -1162,6 +1204,7 @@ export function useCodingAgents(input: {
     onContinueDraft,
     onDropFork,
     onDraftChange,
+    onHandDraft,
     onDraftAttachments,
     onDiscardDraft,
     startPrompt,

@@ -247,7 +247,7 @@ test("the title bar's buttons, each wrapped in its hint, tell a reader the chord
   ]);
 });
 
-test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
+test("the home page welcomes an account with no plan, and its New task raises the dialog over the window, which Escape puts away", () => {
   const page = mount(false);
   const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
@@ -258,11 +258,14 @@ test("the home page welcomes an account with no plan, and its New plan raises th
   act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
   assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
-  const cancel = [...(dialog?.querySelectorAll("button") ?? [])].find(
-    (button) => button.textContent === "Cancel",
+  act(() => {
+    dialog?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(
+    document.querySelector('[role="dialog"][aria-modal="true"]') === null,
+    true,
+    "Escape puts the dialog away",
   );
-  act(() => cancel?.click());
-  assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
 });
 
 test("while a launch reopens the plan last open, the column draws no home page to flash before it", () => {

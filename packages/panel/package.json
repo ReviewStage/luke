@@ -120,7 +120,7 @@
     "./tasks/inbox-toast": "./src/tasks/inbox-toast.js",
     "./tasks/issue-mark": "./src/tasks/issue-mark.js",
     "./tasks/mac-terminal-port": "./src/tasks/mac-terminal-port.js",
-    "./tasks/new-task-planning": "./src/tasks/new-task-planning.js",
+    "./tasks/new-task-mode": "./src/tasks/new-task-mode.js",
     "./tasks/pull-request-labels": "./src/tasks/pull-request-labels.js",
     "./tasks/pull-request-stack": "./src/tasks/pull-request-stack.js",
     "./tasks/relative-time": "./src/tasks/relative-time.js",

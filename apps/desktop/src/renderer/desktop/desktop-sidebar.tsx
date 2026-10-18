@@ -43,6 +43,9 @@ import {
   BUTTON_SIZE,
   Button,
   ComposeIcon,
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
@@ -57,6 +60,7 @@ import {
   Skeleton,
   SkeletonRegion,
   UnpinIcon,
+  useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -85,8 +89,9 @@ import {
   sectionOrder,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { archiveAsks, repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   FactoryIcon,
   FolderPlusIcon,
@@ -575,23 +580,24 @@ function PinnedSection({
  * have no pin, since they always stand last, and no page to open. A group of
  * archived plans offers no Archive, since its plans are already away, so the
  * plans with no repository offer nothing there.
+ * Archive tasks runs through `onArchive`, which asks first where any of the
+ * tasks has coding agents the archive would stop and archive with it.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
   tasks: TasksControl,
   archived: boolean,
+  onArchive: () => void,
 ): MenuAction[][] {
   const { repository } = group;
-  // Note that only the group's plans are archived from here, because an agent is archived from its own page.
-  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []));
   const archive: MenuAction[] =
-    archived || taskIds.length === 0
+    archived || groupTasks(group).length === 0
       ? []
       : [
           {
             label: "Archive tasks",
             icon: <ArchiveIcon />,
-            onSelect: () => tasks.onArchiveTasks(taskIds),
+            onSelect: onArchive,
           },
         ];
   if (repository === null) return archive.length === 0 ? [] : [archive];
@@ -612,6 +618,22 @@ function repositoryActionGroups(
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
+/** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
+function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
+  return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
+}
+
+/** What a repository's Archive tasks asks where a task under it has coding agents, which the archive stops and archives with them. */
+function archiveTasksQuestion(named: string, count: number): DialogQuestion {
+  return {
+    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
+    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
+    verb: "Archive",
+    running: "Archiving",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
 
 /**
  * One repository's tasks under a header in the headings' voice, which folds
@@ -651,7 +673,19 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived);
+  const listed = groupTasks(group);
+  const archiveAll = () => context.tasks.onArchiveTasks(listed.map(({ id }) => id));
+  const archiving = useConfirmDialog(
+    { subject: listed.length > 0, surfaceOpen: context.tasks.shown },
+    () => {
+      archiveAll();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
+    if (archiveAsks(listed)) archiving.ask();
+    else archiveAll();
+  });
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -715,6 +749,7 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
+      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, listed.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
