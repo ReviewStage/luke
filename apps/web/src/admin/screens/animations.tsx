@@ -5,6 +5,7 @@ import {
   JUSTIFY,
   Stack,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -79,13 +80,16 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
     <div className="min-w-0 rounded-lg border border-border bg-card p-5">
       <Stack>
         <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
-          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
-            <span className="font-mono">{entry.motion}</span>
+          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} font={TEXT_FONT.MONO}>
+            {entry.motion}
           </Text>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            <span className="font-mono tabular-nums">
-              {formatCycleSeconds(entry.cycleMs)} cycle
-            </span>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            font={TEXT_FONT.MONO}
+          >
+            {formatCycleSeconds(entry.cycleMs)} cycle
           </Text>
         </Inline>
         <div className="grid grid-cols-2 gap-3">

@@ -245,7 +245,7 @@ function IssueColumn({
     >
       <h2 className="issue-column-head">
         <StatusGlyph status={column.status} />
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
           {ISSUE_STATUS_WORDS[column.status]}
         </Text>
         {column.issues.length === 0 ? null : (

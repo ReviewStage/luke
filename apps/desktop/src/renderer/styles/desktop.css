@@ -4894,11 +4894,7 @@ button.integration-tool-head:hover,
 }
 
 .factory-glyph + .luke-text {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .factory-head-dot {
@@ -5095,11 +5091,6 @@ button.integration-tool-head:hover,
   white-space: nowrap;
 }
 
-.factory-world-label > .luke-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .factory-world-label > .factory-world-signal {
   width: 8px;
   height: 8px;
@@ -5129,11 +5120,7 @@ button.integration-tool-head:hover,
 }
 
 .factory-world-card-head > .luke-text {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .factory-world-tag {

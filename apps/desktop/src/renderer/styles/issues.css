@@ -228,11 +228,7 @@
 }
 
 .issue-column-head > .issue-status-glyph + .luke-text {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The + is a control's full size held to the head's height, so the head does
