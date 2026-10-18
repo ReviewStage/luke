@@ -1,6 +1,6 @@
 # Proposal: move the hosted API and the desktop bridge to oRPC
 
-Status: **proposed, awaiting decisions D1–D4 below.** Written to be rolled
+Status: **approved by Charles Pan on 2026-10-18**, D1–D4 decided as recommended. Written to be rolled
 out with `/orchestrate`: §6 is the PR list, §7 the dependency graph, and each
 PR's entry is its worker's brief.
 
@@ -101,7 +101,7 @@ Effect v4 integration). `@orpc/experimental-effect@2.0.0-beta.44` peers on
 
 ## 3. Decisions
 
-Each is my recommendation; the developer settles them before the rollout.
+Decided by Charles Pan on 2026-10-18: each as recommended below.
 
 - **D1. Version.** Pin `@orpc/{contract,server,client,openapi,experimental-effect}`
   at exactly `2.0.0-beta.44` in the pnpm catalog, moved deliberately like
