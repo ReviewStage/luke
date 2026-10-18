@@ -1,0 +1,71 @@
+/* face.css -- Luke's face: its ink, the colour of whose turn it is, and the
+   wiring the generated motions in face-motion.css assume.
+
+   Drawn in the primary ink because it is the app rather than one of the
+   things the app is watching. The loud motions leave the square the artwork
+   is drawn in — a pirouette and a duck both need more room than a face at
+   rest — so nothing is clipped here. Its size is the font's until the app
+   that lays it out gives it one. */
+
+@layer components {
+  .luke-face {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 auto;
+    overflow: visible;
+    color: var(--luke-color-text);
+    transition: color var(--luke-duration-quick) var(--luke-motion-exit);
+  }
+
+  /* The two motions the microphone owns, in the meters' own colours: the face
+     is green while it attends to you and blue while it is the one talking, so
+     the face alone says whose turn it is. */
+  .luke-face[data-motion="listening"] {
+    color: var(--luke-color-complete);
+  }
+
+  .luke-face[data-motion="talking"] {
+    color: var(--luke-color-working);
+  }
+
+  /* Everything the artwork moves wears `luke-face-part`. Which keyframes each
+     part plays, at what duration and about which pivot, is generated into
+     face-motion.css from the same table the SVGs in packages/brand/assets/ are
+     cut from; this is only the wiring those rules assume — how long they run,
+     and what can stop them.
+
+     Pivots arrive as points on the artwork's canvas, so the layers measure
+     against the viewBox. The eyes squeeze about their own centres instead,
+     which is what `fill-box` means here. Linear is the easing of a part that
+     names none; a part that eases every interval alike carries the curve on
+     its generated rule, and only mixed curves become per-keyframe timing
+     functions, because a keySplines list is a curve per interval and
+     `animation-timing-function` is only one. */
+  .luke-face-part {
+    animation-play-state: var(--luke-face-motion);
+    /* A gesture is something that happens rather than something that is: it
+       plays once and leaves the face at the pose it started from, which is the
+       drawn rest every motion the app plays begins and ends at. What is left
+       between gestures is stillness, and stillness is the face's usual
+       condition. */
+    animation-iteration-count: 1;
+    animation-timing-function: linear;
+  }
+
+  /* The exception, and the whole of it: a motion that says something
+     continuously true has to keep saying it. An open microphone and a sleeping
+     face are states rather than moments, so they repeat for as long as they
+     hold. */
+  .luke-face[data-repeat="true"] .luke-face-part {
+    animation-iteration-count: infinite;
+  }
+
+  .luke-face-layer {
+    transform-box: view-box;
+  }
+
+  .luke-face-eye {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}

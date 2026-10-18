@@ -5258,7 +5258,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A person's handle reads in the developer's green, as their words do on a call. */
 .chat-notice[data-author="human"] .chat-notice-from {
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 .chat-notice-words {
