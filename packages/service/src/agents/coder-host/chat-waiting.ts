@@ -104,7 +104,7 @@ export function chatWaitingStamps(
 function entryOf(
   message: ChatMessageRow,
   reason: AccountChatEntry["reason"],
-  planId: string | null,
+  taskId: string | null,
   rosters: Rosters,
 ): AccountChatEntry {
   return {
@@ -113,7 +113,7 @@ function entryOf(
     workspaceId: rosters.workspaceId,
     reason,
     from: rosters.members.get(message.authorMemberId)?.handle ?? "",
-    planId,
+    planId: taskId,
     touchedSeq: message.touchedSeq,
     updatedAt: message.touchedAt.getTime(),
   };
@@ -142,9 +142,9 @@ export function chatWaitingEntries(
     if (!(yield* chatEnabledFor(userId))) return [];
     const rosters = yield* rostersOf(userId);
     const byWorkspace = new Map(rosters.map((each) => [each.workspaceId, each]));
-    const asks = (yield* waitingOn(userId)).flatMap(({ message, planId }) => {
+    const asks = (yield* waitingOn(userId)).flatMap(({ message, planId: taskId }) => {
       const of = byWorkspace.get(message.organizationId);
-      return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, planId, of)];
+      return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, taskId, of)];
     });
     const notices = (yield* Effect.forEach(rosters, (each) => noticeEntry(userId, each))).flat();
     // A notice of an ask is the ask already, so it is said once.

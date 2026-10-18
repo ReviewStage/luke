@@ -84,16 +84,16 @@ test("a crumb with no press is words, and a pressed crumb is handed itself", () 
   const container = draw({
     label: "Path",
     crumbs: [
-      { label: "Plans", onPress: (crumb) => pressed.push(crumb) },
+      { label: "Tasks", onPress: (crumb) => pressed.push(crumb) },
       { label: "Launch", current: true },
     ],
   });
   expect([...container.querySelectorAll("button")].map((each) => each.textContent)).toEqual([
-    "Plans",
+    "Tasks",
   ]);
-  const plans = button(container, "Plans");
-  act(() => plans.click());
-  expect(pressed).toEqual([plans]);
+  const tasks = button(container, "Tasks");
+  act(() => tasks.click());
+  expect(pressed).toEqual([tasks]);
 });
 
 test("a crumb that opens a dialog says so, and whether it stands open", () => {
