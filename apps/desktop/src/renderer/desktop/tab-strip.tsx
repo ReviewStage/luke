@@ -1,8 +1,10 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   atPointer,
+  BUTTON_SIZE,
   CloseIcon,
   cssCustomProperties,
+  IconButton,
   MENU_ALIGN,
   MENU_DROP,
   type MenuPlacement,
@@ -457,15 +459,15 @@ export function Tab({
         </span>
       )}
       {onClose === undefined || editor !== undefined ? null : (
-        <button
-          type="button"
-          className="tab-close"
-          aria-label={`Close ${label}`}
-          tabIndex={-1}
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </button>
+        <span className="tab-close">
+          <IconButton
+            icon={<CloseIcon />}
+            label={`Close ${label}`}
+            size={BUTTON_SIZE.COMPACT}
+            tabbable={false}
+            onClick={onClose}
+          />
+        </span>
       )}
     </div>
   );

@@ -97,6 +97,16 @@
     --luke-button-ink: var(--luke-color-ground);
   }
 
+  .luke-button[data-variant="working-tint"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+    --luke-button-ink: var(--luke-color-working);
+  }
+
+  .luke-button[data-variant="danger-tint"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+    --luke-button-ink: var(--luke-color-danger-text);
+  }
+
   /* Round, a glyph alone is a disc and words a pill, held off its round
      ends by half its height. */
   .luke-button[data-shape="round"] {
@@ -179,6 +189,14 @@
     [aria-disabled="true"]
   ) {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 24%, transparent);
+  }
+
+  .luke-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
+  }
+
+  .luke-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
   }
 
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {

@@ -145,7 +145,7 @@ function notice(text: string, retry: (() => void) | undefined): HTMLElement {
   box.setAttribute("role", "alert");
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "toolbar-button quiet-button";
+  button.className = "toolbar-button";
   button.append(retryGlyph(), "Retry");
   button.addEventListener("click", retry);
   box.append(button);

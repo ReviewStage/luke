@@ -468,7 +468,7 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
   );
   act(() => add.click());
   await settle();
-  const close = panel.querySelector<HTMLButtonElement>(".tab-close");
+  const close = panel.querySelector<HTMLButtonElement>('button[aria-label^="Close "]');
   assert.ok(close, "the worker's tab closes");
   act(() => close.click());
   await settle();

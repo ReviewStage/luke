@@ -10,7 +10,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * for one that destroys, `danger-outline` for a destructive act that is
  * not the place's own, and `ink` for one that ends what the place holds, a
  * solid fill in the text's own colour apart from the quiet ones beside it,
- * as a call's End call is. Each is one control's height, corner, and glyph
+ * as a call's End call is. Two tinted looks carry news on a wash of their
+ * colour rather than a fill: `working-tint` for an act something under way
+ * offers (Restart, once a release is downloaded), and `danger-tint` for the
+ * one a failure offers (Download, once installing it failed). Each is one control's height, corner, and glyph
  * in the profile it is drawn at, and owns its insides: it takes no class or
  * style, and its outer spacing is its container's. Its shape is square on
  * the control's corner, or `round`: a disc for a glyph alone, a pill for
@@ -76,6 +79,8 @@ export const BUTTON_VARIANT = {
   DANGER: "danger",
   DANGER_OUTLINE: "danger-outline",
   INK: "ink",
+  WORKING_TINT: "working-tint",
+  DANGER_TINT: "danger-tint",
 } as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];

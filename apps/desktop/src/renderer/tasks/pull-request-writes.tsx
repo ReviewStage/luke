@@ -16,14 +16,24 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Badge, CHIP_LOOK, Chip, ChipName, ErrorState, useMenu } from "@luke/ui";
 import {
-  CheckIcon,
+  Badge,
+  BUTTON_SIZE,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  ErrorState,
+  IconButton,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
+  useMenu,
+} from "@luke/ui";
+import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
   PencilIcon,
-  XIcon,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
@@ -306,16 +316,15 @@ export function PullRequestWriteNote({
 /** The title's own words. */
 const TITLE_WORDS = {
   EDIT: "Edit title",
-  SAVE: "Save title",
-  CANCEL: "Cancel",
   FIELD: "Pull request title",
 } as const;
 
 /**
  * The pull request's title and number, its pencil opening a field over the
- * title where its words may be changed: kept on Enter or the check where
- * they changed and are not empty, given up on Escape or the cross. The field
- * stands until GitHub answers, and closes once it has.
+ * title where its words may be changed: kept on Enter, or as the focus
+ * leaves, where they changed and are not empty, and given up on Escape.
+ * The title stands as it was until GitHub answers with the new one, its
+ * pencil unavailable while the write is out.
  */
 export function PullRequestTitle({
   title,
@@ -327,83 +336,41 @@ export function PullRequestTitle({
   number: string;
   writes: PullRequestWrites;
 }): React.JSX.Element {
-  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
   const busy = writes.pending !== undefined;
-  const begin = () => setEditing(title);
-  const keep = () => {
-    const words = (editing ?? "").trim();
-    if (words === "" || words === title) {
-      setEditing(undefined);
-      return;
-    }
-    void writes
-      .write({ action: PULL_REQUEST_ACTION.EDIT_TITLE, title: words })
-      .then(() => setEditing(undefined));
+  const end = ({ value }: InlineEditEnd) => {
+    setEditing(false);
+    if (value === undefined) return;
+    void writes.write({ action: PULL_REQUEST_ACTION.EDIT_TITLE, title: value });
   };
-  if (editing === undefined) {
+  if (editing) {
     return (
-      <h2 className="pull-request-title pull-request-title-editable">
-        {title} <span className="pull-request-number">{number}</span>
-        <Tooltip label={TITLE_WORDS.EDIT}>
-          <button
-            type="button"
-            className="icon-button pull-request-title-edit"
-            aria-label={TITLE_WORDS.EDIT}
-            disabled={busy}
-            onClick={begin}
-          >
-            <PencilIcon />
-          </button>
-        </Tooltip>
+      <h2 className="pull-request-title pull-request-title-field">
+        <InlineEdit
+          value={title}
+          label={TITLE_WORDS.FIELD}
+          editing
+          maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
+          look={INLINE_EDIT_LOOK.INPUT}
+          onEnd={end}
+        />
       </h2>
     );
   }
   return (
-    <div className="pull-request-title pull-request-title-field">
-      <input
-        className="pull-request-title-input"
-        // biome-ignore lint/a11y/noAutofocus: the field opens on a press of its pencil, which is where the keyboard is going.
-        autoFocus
-        onFocus={(event) => event.currentTarget.select()}
-        aria-label={TITLE_WORDS.FIELD}
-        value={editing}
-        maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
-        disabled={busy}
-        onChange={(event) => setEditing(event.target.value)}
-        onKeyDown={(event) => {
-          // Note that a key an input method takes to finish a word is the word's, not the field's.
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "Enter") keep();
-          if (event.key === "Escape") {
-            // The field's Escape gives the edit up and nothing more, so the window's own Escape never closes the page.
-            event.preventDefault();
-            event.stopPropagation();
-            setEditing(undefined);
-          }
-        }}
-      />
-      <Tooltip label={TITLE_WORDS.SAVE}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={TITLE_WORDS.SAVE}
-          disabled={busy || editing.trim() === ""}
-          onClick={keep}
-        >
-          <CheckIcon />
-        </button>
-      </Tooltip>
-      <Tooltip label={TITLE_WORDS.CANCEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={TITLE_WORDS.CANCEL}
-          disabled={busy}
-          onClick={() => setEditing(undefined)}
-        >
-          <XIcon />
-        </button>
-      </Tooltip>
-    </div>
+    <h2 className="pull-request-title pull-request-title-editable">
+      {title} <span className="pull-request-number">{number}</span>
+      <span className="pull-request-title-edit">
+        <Tooltip label={TITLE_WORDS.EDIT}>
+          <IconButton
+            icon={<PencilIcon aria-hidden="true" />}
+            label={TITLE_WORDS.EDIT}
+            size={BUTTON_SIZE.COMPACT}
+            disabled={busy}
+            onClick={() => setEditing(true)}
+          />
+        </Tooltip>
+      </span>
+    </h2>
   );
 }

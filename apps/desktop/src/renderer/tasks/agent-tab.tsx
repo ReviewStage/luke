@@ -17,6 +17,8 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  BUTTON_VARIANT,
+  Button,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -1245,13 +1247,11 @@ function AgentEndLine({
       <span className="agent-end-words">{ended.words}</span>
       {cost}
       {remedy === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button bordered-button failure-note-remedy agent-end-remedy"
-          onClick={onOpenApiKeys}
-        >
-          {remedy}
-        </button>
+        <span className="agent-end-remedy">
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+            {remedy}
+          </Button>
+        </span>
       )}
     </p>
   );

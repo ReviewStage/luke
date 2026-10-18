@@ -2204,9 +2204,10 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
     (link) => links.push(link),
   );
   const button =
-    tab.querySelector<HTMLButtonElement>(".pull-request-branch-row .pull-request-stack") ??
-    assert.fail("the stack stands beside the branches");
-  assert.equal(button.textContent, "Stack3/5");
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 3 of 5"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+  assert.equal(button.textContent, "Stack 3/5");
   const items = () => [
     ...document.querySelectorAll<HTMLButtonElement>(
       ':is([role="menuitem"], [role="menuitemcheckbox"])',
@@ -2661,6 +2662,18 @@ test("the title is edited in place: Enter keeps new words trimmed, and Escape, o
     null,
     "the field closes once GitHub answered",
   );
+});
+
+test("the title's edit is kept as the focus leaves its field, as it is on Enter", async () => {
+  const tab = await draw(controlAnswering());
+  const field = editTitle(tab);
+  type(field, "Expire invitations after a day");
+  act(() => field.blur());
+  await settle();
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.EDIT_TITLE, title: "Expire invitations after a day" }],
+  ]);
+  assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null, "the field closes");
 });
 
 test("Files changed draws each review thread under its line, its comments through the overview's own drawing, folded while Minimize inline comments is on", async () => {

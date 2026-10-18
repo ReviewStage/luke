@@ -1509,12 +1509,12 @@
   outline-offset: var(--luke-focus-ring-inset);
 }
 
-.diff-list-fold > svg {
+.diff-list-fold {
   transform: rotate(90deg);
   transition: transform var(--duration-quick) ease;
 }
 
-.diff-list-head[data-collapsed] .diff-list-fold > svg {
+.diff-list-head[data-collapsed] .diff-list-fold {
   transform: none;
 }
 
@@ -1976,32 +1976,7 @@
   flex: 0 1 auto;
 }
 
-/* "Stack 2/4", a quiet outlined button whose menu lists the stack. */
-.pull-request-stack {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  height: 22px;
-  margin-top: var(--luke-space-2);
-  padding: 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--luke-color-text-muted);
-  font-size: 11.5px;
-}
-
-.pull-request-stack:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.pull-request-stack > svg {
-  width: 12px;
-  height: 12px;
-}
-
+/* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
 .pull-request-stack-count {
   color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
@@ -2066,18 +2041,6 @@
   gap: var(--luke-space-4);
 }
 
-/* A picker's press, as small as the words beside it. */
-.icon-button.pull-request-picker {
-  width: 22px;
-  height: 22px;
-  color: var(--luke-color-text-subtle);
-}
-
-.icon-button.pull-request-picker > svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* A label's colour, leading its item in the label picker. */
 .pull-request-label-dot {
   display: inline-block;
@@ -2133,38 +2096,18 @@
    faint after the number until the title is hovered or the pencil focused,
    and the field takes the title's own type and room. */
 .pull-request-title-edit {
-  width: 22px;
-  height: 22px;
   margin-inline-start: var(--luke-space-2);
   vertical-align: middle;
   opacity: 0;
 }
 
-.pull-request-title-edit svg {
-  width: 13px;
-  height: 13px;
-}
-
 .pull-request-title-editable:hover .pull-request-title-edit,
-.pull-request-title-edit:focus-visible {
+.pull-request-title-edit:has(:focus-visible) {
   opacity: 1;
 }
 
 .pull-request-title-field {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.pull-request-title-input {
-  min-width: 0;
-  flex: 1 1 auto;
-  padding: var(--luke-space-2) var(--luke-space-4);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-  color: inherit;
-  font: inherit;
+  display: grid;
 }
 
 .pull-request-number {
@@ -2545,25 +2488,6 @@
   gap: var(--luke-control-gap);
 }
 
-.pull-request-thread-reply-open {
-  min-width: 0;
-  height: var(--luke-control-height);
-  flex: 1 1 auto;
-  padding: 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text-subtle);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  text-align: start;
-  cursor: text;
-}
-
-.pull-request-thread-reply-open:hover {
-  border-color: var(--luke-color-border-strong);
-}
-
 .pull-request-thread-reply {
   display: flex;
   flex-direction: column;
@@ -2638,25 +2562,10 @@
 }
 
 .file-tab-edge {
-  display: block;
-  width: 100%;
   padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  border: 0;
-  background: none;
   color: var(--luke-color-text-subtle);
-  font: inherit;
-  text-align: left;
   -webkit-user-select: none;
   user-select: none;
-}
-
-.file-tab-edge:hover:not(:disabled) {
-  color: var(--luke-color-text-muted);
-}
-
-/* The edges run the lines' whole width, so their ring is drawn inside them. */
-.file-tab-edge:focus-visible {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -3098,19 +3007,11 @@ ol.transcript-list {
 /* Show more, under an answer cut to its first lines: a quiet strip across
    the card's width. */
 .tool-more {
-  display: block;
-  width: 100%;
+  margin: 0;
   padding: var(--luke-space-6) var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
-  background: transparent;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  text-align: left;
-  transition: color var(--duration-quick) var(--spring);
-}
-
-.tool-more:hover {
-  color: var(--luke-color-text);
 }
 
 /* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
@@ -4025,6 +3926,7 @@ ol.transcript-list {
    stands only once the card is too narrow for every press. */
 .agent-composer-attach,
 .agent-servers-button,
+.agent-context-button,
 .dictate-button {
   display: flex;
 }
@@ -5206,21 +5108,12 @@ ol.transcript-list {
 
 /* The Work tab's own ----------------------------------------------------- */
 
-/* A quiet button-shaped line of the Work tab. Note that it is written here
-   rather than as utilities, because base.css sets every button's font and
-   colour outside the utilities' layer, and that rule wins over any utility. */
-.ai-trigger {
-  padding: 0;
-  background: none;
+/* The Work tab's Show earlier work, a quiet line over its oldest turn. */
+.task-call-earlier {
+  margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  transition: color var(--duration-hover) ease;
-}
-
-.ai-trigger:hover {
-  color: var(--luke-color-text);
 }
 
 /* Lucide's glyphs, which the AI Elements components draw with, at the
