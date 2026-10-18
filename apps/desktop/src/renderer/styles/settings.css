@@ -140,7 +140,7 @@
   text-underline-offset: 2px;
 }
 
-/* A press among a row's detail words, drawn as the links beside it are: an
+/* A press among a row's detail words, drawn as an underlined link is: an
    experiment's Send feedback, which opens a dialog rather than a page. */
 .settings-detail-act {
   padding: 0;

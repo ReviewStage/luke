@@ -18,6 +18,8 @@ import {
   SettingsLine,
   SettingsRow,
   SettingsSection,
+  TEXT_LINK_LOOK,
+  TextLink,
 } from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -227,8 +229,8 @@ function DefaultRows({
               {fastAskable ? (
                 <>
                   {" "}
-                  <a
-                    className="settings-detail-act"
+                  <TextLink
+                    look={TEXT_LINK_LOOK.UNDERLINED}
                     href={FAST_ACCESS_URL}
                     onClick={(event) => {
                       event.preventDefault();
@@ -236,7 +238,7 @@ function DefaultRows({
                     }}
                   >
                     {FAST_ACCESS_WORD}
-                  </a>
+                  </TextLink>
                 </>
               ) : null}
             </>
