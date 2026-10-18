@@ -11,6 +11,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -127,6 +128,7 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     createIssue(userId, { ...made, organizationId: workspaceId }),
   );
   if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  yield* recordServerEvent(SERVER_EVENT.ISSUE_CREATE, userId, {});
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { issue: created.value });
 });
 

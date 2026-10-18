@@ -569,10 +569,40 @@ const ISSUES: readonly LinearIssueSummary[] = [
   },
 ];
 
-/** The rows standing under the name field, each as it reads, and which one is highlighted. */
-function matchRows() {
+/** What the Linear chip is named, and its search field's. */
+const LINEAR_CHIP = '[aria-label="Choose from Linear"]';
+const LINEAR_SEARCH = 'input[aria-label="Search issues, or paste a key or link"]';
+
+/** The Linear chip's search, open. */
+function linearSearch(): HTMLInputElement {
+  return (
+    document.querySelector<HTMLInputElement>(LINEAR_SEARCH) ??
+    assert.fail("the Linear chip's search is open")
+  );
+}
+
+/** The Linear chip pressed, and its search as it opens. */
+async function openLinear(): Promise<HTMLInputElement> {
+  const chip =
+    document.querySelector<HTMLButtonElement>(LINEAR_CHIP) ?? assert.fail("the Linear chip stands");
+  act(() => chip.click());
+  await settle();
+  return linearSearch();
+}
+
+/** Words typed into the Linear chip's search. */
+function search(words: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(linearSearch(), words);
+    linearSearch().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The rows any open list draws, each as it reads, and which one is highlighted. */
+function issueRows() {
   const options = [...document.querySelectorAll('[role="listbox"] [role="option"]')];
-  const words = (row: Element) => row.textContent?.replace("⌘⏎", "").trim() ?? "";
+  const words = (row: Element) => row.textContent?.trim() ?? "";
   return {
     rows: options.map(words),
     highlighted: options
@@ -581,84 +611,6 @@ function matchRows() {
       .at(0),
   };
 }
-
-test("with Linear connected, what is typed lists the matching issues under the field, the nearest highlighted, and Return starts that issue's task at once on the card's repository", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES);
-  assert.equal(card.field().placeholder, "Task name, or search Linear issues");
-
-  card.type("stack");
-  await settle();
-  const listed = matchRows();
-  const label = card.button("Start").textContent;
-  await card.press("Enter", card.field());
-
-  assert.deepEqual(listed, {
-    rows: [
-      "Add support for stacked PRsENG-2 · In Progress",
-      "Restack the deploy queueENG-1 · Todo",
-      "Create task “stack”",
-    ],
-    highlighted: "Add support for stacked PRsENG-2 · In Progress",
-  });
-  assert.equal(label, "Start ENG-2⏎");
-  assert.deepEqual(card.starts, [["Add support for stacked PRs", "acme/web"]]);
-  assert.deepEqual(card.fromIssues, ["issue-2"]);
-});
-
-test("the arrows move on through the issues to the name as typed, and Command-Return creates the name as typed whatever is highlighted", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES);
-  card.type("deploy");
-  await settle();
-
-  await card.press("ArrowDown", card.field());
-  const second = matchRows().highlighted;
-  await card.press("ArrowDown", card.field());
-  const typed = matchRows().highlighted;
-  await card.press("Enter", card.field());
-  await card.press("ArrowDown", card.field());
-  await card.press("Enter", card.field(), { metaKey: true });
-
-  assert.equal(second, "Rotate the deploy keyOPS-7");
-  assert.equal(typed, "Create task “deploy”");
-  assert.deepEqual(card.starts, [
-    ["deploy", "acme/web"],
-    ["deploy", "acme/web"],
-  ]);
-  assert.deepEqual(card.fromIssues, [undefined, undefined]);
-});
-
-test("Escape puts the issues away and leaves the card, a second puts the card away, and typing brings the issues back", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES);
-  card.type("stack");
-  await settle();
-
-  await card.press("Escape", card.field());
-  const afterFirst = { rows: matchRows().rows.length, card: card.dialog() !== null };
-  card.type("stacked");
-  await settle();
-  const retyped = matchRows().rows.length;
-  await card.press("Escape", card.field());
-  await card.press("Escape", card.field());
-
-  assert.deepEqual(afterFirst, { rows: 0, card: true });
-  assert.equal(retyped, 2);
-  assert.equal(card.dialog(), null);
-  assert.deepEqual(card.starts, []);
-});
-
-test("a name no issue matches is the plain field it always was: nothing listed, and Return creates the task under it", async () => {
-  const card = await mount(undefined, undefined, {}, ISSUES);
-  card.type("Refactor billing");
-  await settle();
-
-  const listed = document.querySelector('[role="listbox"]');
-  await card.press("Enter", card.field());
-
-  assert.equal(listed, null);
-  assert.equal(card.field().getAttribute("aria-expanded"), "false");
-  assert.deepEqual(card.starts, [["Refactor billing", "acme/web"]]);
-  assert.deepEqual(card.fromIssues, [undefined]);
-});
 
 /** Longer than the typing rests before Linear is searched. */
 const PAST_SEARCH_PAUSE = 300;
@@ -680,7 +632,65 @@ const OLDER_ISSUE: LinearIssueSummary = {
   state: "Backlog",
 };
 
-test("once the typing rests, Linear itself is searched for the words, and an issue it finds beyond those read stands after the ones read", async () => {
+test("with Linear connected, typing in the name lists no issues and searches no Linear: Return creates the task under the name as typed", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES);
+    card.type("stack");
+    await rest();
+    const listed = document.querySelector('[role="listbox"]');
+    await card.press("Enter", card.field());
+
+    assert.equal(card.field().placeholder, "Task name (optional)");
+    assert.equal(listed, null);
+    assert.deepEqual(card.asks, []);
+    assert.deepEqual(card.starts, [["stack", "acme/web"]]);
+    assert.deepEqual(card.fromIssues, [undefined]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the Linear chip stands after the repository chip only where the workspace has Linear connected", async () => {
+  const connected = await mount(undefined, undefined, {}, ISSUES);
+  const withLinear = connected.controls();
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const plain = await mount();
+
+  assert.deepEqual(withLinear, [
+    "Plan with Luke",
+    "Task name",
+    "acme/web",
+    "Choose from Linear",
+    "Cancel",
+    "Create task⏎",
+  ]);
+  assert.equal(plain.controls().includes("Choose from Linear"), false);
+});
+
+test("the Linear chip lists the issues read as the card opened, the arrows move, and Return starts that issue's task at once on the card's repository", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES);
+  const field = await openLinear();
+  const listed = issueRows();
+  await card.press("ArrowDown", field);
+  const moved = issueRows().highlighted;
+  await card.press("Enter", field);
+
+  assert.deepEqual(listed, {
+    rows: [
+      "Restack the deploy queueENG-1 · Todo",
+      "Add support for stacked PRsENG-2 · In Progress",
+      "Rotate the deploy keyOPS-7",
+    ],
+    highlighted: "Restack the deploy queueENG-1 · Todo",
+  });
+  assert.equal(moved, "Add support for stacked PRsENG-2 · In Progress");
+  assert.deepEqual(card.starts, [["Add support for stacked PRs", "acme/web"]]);
+  assert.deepEqual(card.fromIssues, ["issue-2"]);
+});
+
+test("typing in the Linear search narrows the issues at once, and once it rests Linear itself is searched, an issue it finds beyond those read standing after them", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
@@ -688,44 +698,91 @@ test("once the typing rests, Linear itself is searched for the words, and an iss
         ? [OLDER_ISSUE, ISSUES[0] ?? assert.fail("the first issue")]
         : [],
     );
-    card.type("deploy");
+    await openLinear();
+    search("deploy");
     await settle();
-    card.type("deploy queue");
+    const narrowed = issueRows().rows;
+    search("deploy queue");
     await settle();
-    const before = { rows: matchRows().rows, asks: card.asks.length };
+    const before = { rows: issueRows().rows, asks: card.asks.length };
     await rest();
-    const after = matchRows().rows;
 
-    assert.deepEqual(before, {
-      rows: ["Restack the deploy queueENG-1 · Todo", "Create task “deploy queue”"],
-      asks: 0,
-    });
+    assert.deepEqual(narrowed, [
+      "Restack the deploy queueENG-1 · Todo",
+      "Rotate the deploy keyOPS-7",
+    ]);
+    assert.deepEqual(before, { rows: ["Restack the deploy queueENG-1 · Todo"], asks: 0 });
     assert.deepEqual(card.asks, [{ query: "deploy queue" }]);
-    assert.deepEqual(after, [
+    assert.deepEqual(issueRows().rows, [
       "Restack the deploy queueENG-1 · Todo",
       "Queue jumps on retryENG-301 · Backlog",
-      "Create task “deploy queue”",
     ]);
+    assert.deepEqual(card.starts, []);
   } finally {
     vi.useRealTimers();
   }
 });
 
-test("a pasted link to an issue, or its key typed alone, asks Linear for that one issue, which is offered first and started by Return", async () => {
+test("an issue Linear finds that sorts ahead of the highlighted one leaves the highlight, and Return, on the issue the arrows chose", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const redeploy: LinearIssueSummary = {
+      id: "issue-9",
+      identifier: "ENG-9",
+      title: "Redeploy the docs",
+      url: "https://linear.app/acme/issue/ENG-9",
+    };
+    const dashboard: LinearIssueSummary = {
+      id: "issue-400",
+      identifier: "ENG-400",
+      title: "Deploy dashboard",
+      url: "https://linear.app/acme/issue/ENG-400",
+    };
+    const card = await mount(
+      undefined,
+      undefined,
+      {},
+      [ISSUES[0] ?? assert.fail("the first issue"), redeploy],
+      (ask) => (ask.query === "deploy" ? [dashboard] : []),
+    );
+    await openLinear();
+    search("deploy");
+    await settle();
+    await card.press("ArrowDown", linearSearch());
+    const chosen = issueRows().highlighted;
+    await rest();
+    const answered = issueRows();
+    await card.press("Enter", linearSearch());
+
+    assert.equal(chosen, "Redeploy the docsENG-9");
+    assert.deepEqual(answered, {
+      rows: [
+        "Restack the deploy queueENG-1 · Todo",
+        "Deploy dashboardENG-400",
+        "Redeploy the docsENG-9",
+      ],
+      highlighted: "Redeploy the docsENG-9",
+    });
+    assert.deepEqual(card.fromIssues, ["issue-9"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a link to an issue pasted in the Linear search asks Linear for that one issue, which is offered first and started by Return", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
       ask.identifier === "ENG-301" ? [OLDER_ISSUE] : [],
     );
-    card.type("https://linear.app/acme/issue/ENG-301/queue-jumps-on-retry");
+    await openLinear();
+    search("https://linear.app/acme/issue/ENG-301/queue-jumps-on-retry");
     await rest();
-    const listed = matchRows();
-    await card.press("Enter", card.field());
-    card.type("eng-301");
-    await rest();
+    const listed = issueRows();
+    await card.press("Enter", linearSearch());
 
-    assert.deepEqual(card.asks, [{ identifier: "ENG-301" }, { identifier: "ENG-301" }]);
-    assert.deepEqual(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
+    assert.deepEqual(card.asks, [{ identifier: "ENG-301" }]);
+    assert.equal(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
     assert.deepEqual(card.starts, [["Queue jumps on retry", "acme/web"]]);
     assert.deepEqual(card.fromIssues, ["issue-301"]);
   } finally {
@@ -733,7 +790,38 @@ test("a pasted link to an issue, or its key typed alone, asks Linear for that on
   }
 });
 
-test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, searches no Linear, and links the task to the issue", async () => {
+test("Escape closes the Linear search and leaves the card with focus on the chip, and a second Escape puts the card away", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES);
+  const field = await openLinear();
+  await card.press("Escape", field);
+  const afterFirst = {
+    search: document.querySelector(LINEAR_SEARCH) !== null,
+    card: card.dialog() !== null,
+    focus: document.activeElement?.getAttribute("aria-label"),
+  };
+  await card.press("Escape", card.field());
+
+  assert.deepEqual(afterFirst, { search: false, card: true, focus: "Choose from Linear" });
+  assert.equal(card.dialog(), null);
+  assert.deepEqual(card.starts, []);
+});
+
+test("Command-L from the name field opens the Linear search, but not while an input method composes, and Escape hands focus back to the name", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES);
+  await card.press("l", card.field(), { metaKey: true, isComposing: true });
+  const whileComposing = document.querySelector(LINEAR_SEARCH);
+  await card.press("l", card.field(), { metaKey: true });
+  const opened = document.activeElement === linearSearch();
+  await card.press("Escape", linearSearch());
+
+  assert.equal(whileComposing !== null, false, "a composing key opens nothing");
+  assert.equal(opened, true);
+  assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "the search is closed");
+  assert.equal(document.activeElement, card.field());
+  assert.ok(card.dialog());
+});
+
+test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, offers no Linear chip, and links the task to the issue", async () => {
   const issue = {
     id: "issue-1",
     workspaceId: "workspace-2",
@@ -750,10 +838,9 @@ test("opened on one of the workspace's issues, the card says so, starts named by
 
   assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
   assert.equal(card.field().value, "Invites expire");
-  assert.equal(card.field().placeholder, "Task name (optional)");
-  card.type("Invites expire");
-  await settle();
-  assert.equal(document.querySelector('[role="option"]'), null, "no Linear issue is offered");
+  assert.equal(document.querySelector(LINEAR_CHIP), null, "no Linear chip is offered");
+  await card.press("l", card.field(), { metaKey: true });
+  assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "Command-L opens nothing");
   await card.press("Enter", card.field());
 
   assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);

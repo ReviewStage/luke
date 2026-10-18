@@ -8,9 +8,7 @@
  * login a person may change. An account is named only where its holder is a
  * member of the agent's own workspace, so the answer never says which Luke
  * account stands behind someone outside it. Luke's own App's bot is named
- * as any other App's bot is: by its login, as GitHub names it, and, where a
- * commit's trailer names it a co-author, which gives no avatar, by its
- * App's logo (`GitHubApp`'s `botAvatarUrl`).
+ * as any other App's bot is: by its login, as GitHub names it.
  *
  * Who a pull request names rides beside its files and is never what the
  * files wait on: a read of the people that fails is said once in the log and
@@ -38,10 +36,10 @@ import type {
   ReactionGroup,
 } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
-import { Effect, Option, type Redacted, Schema } from "effect";
+import { Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlSchema } from "effect/sql";
-import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
+import { GITHUB_PROVIDER_ID } from "./github-app.js";
 import type { StackEntry } from "./pull-request-stack.js";
 import {
   type GitHubAccount,
@@ -49,7 +47,6 @@ import {
   type GitHubOverviewPullRequest,
   type GitHubReaction,
   type GitHubReviewOptions,
-  type KnownBot,
   type PullRequestPeople,
   pullRequestPeople,
 } from "./pull-requests.js";
@@ -89,7 +86,6 @@ function accountsOfPeople(people: PullRequestPeople): readonly GitHubAccount[] {
   return [
     ...(people.author === undefined ? [] : [people.author]),
     ...people.reviewers.map((reviewer) => reviewer.account),
-    ...people.commitAuthors,
     ...people.comments.map((comment) => comment.account),
   ];
 }
@@ -116,7 +112,6 @@ interface PersonBeingNamed {
 interface PeopleBeingNamed {
   author?: GitHubPerson;
   reviewers: NonNullable<ChangesPeople["reviewers"]>;
-  commitAuthors: NonNullable<ChangesPeople["commitAuthors"]>;
   comments: NonNullable<ChangesPeople["comments"]>;
 }
 
@@ -140,7 +135,6 @@ function changesPeopleOf(
   const person = (held: GitHubAccount) => personOf(held, linked);
   const answer: PeopleBeingNamed = {
     reviewers: people.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
-    commitAuthors: people.commitAuthors.map(person),
     comments: people.comments.map(({ account: held, state, excerpt, at }) => ({
       by: person(held),
       state,
@@ -152,15 +146,6 @@ function changesPeopleOf(
   return answer;
 }
 
-/** Luke's own App's bot by its login and its App's logo; none where the App is not configured. */
-const lukeBot = /* @__PURE__ */ Effect.fnUntraced(function* () {
-  const app = yield* GitHubApp;
-  const bot = yield* Effect.option(
-    Effect.all({ login: app.botLogin, avatarUrl: app.botAvatarUrl }),
-  );
-  return Option.toArray(bot) satisfies readonly KnownBot[];
-});
-
 /**
  * Who the agent's pull request names, read on the token minted for its
  * repository and named against its workspace's members; nothing, said once
@@ -170,10 +155,9 @@ export const changesPeople = /* @__PURE__ */ Effect.fn("web/changesPeople")(func
   token: Redacted.Redacted,
   agent: { readonly repository: string; readonly organizationId: string },
   number: number,
-): Effect.fn.Return<ChangesPeople, never, HttpClient.HttpClient | DatabaseServices | GitHubApp> {
+): Effect.fn.Return<ChangesPeople, never, HttpClient.HttpClient | DatabaseServices> {
   return yield* Effect.gen(function* () {
-    const known = yield* lukeBot();
-    const people = yield* pullRequestPeople(token, agent.repository, number, known);
+    const people = yield* pullRequestPeople(token, agent.repository, number);
     const linked = yield* linkedMembers(agent.organizationId, idsOf(accountsOfPeople(people)));
     return changesPeopleOf(people, linked);
   }).pipe(

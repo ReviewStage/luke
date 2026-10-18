@@ -426,6 +426,9 @@ export type IssuesPlace =
   | { readonly kind: typeof ISSUES_PAGE.LIST }
   | { readonly kind: typeof ISSUES_PAGE.ISSUE; readonly issueId: string };
 
+/** The side panel beside the Issues pages: no task's, its one tab the issue the list peeked, which the list draws. */
+const ISSUES_PANEL = { id: undefined, holds: {}, bare: true, drawsOwn: true } as const;
+
 /** The list, where the Issues pages open with none asked for. */
 const ISSUES_LIST: IssuesPlace = { kind: ISSUES_PAGE.LIST };
 
@@ -437,6 +440,13 @@ interface IssuesViewControl {
   /** Opens the page asked for, the list where none is. */
   readonly onOpen: (place?: IssuesPlace) => void;
   readonly onClose: () => void;
+  /**
+   * The issue the list last peeked, which the window's side panel draws
+   * beside it while the panel is open, as the Inbox's chosen item's task's
+   * panel stands beside the Inbox; none before one is peeked.
+   */
+  readonly peeked: string | undefined;
+  readonly onPeek: (issueId: string | undefined) => void;
 }
 
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
@@ -1050,6 +1060,8 @@ export function useTasksTab(input: {
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
   /** What stands in the task's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
   // The chat profile opens Chat at launch over its fixture.
+  // The issue the Issues list last peeked, held for the window's life so the panel's toggle shows it again.
+  const [issuePeek, setIssuePeek] = useState<string | undefined>(undefined);
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
       ? { kind: STAND_IN.CHAT, place: FOR_YOU }
@@ -1423,23 +1435,39 @@ export function useTasksTab(input: {
     () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
     [inboxAgent],
   );
+  // The Issues list's panel is its peek's, which the list draws itself, beside no task.
+  const issuesStand = standIn?.kind === STAND_IN.ISSUES;
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
-    inboxView !== undefined
-      ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
-      : pageAgents === undefined
-        ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
-        : { id: pageAgent, holds: NO_HOLDS },
-    inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
-    inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
-    inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
-    inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : NO_IDS,
+    issuesStand
+      ? ISSUES_PANEL
+      : inboxView !== undefined
+        ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
+        : pageAgents === undefined
+          ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
+          : { id: pageAgent, holds: NO_HOLDS },
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxAgents
+        : (pageAgents ?? mainTabs.openAgents),
+    !issuesStand && inboxView === undefined && pageAgents === undefined ? workers : NO_IDS,
+    !issuesStand && inboxView === undefined && pageAgents === undefined ? files : NO_IDS,
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxPageIds
+        : pageAgents === undefined
+          ? pages
+          : NO_IDS,
     // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by.
-    inboxView !== undefined
-      ? inboxAgent === undefined
-        ? undefined
-        : inboxAgents
-      : (pageAgents ?? agents.agentIds),
+    issuesStand
+      ? NO_IDS
+      : inboxView !== undefined
+        ? inboxAgent === undefined
+          ? undefined
+          : inboxAgents
+        : (pageAgents ?? agents.agentIds),
   );
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
@@ -2997,6 +3025,8 @@ export function useTasksTab(input: {
         setStandIn({ kind: STAND_IN.ISSUES, place });
       }),
       onClose: guard(() => setStandIn(undefined)),
+      peeked: issuePeek,
+      onPeek: setIssuePeek,
     },
     callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,

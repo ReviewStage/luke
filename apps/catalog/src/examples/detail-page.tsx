@@ -1,6 +1,7 @@
 import {
   BUTTON_VARIANT,
   Button,
+  DETAIL_PAGE_INSET,
   DetailPage,
   EllipsisIcon,
   GAP,
@@ -8,6 +9,8 @@ import {
   PAGE_FRAME,
   PencilIcon,
   Stack,
+  TABS_INSET,
+  Tabs,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -21,7 +24,8 @@ import { CatalogSection } from "../section";
  * main content, each scrolling on its own; the same page with no secondary
  * column; and the page in a phone's width, where the secondary column
  * follows the main content in the one scroll; and the page under a window's
- * toolbar, which holds its title and acts. Every name is made up.
+ * toolbar, which holds its title and acts; and the page in a side panel
+ * under its tabs, its words at the tabs' column inset. Every name is made up.
  */
 
 const SECTIONS = [
@@ -138,6 +142,34 @@ function TaskUnderToolbar(): React.JSX.Element {
   );
 }
 
+/** The tabs a side panel's page stands under, as a pull request's do. */
+const PANEL_TABS = [
+  { value: "conversation", label: "Conversation" },
+  { value: "checks", label: "Checks" },
+] as const;
+
+function TaskInPanel(): React.JSX.Element {
+  return (
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Conversation"
+      inset={DETAIL_PAGE_INSET.READING}
+      toolbar={
+        <Tabs
+          label="Task"
+          tabs={PANEL_TABS}
+          value="conversation"
+          onChange={() => undefined}
+          ids={(value) => ({ tab: `panel-${value}-tab`, panel: `panel-${value}-panel` })}
+          inset={TABS_INSET.READING}
+        />
+      }
+    >
+      <Sections />
+    </DetailPage>
+  );
+}
+
 function DetailPages(): React.JSX.Element {
   return (
     <>
@@ -162,6 +194,11 @@ function DetailPages(): React.JSX.Element {
       <CatalogSection id="detail-page-toolbar" title="Under the window's toolbar">
         <div className="catalog-screen catalog-screen-detail">
           <TaskUnderToolbar />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="detail-page-reading" title="In a side panel, at its tabs' inset">
+        <div className="catalog-screen catalog-screen-panel catalog-screen-detail">
+          <TaskInPanel />
         </div>
       </CatalogSection>
     </>

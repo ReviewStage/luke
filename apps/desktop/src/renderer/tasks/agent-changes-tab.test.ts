@@ -134,7 +134,6 @@ const control = codingAgentsControl({
         truncated: false,
         files,
         reviewers: [],
-        commitAuthors: [],
         comments: [],
       },
     }),
@@ -462,6 +461,18 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   assert.equal(lastDrawn().files.length, 3);
 });
 
+test("with the file stood on filtered out, the bar names the file the list scrolls to", async () => {
+  files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
+  await drawTab({ treeOpen: true });
+  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.ok(header("src/a.ts").hasAttribute("data-standing"));
+
+  typeSearch("lib");
+  await flush();
+  act(() => lastDrawn().onTopFile("lib/c.ts"));
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /c\.ts/u);
+});
+
 test("a file the filter leaves out, chosen in a tree of every changed file, clears the filter and is scrolled to", async () => {
   files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
   await drawTab({ treeOpen: true });
@@ -509,6 +520,70 @@ test("J and K step through the files inside the view, ; and ⇧; fold, and Escap
   assert.ok(press(box, { key: "Escape" }), "Escape lets go of the file stood on");
   assert.equal(header("b.ts").hasAttribute("data-standing"), false);
   assert.equal(press(box, { key: "Escape" }), false, "with none stood on, Escape is the window's");
+});
+
+test("a J press draws again only the files it stood on and off, and leaves every other file's header and notes as they were drawn", async () => {
+  const paths = ["a.ts", "b.ts", "c.ts", "d.ts"];
+  files = paths.map((path) => changed(path));
+  // Each file holds a thread, so a file drawn anew is counted by the thread drawn on it.
+  const drawnFor: string[] = [];
+  const threads: ChangesThreads = {
+    list: paths.map((path) => ({ ...seatsThread(2, path), path })),
+    draw: (thread) => {
+      drawnFor.push(thread.path);
+      return createElement("p", null, thread.path);
+    },
+  };
+  await drawTab({ threads });
+  const box = listBox();
+  press(box, { key: "j" });
+  await flush();
+  drawnFor.length = 0;
+
+  press(box, { key: "j" });
+  await flush();
+  assert.deepEqual(
+    [...new Set(drawnFor)].sort(),
+    ["a.ts", "b.ts"],
+    "only the file stood off and the file stood on",
+  );
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.equal(header("a.ts").hasAttribute("data-standing"), false);
+});
+
+test("a file's header mounts its hints as the keyboard comes to its fold, which keeps the focus", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  assert.equal(
+    fold.getAttribute("aria-keyshortcuts"),
+    ";",
+    "the fold names its key before its hint is mounted",
+  );
+  document.documentElement.dataset.keyboard = "true";
+  try {
+    act(() => fold.focus());
+    await flush();
+    const focused = document.activeElement;
+    assert.ok(header("a.ts").contains(focused), "the focus stays on the header's fold");
+    assert.equal(focused?.getAttribute("aria-label"), "Collapse file");
+  } finally {
+    delete document.documentElement.dataset.keyboard;
+  }
+});
+
+test("the pointer's first arrival on a header's letter hangs its hint, though the hint is mounted by that arrival", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const letter = () =>
+    header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
+  act(() => letter().dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  await flush();
+  const hint = letter().getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the letter is described by its hint");
+  assert.equal(document.getElementById(hint)?.textContent, "Modified");
 });
 
 test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {

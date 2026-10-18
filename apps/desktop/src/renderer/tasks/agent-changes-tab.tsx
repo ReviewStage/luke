@@ -77,7 +77,7 @@ import { FileViewBar, usePaneRoom } from "./file-view";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
-import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
+import { OpenedBy, ReviewersLine } from "./pull-request-people";
 import { PullRequestWriteNote } from "./pull-request-writes";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
 import { useViewedFiles } from "./viewed-files";
@@ -95,12 +95,11 @@ import { useViewedFiles } from "./viewed-files";
  * panel keys the tab by its agent, so one agent's answer is never drawn in
  * another's tab.
  *
- * Under its bar the view says who the pull request names, who opened it,
- * its reviewers, and who authored its commits (`pull-request-people.tsx`);
- * what the reviews said stands in the tab's overview, whole, in its
- * conversation.
+ * Who opened the pull request and its reviewers stand in the Pull request
+ * tab's header above it, and what the reviews said in its overview's
+ * conversation, so the view leads with its files.
  *
- * Otherwise the tab is a File view (`file-view.tsx`) over its files' diffs,
+ * The tab is a File view (`file-view.tsx`) over its files' diffs,
  * every file in one list as stage-cli draws them (`diff-list.tsx`), each
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
@@ -303,15 +302,15 @@ const LEAD_KEY = "lead";
 /** A file's review threads that stand above its lines, as one list. */
 function AboveThreads({
   above,
-  threads,
+  draw,
 }: {
   above: readonly { readonly key: string; readonly thread: ReviewThread }[];
-  threads: ChangesThreads | undefined;
+  draw: ChangesThreads["draw"] | undefined;
 }): React.JSX.Element {
   return (
     <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
       {above.map((each) => (
-        <li key={each.key}>{threads?.draw(each.thread, THREAD_PLACE.ABOVE)}</li>
+        <li key={each.key}>{draw?.(each.thread, THREAD_PLACE.ABOVE)}</li>
       ))}
     </ol>
   );
@@ -331,7 +330,9 @@ function AboveThreads({
 function entryOf(
   file: CodingAgentChangedFile,
   list: ChangesList,
-  threads: ChangesThreads | undefined,
+  /** The review threads on this file, and the door that draws one. */
+  threads: readonly ReviewThread[],
+  draw: ChangesThreads["draw"] | undefined,
   images: ImageSides | undefined,
   comment: DiffNote | undefined,
 ): DiffListEntry {
@@ -342,12 +343,12 @@ function entryOf(
   const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
   // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
-  const { placed, above } = threadsOn(threads?.list ?? [], drawnAs);
+  const { placed, above } = threadsOn(threads, drawnAs);
   const notes: DiffNote[] = placed.map((each) => ({
     key: each.key,
     side: each.side,
     line: each.line,
-    content: threads?.draw(each.thread, THREAD_PLACE.ON_LINE),
+    content: draw?.(each.thread, THREAD_PLACE.ON_LINE),
   }));
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
   const notice = fileNotice(file);
@@ -365,7 +366,7 @@ function entryOf(
       content: (
         <>
           {lead}
-          {above.length === 0 ? null : <AboveThreads above={above} threads={threads} />}
+          {above.length === 0 ? null : <AboveThreads above={above} draw={draw} />}
         </>
       ),
     });
@@ -377,7 +378,7 @@ function entryOf(
       key: ABOVE_KEY[side],
       side,
       line: FILE_NOTE_LINE,
-      content: <AboveThreads above={unplaced} threads={threads} />,
+      content: <AboveThreads above={unplaced} draw={draw} />,
     });
   }
   if (comment !== undefined) notes.push(comment);
@@ -408,6 +409,70 @@ function entryOf(
     ),
     notes,
   };
+}
+
+/** What a file's entry is drawn from, in a fixed order: the entry stands while each is the same. */
+function entryInputs(
+  file: CodingAgentChangedFile,
+  list: ChangesList,
+  threads: readonly ReviewThread[],
+  draw: ChangesThreads["draw"] | undefined,
+  images: ImageSides | undefined,
+  comment: DiffNote | undefined,
+): readonly unknown[] {
+  const path = file.path;
+  return [
+    file,
+    list.collapsed(path),
+    list.standing === path,
+    list.viewed?.(path),
+    list.asSource(path),
+    list.toggle,
+    list.stand,
+    list.toggleSource,
+    list.markViewed,
+    images,
+    comment,
+    // Note that the door drawing a thread matters only to a file a thread is on.
+    threads.length === 0 ? undefined : draw,
+    ...threads,
+  ];
+}
+
+/** Whether two lists of inputs are the same, each by identity. */
+function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((each, at) => Object.is(each, b[at]));
+}
+
+/**
+ * Each kept file's entry, the one drawn last kept while nothing it is drawn
+ * from changed, so a draw of the view for a key or a scroll builds and
+ * reconciles only the files that changed: the file stood on and the one
+ * before it, not every file of the pull request. A file's header and notes
+ * are then the very elements drawn last, which React leaves as they stand.
+ */
+function useEntries(
+  list: ChangesList,
+  threads: ChangesThreads | undefined,
+  images: ImageSides | undefined,
+  commenting: ListCommenting | undefined,
+): readonly DiffListEntry[] {
+  const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
+  const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
+  const entries = list.kept.map((file) => {
+    const own = threads?.list.filter((thread) => thread.path === file.path) ?? [];
+    const comment = commenting?.note?.path === file.path ? commenting.note.content : undefined;
+    const inputs = entryInputs(file, list, own, threads?.draw, images, comment);
+    const was = kept.current.get(file.path);
+    const entry =
+      was !== undefined && sameInputs(was.inputs, inputs)
+        ? was.entry
+        : entryOf(file, list, own, threads?.draw, images, comment);
+    next.set(file.path, { inputs, entry });
+    return entry;
+  });
+  kept.current = next;
+  return entries;
 }
 
 /** The key a comment being written stands under its lines by; a review thread's note is keyed by its page, which this never is. */
@@ -586,6 +651,7 @@ function FilesList({
   boxRef: (element: HTMLDivElement | null) => void;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
+  const entries = useEntries(list, threads, images, commenting);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -601,15 +667,7 @@ function FilesList({
         <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
       ) : (
         <PierreDiffList
-          entries={list.kept.map((file) =>
-            entryOf(
-              file,
-              list,
-              threads,
-              images,
-              commenting?.note?.path === file.path ? commenting.note.content : undefined,
-            ),
-          )}
+          entries={entries}
           look={look}
           door={list.door}
           onTopFile={list.onTopFile}
@@ -738,6 +796,12 @@ export function AgentChangesTab({
     pullRequest === null ? undefined : reads.current.count,
   );
   const list = useChangesList(changed.files, viewedFiles.marks);
+  const answered = reads.current.count;
+  // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
+  const images = useMemo(
+    () => (pullRequest === null ? undefined : imagesOf(agentId, pullRequest, answered)),
+    [agentId, pullRequest, answered],
+  );
   const { closeOver } = room;
   const { go } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
@@ -774,14 +838,8 @@ export function AgentChangesTab({
   if (pullRequest === null) {
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
   }
-  // A pull request that changes no file still names its people, over the line saying so.
   if (shownFile === undefined) {
-    return (
-      <div className="file-view ph-no-capture">
-        <PullRequestPeople people={pullRequest} />
-        <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
-      </div>
-    );
+    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   const count = pullRequest.files.length;
   const total = linesChanged(pullRequest.files);
@@ -830,7 +888,6 @@ export function AgentChangesTab({
         tree={room.toggles}
       />
       <PullRequestWriteNote writes={viewedFiles} />
-      <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>
@@ -840,7 +897,7 @@ export function AgentChangesTab({
         <FilesList
           list={list}
           threads={threads}
-          images={imagesOf(agentId, pullRequest, reads.current.count)}
+          images={images}
           commenting={commenting}
           filterShown={room.drawn}
           roomy={roomy}

@@ -158,8 +158,6 @@ body,
 }
 
 .desktop-shell {
-  /* What a pinned header paints behind itself is the window's ground here. */
-  --surface-fill: var(--luke-color-ground);
   display: grid;
   height: 100%;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -1478,8 +1476,8 @@ ul.actor-stack {
 }
 
 .section-icon-choice svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .section-icon-choice:hover {
@@ -1802,11 +1800,14 @@ ul.actor-stack {
 /* Buttons --------------------------------------------------------------------- */
 
 /* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
-   glyph size. */
-.icon-button-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
+   glyph size; in the `base` layer, so a shared component holding one sizes
+   it as its own. */
+@layer base {
+  .icon-button-glyph {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    flex: 0 0 auto;
+  }
 }
 
 /* The file tree's Retry, beside the words saying why it is empty
@@ -1915,10 +1916,8 @@ ul.actor-stack {
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
    looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
-   from; its presses claimed back from the toolbar's drag strip it sits
-   over; and a repository's picture in the glyph slot, at a menu glyph's
-   size, because its own rule here would otherwise win over the shared
-   layer. */
+   from, and its presses claimed back from the toolbar's drag strip it sits
+   over. */
 .luke-menu {
   z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
@@ -1926,12 +1925,6 @@ ul.actor-stack {
 
 .luke-menu[data-layer="dialog"] {
   z-index: calc(var(--luke-z-dialog) + 1);
-}
-
-.luke-menu-item-glyph .repository-picture {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -1991,7 +1984,7 @@ ul.actor-stack {
 
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. */
-:is(.automations-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
+.inbox-tasks-scroll:has(.luke-empty-state) {
   display: flex;
   flex-direction: column;
 }
@@ -2285,7 +2278,7 @@ ul.actor-stack {
 
 .desktop-document .plan-body {
   color: var(--luke-color-text-body);
-  font-size: 15px;
+  font-size: var(--luke-type-reading-size);
   line-height: var(--luke-type-reading-leading);
 }
 
@@ -2546,6 +2539,26 @@ ul.actor-stack {
 
 .repository-chip {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
+}
+
+/* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
+   repository chip in the card's foot and hangs its menu from its leading
+   edge, placed as a Settings picker's is, wide enough for an issue's title
+   with its key and state after it. */
+.linear-issue-chip {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
+  position: relative;
+  min-width: 0;
+}
+
+.linear-issue-chip .searchable-menu {
+  width: 420px;
+  max-width: var(--settings-picker-width-max, 420px);
+}
+
+.linear-issue-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--luke-space-4));
 }
 
 /* A harness's mark keeps its box in a row however tight the row is, drawn
@@ -3165,6 +3178,57 @@ ul.actor-stack {
   height: 12px;
 }
 
+/* The pictures and pages an Inbox item carries, drawn small under its row's
+   preview where the view's menu shows them (`inbox-row-media.tsx`): each a
+   tile of a page's shape, a picture filling it and a page laid out four
+   times its width and scaled down to it, as a page's card draws its
+   preview; a quiet ground holds its place until it lands. */
+.inbox-row-media-tile {
+  position: relative;
+  display: inline-flex;
+  height: var(--inbox-row-media-height);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+
+  --inbox-row-media-height: 48px;
+}
+
+.inbox-row-media-tile[data-missing] svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.inbox-row-media-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inbox-row-media-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.inbox-row-media-tile[data-loaded="true"] .inbox-row-media-frame {
+  opacity: 1;
+}
+
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title at a document heading's size,
    then a muted line of its agent, when it asked, and where it stands, over a
@@ -3222,6 +3286,7 @@ ul.actor-stack {
    name and when on one line and its words under it, and a line down from
    the face to the next comment's, as an issue's timeline joins them. */
 .inbox-thread {
+  --inbox-face: 20px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3230,7 +3295,6 @@ ul.actor-stack {
 }
 
 .inbox-comment {
-  --inbox-face: 20px;
   position: relative;
   display: grid;
   grid-template-columns: var(--inbox-face) minmax(0, 1fr);
@@ -3258,7 +3322,7 @@ ul.actor-stack {
    down from the faces running on past it. */
 .inbox-thread-earlier {
   position: relative;
-  padding: 0 0 var(--luke-space-20) calc(20px + var(--luke-space-12));
+  padding: 0 0 var(--luke-space-20) calc(var(--inbox-face) + var(--luke-space-12));
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -3418,118 +3482,6 @@ ul.actor-stack {
 
 .inbox-field-composer .agent-composer-input {
   padding: var(--luke-space-6) var(--luke-control-inset);
-}
-
-/* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
-   ticked in the complete green, and under a hairline a pill saying it could
-   not be done, filled in the danger tint once picked. Each pick wears its
-   number at its right, as a choice's options do. */
-.inbox-todo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-}
-
-.inbox-todo-step {
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  gap: var(--luke-space-12);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-weight: var(--luke-weight-medium);
-  text-align: left;
-}
-
-.inbox-todo-words {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.inbox-todo-number {
-  flex: none;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-regular);
-}
-
-.inbox-todo-box {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  box-sizing: border-box;
-  width: var(--luke-space-16);
-  height: var(--luke-space-16);
-  margin-top: calc(
-    (1lh - var(--luke-space-16)) /
-    2
-  ); /* off-scale: centres the box on the first line */
-  border: 1.5px solid var(--luke-color-text-subtle); /* off-scale: a checkbox's ring, as a choice's is */
-  border-radius: var(--luke-space-4);
-}
-
-.inbox-todo-step[aria-checked="true"] > .inbox-todo-box {
-  border-color: var(--luke-color-complete);
-  background: var(--luke-color-complete);
-}
-
-.inbox-todo-step[aria-checked="true"] > .inbox-todo-box::after {
-  width: var(--luke-space-8);
-  height: var(--luke-space-4);
-  margin-top: -2px; /* off-scale: lifts the tick to the box's centre */
-  border-bottom: 2px solid var(--luke-color-ground);
-  border-left: 2px solid var(--luke-color-ground);
-  transform: rotate(-45deg);
-  content: "";
-}
-
-.inbox-todo-acts {
-  display: flex;
-  padding-top: var(--luke-space-8);
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.inbox-todo-pill {
-  display: inline-flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-}
-
-.inbox-todo-pill svg {
-  display: none;
-  width: 12px;
-  height: 12px;
-}
-
-.inbox-todo-pill[aria-checked="true"] {
-  border-color: var(--luke-color-danger);
-  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
-  color: var(--luke-color-danger-text);
-}
-
-.inbox-todo-pill[aria-checked="true"] svg {
-  display: block;
-}
-
-.inbox-todo-step:disabled,
-.inbox-todo-pill:disabled {
-  opacity: 0.4;
 }
 
 /* A settled form's values, a field a line in the form's order: its name in
@@ -3933,8 +3885,7 @@ ul.actor-stack {
 .factory-world-pipeline,
 .factory-world-home,
 .factory-world-label,
-.factory-world-card,
-.factory-world-scrubber {
+.factory-world-card {
   position: absolute;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
@@ -4129,49 +4080,6 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-space-6);
-}
-
-/* The scrubber stands at the foot, its track the window the snapshot looks
-   back on, each merge a tick in the shipped colour. */
-.factory-world-scrubber {
-  bottom: var(--luke-space-12);
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-4) var(--luke-space-12);
-  transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
-}
-
-.factory-world-track {
-  position: relative;
-  width: min(520px, 40vw);
-  height: 28px;
-}
-
-.factory-world-ticks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.factory-world-tick {
-  position: absolute;
-  top: 4px;
-  left: calc(var(--at) * 100%);
-  width: 1px;
-  height: 8px;
-  background: var(--world-shipped);
-}
-
-.factory-world-track > input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  accent-color: var(--luke-color-accent);
 }
 
 /* Factory campus ------------------------------------------------------------ */
@@ -4460,9 +4368,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Automations ---------------------------------------------------------------- */
 
-/* A window-wide place beside the sidebar, as Factory is: its toolbar, then
-   each owner's automations in a Settings card, at the measure a plan is read
-   at and centred in the room beside the sidebar, as a plan is. */
+/* A window-wide place beside the sidebar, as Factory is: its toolbar over
+   its page. The list is a `CollectionPage` of each owner's automations in a
+   Settings card, and an automation's page its toolbar over its setup (a
+   `DetailPage`) and its Runs panel beside it. */
 .automations-view {
   display: flex;
   min-width: 0;
@@ -4471,34 +4380,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.automations-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
-}
-
-.automation-group,
-.automations-skeleton {
-  max-width: var(--luke-page-measure);
-  margin-inline: auto;
-}
-
 .automation-group + .automation-group {
   margin-top: var(--luke-space-24);
 }
 
-/* The suggested automations, at the list's measure, a group's gap below it,
-   their heading a short step above the cards and inset a hair, as a
-   settings section's is. */
+/* The suggested automations, a group's gap below the list, their heading a
+   short step above the cards and inset a hair, as a settings section's is. */
 .automation-suggestions {
   display: flex;
   width: 100%;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
   gap: var(--luke-space-8);
-  margin-inline: auto;
 }
 
 .automation-suggestions-head,
@@ -4736,9 +4628,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .automation-editor {
   display: flex;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
-  margin-inline: auto;
   gap: var(--luke-space-12);
 }
 
@@ -4800,18 +4690,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
 }
 
-/* An automation's page: its setup at the measure a plan is read at, centred
-   in the room between the sidebar and its runs, then its runs in a panel of
-   their own on the right, each scrolling by itself. */
+/* An automation's page: its setup, a `DetailPage` in the room between the
+   sidebar and its runs, then its runs in a panel of their own on the right,
+   each scrolling by itself. */
 .automation-editor-layout {
   position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
-}
-
-.automation-editor-layout > .automations-scroll {
-  min-width: 0;
 }
 
 /* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
@@ -6516,17 +6402,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* Every card the window hangs in a pill's place is drawn from `@luke/ui`'s
-   hover card parts (hover-card.css); what is the window's own is the size a
-   state glyph takes on its head and on the line under its name. */
-.luke-hover-card-glyph {
-  --state-glyph-size: 14px;
-}
-
-.luke-hover-card-sub {
-  --state-glyph-size: 12px;
-}
-
 /* A card's corner leading with a pull request's mark sets it inline, so the
    corner keeps the head's baseline. */
 .card-corner-mark {
@@ -6599,8 +6474,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.tab-button > .luke-inline-edit {
+/* The field stands at a name's width whatever the label was, its own
+   width the place's to say (`@luke/ui`'s InlineEdit). */
+.tab-rename {
+  display: grid;
   width: 24ch;
+  min-width: 0;
 }
 
 /* The ×, a row's compact mark, stands at the pill's end, out of the
@@ -6706,7 +6585,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    way down as a command palette stands, holding the searchable menu's own
    search row and rows, the filters under the field and the keys' hints at
    its foot. The highlight is cmdk's `data-selected`, which the arrows and
-   the pointer both move, so a hover draws nothing of its own. */
+   the pointer both move, so a hover draws nothing of its own. The results
+   are `@luke/ui`'s `ComboboxListBox`, filling the card between the filters
+   and the foot and scrolling inside itself, so nothing here scrolls. */
 .command-palette-backdrop {
   position: fixed;
   z-index: var(--luke-z-dialog);
@@ -6794,19 +6675,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--luke-space-6);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.command-palette-list:focus-visible {
-  outline: none; /* no ring: the highlighted row marks it */
 }
 
 /* The keys' hints along the card's foot, each chord a step louder than the
@@ -6944,11 +6812,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The home page (`desktop-home.tsx`): one column at a reading measure, a
-   little above the window's middle, its rows the sidebar's own, each with
-   its context, the plan or the repository, in the faint ink between its name
-   and its time. The column is the scroller, so a long Recent never pushes
-   the greeting off a short window for good. */
+/* The home page (`desktop-home.tsx`), a `DetailPage`: its sections a
+   little apart, their rows the Inbox's and Recent's own, each with its
+   context, the plan or the repository, in the faint ink between its name
+   and its time. */
 .home {
   display: flex;
   min-height: 0;
@@ -6956,28 +6823,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.home-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
-}
-
-.home-column {
-  display: flex;
-  width: min(600px, 100%);
-  flex-direction: column;
-  gap: var(--luke-space-32);
-  margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
-}
-
-.home-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-16);
-  padding: 0 var(--row-inset);
+/* The box the arrow keys find Home's rows in lays nothing out, so the page
+   fills the room as it would alone. */
+.home-rows {
+  display: contents;
 }
 
 .home-section {
@@ -6986,20 +6835,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-4);
 }
 
+.home-section + .home-section {
+  margin-top: var(--luke-space-32);
+}
+
 .home-section-title {
   display: flex;
   align-items: baseline;
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
 
-/* A section's note, nothing waiting or a read refused, on its rows' inset. */
+/* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
-  margin: var(--luke-space-4) var(--row-inset);
+  margin: var(--luke-space-4) 0;
 }
 
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
@@ -7090,8 +6942,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .home-row-picture svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .home-row-picture .repository-picture {
@@ -7099,12 +6951,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: 16px;
 }
 
-/* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. It stands
-   that column under its toolbar, not Home's way down. */
-.person-column {
-  margin-top: 0;
-  gap: var(--luke-space-24);
+/* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
+   Home's sections, headed by their face at the page's size beside their
+   name and who they are here, and each block a section's gap under the
+   head. Show all stands close under the section it lists in full. */
+.person-top ~ * {
+  margin-top: var(--luke-space-24);
+}
+
+.person-top ~ .person-section-foot {
+  margin-top: var(--luke-space-4);
 }
 
 .person-head {
@@ -7112,7 +6968,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-12);
-  padding: 0 var(--row-inset);
 }
 
 /* Note that a long name or email wraps anywhere rather than run past the
@@ -7139,13 +6994,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   align-items: baseline;
   gap: var(--luke-space-6);
   margin-bottom: var(--luke-space-2);
-  padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
 }
 
 /* The way to the rest of their tasks, standing under the section's rows. */
 .person-section-foot {
-  margin: calc(-1 * var(--luke-space-20)) 0 0;
+  margin-bottom: 0;
 }
 
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
@@ -7471,12 +7325,6 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   from {
     transform: translateY(var(--luke-space-12));
   }
-}
-
-/* A card's rows (`@luke/ui`'s HoverCardRow) draw an agent's mark at a menu
-   glyph's size, as its tab does. */
-.luke-hover-card-row-glyph {
-  --state-glyph-size: var(--luke-menu-glyph);
 }
 
 /* A server's line at a card's head (`server-card.tsx`), set as a card's

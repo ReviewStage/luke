@@ -99,6 +99,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -391,6 +392,11 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   const completed = yield* hostedStoreOrUnavailable(
     seams.completeSignIn(row.userId, row.connectionName, state, accountName),
   );
+  if (completed) {
+    yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_CREATE, row.userId, {
+      provider: row.provider,
+    });
+  }
   return { completed, ...(accountName !== undefined ? { accountName } : undefined) };
 });
 
@@ -953,7 +959,12 @@ const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectE
     const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
     const row = rows.find((each) => each.connectionName === connectionName);
     if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
-      if (row !== undefined) yield* revokeIntegrationGrant(row);
+      if (row !== undefined) {
+        yield* revokeIntegrationGrant(row);
+        yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_DELETE, userId, {
+          provider: row.provider,
+        });
+      }
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
         status: INTEGRATION_STATUS.DISCONNECTED,
       });
@@ -1064,6 +1075,11 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   const completed = yield* hostedStoreOrUnavailable(
     seams.completeSignIn(row.userId, row.connectionName, state, issued.success.accountName),
   );
+  if (completed) {
+    yield* recordServerEvent(SERVER_EVENT.INTEGRATION_CONNECTION_CREATE, row.userId, {
+      provider: row.provider,
+    });
+  }
   // A Disconnect pressed while the browser was away, or a sign-in begun again, wins: this one completes nothing.
   return landed(
     completed ? INTEGRATION_LANDING_STATUS.CONNECTED : INTEGRATION_LANDING_STATUS.NOT_COMPLETED,

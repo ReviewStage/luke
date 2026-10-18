@@ -24,7 +24,19 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatNumber, formatTrendMove, trendTone } from "@luke/ui/admin-format";
+import {
+  formatNumber,
+  formatTrendMove,
+  TREND_DIRECTION,
+  trendDirection,
+} from "@luke/ui/admin-format";
+
+/** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
+const TREND_TONE = {
+  [TREND_DIRECTION.UP]: "text-complete",
+  [TREND_DIRECTION.DOWN]: "text-attention",
+  [TREND_DIRECTION.FLAT]: "text-muted-foreground",
+} as const;
 
 /** The room an empty window's line stands in, about a short plot's height. */
 const CHART_EMPTY = "py-6 text-center";
@@ -45,7 +57,7 @@ const SKELETON_LEGEND_WIDTH = "60%";
 export function ChartTrend({ trend }: { trend: AdminTrend }): React.JSX.Element {
   return (
     <>
-      <span className={`font-medium tabular-nums ${trendTone(trend)}`}>
+      <span className={`font-medium tabular-nums ${TREND_TONE[trendDirection(trend)]}`}>
         {formatTrendMove(trend)}
       </span>{" "}
       {formatNumber(trend.recent)} in the last {trend.days} days, against{" "}

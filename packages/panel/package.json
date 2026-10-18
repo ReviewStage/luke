@@ -19,7 +19,6 @@
     "./automation-directory": "./src/automation-directory.js",
     "./call/use-window-focused": "./src/call/use-window-focused.js",
     "./desktop/automation-words": "./src/desktop/automation-words.js",
-    "./desktop/automations-skeleton": "./src/desktop/automations-skeleton.js",
     "./desktop/column-dock": "./src/desktop/column-dock.js",
     "./desktop/hover-pane": "./src/desktop/hover-pane.js",
     "./desktop/new-workspace-dialog": "./src/desktop/new-workspace-dialog.js",

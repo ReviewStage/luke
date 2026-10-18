@@ -30,7 +30,15 @@ import {
   type Reaction,
 } from "@luke/features/pull-request-write-wire";
 import { useMemberDirectory } from "@luke/panel/member-directory";
-import { AnchoredPopover, IconButton, POPOVER_ALIGN, POPOVER_PANEL_LOOK } from "@luke/ui";
+import {
+  AnchoredPopover,
+  CHIP_LOOK,
+  CHIP_SIZE,
+  Chip,
+  IconButton,
+  POPOVER_ALIGN,
+  POPOVER_PANEL_LOOK,
+} from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
@@ -180,18 +188,17 @@ function ReactionPill({
             {inner}
           </span>
         ) : (
-          <button
-            type="button"
-            className="pull-request-reaction"
-            data-mine={mine}
+          <Chip
+            look={CHIP_LOOK.FILTER}
+            size={CHIP_SIZE.COMPACT}
             aria-label={words}
             aria-pressed={mine}
-            aria-busy={press.busy}
+            busy={press.busy}
             disabled={press.waiting}
             onClick={press.onPress}
           >
             {inner}
-          </button>
+          </Chip>
         )}
       </Tooltip>
     </li>

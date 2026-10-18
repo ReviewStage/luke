@@ -5,7 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { createTask } from "@luke/database/models/task-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
@@ -483,6 +483,44 @@ it.layer(getTestDB())("the plan routes", (it) => {
       assert.equal(documentOf(planned).body, DEFAULT_PLAN_TEMPLATE);
       assert.deepEqual(documentOf(unplanned), { body: "", assumptions: [] });
     }),
+  );
+
+  it.effect(
+    "a start keeps its brief, one at its bound with every character escaped among them, and one past its bound is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const briefOf = (answer: Answer) =>
+          Effect.map(
+            readTask(owner, startedId(answer)),
+            (read) => Option.getOrUndefined(read)?.brief,
+          );
+        // Note that a control character is the widest a character escapes to in JSON, six bytes.
+        const widest = "\u0001".repeat(TASK_BOUNDS.MAX_BRIEF_CHARS);
+
+        const briefed = yield* ask(
+          request(TASKS, owner, {
+            method: "POST",
+            body: { ...RELAY, brief: "Let any member invite a teammate." },
+          }),
+        );
+        const atBound = yield* ask(
+          request(TASKS, owner, { method: "POST", body: { ...LEDGER, brief: widest } }),
+        );
+        const overlong = yield* ask(
+          request(TASKS, owner, {
+            method: "POST",
+            body: { ...LEDGER, brief: "x".repeat(TASK_BOUNDS.MAX_BRIEF_CHARS + 1) },
+          }),
+        );
+
+        assert.equal(yield* briefOf(briefed), "Let any member invite a teammate.");
+        assert.equal(yield* briefOf(atBound), widest);
+        assert.deepEqual(
+          overlong,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
   );
 
   it.effect("a start that names no workspace lands in the account's personal one", () =>

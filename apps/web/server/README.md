@@ -722,6 +722,18 @@ no address resolves to the data centre's own location and the privacy claim in
 `PRIVACY.md` becomes false; the project's IP-capture setting should be set to
 discard as well, so the guarantee does not rest on one property in one file.
 
+The service counts its own half under the same key: the core loop the desktop
+cannot see (a task, workspace, issue, or automation made, a coding agent
+started, an agent's pull request opened, an Inbox answer, a member's Chat post,
+an integration connected or disconnected), recorded where each is committed
+through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
+Its vocabulary is typed per event and holds only fixed words, booleans, and
+catalog ids, and each event carries the account's id as `distinct_id`, so it
+joins the desktop's person and is erased with it. The `ProductAnalytics`
+service is read optionally, so a runtime or test without it records nothing,
+and a deployment without `POSTHOG_PROJECT_API_KEY` builds one that records
+nothing.
+
 The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
 is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never
@@ -760,7 +772,11 @@ names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
 uploads the function bundles' source maps when the build holds
 `SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
-the deployment's commit. Alert rules are set in Sentry, not here: a Slack
+the deployment's commit. The eve roots' builds do the same after `eve build`:
+each root's `nitro.config.ts` has Nitro write hidden maps when the build holds
+the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
+uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
+from the output. Alert rules are set in Sentry, not here: a Slack
 `#alerts` message on more than ten events in five minutes, and an email to
 the issue's owners on a high-priority issue.
 

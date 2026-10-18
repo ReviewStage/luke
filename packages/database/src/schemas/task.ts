@@ -67,6 +67,12 @@ export const task = pgTable(
      */
     issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
     /**
+     * The developer's own words about the task as they started it, which
+     * Luke is handed beside the plan to plan from; null for a task started
+     * with none. Kept as written, like the document.
+     */
+    brief: text("brief"),
+    /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
      * workspace's, so a pin one member made stood for every member. It stands

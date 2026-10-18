@@ -465,8 +465,8 @@ export function endLineOffersContinue(input: {
   return input.continued || !input.boxClosed;
 }
 
-/** Said beside Start when the model or effort the menu chose could not be kept as the default. */
-export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
+/** Said under an agent's box when the model or effort its chip chose could not be changed. */
+const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
 
 /** What a change of an agent's model that did not take says under its box. */
 export function chooseFailureNote(failure: CodingAgentCallFailure): string {

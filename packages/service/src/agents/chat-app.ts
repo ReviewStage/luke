@@ -41,6 +41,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -271,13 +272,19 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     post.blocks ??
     (post.text === undefined ? [] : [{ type: CHAT_BLOCK.MARKDOWN, text: post.text }]);
   const to = yield* placeOf(writer, post.to, post.replyTo);
-  const told = yield* postChat(yield* telling, {
+  const teller = yield* telling;
+  const told = yield* postChat(teller, {
     authorMemberId: writer.self.id,
     to,
     blocks,
     mentions: mentionsOf(blocks),
     clientKey: post.clientKey,
   });
+  if (!told.repeated) {
+    yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, teller.userId, {
+      is_reply: post.replyTo !== undefined,
+    });
+  }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     posted: messageOnWire(told.message),
     receipt: told.receipt,
@@ -325,6 +332,10 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[answered.failure]);
   }
   const { ask: now, reply: posted, taken } = answered.success;
+  // The answer's reply is a member's message in the ask's thread; one sent again under its key is not new.
+  if (taken && Option.isSome(posted) && message.value.answerKey !== asked.clientKey) {
+    yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, userId, { is_reply: true });
+  }
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* tellMessage(yield* telling, posted.value, []);
   }

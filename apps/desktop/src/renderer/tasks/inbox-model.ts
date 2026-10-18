@@ -6,6 +6,7 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -25,6 +26,8 @@ import {
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE, readLink } from "@luke/features/luke-link";
+import { linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
@@ -640,6 +643,77 @@ export function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
+/** What a row's media strip shows of an item: a picture by its attachment, or a page by its task and id. */
+export const INBOX_MEDIA = {
+  IMAGE: "image",
+  PAGE: "page",
+} as const;
+
+export type InboxMedia =
+  | {
+      readonly kind: typeof INBOX_MEDIA.IMAGE;
+      readonly attachmentId: string;
+    }
+  | {
+      readonly kind: typeof INBOX_MEDIA.PAGE;
+      readonly taskId: string;
+      readonly pageId: string;
+    };
+
+/** How many of an item's media its row shows at most, so a row stays a row. */
+const MAX_ROW_MEDIA = 4;
+
+/** The picture types a file on the thread may be drawn as, the ones an image block's attachment is kept as. */
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/**
+ * The media an item carries, as its row shows them, at most
+ * {@link MAX_ROW_MEDIA}: its image blocks and the pages it names, in the
+ * order its blocks hold them, a page named by a link block or by any link
+ * in its words, labelled, an `@` mention, or bare, each page once; then the pictures
+ * its answer carried, and the pages and pictures its thread's messages
+ * name and carry, oldest first. A file that is no picture is no media.
+ */
+export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
+  const found: InboxMedia[] = [];
+  const page = (target: string) => {
+    const place = readLink(target)?.place;
+    if (place?.kind !== LINK_PLACE.PAGE) return;
+    const known = found.some(
+      (each) =>
+        each.kind === INBOX_MEDIA.PAGE &&
+        each.taskId === place.planId &&
+        each.pageId === place.pageId,
+    );
+    if (!known) {
+      found.push({ kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId });
+    }
+  };
+  const pictures = (files: readonly { attachmentId: string; mediaType: string }[]) => {
+    for (const file of files) {
+      if (PICTURE_TYPES.has(file.mediaType)) {
+        found.push({ kind: INBOX_MEDIA.IMAGE, attachmentId: file.attachmentId });
+      }
+    }
+  };
+  for (const block of item.blocks) {
+    if (!knownBlock(block)) continue;
+    if (block.type === INBOX_BLOCK.IMAGE) {
+      found.push({ kind: INBOX_MEDIA.IMAGE, attachmentId: block.attachmentId });
+    } else if (block.type === INBOX_BLOCK.LINK) {
+      page(block.url);
+    } else if (block.type === INBOX_BLOCK.MARKDOWN) {
+      for (const link of linksIn(block.text)) page(link.target);
+    }
+  }
+  pictures(item.answerFiles ?? []);
+  for (const message of item.messages ?? []) {
+    for (const link of linksIn(message.text)) page(link.target);
+    pictures(message.files ?? []);
+  }
+  return found.slice(0, MAX_ROW_MEDIA);
+}
+
 /**
  * The last word in an item's thread, as its row's second line says it,
  * led by who said it: a message on the thread by its writer, "Agent" for
@@ -1144,38 +1218,6 @@ export function inboxCounts(
     [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
   };
-}
-
-/**
- * A read mark the window made that the reads may not hold yet: whether the
- * item now reads as unread, and when it last changed as it was marked.
- */
-export interface InboxReadMark {
-  readonly unread: boolean;
-  readonly updatedAt: number;
-}
-
-/**
- * The groups with the window's own read marks laid over what the reads
- * hold, so a dot flips the moment it is marked rather than when the
- * service's held read next answers. A mark stands only over the item as it
- * was marked: once the item changes again, a message landing on its thread
- * say, the reads' word on it stands, since that change may make it unread
- * again.
- */
-export function withReadMarks(
-  groups: readonly InboxGroup[],
-  marks: ReadonlyMap<string, InboxReadMark>,
-): readonly InboxGroup[] {
-  if (marks.size === 0) return groups;
-  return groups.map(({ holder, items }) => ({
-    holder,
-    items: items.map((item) => {
-      const mark = marks.get(item.id);
-      if (mark === undefined || mark.updatedAt !== item.updatedAt) return item;
-      return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
-    }),
-  }));
 }
 
 /** Whether any task's item is unread, listed or filtered out. */

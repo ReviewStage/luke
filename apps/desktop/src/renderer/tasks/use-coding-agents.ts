@@ -40,7 +40,6 @@ import {
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
-  MODEL_CHANGE_FAILED,
   RENAME_FAILED,
   SERVERS_FAILED,
   START_ARCHIVED,
@@ -80,9 +79,9 @@ const NO_KEYWORDS: readonly string[] = [];
  * first press made rather than a second one; a press of another choice is
  * another request with a key of its own. The models the menu offers and
  * the account's default are read when the menu asks, so the menu shows the
- * catalog as it stands and the default the last change wrote; a model or
- * effort picked in the Start menu is written as the account's default, which
- * is what the next Start runs on; one picked on an agent's chip is written
+ * catalog as it stands and the default as Settings last wrote it; a model or
+ * effort picked in the Start menu is what that button's next Start runs on,
+ * never the account's default; one picked on an agent's chip is written
  * on that agent alone, for its next step, and the agent the service answers
  * takes its place in the list, as does the agent a rename answers. A page
  * of an agent's transcript carries its title too, which is how the title
@@ -162,8 +161,6 @@ export interface CodingAgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
-  /** Keeps a choice as the account's default, which Start runs on; a write that did not take is said beside Start. */
-  writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
   /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
   /** Opens a draft agent on the open task, or answers the one it has, by its key. */
@@ -582,20 +579,6 @@ export function useCodingAgents(input: {
       ),
     [act],
   );
-
-  const writeDefault = (choice: ModelChoice): Promise<CodingAgentDefaultAnswer> => {
-    setNote(undefined);
-    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choiceRequest(choice))
-      .catch((): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
-      .then((answer) => {
-        if ("failure" in answer && taskId !== undefined)
-          setNote({
-            taskId,
-            note: { reason: FAILURE_REASON.OTHER, text: MODEL_CHANGE_FAILED },
-          });
-        return answer;
-      });
-  };
 
   /** One Start asked of the service on the task, held as under way until it answers. */
   const askStart = (
@@ -1189,7 +1172,6 @@ export function useCodingAgents(input: {
     models,
     readModels,
     readDefault,
-    writeDefault,
     onUnarchive: taskId !== undefined && archived ? input.onUnarchive : undefined,
     continueAgent:
       taskId !== undefined && repository !== null && !archived ? continueAgent : undefined,

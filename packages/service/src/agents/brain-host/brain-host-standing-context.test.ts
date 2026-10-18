@@ -159,6 +159,25 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
   assert.equal(other.includes("[linear issue"), false);
 });
 
+test("a task started with the developer's brief hands every turn the brief as they wrote it, beside the plan's name", async () => {
+  const brief =
+    'Let any member invite a teammate, not only admins. "Members" means anyone in the workspace.';
+  const userId = await database.createUser();
+  const task = await database.run(startTask(userId, { name: TASK_NAME, brief }));
+  const plain = await database.run(startTask(userId, { name: TASK_NAME }));
+  const targetOf = async (taskId: string) => ({
+    userId,
+    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, taskId)))
+      .conversationId,
+  });
+
+  const started = await standingContextOf(await targetOf(task.id));
+  const other = await standingContextOf(await targetOf(plain.id));
+
+  assert.ok(started.includes(`[the developer's brief for the task]\n${JSON.stringify(brief)}`));
+  assert.equal(other.includes("[the developer's brief"), false);
+});
+
 test("a plan started from one of the workspace's issues hands every turn the issue as it reads now, by its identifier and its link", async () => {
   const userId = await database.createUser();
   const plain = await database.run(startTask(userId, { name: TASK_NAME }));

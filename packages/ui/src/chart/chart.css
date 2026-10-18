@@ -1,0 +1,128 @@
+/* chart.css -- the chart's own frame around recharts' plot, and its tooltip's card.
+
+   Recharts is the engine and draws the plot; what it paints in its stock
+   greys (an axis tick, the grid, the hover cursor) is redrawn here in the
+   shared palette, and its focus outlines are dropped, because a chart is
+   read rather than tabbed through. Every value is a `--luke-*` token, so the
+   chart reads the same in whichever app mounts it. */
+
+@layer components {
+  .luke-chart {
+    display: flex;
+    justify-content: center;
+    aspect-ratio: 16 / 9;
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-chart .recharts-cartesian-axis-tick text {
+    fill: var(--luke-color-text-muted);
+  }
+
+  .luke-chart .recharts-cartesian-grid line[stroke="#ccc"] {
+    stroke: color-mix(in srgb, var(--luke-color-border) 50%, transparent);
+  }
+
+  .luke-chart .recharts-curve.recharts-tooltip-cursor,
+  .luke-chart .recharts-polar-grid [stroke="#ccc"],
+  .luke-chart .recharts-reference-line [stroke="#ccc"] {
+    stroke: var(--luke-color-border);
+  }
+
+  .luke-chart .recharts-dot[stroke="#fff"],
+  .luke-chart .recharts-sector[stroke="#fff"] {
+    stroke: transparent;
+  }
+
+  .luke-chart .recharts-radial-bar-background-sector,
+  .luke-chart .recharts-rectangle.recharts-tooltip-cursor {
+    fill: var(--luke-color-fill-hover);
+  }
+
+  .luke-chart .recharts-layer,
+  .luke-chart .recharts-sector,
+  .luke-chart .recharts-surface {
+    outline: none;
+  }
+
+  /* Note that forced colours keep an outline on what holds the keyboard's
+     focus, drawn transparent, because the system paints it in its own ink
+     there and it is the focus's only cue; on the rest it would ring every
+     layer at once. */
+  @media (forced-colors: active) {
+    .luke-chart .recharts-layer:focus-visible,
+    .luke-chart .recharts-sector:focus-visible,
+    .luke-chart .recharts-surface:focus-visible {
+      outline: var(--luke-focus-ring-width) solid transparent;
+      outline-offset: var(--luke-focus-ring-offset);
+    }
+  }
+
+  /* The tooltip floats over a chart that sits on a card, so it is drawn on
+     the overlay's ground, a step above the card in the dark, never the
+     page's, which would draw the one floating surface below what it covers. */
+  .luke-chart-tooltip {
+    display: grid;
+    align-items: start;
+    gap: var(--luke-space-6);
+    min-width: calc(2 * var(--luke-space-64));
+    border: 1px solid color-mix(in srgb, var(--luke-color-border) 50%, transparent);
+    border-radius: var(--luke-card-radius);
+    background: var(--luke-color-overlay);
+    box-shadow: var(--luke-menu-shadow);
+    padding: var(--luke-space-6) var(--luke-space-8);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-chart-tooltip-label {
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-chart-tooltip-rows {
+    display: grid;
+    gap: var(--luke-space-6);
+  }
+
+  .luke-chart-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-8);
+    width: 100%;
+  }
+
+  /* A series' swatch, or the icon its config names in its place. */
+  .luke-chart-tooltip-swatch,
+  .luke-chart-tooltip-row > svg {
+    flex-shrink: 0;
+    width: var(--luke-space-8);
+    height: var(--luke-space-8);
+    color: var(--luke-color-text-muted);
+  }
+
+  /* Note that the corner is the scale's two-pixel step, because a swatch
+     this small rounded at a control's corner would read as a dot. */
+  .luke-chart-tooltip-swatch {
+    border-radius: var(--luke-space-2);
+  }
+
+  .luke-chart-tooltip-entry {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-space-16);
+    line-height: 1;
+  }
+
+  .luke-chart-tooltip-name {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-chart-tooltip-value {
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-mono);
+    font-weight: var(--luke-weight-medium);
+    font-variant-numeric: tabular-nums;
+  }
+}

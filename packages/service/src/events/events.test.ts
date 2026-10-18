@@ -105,3 +105,13 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
   assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
   assert.equal(anonymous.forwarded.length, 0);
 });
+
+test("each forwarded event names the account at its top level, as the capture docs ask", async () => {
+  const processor = upstream();
+  const accepted = await runWithoutDatabase(events(options({ httpClient: processor.layer })));
+  assert.equal(accepted.status, 202);
+  const [item] = processor.forwarded[0]?.body.batch ?? [];
+  assert.equal(item?.distinct_id, "user-1");
+  assert.equal(item?.properties.distinct_id, undefined);
+  assert.equal(item?.properties.$geoip_disable, true);
+});

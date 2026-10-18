@@ -11,8 +11,8 @@
  * (`packages/credentials/src/account/client.ts`), and the service reads a
  * personal workspace's owner's picture through it. Someone a pull request
  * names on GitHub is drawn by their GitHub avatar alone (`githubAvatarUrl`),
- * or, for a person GitHub named by id or login alone, the avatar GitHub
- * serves for that id or login (`githubUserAvatarUrl`), each asked for at the
+ * or, for a person GitHub named by login alone, the avatar GitHub serves
+ * for that login (`githubUserAvatarUrl`), each asked for at the
  * size it is drawn (`githubAvatarAt`). A GitHub App, which runs a pull
  * request's checks, is drawn by the logo GitHub serves at its App's address
  * (`githubAppAvatarUrl`).
@@ -52,17 +52,14 @@ export function githubAvatarUrl(value: string | null | undefined): string | unde
 }
 
 /**
- * The avatar GitHub serves for a person it names by id or by login alone,
- * as a co-author's noreply address and a comment's author do. Note that
- * GitHub serves an App's bot's own picture only at its App's address, which
- * neither names, and an identicon at these, so a bot is never asked for here.
+ * The avatar GitHub serves for a person it names by login alone, as a
+ * comment's author does. Note that GitHub serves an App's bot's own picture
+ * only at its App's address, which a login does not name, and an identicon
+ * at this one, so a bot is never asked for here.
  */
-export function githubUserAvatarUrl(
-  person: { readonly id: number } | { readonly login: string },
-): string {
-  const path = "id" in person ? ["u", String(person.id)] : [person.login];
+export function githubUserAvatarUrl(person: { readonly login: string }): string {
   const url = new URL(`https://${GITHUB_PICTURE_HOST}/`);
-  url.pathname = path.map(encodeURIComponent).join("/");
+  url.pathname = `/${encodeURIComponent(person.login)}`;
   url.searchParams.set("v", GITHUB_AVATAR_REVISION);
   return url.toString();
 }

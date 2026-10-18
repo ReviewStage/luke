@@ -1,33 +1,34 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
-import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
-import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CloseIcon, ExpandIcon, IconButton } from "@luke/ui";
-import { Schema } from "effect";
 import type React from "react";
 import { useState } from "react";
 import { DocumentScroll } from "../tasks/document-frame";
-import { Tooltip } from "../tooltip";
-import { readKept, writeKept } from "./folded-groups";
+import { SIDE_PANEL_WIDTH, type SidePanelControl } from "../tasks/use-side-panel";
 import { IssueDocument, IssueMenu } from "./issue-detail";
+import { StatusGlyph } from "./issue-pickers";
+import { PANEL_LEAVING, PanelFrame, useSidePanelDrawing } from "./side-panel";
+import { Tab, TabStrip } from "./tab-strip";
 
 /**
  * issue-peek.tsx -- one issue read beside the Issues board or list rather than in its place: the issue's own document under a head of its identifier, Open as page, its ⋯ menu, and Close.
  *
  * A press or Return on a card or row peeks its issue, and ⌘ held with
- * either opens its page instead (`openingOf`). The peek is a pane of the
- * Issues page's own, docked at its right as an automation's Runs are
- * (`automation-runs-panel.tsx`), not a tab of the window's side panel,
- * whose tabs are a task's: it slides in and out on the window's pane
- * motion (`usePaneSlide`), the board or list narrowing beside it at once,
- * and its left edge resizes it, its width kept on this Mac, a drag past
- * its least width closing it. It draws the issue the list holds, so
- * moving through the cards with the peek following reads nothing, and a
- * change is sent through the list, which holds what was kept the moment
- * it lands. Escape, or Close, puts it away. A window with no room for it
+ * either opens its page instead (`openingOf`). The peek is the window's
+ * side panel standing beside the Issues page, as it stands beside the
+ * Inbox for the chosen item's task: its frame, its top row, its
+ * full-screen button, its resize edge, and its motion are the panel's own
+ * (`PanelFrame`), and so are whether it is open, how wide it stands, and
+ * whether it fills the page, so the title bar's toggle and ⌥⌘B show and
+ * hide it as they do the panel anywhere. Its one tab is the issue, whose ×
+ * closes the panel as closing a panel's last tab does, and the chosen
+ * tab's ⋯ is the issue's own menu, Open as page among it. It draws the
+ * issue the list holds, so moving through the cards with the peek
+ * following reads nothing, and a change is sent through the list, which
+ * holds what was kept the moment it lands. Escape steps out of full
+ * screen, then puts the peek away. A window with no room for the panel
  * beside a column of the board opens the issue's page instead
  * (`peekFits`), and a peek the window narrows past that room is put away.
  */
@@ -40,23 +41,13 @@ export const ISSUE_OPENING = {
 
 export type IssueOpening = (typeof ISSUE_OPENING)[keyof typeof ISSUE_OPENING];
 
-/** How wide the peek may stand, in CSS pixels, and where it starts: a document's narrow measure, as wide as the side panel's least at most. */
-const PEEK_WIDTH = {
-  MIN: 360,
-  MAX: 720,
-  DEFAULT: 440,
-} as const;
-
-/** What the peek leaves the board or list beside it: a column of the board, a card's least width, and the page's insets either side. */
+/**
+ * What the peek leaves the board or list beside it: a column of the board, a
+ * card's least width, and the page's insets either side. It is the Issues
+ * page's `--document-reserve` (issues.css), which the panel's edge and its
+ * width read as the plan's.
+ */
 const PEEK_RESERVE = 320;
-
-/** Where the peek's width is kept in the renderer's storage. */
-const WIDTH_KEY = "luke.issuePeekWidth";
-
-const storedWidth = Schema.fromJsonString(Schema.Finite);
-
-/** What the peek is called, as a region and as its head's words before the identifier. */
-const PEEK_LABEL = "Issue peek";
 
 /** How a press opens an issue: its page where ⌘ is held, its peek otherwise. */
 export function openingOf(event: { readonly metaKey: boolean }): IssueOpening {
@@ -74,142 +65,97 @@ export function pageKey(event: React.KeyboardEvent): boolean {
 
 /** Whether the Issues page is wide enough for the peek at its least beside a column of the board. */
 export function peekFits(page: HTMLElement): boolean {
-  return page.clientWidth >= PEEK_WIDTH.MIN + PEEK_RESERVE;
-}
-
-/** A width held within the peek's bounds, in whole pixels. */
-function clampWidth(width: number): number {
-  return Math.min(PEEK_WIDTH.MAX, Math.max(PEEK_WIDTH.MIN, Math.round(width)));
-}
-
-/** How wide the peek stands, and the drag that asks for another width. */
-export interface PeekWidth {
-  /** Always within {@link PEEK_WIDTH}. */
-  width: number;
-  onResize: (width: number) => void;
-}
-
-/** The peek's width, the default until first dragged, and kept as it is. */
-export function usePeekWidth(): PeekWidth {
-  const [width, setWidth] = useState(() =>
-    clampWidth(readKept(WIDTH_KEY, storedWidth, PEEK_WIDTH.DEFAULT)),
-  );
-  return {
-    width,
-    onResize: (asked) => {
-      const next = clampWidth(asked);
-      setWidth(next);
-      writeKept(WIDTH_KEY, storedWidth, next);
-    },
-  };
-}
-
-/** The peek's head, the window's drag handle wherever no control stands: the issue's identifier, then Open as page, its ⋯ menu, and Close. */
-function PeekHead({
-  issue,
-  identifier,
-  standing,
-  onChange,
-  onClose,
-  onOpenPage,
-}: {
-  issue: Issue;
-  identifier: string;
-  /** Whether the peek still stands, rather than sliding out, which its menu and Archive's question do not outlive. */
-  standing: boolean;
-  onChange: (change: IssueChange) => Promise<boolean>;
-  onClose: () => void;
-  onOpenPage: () => void;
-}): React.JSX.Element {
-  return (
-    <header className="issue-peek-head">
-      <h2 className="issue-peek-identifier">{identifier}</h2>
-      <div className="issue-peek-actions">
-        <Tooltip label="Open as page">
-          <IconButton icon={<ExpandIcon />} label="Open as page" onClick={onOpenPage} />
-        </Tooltip>
-        <IssueMenu
-          issue={issue}
-          identifier={identifier}
-          surfaceOpen={standing}
-          onChange={onChange}
-          onArchived={onClose}
-        />
-        <Tooltip label="Close" command={APP_COMMAND.EXIT_ISSUES}>
-          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
-        </Tooltip>
-      </div>
-    </header>
-  );
+  return page.clientWidth >= SIDE_PANEL_WIDTH.MIN + PEEK_RESERVE;
 }
 
 /**
- * The peek: the issue given, or nothing while none is peeked. It is drawn
- * by whoever outlives it, so a peek put away is held drawn, its last issue
- * still in it, through its slide out, and its edge still hears a drag that
- * closed it coming back.
+ * The peek: the window's side panel beside the Issues page, drawing the issue
+ * given, while the panel is open and one is peeked. A panel shut is held
+ * drawn through its exit with the issue it last drew, and an issue put away
+ * with the panel open draws nothing.
  */
 export function IssuePeek({
+  panel,
   issue,
   workspaceName,
-  width,
   onChange,
   onClose,
   onOpenPage,
 }: {
+  /** The window's side panel: whether the peek stands, how wide, and whether it fills the page. */
+  panel: SidePanelControl;
   issue: Issue | undefined;
   workspaceName: string;
-  width: PeekWidth;
   /** Sends a change to the issue peeked, answering whether it was kept. */
   onChange: (change: IssueChange) => Promise<boolean>;
+  /** Shuts the panel, handing the keyboard back to the issue's card. */
   onClose: () => void;
   onOpenPage: (issue: Issue) => void;
 }): React.JSX.Element | null {
-  // Escape puts the peek away before it leaves the Issues page, being offered after the page's own.
-  useAppCommand(APP_COMMAND.EXIT_ISSUES, issue === undefined ? undefined : onClose);
+  const drawing = useSidePanelDrawing(panel);
+  const standing = drawing.panel !== undefined && issue !== undefined;
+  // Escape steps out of full screen first, then puts the peek away, before it leaves the Issues page.
+  useAppCommand(
+    APP_COMMAND.EXIT_ISSUES,
+    !standing || drawing.leaving !== PANEL_LEAVING.NONE
+      ? undefined
+      : panel.fullScreen
+        ? panel.onToggleFullScreen
+        : onClose,
+  );
   const [last, setLast] = useState(issue);
   if (issue !== undefined && issue !== last) setLast(issue);
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
-    width: width.width,
-    bounds: PEEK_WIDTH,
-    reserve: () => PEEK_RESERVE,
-    label: "Resize issue peek",
-    onResize: width.onResize,
-    onToggleCollapsed: issue === undefined ? undefined : onClose,
-  });
-  const slide = usePaneSlide(issue !== undefined);
-  const drawn = issue ?? last;
-  if (!slide.drawn || drawn === undefined) return null;
+  const leaving = drawing.leaving !== PANEL_LEAVING.NONE;
+  // Note that a panel shut is held drawn through its exit with the issue it last drew.
+  const drawn = issue ?? (leaving ? last : undefined);
+  if (drawing.panel === undefined || drawn === undefined) return null;
   const identifier = issueIdentifier(workspaceName, drawn.number);
   return (
-    <div
-      ref={(node) => {
-        slide.pane.current = node;
-      }}
-      className="issue-peek-pane"
-      data-leaving={slide.leaving ? "" : undefined}
-      inert={slide.leaving}
-      style={{ width: width.width }}
+    <PanelFrame
+      panel={drawing.panel}
+      leaving={drawing.leaving}
+      onLeft={drawing.onLeft}
+      edge={drawing.edge}
+      label="Panel"
+      tabs={
+        <div className="side-panel-tabs">
+          <TabStrip label="Panel">
+            <Tab
+              icon={<StatusGlyph status={drawn.status} />}
+              label={identifier}
+              detail={drawn.title}
+              selected
+              quiet
+              onSelect={() => undefined}
+              onClose={onClose}
+            />
+          </TabStrip>
+        </div>
+      }
+      actions={
+        <span className="toolbar-tab-actions">
+          {/* Keyed by the issue, so Archive's question asked of one is never answered for another. */}
+          <IssueMenu
+            key={drawn.id}
+            issue={drawn}
+            identifier={identifier}
+            surfaceOpen={!leaving}
+            onChange={onChange}
+            onArchived={onClose}
+            onOpenPage={() => onOpenPage(drawn)}
+          />
+        </span>
+      }
     >
-      <div className="side-panel-resize" {...edge} />
       {/* Keyed by the issue, so a title or description being written in one is never sent as another's. */}
-      <aside key={drawn.id} className="issue-peek" aria-label={`${PEEK_LABEL}: ${identifier}`}>
-        <PeekHead
-          issue={drawn}
-          identifier={identifier}
-          standing={issue !== undefined}
-          onChange={onChange}
-          onClose={onClose}
-          onOpenPage={() => onOpenPage(drawn)}
-        />
-        {/* The issue scrolls in the column every document of the window does, at the peek's own width. */}
+      <div key={drawn.id} className="side-panel-content" role="tabpanel" aria-label={identifier}>
+        {/* The issue scrolls in the column every document of the window does, at the panel's width. */}
         <div className="desktop-document">
           <DocumentScroll>
             <IssueDocument issue={drawn} onChange={onChange} />
           </DocumentScroll>
         </div>
-      </aside>
-    </div>
+      </div>
+    </PanelFrame>
   );
 }

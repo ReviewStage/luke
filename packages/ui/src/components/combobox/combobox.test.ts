@@ -5,7 +5,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 // Note that the row a list engine owns is reached through the barrel, as an app reaches it.
-import { ComboboxOptionItem } from "../../index.js";
+import { ComboboxListBox, ComboboxOptionItem } from "../../index.js";
 import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
 import { useComboboxField } from "./use-combobox-field.js";
 
@@ -20,7 +20,8 @@ import { useComboboxField } from "./use-combobox-field.js";
  * keeps a press from taking the caret. An option that cannot be chosen now
  * is passed over by the pointer and a press, the one chosen now is told as
  * current, a note stands after the options, and a list with no field holds
- * the focus and reads the keys itself.
+ * the focus and reads the keys itself. A row and a box a list engine owns
+ * take the engine's names, keys, handlers, and ref.
  */
 
 declare global {
@@ -438,4 +439,49 @@ test("an option a list engine owns that cannot be chosen now passes no press on 
 
   assert.equal(option.getAttribute("aria-disabled"), "true");
   assert.deepEqual(pressed, []);
+});
+
+test("a list box a list engine owns takes the engine's names, keys, and ref, and holds the rows it hands", () => {
+  const keys: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  let held: HTMLDivElement | null = null;
+  act(() =>
+    root.render(
+      createElement(
+        ComboboxListBox,
+        {
+          id: "engine-list",
+          "aria-label": "Results",
+          "aria-activedescendant": "engine-relay",
+          onKeyDown: (event: React.KeyboardEvent) => keys.push(event.key),
+          ref: (element: HTMLDivElement | null) => {
+            held = element;
+          },
+        },
+        createElement(ComboboxOptionItem, {
+          option: { id: "relay", label: "relay" },
+          id: "engine-relay",
+          "aria-selected": true,
+        }),
+        createElement(ComboboxOptionItem, { option: { id: "deck", label: "deck" } }),
+      ),
+    ),
+  );
+  const list = container.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("list");
+  press(list, { key: "ArrowDown" });
+
+  assert.equal(list.getAttribute("aria-label"), "Results");
+  assert.equal(list.id, "engine-list");
+  assert.equal(held, list);
+  assert.equal(
+    document.getElementById(list.getAttribute("aria-activedescendant") ?? "")?.textContent,
+    "relay",
+  );
+  assert.deepEqual(
+    [...list.querySelectorAll('[role="option"]')].map((option) => option.textContent),
+    ["relay", "deck"],
+  );
+  assert.deepEqual(keys, ["ArrowDown"]);
 });

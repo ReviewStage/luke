@@ -53,18 +53,19 @@ import {
   SquareKanbanIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
+import { openPullRequest } from "./desktop-factory";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
 import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
-import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits, usePeekWidth } from "./issue-peek";
+import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits } from "./issue-peek";
 import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
@@ -629,6 +630,7 @@ export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
       ),
     tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
     onOpenTask: tasks.onSelect,
+    onOpenPullRequest: (task, pullRequest) => openPullRequest(tasks, task, pullRequest),
   };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
@@ -662,14 +664,9 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
     pagesRef.current = node;
     setPages(node);
   }, []);
-  const [peeked, setPeeked] = useState<string | undefined>(undefined);
-  // Note that a peek is of the workspace it was opened in, so another workspace listed puts it away for good.
-  const [peekedIn, setPeekedIn] = useState(workspace?.id);
-  if (peekedIn !== workspace?.id) {
-    setPeekedIn(workspace?.id);
-    setPeeked(undefined);
-  }
-  const peekWidth = usePeekWidth();
+  // The peek is the window's side panel beside the page, drawing the issue last peeked while it is open.
+  const { sidePanel } = tasks;
+  const { peeked, onPeek } = view;
   const said = useChangeSaid();
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
@@ -712,40 +709,58 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
     place.kind === ISSUES_PAGE.LIST && peeked !== undefined
       ? listedIssues?.find((each) => each.id === peeked)
       : undefined;
-  // Note that an issue the page no longer draws, archived, filtered out, or of a workspace no longer listed, is peeked no more.
-  if (peeked !== undefined && listedIssues !== undefined && peekedIssue === undefined) {
-    setPeeked(undefined);
-  }
+  const peeking = sidePanel.open && peekedIssue !== undefined;
+  // Note that an issue the page no longer draws, archived, filtered out, or of a workspace no longer listed, is peeked no more, the panel showing it sliding out with it.
+  const gone =
+    peeked !== undefined &&
+    listedIssues !== undefined &&
+    !listedIssues.some((each) => each.id === peeked);
+  const { onSetOpen, open: panelOpen } = sidePanel;
+  // Note that a peek is of the workspace it was opened in, so another workspace listed puts it away for good, though its list held the issue too.
+  const listedIn = useRef(workspace?.id);
+  const moved = listedIn.current !== workspace?.id;
+  // Note that it is shut before the frame is painted, so the panel slides out rather than vanishing for a frame first.
+  useLayoutEffect(() => {
+    if (moved) listedIn.current = workspace?.id;
+    if (!gone && !(moved && peeked !== undefined)) return;
+    if (panelOpen) onSetOpen(false);
+    onPeek(undefined);
+  }, [gone, moved, peeked, workspace?.id, panelOpen, onSetOpen, onPeek]);
+  // Note that the issue's page draws no panel, so a peek filling the page is brought back beside it first, and leaves no panel full screen for the next page to draw.
   const openPage = (issue: Issue) => {
-    setPeeked(undefined);
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    onPeek(undefined);
     view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   };
-  // Note that a page with no room for the peek beside a column opens the issue's page, as before there was a peek.
+  // Note that a page with no room for the panel beside a column opens the issue's page, as before there was a peek.
   const open = (issue: Issue, opening: IssueOpening) => {
-    if (opening === ISSUE_OPENING.PAGE || pages === null || !peekFits(pages)) openPage(issue);
-    else setPeeked(issue.id);
+    if (opening === ISSUE_OPENING.PAGE || pages === null || !peekFits(pages)) {
+      openPage(issue);
+      return;
+    }
+    onPeek(issue.id);
+    onSetOpen(true);
   };
-  /** Puts the peek away, handing its card or row the keyboard where the peek held it, or nothing did. */
+  /** Puts the peek away, handing its card or row the keyboard where the panel held it, or nothing did. */
   const closePeek = () => {
     const at = document.activeElement;
     const keyless =
       at === null ||
       at === document.body ||
-      (pages?.querySelector(".issue-peek-pane")?.contains(at) ?? false);
+      (pages?.querySelector(".side-panel")?.contains(at) ?? false);
     if (peeked !== undefined && pages !== null && keyless) pressOf(pages, peeked)?.focus();
-    setPeeked(undefined);
+    onSetOpen(false);
   };
   // While a peek stands it follows the keyboard: a card or row reached by an arrow, Tab, or a press is the one peeked.
-  const peeking = peekedIssue !== undefined;
   useEffect(() => {
     if (pages === null || !peeking) return;
     const follow = (event: FocusEvent) => {
       const issueId = event.target instanceof HTMLElement ? pressIssue(event.target) : undefined;
-      if (issueId !== undefined) setPeeked(issueId);
+      if (issueId !== undefined) onPeek(issueId);
     };
     pages.addEventListener("focusin", follow);
     return () => pages.removeEventListener("focusin", follow);
-  }, [pages, peeking]);
+  }, [pages, peeking, onPeek]);
   // Note that a window narrowed past the peek's room beside a column puts the peek away, as one that never had it opens none.
   const closeNow = useRef(closePeek);
   closeNow.current = closePeek;
@@ -758,7 +773,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
     return () => observer.disconnect();
   }, [pages, peeking]);
   return (
-    <div ref={holdPages} className="issues-pages">
+    <div ref={holdPages} className="issues-pages" data-panel-open={String(peeking)}>
       {place.kind === ISSUES_PAGE.LIST ? (
         // The workspace's members, read for View options' Created by: their faces, and Me for the reader.
         <MemberDirectory workspace={workspace} readerId={tasks.me}>
@@ -811,9 +826,9 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       {/* The workspace's members, read for the peeked issue's creator: their picture, and You for the reader's own. */}
       <MemberDirectory workspace={workspace} readerId={tasks.me}>
         <IssuePeek
-          issue={peekedIssue}
+          panel={sidePanel}
+          issue={place.kind === ISSUES_PAGE.LIST ? peekedIssue : undefined}
           workspaceName={workspace?.name ?? ""}
-          width={peekWidth}
           onChange={(asked) =>
             peeked === undefined
               ? Promise.resolve(false)
