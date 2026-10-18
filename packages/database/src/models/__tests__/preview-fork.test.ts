@@ -25,7 +25,18 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "../../core/migrator.js";
 import { Database } from "../../core/query.js";
 import { accountProviderKey } from "../../schemas/account-provider-key.js";
-import { account, member, organization, session, user, verification } from "../../schemas/auth.js";
+import {
+  account,
+  member,
+  oauthAccessToken,
+  oauthClient,
+  oauthConsent,
+  oauthRefreshToken,
+  organization,
+  session,
+  user,
+  verification,
+} from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { macCommand, macCommandListener } from "../../schemas/mac-command.js";
@@ -152,7 +163,8 @@ const runningTurnIn = (writer: StoreWriter, target: ConversationTarget) =>
   });
 
 /**
- * What production holds for an account mid-flight: a signed-in session, a
+ * What production holds for an account mid-flight: a signed-in session, the
+ * desktop's OAuth tokens and the consent they were granted under, a
  * provider's tokens and a key of its own, a sign-in under way, a command
  * queued for its Mac and the Mac listening, an open call with its avatar,
  * the agent's sandbox held for a terminal and another session's queued for
@@ -169,6 +181,24 @@ const leaveInFlight = (target: ConversationTarget) =>
       expiresAt: new Date(NOW + 86_400_000),
       updatedAt: at,
       userId,
+    });
+    const clientId = `client-${randomUUID()}`;
+    yield* db
+      .insert(oauthClient)
+      .values({ id: randomUUID(), clientId, redirectUris: ["http://127.0.0.1/callback"] });
+    yield* db
+      .insert(oauthConsent)
+      .values({ id: randomUUID(), clientId, userId, scopes: ["openid"] });
+    // Note that the access token stands alone, since one minted under a refresh token goes with it.
+    yield* db
+      .insert(oauthRefreshToken)
+      .values({ id: randomUUID(), token: randomUUID(), clientId, userId, scopes: ["openid"] });
+    yield* db.insert(oauthAccessToken).values({
+      id: randomUUID(),
+      token: randomUUID(),
+      clientId,
+      userId,
+      scopes: ["openid"],
     });
     yield* db.insert(account).values({
       id: randomUUID(),
@@ -326,6 +356,9 @@ it.layer(getTestDB())("a Preview's copy made its own", (it) => {
 
         for (const [name, table] of [
           ["sessions", session],
+          ["OAuth access tokens", oauthAccessToken],
+          ["OAuth refresh tokens", oauthRefreshToken],
+          ["OAuth consents", oauthConsent],
           ["verifications", verification],
           ["provider keys", accountProviderKey],
           ["Mac commands", macCommand],
