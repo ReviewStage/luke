@@ -29,7 +29,7 @@ import {
   zoneOfAreaIn,
   zoneReadingsOf,
 } from "./zone-graph.js";
-import { type ZonePlacement, zoneFootprintOf, zonePlacementOf } from "./zone-layout.js";
+import { type ZonePlacement, zoneFootprintOf, zonePlacementsOf } from "./zone-layout.js";
 
 /** @public The types the Factory's scene host and its worlds (PR 5 and the world PRs) name their props by. */
 export type { AgentKind, AgentState, AgentView, TouchedZone } from "./agent-reading.js";
@@ -133,20 +133,26 @@ export function factoryWorldViewOf(world: FactoryWorld): FactoryWorldView {
   const timeline = timelineOf(world.shipped, zoneOfArea);
   const alive = aliveByZoneOf(timeline, world.snapshotAt);
   const largestBytes = Math.max(0, ...world.zones.map((zone) => zone.bytes));
-  const zoneByPath = new Map<string, ZoneView>();
+  const unplaced = new Map<string, Omit<ZoneView, keyof ZonePlacement>>();
   for (const zone of world.zones) {
     const reading = readings.get(zone.path);
-    if (reading === undefined || zoneByPath.has(zone.path)) continue;
-    zoneByPath.set(zone.path, {
+    if (reading === undefined || unplaced.has(zone.path)) continue;
+    unplaced.set(zone.path, {
       path: zone.path,
       label: zone.label,
       files: zone.files,
       bytes: zone.bytes,
       ...reading,
-      ...zonePlacementOf(zone.path, reading.ring),
       footprint: zoneFootprintOf(zone.bytes, largestBytes),
       alive: alive.get(zone.path) ?? 0,
     });
+  }
+  // Note that a zone's place reads every zone on its ring, so the floor is laid once all are read.
+  const placements = zonePlacementsOf([...unplaced.values()]);
+  const zoneByPath = new Map<string, ZoneView>();
+  for (const [path, zone] of unplaced) {
+    const placement = placements.get(path);
+    if (placement !== undefined) zoneByPath.set(path, { ...zone, ...placement });
   }
   const context = {
     now: world.snapshotAt,

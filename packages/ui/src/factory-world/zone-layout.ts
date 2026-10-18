@@ -4,20 +4,30 @@
  * The floor is polar. Each layer is a ring one unit wide, the core's from
  * the centre out to 1, the domain's from 1 to 2, and so on
  * (`zone-graph.ts`'s `LAYER_RING`); a zone stands inside its ring's band,
- * kept `BAND_INSET` off either edge.
+ * kept `BAND_INSET` off either edge, at a radius seeded by its own path.
  *
- * Note that a zone's place is read from its own path and its layer alone,
- * never from the other zones, so the same path lands in the same place when
- * zones come and go around it. Its angle is its top-level directory's,
- * seeded by that directory's name, spread up to `GROUP_SPREAD` either side
- * by its own path, which keeps a directory's zones together; its radius
- * within the band is seeded by its path too. Two directories can seed near
- * angles, and two zones can land close: a world that must keep zones apart
- * nudges them in its own geometry.
+ * Each ring is used all the way round. Its zones are dealt out in one sweep
+ * from angle zero, each taking a slot of the turn in proportion to its
+ * footprint and standing at the slot's middle, so the slots tile the ring
+ * and two zones' slots never overlap: a world that draws a zone as wide as
+ * its footprint draws neighbours apart, a large zone given the room it
+ * covers. The sweep takes the zones by their top-level directory, so a
+ * directory's zones hold one unbroken arc, and the directories in the order
+ * of an angle seeded by each one's name, then each directory's zones by
+ * path.
+ *
+ * Note that a zone's angle therefore reads the other zones on its ring,
+ * because a ring filled all the way round has to. It stays deterministic,
+ * and a change moves the others only by what it adds or takes away: a zone
+ * coming or going shifts every other zone on its ring by less than its own
+ * slot, the zones before it in the sweep drawn together and those after
+ * pushed on, and a zone on another ring not at all. The seeded order keeps
+ * a new directory's arc from reshuffling the rest, which it would if
+ * directories were sorted by size.
  *
  * A zone's footprint is `sqrt(bytes)` against the snapshot's largest zone,
  * so its area grows with its bytes, and never under `FOOTPRINT_FLOOR`, so the
- * smallest zone is still there to see.
+ * smallest zone is still there to see, and holds a slot of the ring.
  */
 
 import { AREA_PATH } from "@luke/features/pull-request-area";
@@ -25,8 +35,6 @@ import { AREA_PATH } from "@luke/features/pull-request-area";
 export const ZONE_LAYOUT = {
   /** How far a zone stands off either edge of its ring's band, of the band's unit width. */
   BAND_INSET: 0.2,
-  /** How far, in radians, a zone's angle reaches either side of its directory's. */
-  GROUP_SPREAD: Math.PI / 6,
   /** The smallest footprint a zone has, of the largest zone's. */
   FOOTPRINT_FLOOR: 0.15,
 } as const;
@@ -41,12 +49,18 @@ export interface ZonePlacement {
   readonly y: number;
 }
 
+/** What the layout reads of one zone: its path, its layer's ring, and its footprint. */
+interface ZoneSlot {
+  readonly path: string;
+  readonly ring: number;
+  readonly footprint: number;
+}
+
 const FULL_TURN = 2 * Math.PI;
 
-/** The seeds each of a zone's draws is hashed under, so its angle and its radius are independent. */
+/** The seeds a directory's angle and a zone's radius are hashed under, so the two are independent. */
 const SEED = {
   GROUP: 0x811c9dc5,
-  SPREAD: 0x9e3779b9,
   RADIUS: 0x85ebca6b,
 } as const;
 
@@ -70,14 +84,52 @@ function groupOf(path: string): string {
   return path.split("/")[0] ?? path;
 }
 
-/** Where the zone at `path` stands on the ring numbered `ring`. */
-export function zonePlacementOf(path: string, ring: number): ZonePlacement {
-  const spread = (unitHash(path, SEED.SPREAD) * 2 - 1) * ZONE_LAYOUT.GROUP_SPREAD;
-  const turned = unitHash(groupOf(path), SEED.GROUP) * FULL_TURN + spread;
-  const angle = ((turned % FULL_TURN) + FULL_TURN) % FULL_TURN;
-  const band = 1 - 2 * ZONE_LAYOUT.BAND_INSET;
-  const radius = ring + ZONE_LAYOUT.BAND_INSET + unitHash(path, SEED.RADIUS) * band;
+function byText(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+/** The zones of one ring in the order the sweep deals them: by directory, seeded, then by path. */
+function sweepOrderOf(zones: readonly ZoneSlot[]): ZoneSlot[] {
+  const keyed = zones.map((zone) => {
+    const group = groupOf(zone.path);
+    return { zone, group, seat: unitHash(group, SEED.GROUP) };
+  });
+  keyed.sort(
+    (left, right) =>
+      left.seat - right.seat ||
+      byText(left.group, right.group) ||
+      byText(left.zone.path, right.zone.path),
+  );
+  return keyed.map((each) => each.zone);
+}
+
+function placementAt(angle: number, radius: number): ZonePlacement {
   return { angle, radius, x: radius * Math.cos(angle), y: radius * Math.sin(angle) };
+}
+
+/** Where each zone stands, by path, every ring dealt round its whole turn. */
+export function zonePlacementsOf(zones: readonly ZoneSlot[]): Map<string, ZonePlacement> {
+  const ringZones = new Map<number, ZoneSlot[]>();
+  for (const zone of zones) {
+    if (!(zone.footprint > 0)) throw new Error(`zone ${zone.path} has no footprint to hold a slot`);
+    const members = ringZones.get(zone.ring);
+    if (members === undefined) ringZones.set(zone.ring, [zone]);
+    else members.push(zone);
+  }
+  const band = 1 - 2 * ZONE_LAYOUT.BAND_INSET;
+  const placements = new Map<string, ZonePlacement>();
+  for (const [ring, members] of ringZones) {
+    const total = members.reduce((sum, zone) => sum + zone.footprint, 0);
+    let swept = 0;
+    for (const zone of sweepOrderOf(members)) {
+      const angle = ((swept + zone.footprint / 2) / total) * FULL_TURN;
+      swept += zone.footprint;
+      const radius = ring + ZONE_LAYOUT.BAND_INSET + unitHash(zone.path, SEED.RADIUS) * band;
+      placements.set(zone.path, placementAt(angle, radius));
+    }
+  }
+  return placements;
 }
 
 /** A zone's footprint, from `FOOTPRINT_FLOOR` up to 1 for the snapshot's largest. */
