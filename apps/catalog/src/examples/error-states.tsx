@@ -1,11 +1,11 @@
 /**
  * error-states.tsx -- a failed read among rows with Retry beside it, one
  * alone in its region with Retry under it, one with no Retry, ones with a
- * remedy, Remove, or Dismiss beside Retry, and long words in a pane
- * narrower than the line.
+ * remedy, Remove, or Dismiss beside Retry, long words in a pane narrower
+ * than the line, and a list's foot that is itself the retry.
  */
 
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -58,6 +58,13 @@ function ErrorStates(): React.JSX.Element {
           <ErrorState onRetry={stay}>
             The questions your agents asked while you were away could not be read.
           </ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-row" title="A row that is itself the retry">
+        <div className="catalog-frame catalog-error-narrow">
+          <button type="button" className="catalog-retry-row" onClick={stay}>
+            <RetryRowLabel failure="Could not read older versions." />
+          </button>
         </div>
       </CatalogSection>
     </>

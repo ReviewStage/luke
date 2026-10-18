@@ -302,6 +302,26 @@ body {
   width: 200px;
 }
 
+/* A list's foot that is itself its press, as an app draws one around
+   `RetryRowLabel`: a row in the caption's type, lit on hover. */
+.catalog-retry-row {
+  width: 100%;
+  padding: var(--luke-space-8);
+  border: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+  color: var(--luke-color-text-muted);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+}
+
+.catalog-retry-row:hover {
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
