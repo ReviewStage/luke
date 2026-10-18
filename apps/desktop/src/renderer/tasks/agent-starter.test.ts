@@ -27,7 +27,7 @@ import { MemberDirectory } from "../member-directory";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
 import {
   agentActor,
-  endLine,
+  endLineParts,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -321,7 +321,7 @@ test("an agent's card wears its tile beside its name and its pull request at the
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
   const failed = (failure: typeof CODING_AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
-    endLine(CODING_AGENT_STATUS.FAILED, failure, undefined, starter);
+    endLineParts(CODING_AGENT_STATUS.FAILED, failure, starter)?.words;
 
   assert.equal(
     failed(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
@@ -334,12 +334,8 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
   assert.match(failed(CODING_AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
   assert.equal(endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
   assert.equal(
-    endLine(
-      CODING_AGENT_STATUS.FAILED,
-      CODING_AGENT_FAILURE.FAST_ON_OWN_KEY,
-      undefined,
-      "Charles Pan",
-    ),
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")
+      ?.words,
     "Failed: Fast isn't available on Charles Pan's own API key; choose the model with Fast off",
   );
 });

@@ -1,12 +1,21 @@
-import { Avatar, CHOICE_SELECT, ChoiceList, type ChoiceOption, type ChoiceSelect } from "@luke/ui";
+import {
+  Avatar,
+  CHOICE_LOOK,
+  CHOICE_SELECT,
+  ChoiceList,
+  type ChoiceLook,
+  type ChoiceOption,
+  type ChoiceSelect,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * choice-list.tsx -- a pick-one list with a recommended option and an
- * unavailable one, a pick-several list, rows with a mark before their
- * words, an unavailable list, a settled record of what was picked, and a
+ * unavailable one, a pick-several list, both marked with their radios or
+ * checkboxes and numbered, rows with a mark before their words, an
+ * unavailable list, a settled record of what was picked, and a
  * narrow column of long words.
  */
 
@@ -65,12 +74,16 @@ function Held({
   legend,
   select,
   disabled = false,
+  look,
+  numbered,
 }: {
   options: readonly ChoiceOption<string>[];
   start: readonly string[];
   legend: string;
   select?: ChoiceSelect;
   disabled?: boolean;
+  look?: ChoiceLook;
+  numbered?: boolean;
 }): React.JSX.Element {
   const [value, setValue] = useState(start);
   return (
@@ -79,6 +92,8 @@ function Held({
       options={options}
       value={value}
       select={select}
+      look={look}
+      numbered={numbered}
       clearable
       disabled={disabled}
       onChange={setValue}
@@ -98,6 +113,23 @@ function ChoiceLists(): React.JSX.Element {
           options={CHANNELS}
           start={["email", "pager"]}
           select={CHOICE_SELECT.MANY}
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-list-marked" title="Marked and numbered">
+        <Held
+          legend="Retries"
+          options={RETRIES}
+          start={["three"]}
+          look={CHOICE_LOOK.MARKED}
+          numbered
+        />
+        <Held
+          legend="Channels"
+          options={CHANNELS}
+          start={["email", "pager"]}
+          select={CHOICE_SELECT.MANY}
+          look={CHOICE_LOOK.MARKED}
+          numbered
         />
       </CatalogSection>
       <CatalogSection id="choice-list-mark" title="With a mark">

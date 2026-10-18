@@ -13,6 +13,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
+  type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -34,7 +35,6 @@ import { AgentTab } from "./agent-tab";
 import {
   continuationsOf,
   continuedByIds,
-  endLine,
   endLineContinues,
   endLineParts,
   endLineReason,
@@ -170,6 +170,8 @@ async function drawnTab(input: {
   messages?: readonly CodingAgentMessage[];
   /** Whether the tab's place opens the continue as a draft, as the task's column does. */
   drafts?: boolean;
+  /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
+  usage?: Pick<CodingAgentMessagesAnswer, "usage" | "turnUsage">;
 }) {
   fakeAppBridge({
     act: (_request: Act): Promise<ActOutcome> =>
@@ -212,6 +214,7 @@ async function drawnTab(input: {
         status: input.status,
         title: null,
         ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
+        ...input.usage,
       });
     },
   });
@@ -315,20 +318,12 @@ test("an agent's continuations are those its summary names, forks left out, then
   assert.deepEqual(continuedByIds(agentOf(SOURCE), [], []), []);
 });
 
-test("the end line's words, its cost, and whether it tells of a failure come apart, and join as one line for a card or a notification", () => {
-  const usage = { inputTokens: 10, outputTokens: 5, costUsd: 7.75 };
-
-  const failed = endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.SANDBOX, usage);
+test("the end line's words and whether it tells of a failure come apart, and name no price", () => {
+  const failed = endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.SANDBOX);
   assert.equal(failed?.failed, true);
   assert.match(failed?.words ?? "", /^Failed: /);
-  assert.equal(failed?.cost, "$7.75");
-  assert.equal(
-    endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.SANDBOX, usage),
-    `${failed?.words} · $7.75`,
-  );
   assert.deepEqual(endLineParts(CODING_AGENT_STATUS.CANCELLED, undefined), {
     words: "Stopped",
-    cost: undefined,
     failed: false,
   });
   assert.equal(endLineParts(CODING_AGENT_STATUS.FAILED, undefined)?.words, "Failed");
@@ -337,8 +332,32 @@ test("the end line's words, its cost, and whether it tells of a failure come apa
     CODING_AGENT_STATUS.RUNNING,
     CODING_AGENT_STATUS.COMPLETED,
   ]) {
-    assert.equal(endLineParts(status, undefined, usage), undefined, status);
+    assert.equal(endLineParts(status, undefined), undefined, status);
   }
+});
+
+test("a failed turn's end line names no price, even from a service that sent the turn's, while the model menu's foot still says the whole run's", async () => {
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.SANDBOX,
+    usage: {
+      usage: { inputTokens: 1_200_000, outputTokens: 30_000, cachedInputTokens: 0, costUsd: 2.41 },
+      turnUsage: { inputTokens: 40_000, outputTokens: 900, cachedInputTokens: 0, costUsd: 0.08 },
+    },
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  assert.match(line.textContent ?? "", /Failed: /);
+  assert.doesNotMatch(line.textContent ?? "", /\$/);
+  assert.ok(line.querySelector("[data-failed]"), "the line still tells of a failure");
+
+  const chip =
+    tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the box offers its model chip");
+  act(() => chip.click());
+  await settle();
+  const menu = tab.container.querySelector(".agent-model-menu") ?? assert.fail("the menu opens");
+  assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
+  assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });
 
 test("only a failed turn's end line continues the agent, and not one failed on the reader's own refused API key", () => {
