@@ -706,6 +706,19 @@ export function readersItem(item: InboxItem, readerId: string | undefined): bool
   return starter === undefined || readerId === undefined || starter === readerId;
 }
 
+/**
+ * Whether an open item of an agent with no task, as main lists it, waits on
+ * the reader: its agent started by them, or by nobody the service names, or
+ * listed before the reader's own id is known, as `readersItem` reads an item.
+ * Main lists every member's, as the Inbox lists them, and counts only these.
+ */
+export function waitsOnReader(
+  entry: Pick<AppInboxTasklessItem, "startedBy">,
+  readerId: string | undefined,
+): boolean {
+  return entry.startedBy === undefined || readerId === undefined || entry.startedBy === readerId;
+}
+
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
