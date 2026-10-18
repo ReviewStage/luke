@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ChatComposer } from "@luke/panel/tasks/chat-composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -429,4 +430,30 @@ test("until the chat is read, its wait stands centred in the window's Chat and i
   const tabWait = tab.querySelector('.task-chat [role="status"]');
   assert.ok(tabWait, "the plan's Chat tab says it is waiting");
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
+});
+
+test("a post still out names the composer's send Sending and busy, and the box empties once it is taken", async () => {
+  const gate = Promise.withResolvers<string | undefined>();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      createElement(ChatComposer, {
+        label: "Message #general",
+        hints: [],
+        targets: [],
+        onSend: () => gate.promise,
+      }),
+    ),
+  );
+  const box = boxNamed(container, "Message #general");
+  typeInto(box, "Shipping today.");
+  press(box, "Enter");
+  const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
+  assert.equal(sending?.getAttribute("aria-busy"), "true");
+  act(() => gate.resolve(undefined));
+  await settle();
+  assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
+  assert.equal(box.value, "");
 });

@@ -427,7 +427,9 @@ export function ChatPane({
     <section className="chat-stream ph-no-capture" aria-label={title}>
       <PlaceHead title={title} meta={channelMeta(chat, names, channel)} />
       {threads.length === 0 ? (
-        <EmptyState icon={<HashIcon />}>{NOTHING_POSTED}</EmptyState>
+        <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
+          {NOTHING_POSTED}
+        </EmptyState>
       ) : (
         <ScrollArea>
           <div className="chat-stream-body">

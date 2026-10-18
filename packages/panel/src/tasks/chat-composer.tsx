@@ -46,6 +46,7 @@ import { Tooltip } from "../tooltip.js";
 
 /** What the send press is called. */
 const SEND = "Send";
+const SENDING = "Sending";
 
 /** The list's own name, which its listbox is read by. */
 const MENTION_MENU_LABEL = "Mention";
@@ -265,7 +266,9 @@ export function ChatComposer({
             <PromptInputSubmit
               label={SEND}
               status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-              disabled={sending || draft.trim() === ""}
+              disabled={!sending && draft.trim() === ""}
+              busy={sending}
+              busyLabel={SENDING}
             />
           </Tooltip>
         </PromptInputFooter>
