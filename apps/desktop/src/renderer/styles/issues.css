@@ -221,7 +221,7 @@
 .issue-board > [data-carried="true"] > .sidebar-task-item[data-dragging="true"] {
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-surface), var(--desktop-well);
+    var(--luke-color-surface), var(--luke-color-well);
   box-shadow:
     0 0 0 1px var(--luke-color-border-strong),
     0 4px 12px var(--luke-color-shadow);
@@ -263,8 +263,8 @@
 .issue-column-cards {
   min-height: 0;
   flex: 0 1 auto;
-  margin: 0 calc(-1 * var(--focus-ring-reach)) calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
+  margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-focus-ring-reach);
   overflow-y: auto;
 }
 

@@ -99,7 +99,6 @@ export function ConfirmDialog({
   const open = confirm.standing && (confirmAsked(stage) || rejection !== undefined);
   const acting = stage === CONFIRM_STAGE.ACTING;
   const cancel = useRef<HTMLButtonElement | null>(null);
-  const titleId = useId();
   const bodyId = useId();
 
   if (!open) return null;
@@ -120,16 +119,29 @@ export function ConfirmDialog({
   return (
     <Dialog
       role={DIALOG_ROLE.ALERT_DIALOG}
-      labelledBy={titleId}
+      title={question.title}
       describedBy={question.body ? bodyId : undefined}
       busy={acting}
       initialFocus={field ?? cancel}
       onDismiss={dismiss}
       onKeyDown={fieldKey}
+      actions={
+        <>
+          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={acting} onClick={dismiss}>
+            Cancel
+          </Button>
+          <Button
+            variant={ACT_VARIANT[question.tone ?? DIALOG_TONE.DANGER]}
+            disabled={acting}
+            busy={acting}
+            busyLabel={question.running}
+            onClick={() => confirm.run()}
+          >
+            {question.verb}
+          </Button>
+        </>
+      }
     >
-      <h2 id={titleId} className="luke-confirm-dialog-title">
-        {question.title}
-      </h2>
       {question.body ? (
         <p id={bodyId} className="luke-confirm-dialog-body">
           {question.body}
@@ -141,20 +153,6 @@ export function ConfirmDialog({
           {rejection}
         </p>
       ) : null}
-      <div className="luke-confirm-dialog-actions">
-        <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={acting} onClick={dismiss}>
-          Cancel
-        </Button>
-        <Button
-          variant={ACT_VARIANT[question.tone ?? DIALOG_TONE.DANGER]}
-          disabled={acting}
-          busy={acting}
-          busyLabel={question.running}
-          onClick={() => confirm.run()}
-        >
-          {question.verb}
-        </Button>
-      </div>
     </Dialog>
   );
 }
