@@ -59,7 +59,7 @@ import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-r
 import { automationNextText, automationOwnerName } from "./automation-words";
 import { AutomationListSkeleton } from "./automations-skeleton";
 import { useRunsPanel } from "./folded-groups";
-import { type AutomationsRead, useAutomations } from "./use-automations";
+import { useAutomations } from "./use-automations";
 
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
@@ -85,12 +85,6 @@ const ROW_ACTIONS = "Automation actions";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
-
-/** The list where no workspace is listed once the workspaces are read: none, since none is asked for. */
-const NO_AUTOMATIONS: AutomationsRead = { automations: [] };
-
-/** The list where the workspaces could not be read, so neither could the automations of any. */
-const WORKSPACES_UNREAD: AutomationsRead = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
 
 /** What an automation's placeholder page says to a reader while the list is first read. */
 const READING_AUTOMATION = "Reading the automation…";
@@ -555,27 +549,6 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   );
 }
 
-/** The list as the pages draw it, and the press that reads it again. */
-interface ListedRead {
-  readonly read: AutomationsRead;
-  readonly reload: () => void;
-}
-
-/**
- * The list as the pages draw it, and how to read it again. Note that no list
- * is asked for while no workspace is listed, so once the workspaces are read
- * and none is, it reads as empty rather than as still being read; where the
- * workspaces could not be read, it reads as failed, and Retry reads them.
- */
-function listedRead(
-  tasks: TasksControl,
-  automations: ReturnType<typeof useAutomations>,
-): ListedRead {
-  if (tasks.workspace !== undefined) return automations;
-  if (tasks.listFailed) return { read: WORKSPACES_UNREAD, reload: tasks.onRetryList };
-  return { read: tasks.listRead ? NO_AUTOMATIONS : undefined, reload: automations.reload };
-}
-
 /**
  * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
@@ -595,15 +568,18 @@ export function AutomationsPage({ tasks }: { tasks: TasksControl }): React.JSX.E
 function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
+  // Note that no list is asked for while no workspace is listed, which is
+  // while the workspaces are still read, so the pages stand as quiet blocks
+  // until one is, rather than calling the list empty or an automation gone.
   const automations = useAutomations(workspace?.id);
-  const { read, reload } = listedRead(tasks, automations);
   // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
   const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
-    return <ListPage tasks={tasks} automations={{ ...automations, read, reload }} />;
+    return <ListPage tasks={tasks} automations={automations} />;
   }
+  const { read, reload } = automations;
   if (read !== undefined && "failure" in read) {
     return <UnreadPage onBack={back} onRetry={reload} />;
   }

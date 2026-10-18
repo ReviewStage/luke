@@ -597,34 +597,38 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   );
 });
 
-test("with no workspace listed the list stands as quiet rows until the workspaces are read, then empty, or failed with Retry where they could not be", async () => {
-  standing = [];
-  let retried = 0;
-  const control = (patch: Partial<ReturnType<typeof tasksControl>>) =>
-    tasksControl({
-      workspace: undefined,
-      onRetryList: () => {
-        retried += 1;
-      },
-      ...patch,
-    });
-  const page = mount(control({ listRead: false, listFailed: false }));
+test("with no workspace listed the list and a linked automation stand as quiet blocks, never as empty or gone", async () => {
+  // Note that the tasks are read apart from the workspaces, so a listed task list says nothing of them.
+  const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));
   await settle();
   assert.equal(
     page.querySelector(".automations-scroll [role=status]")?.textContent,
     "Reading your automations…",
   );
+  assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
 
-  render(control({ listRead: true, listFailed: false }));
+  act(() => root?.unmount());
+  root = undefined;
+  mount(
+    tasksControl({
+      workspace: undefined,
+      automationsView: {
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
+        onOpen: () => undefined,
+        onClose: () => undefined,
+      },
+    }),
+  );
   await settle();
-  assert.equal(page.querySelector("[role=status]"), null);
-  assert.match(page.textContent ?? "", /No automations yet/u);
-
-  render(control({ listRead: false, listFailed: true }));
-  await settle();
-  assert.match(page.textContent ?? "", /The automations could not be read\./u);
-  act(() => button("Retry").click());
-  assert.equal(retried, 1);
+  const linked = document.body;
+  assert.equal(
+    linked
+      .querySelector(".automations-scroll [role=status]")
+      ?.textContent?.startsWith("Reading the automation…"),
+    true,
+  );
+  assert.doesNotMatch(linked.textContent ?? "", /Not found/u);
   assert.deepEqual(listed, [], "no workspace's list is asked for");
 });
 
