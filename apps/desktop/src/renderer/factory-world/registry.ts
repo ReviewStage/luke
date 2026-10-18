@@ -1,4 +1,4 @@
-import { FlaskConicalIcon, type LucideIcon, SatelliteIcon } from "lucide-react";
+import { CastleIcon, FlaskConicalIcon, type LucideIcon, SatelliteIcon } from "lucide-react";
 import type { WorldModule } from "./world";
 
 /**
@@ -29,6 +29,12 @@ export const FACTORY_BOARD = "board";
 
 /** The worlds every build offers, in the picker's order. */
 const FACTORY_WORLDS = [
+  {
+    key: "citadel",
+    name: "Citadel",
+    icon: CastleIcon,
+    load: () => import("./worlds/citadel/index"),
+  },
   {
     key: "station",
     name: "Orbital Station",

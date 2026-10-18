@@ -13,8 +13,9 @@
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195519,
     "renderer/diff-view.js": 142443,
-    "renderer/factory-world.js": 156895,
+    "renderer/factory-world.js": 157315,
     "renderer/factory-world-dev.js": 1745,
-    "renderer/factory-world-station.js": 31732
+    "renderer/factory-world-station.js": 31732,
+    "renderer/factory-world-citadel.js": 31274
   }
 }
