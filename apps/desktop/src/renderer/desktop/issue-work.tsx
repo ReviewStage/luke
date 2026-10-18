@@ -33,7 +33,7 @@ const IssueWorkContext = createContext<IssueWork | undefined>(undefined);
 export const IssueWorkProvider = IssueWorkContext.Provider;
 
 /** What Start task… says, on the issue's page and in its card's or row's menu. */
-export const START_TASK_LABEL = "Start task…";
+const START_TASK_LABEL = "Start task…";
 
 /** Start task… for the issue, where the page offers it; nothing outside the Issues page. */
 export function useStartTaskItem(issue: Issue, identifier: string): MenuAction | undefined {
