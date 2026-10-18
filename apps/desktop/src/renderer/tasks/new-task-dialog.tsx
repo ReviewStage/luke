@@ -3,7 +3,10 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { Shortcut } from "@luke/panel/shortcut";
+import { useNewTaskPlanning } from "@luke/panel/tasks/new-task-planning";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -31,12 +34,9 @@ import {
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
-import { WorkspaceTile } from "../desktop/workspace-tile";
 import { Highlighted } from "../search-field";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
-import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
-import { useNewTaskPlanning } from "./new-task-planning";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { TasksControl } from "./use-tasks-tab";
 

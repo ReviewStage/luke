@@ -1,7 +1,9 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useAppCommand } from "@luke/panel/app-commands";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { usePerson } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -18,10 +20,8 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
-import { usePerson } from "../member-directory";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";

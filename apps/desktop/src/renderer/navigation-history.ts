@@ -36,6 +36,7 @@
  * is deleted, as it does a deleted plan.
  */
 
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -49,7 +50,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { HistorySpot } from "./tasks/use-plan-history";
 import {
   AUTOMATIONS_PAGE,

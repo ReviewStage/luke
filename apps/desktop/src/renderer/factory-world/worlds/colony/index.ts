@@ -4,19 +4,19 @@ import {
   type FactoryPlanned,
 } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   AGENT_STATE,
   type AgentState,
   agentDrawnUnder,
   type FactoryWorldView,
 } from "@luke/ui/factory-world";
 import { Color } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldModule,
-  type WorldState,
-} from "../../world";
 import { BLAST_STEP, burrowsMeshesOf, type ZoneLook } from "./burrows";
 import { type Casting, colonyOf, TEAM_POSE, type TeamPose } from "./colony";
 import { type Burrows, burrowsOf, type Chamber, sameShape } from "./layout";

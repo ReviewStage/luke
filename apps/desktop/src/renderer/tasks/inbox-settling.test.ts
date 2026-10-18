@@ -17,11 +17,11 @@ import {
   useSettledItems,
   useSettledWaiting,
 } from "@luke/panel/tasks/inbox-settling";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 
 /**
  * inbox-settling.test.ts -- an answer the window sent stands over main's

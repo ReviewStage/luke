@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
+import { Shortcut } from "@luke/panel/shortcut";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   ComboboxOptionItem,
@@ -14,7 +15,6 @@ import {
 } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Shortcut } from "../shortcut";
 import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
 import type { CodingAgentsControl } from "./use-coding-agents";

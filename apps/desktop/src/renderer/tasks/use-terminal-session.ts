@@ -24,14 +24,14 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import type { TerminalFind, TerminalHandle } from "@luke/panel/terminal/contract";
+import { onTerminalPort } from "@luke/panel/terminal/terminal-port";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSideBundles } from "../bundle-loader";
-import type { TerminalFind, TerminalHandle } from "../terminal/contract";
-import { onTerminalPort } from "../terminal/terminal-port";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 
 /**
  * use-terminal-session.ts -- one Terminal tab's connection to a shell in its agent's sandbox: found, attached while the tab is shown, and let go when it is not.

@@ -9,12 +9,12 @@ import {
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 

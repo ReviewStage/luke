@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import { AGENT_KIND, AGENT_STATE, type AgentState, type AgentView } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -20,7 +21,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { CITY, type CityLayout, DISTRICT_KIND, type District } from "./city";
 import {
   clamp,

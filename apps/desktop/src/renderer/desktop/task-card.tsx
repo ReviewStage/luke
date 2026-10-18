@@ -3,6 +3,9 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useCreator, useMemberDirectory } from "@luke/panel/member-directory";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -17,10 +20,7 @@ import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useCreator, useMemberDirectory } from "../member-directory";
 import { useActorDoor } from "../person-door";
-import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";

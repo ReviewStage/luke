@@ -16,10 +16,10 @@
 import { useAtom } from "@effect/atom-react";
 import { appPlatform } from "@luke/panel/app-platform";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { TOAST_TONE, useToast } from "@luke/panel/toast";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { TOAST_TONE, useToast } from "./toast";
 
 /** What a copy button shows: its resting glyph, the check, or the alert. */
 const COPY_STATE = {

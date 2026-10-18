@@ -3,6 +3,8 @@ import {
   type FactoryPlanned,
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
+import type { PickTarget, WorldPalette, WorldPicking } from "@luke/panel/factory-world/world";
+import { PICK_KIND } from "@luke/panel/factory-world/world";
 import {
   type BufferGeometry,
   Color,
@@ -22,8 +24,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import type { PickTarget, WorldPalette, WorldPicking } from "../../world";
-import { PICK_KIND } from "../../world";
 import type { Isle } from "./islands";
 import { fbm, hashOf, merged, randomOf, TAU, valueNoise } from "./kit";
 import { GLSL_OUTPUT } from "./mood";

@@ -6,6 +6,10 @@ import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { PICK_KIND, WORLD_LAYER, type WorldState } from "@luke/panel/factory-world/world";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { factoryWorldViewOf } from "@luke/ui/factory-world";
 import {
@@ -24,14 +28,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { onSideBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand, useAppCommand } from "../../app-commands";
 import { sideBundles } from "../../bundle-loader";
 import type { TasksControl } from "../../tasks/use-tasks-tab";
-import { PICK_KIND, WORLD_LAYER, type WorldState } from "../world";
 import { FactoryWorldPage } from "../world-page";
 import { CampusScene } from "./campus-scene";
 

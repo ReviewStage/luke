@@ -1,6 +1,6 @@
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import type { SettingsLink, SettingsView } from "@luke/settings/settings-views";
 import { useState } from "react";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { landOnSettingsRow } from "./settings-search";
 
 /**

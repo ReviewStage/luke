@@ -12,17 +12,17 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { MemberDirectory } from "@luke/panel/member-directory";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { signedInAs } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { signedInAs } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
-import { MemberDirectory } from "../member-directory";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**

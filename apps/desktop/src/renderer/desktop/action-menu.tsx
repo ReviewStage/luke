@@ -1,3 +1,4 @@
+import { Shortcut } from "@luke/panel/shortcut";
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   type DrawnMenu,
@@ -5,7 +6,6 @@ import {
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
 } from "@luke/ui";
-import { Shortcut } from "../shortcut";
 
 /**
  * action-menu.tsx -- the window's own drop-down menu: a task's actions, a repository's, a side panel tab's, and the account's.

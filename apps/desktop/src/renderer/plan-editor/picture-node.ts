@@ -1,8 +1,12 @@
+import type {
+  PictureNode,
+  PictureTaken,
+  PlanEditorPictures,
+} from "@luke/panel/plan-editor/contract";
 import type { JSONContent } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import { Fragment, type Node as PmNode, Slice } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
-import type { PictureNode, PictureTaken, PlanEditorPictures } from "./contract";
 
 /**
  * picture-node.ts -- a picture in the plan's text: TipTap's image held inline in its own paragraph, written back escaped, drawn by the panel, and laid in from a paste, a drop, or a file chosen.

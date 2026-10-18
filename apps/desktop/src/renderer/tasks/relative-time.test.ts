@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { SidebarTask } from "../desktop/task-actions";
 import { PlanBody } from "./plan-body";

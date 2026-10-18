@@ -1,15 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
-import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
-import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useRef, useState } from "react";
-import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import {
   type DiffLook,
   type DiffSelection,
   type DiffViewHandle,
   sameLook,
-} from "../diff-view/contract";
+} from "@luke/panel/diff-view/contract";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { useEffect, useRef, useState } from "react";
+import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 
 /**
  * file-diff.tsx -- a patch as Luke draws every diff: Pierre's diff (`../diff-view/`) mounted in a review thread's card in the overview, laid out and marked as the File tabs' settings say, and unified wherever a split would not fit.

@@ -17,10 +17,28 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@luke/panel/ai-elements/conversation";
+import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
+import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { SentTime } from "@luke/panel/tasks/sent-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import {
+  UndeliveredLines,
+  UndeliveredMark,
+  useUndeliveredLines,
+} from "@luke/panel/tasks/undelivered-mark";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import {
   BUTTON_VARIANT,
   Button,
@@ -48,23 +66,12 @@ import {
   AutomationCard,
   automationActor,
 } from "../actor-ref";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
-import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { InlineRef } from "../inline-ref";
-import { useMemberDirectory, usePerson } from "../member-directory";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -130,7 +137,6 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
-import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
@@ -163,14 +169,12 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useKnownNames } from "./use-known-names";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
