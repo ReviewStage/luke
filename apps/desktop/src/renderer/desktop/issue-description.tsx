@@ -57,6 +57,12 @@ function atEnd(description: string): PlanEditorPlacement {
   return { section: Math.max(planSections(description).length - 1, 0) };
 }
 
+/**
+ * The description in one room, open or not, so the words drawn while the
+ * editor's bundle loads are the ones pressed and keep the keyboard: focus
+ * leaving them then opens nothing, since nothing was typed, and a click's
+ * point still lands on the same word once the editor stands in their place.
+ */
 export function IssueDescription({
   description,
   onSave,
@@ -72,6 +78,11 @@ export function IssueDescription({
   const saving = useRef(false);
   // Whether a save was asked for while one was out, which goes once that one is kept.
   const queued = useRef(false);
+  // The description as the service last kept it, which a save is a change from; a save kept moves it before the page draws the answer, or where the page has gone.
+  const kept = useRef(description);
+  useLayoutEffect(() => {
+    kept.current = description;
+  }, [description]);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
   // The words the editor last handed over, read where its handle is gone.
   const drafted = useRef<string | undefined>(undefined);
@@ -102,7 +113,7 @@ export function IssueDescription({
       return;
     }
     const text = typed();
-    if (text === description) {
+    if (text === kept.current) {
       close();
       return;
     }
@@ -111,14 +122,15 @@ export function IssueDescription({
       return;
     }
     saving.current = true;
-    onSave(text).then((kept) => {
+    onSave(text).then((taken) => {
       saving.current = false;
       const again = queued.current;
       queued.current = false;
-      if (!kept) {
+      if (!taken) {
         setNote(REFUSED_LINE);
         return;
       }
+      kept.current = text;
       if (typed() === text) {
         close();
         return;
@@ -190,10 +202,7 @@ export function IssueDescription({
     onLeaveUp: () => undefined,
     drawDiagram: diagrams.draw,
   };
-  // Note that the description stands in the same room open or not, so the
-  // words drawn while the editor's bundle loads are the ones pressed, and
-  // keep the keyboard: focus leaving them then opens nothing, since nothing
-  // was typed, and a click's point still lands on the same word.
+  // Note that the room stands open or not, so the words drawn while the bundle loads are the ones pressed.
   return (
     <section
       className={open ? "plan-document-editor ph-no-capture" : undefined}

@@ -1024,6 +1024,33 @@ test("words typed while a save is out are sent once it is kept, though the page 
   ]);
 });
 
+test("words typed back to the description it opened on while a save is out are sent once it is kept, though the page left the issue", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Fails on CI, twice.");
+  finish(editor);
+  await settle();
+  type(editor, "Fails on CI.");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Fails on CI, twice." } },
+    { issueId: issue(1).id, change: { description: "Fails on CI." } },
+  ]);
+});
+
 test("a control pressed while a finished save is out keeps the keyboard once the save closes the editor", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
