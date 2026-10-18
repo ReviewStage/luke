@@ -100,7 +100,7 @@ Usage-based billing, Webhook retries, and Onboarding checklist; Jordan, Priya,
 and Theo created the rest. Later pull requests: #217 "Expire invite links after
 7 days" (acme/relay, open), #207 and #209 merged on acme/relay, #131 and #135 on
 acme/web, #88, #90, and #91 on acme/ledger. Linear issues are `REL-…` (REL-142
-"Invite links last 7 days", In Progress); Luke's own Issues are `ACME-…`. On
+"Invite links last 7 days", In Progress). On
 GitHub Dean is `dastratakos`, Dana `danamoreno`, Jordan `jordanlee`. The product
 mockups an agent shows are Relay's Members page, invite dialog, and accept page
 (`relay-pictures.ts`).

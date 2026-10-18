@@ -119,8 +119,6 @@ Markdown description in place.
 [#3173](https://github.com/ReviewStage/luke/pull/3173),
 [#3187](https://github.com/ReviewStage/luke/pull/3187))
 
-![The Issues page as a board beside the sidebar: acme's issues under Backlog, Todo, In progress, Done, and Canceled, each with its key, priority, and age.](apps/web/public/changelog/0.17.0/issues.png)
-
 ### Improvements
 
 - Mention a workspace's people with @
@@ -241,7 +239,7 @@ iMessage, or X unfurls as Luke's card.
 [#3074](https://github.com/ReviewStage/luke/pull/3074),
 [#3098](https://github.com/ReviewStage/luke/pull/3098))
 
-![An Inbox item whose words carry chips: relay#217 Open, the Linear issue REL-142 In Progress, the Teammate invitations task, relay#209 Merged, relay#214 and #216 with their states, Dana Moreno, and the Morning Sentry triage automation, around the lines of code it changes.](apps/web/public/changelog/0.16.0/links.png)
+![An Inbox item whose words carry chips: relay#217 Open, the Linear issue REL-142 In Progress, the Teammate invitations task, relay#209 Merged, relay#214 and #216 with their states, and Dana Moreno, around the lines of code it changes.](apps/web/public/changelog/0.16.0/links.png)
 
 ### Agents that start, mention, and archive agents
 
@@ -401,7 +399,7 @@ A member who left keeps their picture, grayed, and their name says they left.
 [#3001](https://github.com/ReviewStage/luke/pull/3001),
 [#3015](https://github.com/ReviewStage/luke/pull/3015))
 
-![Dana Moreno's page in acme: what she has working now, two questions waiting on her answer, the tasks she created, her other agents and her automations, its ⋯ menu open on Copy link.](apps/web/public/changelog/0.15.0/a-persons-page.png)
+![Dana Moreno's page in acme: what she has working now, two questions waiting on her answer, the tasks she created, and her other agents, its ⋯ menu open on Copy link.](apps/web/public/changelog/0.15.0/a-persons-page.png)
 
 ### Copy link to anything
 
@@ -529,8 +527,6 @@ and the sidebar reach it.
 [#2968](https://github.com/ReviewStage/luke/pull/2968),
 [#2998](https://github.com/ReviewStage/luke/pull/2998),
 [#3020](https://github.com/ReviewStage/luke/pull/3020))
-
-![The Factory over the whole window: Teammate invitations on a call in Talk, three questions and the agents at work in Build, and pull requests ready to merge and merged today in Ship.](apps/web/public/changelog/0.15.0/the-factory.png)
 
 ### Improvements
 
