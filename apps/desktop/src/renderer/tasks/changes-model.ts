@@ -466,22 +466,26 @@ export function filePatch(file: CodingAgentChangedFile): string | undefined {
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
 }
 
-/**
- * What a file's place in the list draws: its patch as a whole unified diff,
- * or, where it has no hunks to draw, the same header with none under it, so
- * the file still stands in the list under its header, with why it has none
- * said there (`fileNotice`).
- */
-export function listPatch(file: CodingAgentChangedFile): string {
-  const patch = filePatch(file);
-  if (patch !== undefined) return patch;
+/** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */
+export function headerPatch(file: CodingAgentChangedFile): string {
   const from = file.previousPath ?? file.path;
   return [`diff --git a/${from} b/${file.path}`, `--- a/${from}`, `+++ b/${file.path}`, ""].join(
     "\n",
   );
 }
 
+/**
+ * What a file's place in the list draws: its patch as a whole unified diff,
+ * or, where it has no hunks to draw, its header alone (`headerPatch`), so
+ * the file still stands in the list under its header, with why it has none
+ * said there (`fileNotice`).
+ */
+export function listPatch(file: CodingAgentChangedFile): string {
+  return filePatch(file) ?? headerPatch(file);
+}
+
 /** The files whose path holds `query`, whatever its case, as the tree's search narrows its rows; every file for a query of nothing but spaces. */
+
 export function filterFiles(
   files: readonly CodingAgentChangedFile[],
   query: string,
