@@ -490,7 +490,28 @@ test("a row's chevron says nothing to a reader, so the row still reads as its wo
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
+/**
+ * Stands in for the browser's ResizeObserver, which jsdom lacks, since it
+ * lays nothing out: the widths it would measure are stubbed by each test,
+ * and the function handed back fires the last observer made, as a resize would.
+ */
+function standInResizeObserver(): () => void {
+  let resized: () => void = () => undefined;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resized = callback;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  return () => resized();
+}
+
 test("acts shown only on hover are still met by Tab after their row, and pressed without it", () => {
+  standInResizeObserver();
   const heard: string[] = [];
   const container = draw(
     createElement(List, {
@@ -516,18 +537,7 @@ test("acts shown only on hover are still met by Tab after their row, and pressed
 
 test("an app hears whether a row's title is cut short, whenever its box resizes", () => {
   const heard: boolean[] = [];
-  let resized: () => void = () => undefined;
-  // Note that jsdom lays nothing out, so the observer and the widths it would measure are the stand-ins here.
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(callback: () => void) {
-        resized = callback;
-      }
-      observe(): void {}
-      disconnect(): void {}
-    },
-  );
+  const resized = standInResizeObserver();
   let width = 120;
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
@@ -545,6 +555,35 @@ test("an app hears whether a row's title is cut short, whenever its box resizes"
   width = 320;
   act(() => resized());
   expect(heard).toEqual([false, true]);
+});
+
+test("a row whose acts come in on hover fades its title only while it is cut short, and one whose acts always stand keeps its ellipsis", () => {
+  const resized = standInResizeObserver();
+  let width = 120;
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const row = (actionsAt: (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS]) =>
+    createElement(ListRow, {
+      title: "Fix pin and archive overlapping the sidebar row's name",
+      meta: "2m",
+      onPress: () => undefined,
+      actionsAt,
+      actions: createElement(IconButton, { icon: null, label: "Archive" }),
+    });
+  const hovered = draw(
+    createElement(List, { label: "Tasks", children: row(LIST_ROW_ACTIONS.HOVER) }),
+  );
+  const title = () => hovered.querySelector(".luke-list-row-title");
+  act(() => resized());
+  expect(title()?.getAttribute("data-end")).toBe("fade");
+  expect(title()?.getAttribute("data-overflow")).toBe("false");
+  width = 320;
+  act(() => resized());
+  expect(title()?.getAttribute("data-overflow")).toBe("true");
+  const beside = draw(
+    createElement(List, { label: "Members", children: row(LIST_ROW_ACTIONS.ALWAYS) }),
+  );
+  expect(beside.querySelector(".luke-list-row-title")?.hasAttribute("data-end")).toBe(false);
 });
 
 /** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */

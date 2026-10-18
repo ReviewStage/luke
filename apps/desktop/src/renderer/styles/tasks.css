@@ -976,7 +976,7 @@
   display: flex;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 .checkpoint-live > svg {

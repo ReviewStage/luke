@@ -140,7 +140,7 @@ export function AnimationsScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => void;
 }): React.JSX.Element {
-  // SMIL loops answer to neither `--face-motion` nor `prefers-reduced-motion`,
+  // SMIL loops answer to neither `--luke-face-motion` nor `prefers-reduced-motion`,
   // so the page holds them still itself wherever the reader asked the system
   // for less motion, following the setting as it changes.
   const previewsRef = useRef<HTMLDivElement>(null);
