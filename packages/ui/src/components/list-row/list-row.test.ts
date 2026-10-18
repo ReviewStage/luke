@@ -770,3 +770,16 @@ test("a trackpad's swipe on an open row starts from where it rests, goes the han
   frameAt(1_200);
   expect(flicked.acted).toEqual(["Read"]);
 });
+
+test("a scroll that follows a quick trackpad swipe ends its flick, so the row only opens once the wheel rests, never acting", () => {
+  const { frameAt, wheel } = trackpad();
+  const { item, acted } = swiped();
+  wheel(item, -60, 0, 100);
+  wheel(item, -60, 0, 110);
+  wheel(item, -50, 0, 120);
+  expect(wheel(item, 0, 40, 130)).toBe(false);
+  expect(wheel(item, 2, 60, 140)).toBe(false);
+  frameAt(1_000);
+  frameAt(1_200);
+  expect([acted, standing(item)]).toEqual([[], ["open", "72px", false]]);
+});

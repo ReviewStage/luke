@@ -366,8 +366,12 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       };
       wheel.current = held;
     }
-    // A wheel more up or down than sideways during a swipe is the list's to scroll, and leaves the swipe's rest uncounted.
-    if (held.act !== undefined && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+    // A wheel more up or down than sideways during a swipe is the list's to scroll, and leaves the swipe's rest uncounted;
+    // it ends the swipe's flick, so a scroll after a quick swipe never carries the row on to act.
+    if (held.act !== undefined && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      held.samples.length = 0;
+      return;
+    }
     held.movedAt = undefined;
     // A movement that began up or down is the list's to scroll until its wheel rests, however it turns.
     if (held.scroll) return;
