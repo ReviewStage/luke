@@ -186,6 +186,16 @@ test("a hand-off whose session read stalls goes on to the Mac at its deadline, u
   expect(events.map((event) => event.event)).not.toContain("$identify");
 });
 
+test("a build that counts nothing never holds the hand-off for the session read", async () => {
+  sessionAnswers = false;
+  vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "");
+
+  await openHandOff();
+  vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", PROJECT_KEY);
+
+  expect(await sentEvents()).toEqual([]);
+});
+
 test("a session read that answers after the page's own work still counts", async () => {
   window.history.replaceState(null, "", "/consent.html");
   vi.resetModules();

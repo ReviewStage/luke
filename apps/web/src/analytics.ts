@@ -348,8 +348,9 @@ export async function completeSiteSignIn(
   signedIn: Promise<SiteSession | null | undefined>,
 ): Promise<void> {
   const posthog = await client?.catch(() => undefined);
+  if (!posthog) return;
   const account = await signedIn.catch(() => undefined);
-  if (!posthog || !account) return;
+  if (!account) return;
   const { id, name, email } = account.user;
   posthog.identify(id, { name, email });
   if (firstCountOf(account.session.id)) posthog.capture(SITE_EVENT.SIGN_IN_COMPLETE);
