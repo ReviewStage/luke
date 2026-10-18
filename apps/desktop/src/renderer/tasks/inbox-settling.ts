@@ -28,7 +28,8 @@ import { appStateNow } from "../use-app-state";
  * newer revision, the agent having posted it again, or changed after the
  * service's word on the send. Note that it is not let go once every read
  * merely holds it, because a read asked before the send may still land
- * after, and nothing but a later change says a read is past it. Main's
+ * after, and nothing but a later change says a read is past it; the book
+ * keeps the latest sends alone (`KEPT_SENDS`), which bounds it. Main's
  * read names no revision, so it is trusted again once it has been seen
  * without the item: until then it is behind the answer, and after it, an
  * item it lists is one the agent asked again.
@@ -64,6 +65,13 @@ type Change =
 
 const NOTHING_LAID: ReadonlyMap<string, Settling> = new Map();
 
+/**
+ * The most sends the window keeps, the oldest the service took let go
+ * first, so a long session holds a bounded book. Note that a read asked
+ * before a send lands within moments of it, long before this many more.
+ */
+const KEPT_SENDS = 200;
+
 const NO_IDS: ReadonlySet<string> = new Set();
 
 /** The entry for the send given, by item, where it still stands. */
@@ -86,13 +94,28 @@ function without(
   return kept;
 }
 
+/** The entries cut to `KEPT_SENDS`, the oldest the service took let go first; one still on its way is kept. */
+function bounded(entries: Map<string, Settling>): ReadonlyMap<string, Settling> {
+  let over = entries.size - KEPT_SENDS;
+  for (const [itemId, entry] of entries) {
+    if (over <= 0) break;
+    if (!entry.taken) continue;
+    entries.delete(itemId);
+    over -= 1;
+  }
+  return entries;
+}
+
 /** What the change makes of the entries. */
 function changed(
   entries: ReadonlyMap<string, Settling>,
   change: Change,
 ): ReadonlyMap<string, Settling> {
   if ("lay" in change) {
-    return new Map(entries).set(change.lay.item.id, { ...change.lay, mainCaughtUp: false });
+    const laid = new Map(entries);
+    // Note that a send laid again on the same item moves to the newest place, so the oldest go first.
+    laid.delete(change.lay.item.id);
+    return bounded(laid.set(change.lay.item.id, { ...change.lay, mainCaughtUp: false }));
   }
   if ("take" in change) {
     const found = entryOf(entries, change.take.sent);

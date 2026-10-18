@@ -175,3 +175,22 @@ test("a message the service took stands over a read that lacks it, though the re
   render([], [{ ...written, unread: false }]);
   assert.equal(probe.drawn[0]?.unread, false, "a read holding the message is drawn as it holds it");
 });
+
+test("the window keeps only its latest answers: the oldest taken gives way once more were sent, and its read is drawn as it holds it", () => {
+  const { probe, render } = mount();
+  const items = Array.from({ length: 201 }, (_, at) => ({
+    ...ASKED,
+    id: `a1b2c3d4-0000-4000-8000-${String(at).padStart(12, "0")}`,
+  }));
+  render([], items);
+  act(() => {
+    for (const each of items) {
+      const sent = probe.settler?.answer(each, NOTE);
+      const taken = { ...each, status: INBOX_STATUS.ANSWERED, answer: NOTE, updatedAt: 2_000 };
+      if (sent !== undefined) probe.settler?.take(sent, taken);
+    }
+  });
+  render([], items);
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN, "the oldest answer was let go");
+  assert.equal(probe.drawn[200]?.status, INBOX_STATUS.ANSWERED);
+});
