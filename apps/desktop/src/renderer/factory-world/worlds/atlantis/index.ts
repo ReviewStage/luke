@@ -75,7 +75,7 @@ export const world: WorldModule = {
     const bubbles = billboardsOf(sea, SPRITES.BUBBLES, SPRITE_KIND.BUBBLE);
     const inks = billboardsOf(sea, SPRITES.INK, SPRITE_KIND.INK);
     const pings = pingsOf(sea, SPRITES.PINGS);
-    const shipped = shippedOf(scene, sea, picking, districts, pings);
+    const shipped = shippedOf(scene, sea, picking, districts);
     const particles = particlesOf(SPRITES.PARTICLES, seededRandom(9));
     scene.add(glows.mesh, bubbles.mesh, inks.mesh, pings.mesh);
     const blast = new Color(palette.signal.BLAST_RADIUS);

@@ -26,13 +26,7 @@ import {
   smoothstep,
 } from "./geometry";
 import { type Sea, TAU } from "./sea";
-import {
-  type Billboards,
-  PARTICLE_KIND,
-  PARTICLE_LAYER,
-  type Particles,
-  type Pings,
-} from "./sprites";
+import { type Billboards, PARTICLE_KIND, PARTICLE_LAYER, type Particles, pingsOf } from "./sprites";
 
 /**
  * shipped.ts -- the merged pull requests as Atlantis draws them: anemones blooming where each landed, glowing brightest while it is new, schools of fish circling the districts most alive with shipped work, columns of light rising over them, and, while the scrubber stands at now, the newest work landing again and again.
@@ -50,6 +44,7 @@ const SPOTS = FACTORY_WORLD_BOUNDS.MAX_SHIPPED * 3;
 const FISH = 1600;
 const BEACONS = FACTORY_WORLD_BOUNDS.MAX_ZONES;
 const LAUNCHES = 10;
+const LANDING_RINGS = 12;
 
 /** How long a pull request takes to fade from new to settled, in hours. */
 const FRESH_HOURS = 2.5;
@@ -203,9 +198,11 @@ export function shippedOf(
   sea: Sea,
   picking: WorldPicking,
   districts: Districts,
-  pings: Pings,
 ): Shipped {
   const shippedColor = new Color(sea.signal.SHIPPED);
+  // Note that landings ring out in rings of their own, so putting them out never touches the selected agent's sonar.
+  const pings = pingsOf(sea, LANDING_RINGS);
+  scene.add(pings.mesh);
   const selection = new Color(sea.signal.SELECTION);
   const pale = new Color("#c8ffe8");
 
@@ -438,6 +435,7 @@ export function shippedOf(
     step: (delta, elapsed, live, particles) => {
       lastStep = elapsed;
       swim(elapsed);
+      pings.step(elapsed);
       // Note that work lands only while the scrubber stands at now and shipped is shown, so nothing green flashes outside its layer or its instant.
       if (!live || !shown) {
         quiet();
