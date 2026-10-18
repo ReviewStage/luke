@@ -205,6 +205,10 @@ let copied: string[] = [];
 let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
+/** Every read mark the Inbox sent, in order: `read:<item>`, `unread:<item>`, or `all:<workspace>`. */
+let readMarks: string[] = [];
+/** Whether the service refuses a read mark, as one for an item it no longer holds. */
+let readMarkRefused = false;
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -234,6 +238,8 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   pageAgents = new Map();
   imageReads = [];
+  readMarks = [];
+  readMarkRefused = false;
   fakeAppBridge({
     act: (request: Act) => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
@@ -281,6 +287,20 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
+        const { itemId, unread } = request.payload;
+        readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: readMarkRefused
+            ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+            : { id: itemId, unread },
+        });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL) {
+        readMarks.push(`all:${request.payload.workspaceId ?? "every workspace"}`);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { marked: 2 } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
         return new Promise((resolve) =>
@@ -407,14 +427,14 @@ const ROW_TITLE = ".luke-list-row-title";
 /**
  * What marks a row as needing the developer: `*` where it wears the
  * attention mark and says "Needs you" beside it, nothing where it does
- * neither, and `?` where it does one alone or wears the blue dot that
- * meant it before, so a half-drawn or stale mark fails every listing.
+ * neither, and `?` where it does one alone, so a half-drawn mark fails
+ * every listing.
  */
 function needsYouMark(row: HTMLElement): string {
   const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
-  const said =
-    row.querySelector(".luke-list-row-meta .visually-hidden")?.textContent === "Needs you";
-  if (row.querySelector(".inbox-row-dot") !== null) return "?";
+  const said = [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+    (each) => each.textContent === "Needs you",
+  );
   if (mark && said) return "*";
   return mark || said ? "?" : "";
 }
@@ -3218,7 +3238,7 @@ test("the attention mark stands before the time on the reader's own open item al
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
       said: meta?.querySelector(".visually-hidden")?.textContent,
-      dot: row.querySelector(".inbox-row-dot") !== null,
+      dot: row.querySelector(".inbox-row-unread") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
   };
@@ -3250,4 +3270,183 @@ test("the attention mark stands before the time on the reader's own open item al
     "# Invites",
     "▸ *Expire after 7 days?",
   ]);
+});
+
+/** Whether a row reads as unread: its blue dot, its title in the unread weight, and "Unread" said to a reader, each `?` where only some stand. */
+function unreadOf(page: HTMLElement, title: string): boolean | "?" {
+  const row = rowNamed(page, title);
+  const marks = [
+    row.querySelector(".inbox-row-gutter .inbox-row-unread") !== null,
+    row.closest("li")?.dataset.unread === "true",
+    [...row.querySelectorAll(".luke-list-row-meta .visually-hidden")].some(
+      (each) => each.textContent === "Unread",
+    ),
+  ];
+  if (marks.every(Boolean)) return true;
+  return marks.some(Boolean) ? "?" : false;
+}
+
+/** The mark a row's hover offers over its time. */
+function hoverMark(page: HTMLElement, title: string): HTMLButtonElement {
+  const li = rowNamed(page, title).closest("li");
+  const press = li?.querySelector<HTMLButtonElement>(".luke-list-row-actions button");
+  assert.ok(press, `${title}'s row offers a mark over its time`);
+  return press;
+}
+
+/** A row's right-click menu as it reads: each item's words, its key where it names one, a rule between groups. */
+function rowMenu(page: HTMLElement, title: string): string[] {
+  act(() => {
+    rowNamed(page, title).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  return menuWords();
+}
+
+/** The menu open now as it reads: each item's words, its key where it names one, and a rule between its groups. */
+function menuWords(): string[] {
+  const menu = [...document.querySelectorAll('[role="menu"]')].at(-1);
+  assert.ok(menu, "a menu is open");
+  return [...menu.querySelectorAll('[role^="menuitem"], .luke-menu-rule')].map((each) =>
+    each.classList.contains("luke-menu-rule") ? "—" : (each.textContent ?? ""),
+  );
+}
+
+/** The menu item whose words start with `label`, in the menu open now. */
+function menuItem(label: string): HTMLElement {
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith(label),
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return item;
+}
+
+/** The workspace the marking tests list, whose Mark all as read names it. */
+const ACME: Workspace = {
+  id: "workspace-acme",
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+};
+
+test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, the item standing chosen first among them", async () => {
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, unread: true },
+    { ...RETRY, unread: true },
+  ]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
+  const { page } = mount();
+  await settle();
+  // The item standing chosen is shown, and so opened, as the Inbox opens.
+  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`]);
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  assert.equal(unreadOf(page, "Expire after 7 days?"), true);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), true);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`, `read:${EXPIRY.id}`]);
+  assert.equal(unreadOf(page, "Expire after 7 days?"), false);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), true);
+});
+
+test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and the menu names U above Copy link", async () => {
+  listedWorkspace = ACME;
+  const keys = standKeymap();
+  const { page } = mount();
+  await settle();
+  const retry = "How is a failed email retried?";
+  assert.equal(hoverMark(page, retry).getAttribute("aria-label"), "Mark as unread");
+  act(() => hoverMark(page, retry).click());
+  await settle();
+  assert.equal(unreadOf(page, retry), true);
+  assert.equal(hoverMark(page, retry).getAttribute("aria-label"), "Mark as read");
+  assert.equal(
+    page.querySelector('[aria-current="page"] .luke-list-row-title')?.textContent,
+    "Alert at 80%?",
+    "a press on the mark opens nothing",
+  );
+
+  assert.deepEqual(rowMenu(page, retry), ["Mark as readU", "—", "Copy link"]);
+  act(() => menuItem("Mark as read").click());
+  await settle();
+  assert.equal(unreadOf(page, retry), false);
+
+  pressKey("u");
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), true, "U marks the chosen item unread");
+  pressKey("u");
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false, "and U again marks it read");
+  assert.deepEqual(readMarks, [
+    `unread:${RETRY.id}`,
+    `read:${RETRY.id}`,
+    `unread:${THRESHOLD.id}`,
+    `read:${THRESHOLD.id}`,
+  ]);
+  act(() => keys.unmount());
+});
+
+test("an item marked unread while it is shown stays unread until it is opened again, as a mail app keeps it", async () => {
+  const keys = standKeymap();
+  const { page } = mount();
+  await settle();
+  pressKey("u");
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), true);
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), true, "leaving it leaves it unread");
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false, "opening it again reads it");
+  assert.deepEqual(readMarks, [`unread:${THRESHOLD.id}`, `read:${THRESHOLD.id}`]);
+  act(() => keys.unmount());
+});
+
+test("a mark the service refuses is let go, and the dot stands as the reads hold it", async () => {
+  readMarkRefused = true;
+  const { page } = mount();
+  await settle();
+  act(() => hoverMark(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(readMarks, [`unread:${RETRY.id}`]);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), false);
+});
+
+test("Mark all as read in the view's menu, under the groupings, marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread it stands disabled", async () => {
+  listedWorkspace = ACME;
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
+  const { page } = mount();
+  await settle();
+  const openOptions = () => {
+    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+    assert.ok(options, "the head offers the view's menu");
+    act(() => options.click());
+    return menuWords();
+  };
+  assert.deepEqual(openOptions(), [
+    "Group by task",
+    "Group by person",
+    "Newest first",
+    "—",
+    "Mark all as read",
+  ]);
+  act(() => menuItem("Mark all as read").click());
+  await settle();
+  assert.deepEqual(readMarks, ["all:workspace-acme"]);
+  assert.equal(unreadOf(page, "Expire after 7 days?"), false);
+  assert.equal(unreadOf(page, "How is a failed email retried?"), false);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+  openOptions();
+  assert.equal(menuItem("Mark all as read").matches(":disabled"), true);
 });

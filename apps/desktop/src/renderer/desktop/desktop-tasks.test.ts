@@ -835,3 +835,43 @@ test("with Chat off for the account, a Chat tab kept on the task's strip draws n
   act(() => off.root.unmount());
   off.container.remove();
 });
+
+test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
+  const marked: string[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
+        const { itemId, unread } = request.payload;
+        marked.push(`${unread ? "unread" : "read"}:${itemId}`);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: itemId, unread } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    },
+  });
+  const SHIP = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a1", "Ship it?", 2),
+    unread: true,
+  };
+  const ROLL = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a2", "Roll back?", 1),
+    unread: true,
+  };
+  const inbox = await narrowTaskInbox([SHIP, ROLL], false, 1400);
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.equal(inbox.title(), "Ship it?");
+  assert.deepEqual(marked, [`read:${SHIP.id}`]);
+  const dot = (title: string) =>
+    inbox.row(title)?.querySelector(".inbox-row-gutter .inbox-row-unread") !== null;
+  assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
+  const mark = inbox
+    .row("Roll back?")
+    ?.closest("li")
+    ?.querySelector<HTMLButtonElement>('.luke-list-row-actions button[aria-label="Mark as read"]');
+  assert.ok(mark, "an unread row offers Mark as read over its time");
+  await act(async () => mark.click());
+  assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
+  assert.equal(dot("Roll back?"), false);
+  inbox.unmount();
+});

@@ -37,8 +37,9 @@ import type {
  *
  * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
  * shown beside the list, as an Inbox's item is, or the one item chosen in
- * its set. An unread row's title stands in the heavier weight until it is
- * read. A row that opens something may hang the app's hint from its press
+ * its set. An unread row's title stands in the heavier weight, and its
+ * description in the body's ink, until it is read, as a mail app's unread
+ * thread does. A row that opens something may hang the app's hint from its press
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
@@ -46,7 +47,11 @@ import type {
  * A row's metadata stands at its middle, or, in a list read as a mail
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
  * description running the row's whole width under both and its leading
- * mark level with the title.
+ * mark level with the title. A row's acts stand beside it, or, in a list
+ * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
+ * its metadata's end while the pointer rests on it or it holds the
+ * keyboard, the metadata stepping aside as a sidebar row's time does for
+ * Pin and Archive.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -87,6 +92,14 @@ export const LIST_ROW_META = {
 } as const;
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
+
+/** When a row's acts stand: always, beside it, or over its metadata's end only while the row is in hand. */
+export const LIST_ROW_ACTIONS = {
+  ALWAYS: "always",
+  HOVER: "hover",
+} as const;
+
+export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
 interface ListRowHintProps {
@@ -137,6 +150,7 @@ export function ListRow({
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
+  actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
   current,
   unread,
@@ -156,6 +170,8 @@ export function ListRow({
   metaAt?: ListRowMeta;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
+  /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
+  actionsAt?: ListRowActions;
   /** What pressing the row does; a row without one is not a control. */
   onPress?: (() => void) | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
@@ -213,6 +229,7 @@ export function ListRow({
       ref={onPress ? undefined : ref}
       className="luke-list-row"
       data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
       data-current={current === undefined ? undefined : "true"}
       data-unread={unread === true ? "true" : undefined}
       onContextMenu={onContextMenu}

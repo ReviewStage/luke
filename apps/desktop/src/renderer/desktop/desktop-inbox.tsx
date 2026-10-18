@@ -25,6 +25,7 @@ import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
   anyNeedsYou,
+  anyUnread,
   firstChoice,
   INBOX_HOLDER,
   type InboxGroup,
@@ -50,6 +51,7 @@ import { useMinute } from "../tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
+import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
@@ -276,10 +278,11 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
           },
         ]
       : [];
-  const entries = [
+  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
+  const entries = marks.over([
     ...taskEntries,
     ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ];
+  ]);
   const filter = {
     grouping: choices.grouping,
     waitingOnly: choices.waitingOnly,
@@ -358,6 +361,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const { onMark: markItem } = marks;
+  useReadOnOpen({
+    shown: tasks.shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
+    chosen: chosen?.item,
+    active: tasks.shown,
+    onMark: markItem,
+  });
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -472,6 +482,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                     needsYou: choices,
                     view: { choices, folds },
                     waiting: anyNeedsYou(entries, tasks.me),
+                    readAll: {
+                      unread: anyUnread(entries),
+                      onMarkAll: () => marks.onMarkAll(entries.flatMap(({ items }) => items)),
+                    },
                   }}
                   models={named.models}
                   readerId={tasks.me}
@@ -487,6 +501,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                     />
                   }
                   onChoose={open}
+                  onMark={(listed, unread) => markItem(listed.item, unread)}
                 />
                 {chosen === undefined ? (
                   <section
