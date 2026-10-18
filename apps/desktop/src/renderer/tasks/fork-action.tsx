@@ -153,7 +153,6 @@ export function ForkMessageAction({
     <MessageAction
       label={FORK_WORDS.ACTION}
       tooltip={FORK_WORDS.ACTION}
-      data-fork-action=""
       onClick={() => onFork(messageId, words, cut)}
     >
       <SplitIcon />

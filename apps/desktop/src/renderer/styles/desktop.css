@@ -1389,7 +1389,7 @@ ul.actor-stack {
    where it always is and nothing moves. They are the row's siblings, since
    a button holds no button, laid over its end. */
 .sidebar-task-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -1403,37 +1403,6 @@ ul.actor-stack {
   gap: var(--luke-space-2);
   font-size: var(--luke-type-body-size);
   opacity: 0;
-}
-
-/* Note that Pin and Archive draw no ground under the pointer, as the
-   repository header's glyphs do not, because the row under them is already
-   lit by the hover: only the glyph itself brightens. */
-.sidebar-task-mark {
-  display: inline-flex;
-  width: var(--sidebar-plan-mark);
-  height: var(--sidebar-plan-mark);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-task-mark:hover:not(:disabled) {
-  color: var(--luke-color-text);
-}
-
-.sidebar-task-mark:disabled {
-  opacity: 0.45;
-}
-
-.sidebar-task-mark svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 .sidebar-task-item:hover > .sidebar-task-marks,
@@ -1922,30 +1891,6 @@ ul.actor-stack {
 .sidebar-repository-header:is(:hover, :focus-within, [data-menu-open="true"])
   .sidebar-repository-actions {
   opacity: 1;
-}
-
-/* The header's glyph buttons brighten without a fill, as a tab's × does,
-   because the row under them is already lit by the hover. */
-.sidebar-repository-action {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-repository-action:hover,
-.sidebar-repository-action[aria-expanded="true"] {
-  color: var(--luke-color-text);
-}
-
-.sidebar-repository-action svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
@@ -6406,7 +6351,7 @@ button.integration-tool-head:hover,
    sidebar plan's Pin and Archive are: the row's sibling, since a button
    holds no button, laid over its first line. */
 .version-item {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
@@ -6952,7 +6897,7 @@ button.integration-tool-head:hover,
 }
 
 .task-summary-archived-agent {
-  --sidebar-plan-mark: 22px;
+  --sidebar-plan-mark: var(--luke-space-24);
   position: relative;
 }
 
