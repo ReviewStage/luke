@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { describe, type TestContext, test } from "vitest";
-import { migrationRenames, RENAME_CUTOFF } from "../migration-renames.js";
+import { migrationRenames } from "../migration-renames.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../migrations", import.meta.url));
 
@@ -26,7 +26,7 @@ describe("migrationRenames", () => {
     assert.deepEqual(migrationRenames(MIGRATIONS), []);
   });
 
-  test("the plan-to-task migration written after the cutoff is refused for each table and column it renames", async (t) => {
+  test("the plan-to-task migration written again is refused for each table and column it renames", async (t) => {
     const root = await migrations(t, {});
     const later = "20261018090000_rename_plan_to_task";
     cpSync(join(MIGRATIONS, PLAN_TO_TASK), join(root, later), { recursive: true });
@@ -44,21 +44,33 @@ describe("migrationRenames", () => {
     assert.ok(renames.every((one) => !one.statement.startsWith("ALTER INDEX")));
   });
 
-  test("a column renamed without the COLUMN keyword or across lines is refused", async (t) => {
+  test("a column renamed without the COLUMN keyword, across lines, or in a DO block is refused", async (t) => {
     const root = await migrations(t, {
       "20261018090000_spelled_out": [
         'ALTER TABLE "task" RENAME "title" TO "name";--> statement-breakpoint',
-        'alter table if exists only "task"\n  rename column "body"\n  to "text";',
+        'alter table if exists only "task"\n  rename column "body"\n  to "text";--> statement-breakpoint',
+        "/* a note */ DO $$ BEGIN",
+        '  ALTER TABLE "task" RENAME COLUMN "owner" TO "author";',
+        "EXCEPTION WHEN undefined_column THEN NULL; END $$;",
       ].join("\n"),
     });
 
-    assert.equal(migrationRenames(root).length, 2);
+    assert.equal(migrationRenames(root).length, 3);
   });
 
-  test("a migration up to the cutoff, or one that adds and drops, passes", async (t) => {
+  test("a branch's folder older than the applied rename is still refused", async (t) => {
     const root = await migrations(t, {
-      [RENAME_CUTOFF]: 'ALTER TABLE "plan" RENAME TO "task";',
+      "20261016000000_cut_before": 'ALTER TABLE "plan" RENAME TO "task";',
+    });
+
+    assert.equal(migrationRenames(root).length, 1);
+  });
+
+  test("the applied rename, and a migration that adds, backfills, or renames an index or constraint, pass", async (t) => {
+    const root = await migrations(t, {
+      [PLAN_TO_TASK]: 'ALTER TABLE "plan" RENAME TO "task";',
       "20261018090000_add_then_drop": [
+        '-- ALTER TABLE "task" RENAME TO "job" was the first idea',
         'ALTER TABLE "task" ADD COLUMN "task_id" text;--> statement-breakpoint',
         'UPDATE "task" SET "task_id" = "plan_id";--> statement-breakpoint',
         'ALTER TABLE "task" RENAME CONSTRAINT "plan_pkey" TO "task_pkey";--> statement-breakpoint',
