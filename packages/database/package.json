@@ -35,7 +35,6 @@
     "./models/plan-pages": "./src/models/plan-pages.js",
     "./models/plan-revisions": "./src/models/plan-revisions.js",
     "./models/plan-template-revisions": "./src/models/plan-template-revisions.js",
-    "./models/preview-fork": "./src/models/preview-fork.js",
     "./models/task-section-store": "./src/models/task-section-store.js",
     "./models/task-store": "./src/models/task-store.js",
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",
