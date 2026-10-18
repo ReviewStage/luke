@@ -17,9 +17,10 @@ import { clamp, fbm, hash2, seeded, vnoise } from "./shapes";
  * Every picture is painted here, pixel by pixel, into a texture's own bytes:
  * no image ships in the bundle and no canvas is drawn, so the world reaches
  * no DOM. The soil face is the one texture that changes: its colour is
- * painted once, and its holes (its alpha, which the face's alpha test cuts
- * through) and its cracks are repainted only when the burrows or their
- * damage change, never on a hover or a scrub.
+ * painted once for every world built, its cracks are repainted only when
+ * the burrows or their damage change, and its holes (its alpha, which the
+ * face's alpha test cuts through) only when the burrows do, never on a
+ * hover or a scrub.
  */
 
 /** Soil face pixels per scene unit. */
@@ -171,6 +172,8 @@ function paintSoil(picture: Picture): void {
   const shallow = ["#a58a6c", "#8c7560", "#b59a78", "#6f5a48", "#c2a785"].map(rgbOf);
   const deep = ["#8d847c", "#7a726d", "#9a8f84", "#6f6762"].map(rgbOf);
   const highlight = rgbOf("#f2e6d4");
+  // Note that a flat paint is made once and handed to every pixel, since one made per pixel is most of what an ellipse costs.
+  const shadow = [[30, 18, 10], 0.35] as const;
   for (let index = 0; index < 520; index += 1) {
     const y = rand(-COLONY.DEPTH, -1.5);
     const bedrock = y < -45;
@@ -183,7 +186,7 @@ function paintSoil(picture: Picture): void {
     ellipse(
       picture,
       { cx: px + r * 0.12, cy: py - r * 0.18, rx: r * 1.08, ry: r * 1.08 * squash, turn },
-      () => [[30, 18, 10], 0.35],
+      () => shadow,
     );
     ellipse(picture, { cx: px, cy: py, rx: r, ry: r * squash, turn }, (u, v) => {
       const lit = clamp((Math.hypot(u + 0.35, v - 0.4) - 0.1) / 0.6, 0, 1);
@@ -227,6 +230,7 @@ function paintSoil(picture: Picture): void {
       }
     }
   }
+  const shell = [rgbOf("#d9c3a0"), 1] as const;
   for (const [x, y, r] of [
     [-30, -33, 1],
     [44, -21, 0.8],
@@ -238,7 +242,7 @@ function paintSoil(picture: Picture): void {
       const rr = r * PPU * Math.exp(-a * 0.16);
       spiral.push([cx + Math.cos(a) * rr, cy - Math.sin(a) * rr]);
     }
-    ellipse(picture, { cx, cy, rx: r * PPU, ry: r * PPU, turn: 0 }, () => [rgbOf("#d9c3a0"), 1]);
+    ellipse(picture, { cx, cy, rx: r * PPU, ry: r * PPU, turn: 0 }, () => shell);
     stroke(picture, spiral, 2, rgbOf("#8e7458"), 1);
   }
 }
@@ -265,27 +269,28 @@ function paintWound(picture: Picture, chamber: Burrows["chambers"][number], dama
   }
   if (damage < 4) return;
   const wet = Math.sqrt(damage);
+  const seep = [[40, 52, 62], 0.08] as const;
+  const drop = [[210, 235, 245], 0.5] as const;
   let x = chamber.cx + rand(-1, 1);
   for (let y = 0; y > chamber.cy + chamber.ry * 0.7; y -= 0.15) {
     x += rand(-0.18, 0.18) + Math.sin(y * 0.4) * 0.05;
     const w = (0.35 + wet * 0.09) * (0.7 + 0.6 * vnoise(y * 0.5, chamber.sa)) * PPU;
     const [px, py] = facePixel(x, y);
-    ellipse(picture, { cx: px, cy: py, rx: w, ry: w * 0.6, turn: 0 }, () => [[40, 52, 62], 0.08]);
+    ellipse(picture, { cx: px, cy: py, rx: w, ry: w * 0.6, turn: 0 }, () => seep);
     if (random() < 0.08) {
       ellipse(
         picture,
         { cx: px + rand(-4, 4), cy: py, rx: rand(1, 2.4), ry: rand(1, 2.4), turn: 0 },
-        () => [[210, 235, 245], 0.5],
+        () => drop,
       );
     }
   }
 }
 
-/** Cuts the burrows out of the face's alpha: every tunnel, every bore, and every chamber's outline above its floor. */
-function carve(picture: Picture, burrows: Burrows): void {
+/** Cuts the burrows out of `mask`, the face's alpha: every tunnel, every bore, and every chamber's outline above its floor. */
+function carve(mask: Uint8Array, burrows: Burrows): void {
   const hole = (x: number, y: number) => {
-    if (x >= 0 && y >= 0 && x < picture.width && y < picture.height)
-      picture.data[(y * picture.width + x) * 4 + 3] = 0;
+    if (x >= 0 && y >= 0 && x < FACE_W && y < FACE_H) mask[y * FACE_W + x] = 0;
   };
   const disc = (cx: number, cy: number, radius: number) => {
     for (let y = Math.floor(cy - radius); y <= cy + radius; y += 1) {
@@ -313,7 +318,7 @@ function carve(picture: Picture, burrows: Burrows): void {
   }
   for (const bore of burrows.bores) {
     const [px, bottom] = facePixel(bore.x, bore.bottom - 0.6);
-    const top = bore.top === 0 ? picture.height : facePixel(bore.x, bore.top)[1];
+    const top = bore.top === 0 ? FACE_H : facePixel(bore.x, bore.top)[1];
     for (let y = Math.floor(bottom); y <= top; y += 1) {
       for (let x = Math.ceil(px - radius); x <= px + radius; x += 1) hole(x, y);
     }
@@ -332,37 +337,41 @@ function carve(picture: Picture, burrows: Burrows): void {
   }
 }
 
-/** The face's alpha, halved and blurred, which darkens the soil around every hole's rim. */
-function blurRims(picture: Picture, into: Uint8Array): void {
-  const width = picture.width / 2;
-  const height = picture.height / 2;
+/** The face's alpha `mask`, halved and blurred, which darkens the soil around every hole's rim. */
+function blurRims(mask: Uint8Array, into: Uint8Array): void {
+  const width = FACE_W / 2;
+  const height = FACE_H / 2;
   const plain = new Float32Array(width * height);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      let sum = 0;
-      for (const [dx, dy] of [
-        [0, 0],
-        [1, 0],
-        [0, 1],
-        [1, 1],
-      ] as const) {
-        sum += picture.data[((2 * y + dy) * picture.width + 2 * x + dx) * 4 + 3] ?? 0;
-      }
-      plain[y * width + x] = sum / 4;
+      const below = 2 * y * FACE_W + 2 * x;
+      const above = below + FACE_W;
+      plain[y * width + x] =
+        ((mask[below] ?? 0) +
+          (mask[below + 1] ?? 0) +
+          (mask[above] ?? 0) +
+          (mask[above + 1] ?? 0)) /
+        4;
     }
   }
+  // Note that only a tap past the picture's edge is clamped, so the rest read straight along their row or column.
   const pass = (from: Float32Array, horizontal: boolean): Float32Array => {
     const to = new Float32Array(from.length);
     const reach = 4;
+    const along = horizontal ? width : height;
+    const step = horizontal ? 1 : width;
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
+        const at = y * width + x;
+        const place = horizontal ? x : y;
         let sum = 0;
-        for (let k = -reach; k <= reach; k += 1) {
-          const sx = horizontal ? clamp(x + k, 0, width - 1) : x;
-          const sy = horizontal ? y : clamp(y + k, 0, height - 1);
-          sum += from[sy * width + sx] ?? 255;
+        if (place >= reach && place < along - reach) {
+          for (let k = -reach; k <= reach; k += 1) sum += from[at + k * step] ?? 255;
+        } else {
+          for (let k = -reach; k <= reach; k += 1)
+            sum += from[at + (clamp(place + k, 0, along - 1) - place) * step] ?? 255;
         }
-        to[y * width + x] = sum / (2 * reach + 1);
+        to[at] = sum / (2 * reach + 1);
       }
     }
     return to;
@@ -371,6 +380,17 @@ function blurRims(picture: Picture, into: Uint8Array): void {
   blurred.forEach((value, index) => {
     into[index] = value;
   });
+}
+
+let soilPainted: Uint8Array | undefined;
+
+/** The soil's colour with nothing cut or wounded, painted by the first world built and shared by every one after; callers copy it and never write to it. */
+function soilBase(): Uint8Array {
+  if (soilPainted === undefined) {
+    soilPainted = new Uint8Array(FACE_W * FACE_H * 4);
+    paintSoil({ data: soilPainted, width: FACE_W, height: FACE_H });
+  }
+  return soilPainted;
 }
 
 /* ----- Public ----- */
@@ -384,9 +404,10 @@ export interface SoilFace {
 }
 
 export function soilFace(): SoilFace {
-  const base = new Uint8Array(FACE_W * FACE_H * 4);
-  paintSoil({ data: base, width: FACE_W, height: FACE_H });
+  const base = soilBase();
   const pixels = new Uint8Array(base);
+  const mask = new Uint8Array(FACE_W * FACE_H);
+  let carved: Burrows | undefined;
   const texture = new DataTexture(pixels, FACE_W, FACE_H, RGBAFormat);
   texture.colorSpace = SRGBColorSpace;
   texture.generateMipmaps = true;
@@ -410,10 +431,16 @@ export function soilFace(): SoilFace {
         const chamber = burrows.chambers[index];
         if (chamber !== undefined && amount >= 1) paintWound(picture, chamber, amount);
       }
-      carve(picture, burrows);
-      blurRims(picture, shade);
+      // Note that the holes and their rims follow the burrows alone, so a change in the damage alone cuts nothing again.
+      if (carved !== burrows) {
+        carved = burrows;
+        mask.fill(255);
+        carve(mask, burrows);
+        blurRims(mask, shade);
+        rims.needsUpdate = true;
+      }
+      for (let at = 0; at < mask.length; at += 1) pixels[at * 4 + 3] = mask[at] ?? 255;
       texture.needsUpdate = true;
-      rims.needsUpdate = true;
     },
   };
 }
@@ -432,7 +459,10 @@ export function turf(): Turf {
       base.set([92 + n * 40, 104 + n * 40, 48 + n * 20, 255], (y * TURF_W + x) * 4);
     }
   }
-  const speckles = [rgbOf("#d2bea0"), rgbOf("#785a3c"), rgbOf("#b4a082")];
+  const flecks = [rgbOf("#d2bea0"), rgbOf("#785a3c"), rgbOf("#b4a082")].map(
+    (rgb) => [rgb, 0.6] as const,
+  );
+  const bored = [[32, 19, 11], 1] as const;
   const turfPixels = new Uint8Array(base);
   const texture = new DataTexture(turfPixels, TURF_W, TURF_H, RGBAFormat);
   texture.colorSpace = SRGBColorSpace;
@@ -477,17 +507,15 @@ export function turf(): Turf {
             ry: COLONY.TUNNEL_RADIUS * TURF_PPU,
             turn: 0,
           },
-          () => [[32, 19, 11], 1],
+          () => bored,
         );
       }
       const speck = seeded(23);
       for (let index = 0; index < 900; index += 1) {
         const [cx, cy] = at((speck() * 2 - 1) * COLONY.HALF, -speck() * COLONY.SLAB);
         const r = 0.6 + speck() * 1.6;
-        ellipse(painted, { cx, cy, rx: r, ry: r, turn: 0 }, () => [
-          speckles[index % 3] ?? [0, 0, 0],
-          0.6,
-        ]);
+        const fleck = flecks[index % flecks.length];
+        ellipse(painted, { cx, cy, rx: r, ry: r, turn: 0 }, () => fleck);
       }
       texture.needsUpdate = true;
     },
