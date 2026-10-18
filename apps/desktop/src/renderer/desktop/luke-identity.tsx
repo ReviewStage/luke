@@ -19,12 +19,12 @@ export function LukeIdentity(): React.JSX.Element {
   const faceElement = useRef<HTMLSpanElement>(null);
   const face = useFaceMotion(QUIET, usePrefersReducedMotion(), useFaceHover(faceElement));
   return (
-    <div className="luke-identity">
-      <span className="luke-identity-face" ref={faceElement}>
+    <div className="sidebar-identity">
+      <span className="sidebar-identity-face" ref={faceElement}>
         <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
       </span>
-      <span className="luke-identity-copy">
-        <span className="luke-identity-name">Luke</span>
+      <span className="sidebar-identity-copy">
+        <span className="sidebar-identity-name">Luke</span>
       </span>
     </div>
   );

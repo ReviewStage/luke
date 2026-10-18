@@ -44,6 +44,11 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * any link does; it is never unavailable or busy, since a link that cannot
  * be followed is not drawn.
  *
+ * A labelled button is named by its words, unless it is given a `label`
+ * that says more of what it does than they have room for ("Start a coding
+ * agent" over "Start"). The label holds the words it is drawn with, so a
+ * reader who says what they see still reaches it (WCAG's label in name).
+ *
  * An IconButton comes in two sizes: the control's own, and `compact`, the
  * smaller square a row's marks stand in at its end (a sidebar row's Pin,
  * Archive, or ⋯, a message's Copy), which its row reveals under the
@@ -207,15 +212,18 @@ function stateProps(props: ButtonBase, name: string | undefined) {
 /** A labelled button: its words, after its glyph where it has one. */
 export function Button({
   icon,
+  label,
   children,
   ...props
 }: ButtonBase & {
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <button className="luke-button" {...stateProps(props, undefined)}>
+    <button className="luke-button" {...stateProps(props, label)}>
       <span className="luke-button-face">
         {icon}
         <span className="luke-button-words">{children}</span>

@@ -20,12 +20,13 @@ import {
  * follows it. A button that is not tabbable is left out of the tab order,
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
- * on the field that held it when a pointer presses it. A compact row mark
+ * on the field that held it when a pointer presses it. A labelled button
+ * given a label is named by it, which holds its words. A compact row mark
  * is a button named by its label like any other, its right-click heard so
  * it can offer its row's menu, and an unavailable one is pressed to no
- * effect. A submit sends its form while it takes a press,
- * sends nothing while it is unavailable, and made a Stop does its own act
- * without sending the form.
+ * effect. A submit sends its form while it takes a press, sends nothing
+ * while it is unavailable, and made a Stop does its own act without
+ * sending the form.
  */
 
 const roots: Root[] = [];
@@ -182,6 +183,32 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   expect(
     container.querySelector('button[aria-label="End call"]')?.hasAttribute("aria-pressed"),
   ).toBe(false);
+});
+
+test("a labelled button given a label is named by it, its words within it, and by its busy words while busy", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, { label: "Start a coding agent", children: "Start" }),
+      createElement(Button, {
+        label: "Start a coding agent",
+        busy: true,
+        busyLabel: "Starting",
+        children: "Start",
+      }),
+    ),
+  );
+  const said = Array.from(container.querySelectorAll("button"), (button) => [
+    button.getAttribute("aria-label"),
+    button.textContent,
+  ]);
+
+  expect(said).toEqual([
+    ["Start a coding agent", "Start"],
+    ["Starting", "Start"],
+  ]);
+  expect(said[0]?.[0]).toContain(said[0]?.[1]);
 });
 
 test("a compact row mark is found by its label, pressed, and right-clicked, and refuses its press while unavailable", () => {

@@ -41,11 +41,7 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export function Message({ className, from, ...props }: MessageProps): ReactNode {
   return (
     <div
-      className={cn(
-        "group relative flex w-full flex-col gap-1",
-        from === "user" ? "is-user ml-auto max-w-[95%] items-end justify-end" : "is-assistant",
-        className,
-      )}
+      className={cn("transcript-message", from === "user" ? "is-user" : "is-assistant", className)}
       {...props}
     />
   );
@@ -53,22 +49,27 @@ export function Message({ className, from, ...props }: MessageProps): ReactNode 
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
+/** The words of a turn, in `.message-content` (tasks.css): plain across the column, or the developer's raised bubble. */
 export function MessageContent({ children, className, ...props }: MessageContentProps): ReactNode {
   return (
-    <div
-      className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--focus-ring-room)] text-[13px] leading-relaxed text-foreground",
-        "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
-        className,
-      )}
-      {...props}
-    >
+    <div className={cn("message-content", className)} {...props}>
       {children}
     </div>
   );
 }
 
-export type MessageActionsProps = ComponentProps<"div">;
+/** Where a message's actions stand: floated on a card over its corner, or set in the line under it. */
+export const MESSAGE_ACTIONS_PLACEMENT = {
+  FLOATING: "floating",
+  INLINE: "inline",
+} as const;
+
+export type MessageActionsPlacement =
+  (typeof MESSAGE_ACTIONS_PLACEMENT)[keyof typeof MESSAGE_ACTIONS_PLACEMENT];
+
+export type MessageActionsProps = Omit<ComponentProps<"div">, "className"> & {
+  placement?: MessageActionsPlacement;
+};
 
 /**
  * The actions on a message, shown while the pointer rests on the message
@@ -79,18 +80,17 @@ export type MessageActionsProps = ComponentProps<"div">;
  * a turn takes no room for a bar nobody is looking at and the column keeps
  * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
  * pointer either, so the words under it stay selectable. A sent message
- * sets them back in a line under its bubble, beside who sent it
- * (`agent-tab.tsx`'s `AgentMessage`).
+ * sets them inline, in a line under its bubble beside who sent it
+ * (`agent-tab.tsx`'s `AgentMessage`). Each placement is drawn by
+ * `.message-actions` (tasks.css).
  */
-export function MessageActions({ className, children, ...props }: MessageActionsProps): ReactNode {
+export function MessageActions({
+  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
+  children,
+  ...props
+}: MessageActionsProps): ReactNode {
   return (
-    <div
-      className={cn(
-        "pointer-events-none absolute -top-2 right-0 z-10 flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-md transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
-        className,
-      )}
-      {...props}
-    >
+    <div className="message-actions" data-placement={placement} {...props}>
       {children}
     </div>
   );

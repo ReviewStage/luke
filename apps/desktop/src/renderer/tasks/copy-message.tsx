@@ -1,6 +1,11 @@
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { MessageAction, MessageActions } from "../ai-elements/message";
+import {
+  MESSAGE_ACTIONS_PLACEMENT,
+  MessageAction,
+  MessageActions,
+  type MessageActionsPlacement,
+} from "../ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
 import { useCopyLink } from "../copy-link-item";
 import { ForkMessageAction } from "./fork-action";
@@ -25,7 +30,7 @@ export function CopyMessageAction({
   messageId,
   forkable = false,
   forkCut,
-  className,
+  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
 }: {
   words: string;
   /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
@@ -36,13 +41,14 @@ export function CopyMessageAction({
   forkable?: boolean;
   /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
   forkCut?: ForkCut | undefined;
-  className?: string;
+  /** Where the actions stand: floated over the message's corner, or set in the line under it. */
+  placement?: MessageActionsPlacement;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
-    <MessageActions className={className}>
+    <MessageActions placement={placement}>
       {copyable ? (
         <MessageAction
           label={COPY_LABEL}
