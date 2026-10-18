@@ -1779,7 +1779,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
 
   typeInComposer(pane, "See @roll");
   await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent,
   );
   pressInComposer(pane, "Enter");
