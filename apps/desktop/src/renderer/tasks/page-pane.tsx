@@ -239,7 +239,7 @@ export function PagePane({
           </Tooltip>
           <div className="file-view-actions">
             {page.version > 1 ? (
-              <>
+              <div className="page-view-versions">
                 <VersionStep
                   label="Earlier version"
                   to={version > 1 ? version - 1 : undefined}
@@ -261,7 +261,7 @@ export function PagePane({
                   icon={<ChevronRightIcon aria-hidden="true" />}
                   onStep={step}
                 />
-              </>
+              </div>
             ) : null}
             <Tooltip label={toggleLabel}>
               <IconButton

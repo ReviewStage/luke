@@ -3093,10 +3093,12 @@ ul.actor-stack {
 }
 
 /* Under the strip, its list's head and its item's bar are the tab's own bar,
-   as tall as every other tab's (`.file-view-bar`), rather than a top row. */
+   as tall as every other tab's (`.file-view-bar`) and on its ground, rather
+   than a top row. */
 .desktop-task-main .inbox-view .desktop-toolbar {
   min-height: var(--secondary-bar-height);
   padding-block: var(--luke-space-4);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
