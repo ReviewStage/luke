@@ -1424,7 +1424,9 @@ export interface ScopeInboxLiveStatements {
 
 /**
  * A scope's items written for Neon Realtime: the same rows, joins, bound,
- * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, each
+ * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, and
+ * the same columns, each item's thread, files, and whether it is unread for
+ * the reader among them, each
  * column under the key `live-wire.ts` reads it by and each instant in epoch
  * milliseconds. The open items and the latest settled ones are one
  * statement, so an item settling moves from one to the other in one change
@@ -1454,10 +1456,16 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
               response: inboxItem.response,
               needsReply: inboxItem.needsReply,
               status: inboxItem.status,
+              startedBy: inboxItem.userId,
+              startedByName: INBOX_ITEM_COLUMNS.startedByName,
               answer: inboxItem.answer,
+              answerFiles: ANSWER_FILES,
               answeredBy: inboxItem.answeredBy,
               answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
               closedReason: inboxItem.closedReason,
+              messages: MESSAGES,
+              settledAt: SETTLED_AT,
+              unread: unreadFor(scope.userId),
             },
             { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
           ),

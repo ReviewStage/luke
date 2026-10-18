@@ -13,7 +13,15 @@ import {
   accountInboxTaskSchema,
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
-import { INBOX_STATUS, type InboxItem, inboxItemSchema, inboxReplySchema } from "./inbox-wire.js";
+import {
+  INBOX_STATUS,
+  type InboxItem,
+  type InboxMessage,
+  inboxAnswerFileSchema,
+  inboxItemSchema,
+  inboxMessageSchema,
+  inboxReplySchema,
+} from "./inbox-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -235,13 +243,30 @@ export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
 
 export type ScopeInboxLiveAnswer = typeof scopeInboxLiveAnswerSchema.Type;
 
-/** One item as its row delivers it: what an item leaves out where it holds nothing is null. */
+/** One message of an item's thread as its row carries it: the member by id and name, either null where none stands, and its files, empty where it carried none. */
+const inboxLiveMessageSchema = EffectSchema.Struct({
+  id: inboxMessageSchema.fields.id,
+  author: inboxMessageSchema.fields.author,
+  userId: EffectSchema.NullOr(EffectSchema.String),
+  name: EffectSchema.NullOr(EffectSchema.String),
+  text: EffectSchema.String,
+  files: EffectSchema.Array(inboxAnswerFileSchema),
+  createdAt: countedNumber,
+});
+
+/** One item as its row delivers it: what an item leaves out where it holds nothing is null, or empty for a list. */
 const inboxLiveRowSchema = EffectSchema.Struct({
   ...inboxItemSchema.fields,
+  startedBy: EffectSchema.String,
+  startedByName: EffectSchema.NullOr(EffectSchema.String),
   answer: EffectSchema.NullOr(inboxReplySchema),
+  answerFiles: EffectSchema.Array(inboxAnswerFileSchema),
   answeredBy: EffectSchema.NullOr(EffectSchema.String),
   answeredByName: EffectSchema.NullOr(EffectSchema.String),
   closedReason: EffectSchema.NullOr(EffectSchema.String),
+  messages: EffectSchema.Array(inboxLiveMessageSchema),
+  settledAt: EffectSchema.NullOr(countedNumber),
+  unread: EffectSchema.Boolean,
 });
 
 /** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -251,16 +276,47 @@ export const scopeInboxLiveRowsSchema = EffectSchema.Struct({
 
 type InboxLiveRow = typeof inboxLiveRowSchema.Type;
 
+/** A message as the wire carries it, the member named where their account stands and no files where it carried none, as the held read writes it. */
+function inboxMessageOfLiveRow(row: typeof inboxLiveMessageSchema.Type): InboxMessage {
+  return {
+    id: row.id,
+    author: row.author,
+    ...(row.userId === null || row.name === null
+      ? undefined
+      : { member: { userId: row.userId, name: row.name } }),
+    text: row.text,
+    ...(row.files.length === 0 ? undefined : { files: row.files }),
+    createdAt: row.createdAt,
+  };
+}
+
 /** A row as the wire carries its item, each absent field left out rather than null, as the held read writes it. */
 function inboxItemOfLiveRow(row: InboxLiveRow): InboxItem {
-  const { answer, answeredBy, answeredByName, closedReason, ...item } = row;
+  const {
+    startedBy,
+    startedByName,
+    answer,
+    answerFiles,
+    answeredBy,
+    answeredByName,
+    closedReason,
+    messages,
+    settledAt,
+    ...item
+  } = row;
   return {
     ...item,
+    ...(startedByName === null
+      ? undefined
+      : { startedBy: { userId: startedBy, name: startedByName } }),
     ...(answer === null ? undefined : { answer }),
+    ...(answerFiles.length === 0 ? undefined : { answerFiles }),
     ...(answeredBy === null || answeredByName === null
       ? undefined
       : { answeredBy: { userId: answeredBy, name: answeredByName } }),
     ...(closedReason === null ? undefined : { closedReason }),
+    ...(messages.length === 0 ? undefined : { messages: messages.map(inboxMessageOfLiveRow) }),
+    ...(settledAt === null ? undefined : { settledAt }),
   };
 }
 

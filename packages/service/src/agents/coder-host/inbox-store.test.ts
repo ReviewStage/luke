@@ -230,12 +230,23 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* openWorkspace(outsider);
         const posted = yield* postInboxItem(agent, SETTINGS);
         assert.ok(Result.isSuccess(posted));
-        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "open" })));
+        const open = yield* postInboxItem(agent, { ...SETTINGS, key: "open" });
+        assert.ok(Result.isSuccess(open));
         assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
         assert.ok(
           Option.isSome(yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID())),
         );
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
+        // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
+        assert.ok(
+          Option.isSome(
+            yield* postInboxMessage(teammate, open.success.id, {
+              text: "Here is the trace.",
+              clientKey: randomUUID(),
+              files: [attached("trace.txt", "text/plain", TRACE)],
+            }),
+          ),
+        );
 
         for (const reader of [agent.userId, teammate, outsider]) {
           const plan = Option.getOrThrow(taskInboxLiveStatements(reader, agent.taskId ?? ""));
@@ -257,6 +268,13 @@ it.layer(getTestDB())("the inbox store", (it) => {
           );
         }
         const read = yield* taskInboxItems(teammate, agent.taskId ?? "");
+        const openOf = (items: typeof read) => items.find((item) => item.id === open.success.id);
+        assert.equal(openOf(read)?.unread, false, "the teammate wrote on it last");
+        assert.equal(openOf(yield* taskInboxItems(agent.userId, agent.taskId ?? ""))?.unread, true);
+        assert.deepEqual(
+          openOf(read)?.messages?.map((message) => [message.text, message.files?.length]),
+          [["Here is the trace.", 1]],
+        );
         assert.deepEqual(read.map((item) => item.status).toSorted(), [
           INBOX_STATUS.ANSWERED,
           INBOX_STATUS.CLOSED,

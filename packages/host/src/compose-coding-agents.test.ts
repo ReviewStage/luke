@@ -1199,7 +1199,14 @@ it.effect(
       assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
 
       realtime.deliver("items", [{ id: "not an item" }]);
-      for (const part of ["planless", "plans", "automations", "failedRuns"]) {
+      for (const part of [
+        "planless",
+        "plans",
+        "automations",
+        "failedRuns",
+        "chatAsks",
+        "chatNotices",
+      ]) {
         realtime.deliver(part, []);
       }
       yield* settled;
@@ -1248,12 +1255,20 @@ const SEALED_SCOPE: ScopeInboxLiveAnswer = {
 };
 
 /** That item as its row delivers it, what it leaves out held as null. */
+/** That item as a reader who has read it reads it live. */
+const LIVE_ITEM: InboxItem = { ...ITEM, unread: false };
+
 const ITEM_ROW = {
-  ...ITEM,
+  ...LIVE_ITEM,
+  startedBy: "user-dana",
+  startedByName: null,
   answer: null,
+  answerFiles: [],
   answeredBy: null,
   answeredByName: null,
   closedReason: null,
+  messages: [],
+  settledAt: null,
 };
 
 it.effect(
@@ -1271,7 +1286,7 @@ it.effect(
       yield* settled;
       const answered = yield* Fiber.join(first);
       assert.ok(isRecord(answered) && isWireString(answered.cursor));
-      assert.deepEqual(answered.items, [ITEM]);
+      assert.deepEqual(answered.items, [LIVE_ITEM]);
 
       // Read again from that cursor, it holds until the items move.
       const next = yield* Effect.forkChild(
@@ -1290,7 +1305,7 @@ it.effect(
       assert.ok(isRecord(moved) && isWireString(moved.cursor));
       assert.notEqual(moved.cursor, answered.cursor);
       assert.deepEqual(moved.items, [
-        { ...ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
+        { ...LIVE_ITEM, revision: 3, status: INBOX_STATUS.CLOSED, closedReason: "Done" },
       ]);
 
       const unchanged = yield* Effect.forkChild(
