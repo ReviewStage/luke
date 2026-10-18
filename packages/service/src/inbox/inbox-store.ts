@@ -1081,6 +1081,21 @@ function excluded(column: AnyPgColumn): SQL {
   return sql`excluded.${sql.identifier(column.name)}`;
 }
 
+/**
+ * A read written over a marker that stands: read through the later of the
+ * two changes and no longer marked unread. Note that it never moves a
+ * marker back, because the change a read selected may be older than one a
+ * write of the member's own, such as their answer, recorded while the read
+ * waited on the marker's lock.
+ */
+const READ_ON = {
+  readThrough: sql`greatest(${inboxItemRead.readThrough}, ${excluded(inboxItemRead.readThrough)})`,
+  markedUnread: false,
+};
+
+/** Whether a read moves the marker that stands: it was marked unread, or the read reaches a later change than it had read through. */
+const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)}`;
+
 const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
 
 const MarkedSchema = Schema.Struct({ itemId: Schema.String });
@@ -1088,8 +1103,8 @@ const MarkedSchema = Schema.Struct({ itemId: Schema.String });
 /**
  * The member's marker on the item read through its last change, where the
  * account reaches the item; nothing where the marker already read through
- * that change and was not marked unread, so a read already standing writes
- * no row.
+ * that change or a later one and was not marked unread, so a read already
+ * standing writes no row.
  */
 const upsertRead = SqlSchema.findOneOption({
   Request: ReaderItemSchema,
@@ -1111,8 +1126,8 @@ const upsertRead = SqlSchema.findOneOption({
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
-          set: { readThrough: excluded(inboxItemRead.readThrough), markedUnread: false },
-          setWhere: sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is distinct from ${excluded(inboxItemRead.readThrough)}`,
+          set: READ_ON,
+          setWhere: READ_MOVES,
         })
         .returning({ itemId: inboxItemRead.itemId }),
     ),
@@ -1171,7 +1186,7 @@ function inboxListed(userId: string) {
   );
 }
 
-/** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved. */
+/** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
   Result: MarkedSchema,
@@ -1199,7 +1214,8 @@ const upsertAllRead = SqlSchema.findAll({
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
-          set: { readThrough: excluded(inboxItemRead.readThrough), markedUnread: false },
+          set: READ_ON,
+          setWhere: READ_MOVES,
         })
         .returning({ itemId: inboxItemRead.itemId }),
     ),

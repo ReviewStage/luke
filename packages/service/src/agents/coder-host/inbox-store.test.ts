@@ -9,6 +9,7 @@ import { organization, user } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
+import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -916,6 +917,40 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
         assert.equal(yield* unreadFor(agent.userId, other), false);
+      }),
+  );
+
+  it.effect(
+    "a read never moves a member's marker back past a later change they read through, as their own write landing while a read waits leaves it",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openAgentIn;
+        const id = yield* postedId(agent, SETTINGS.key);
+        // As the member's own answer leaves the marker when it lands while a read that selected the older change waits on its lock.
+        yield* markInboxItemRead(agent.userId, id);
+        const ahead = new Date(
+          (yield* DateTime.nowAsDate).getTime() + Duration.toMillis("5 seconds"),
+        );
+        yield* Database.use((db) =>
+          db.update(inboxItemRead).set({ readThrough: ahead }).where(eq(inboxItemRead.itemId, id)),
+        );
+
+        yield* markInboxItemRead(agent.userId, id);
+        assert.equal(
+          yield* markInboxRead(agent.userId, undefined),
+          0,
+          "nothing moved, so nothing counts",
+        );
+        yield* markInboxItemUnread(agent.userId, id);
+        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+
+        yield* TestClock.adjust(Duration.seconds(2));
+        yield* replyInboxItem(agent, SETTINGS.key, "Before the later change.");
+        assert.equal(
+          yield* unreadFor(agent.userId, id),
+          false,
+          "the marker still reads through the later change, so one before it is read",
+        );
       }),
   );
 
