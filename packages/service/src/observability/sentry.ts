@@ -13,6 +13,10 @@
  * start: a second `init` would replace the client eve's integration hangs
  * off.
  *
+ * One error is not sent: an agent's tool call that failed and was answered
+ * to the model as the call's result, which the AI SDK integration would
+ * capture as unhandled; it stays a breadcrumb and an errored span.
+ *
  * Note that the options are Sentry's defaults: its `dataCollection` is left
  * as the SDK ships it, which `PRIVACY.md` describes. A deployment without
  * `SENTRY_DSN` starts the SDK disabled, and every layer here then sends
@@ -20,6 +24,7 @@
  */
 
 import * as Sentry from "@sentry/effect";
+import { addBreadcrumb, type ErrorEvent } from "@sentry/effect/server";
 import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
 
 const SENTRY_ENVIRONMENT = {
@@ -60,6 +65,50 @@ const TRACES_SAMPLE_RATE = 0.1;
 /** What a process of this deployment starts Sentry with; a test adds its own transport. */
 export type SentryOptions = Sentry.NodeOptions;
 
+/** The mechanism the AI SDK's Sentry integration captures a failed tool call under, and the tag naming the tool. */
+const AI_TOOL_ERROR = {
+  MECHANISM: "auto.vercelai.channel",
+  TOOL_TAG: "vercel.ai.tool.name",
+  CALL_TAG: "vercel.ai.tool.callId",
+} as const;
+
+/**
+ * An error event that is an agent's tool call failing, which the AI SDK
+ * answered the model with as the call's result: the AI SDK integration
+ * captures every one as unhandled (`captureToolError`), though the agent
+ * reads it and carries on, so it is an outcome of the turn rather than an
+ * error of the app.
+ */
+function isAnsweredToolError(event: ErrorEvent): boolean {
+  return (
+    event.tags?.[AI_TOOL_ERROR.TOOL_TAG] !== undefined &&
+    (event.exception?.values ?? []).some(
+      (value) => value.mechanism?.type === AI_TOOL_ERROR.MECHANISM,
+    )
+  );
+}
+
+/**
+ * Sends every error event but a tool call's failure answered to the model,
+ * which is kept as a breadcrumb instead, so a real error later in the same
+ * request still shows what the agent's tools met before it. The tool call's
+ * span keeps its error status and message, so Agent Tracing still shows it.
+ */
+function dropAnsweredToolErrors(event: ErrorEvent): ErrorEvent | null {
+  if (!isAnsweredToolError(event)) return event;
+  const exception = event.exception?.values?.at(-1);
+  addBreadcrumb({
+    category: "ai.tool",
+    level: "warning",
+    message: `${String(event.tags?.[AI_TOOL_ERROR.TOOL_TAG])} failed: ${exception?.type ?? "Error"}: ${exception?.value ?? ""}`,
+    data: {
+      tool: event.tags?.[AI_TOOL_ERROR.TOOL_TAG],
+      toolCallId: event.tags?.[AI_TOOL_ERROR.CALL_TAG],
+    },
+  });
+  return null;
+}
+
 /**
  * The options every process starts Sentry with. The release is the SDK's
  * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, which is the release the
@@ -74,6 +123,7 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
+    beforeSend: dropAnsweredToolErrors,
   };
 }
 
