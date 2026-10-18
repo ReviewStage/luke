@@ -247,14 +247,15 @@ test("the title bar's buttons, each wrapped in its hint, tell a reader the chord
   ]);
 });
 
-test("the home page welcomes an account with no plan, and its New task raises the dialog over the window, which Escape puts away", () => {
+test("the home page welcomes an account with no plan on New task's composer, and the title bar's New task still raises the dialog over the window, which Escape puts away", () => {
   const page = mount(false);
   const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
-  const newTask = [...home.querySelectorAll("button")].find((button) =>
-    button.textContent?.startsWith("New task"),
+  assert.ok(home.querySelector(".new-task-composer"), "the home page holds New task's composer");
+  const newTask = page.querySelector<HTMLButtonElement>(
+    '.title-bar-controls:not([data-edge]) button[aria-label="New task"]',
   );
-  assert.ok(newTask, "the home page offers New plan");
+  assert.ok(newTask, "the title bar offers New task");
   act(() => newTask.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
   assert.equal(dialog?.querySelector("h2")?.textContent, "New task");

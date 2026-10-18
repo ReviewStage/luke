@@ -7047,6 +7047,15 @@ ul.actor-stack {
   margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
 }
 
+/* The greeting and New task's composer under it (`new-task-composer.tsx`),
+   closer to each other than the sections below them, the card as wide as
+   the column, as the rows' own fills are. */
+.home-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-16);
+}
+
 .home-head {
   display: flex;
   align-items: center;
@@ -7223,16 +7232,22 @@ ul.actor-stack {
   margin: calc(-1 * var(--luke-space-20)) 0 0;
 }
 
-/* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
+/* A new account's welcome: Luke's face on a tile and a title, centred over
+   the composer, the column standing in the middle of the window. */
+.home-scroll-welcome {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-scroll-welcome .home-column {
+  margin: auto;
+}
+
 .home-welcome {
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--luke-space-12);
-  padding: var(--luke-page-inset);
   text-align: center;
 }
 
