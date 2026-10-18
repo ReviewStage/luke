@@ -4,13 +4,20 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import {
   OpenHereProvider,
   openPullRequestsHere,
   useOpenLink,
 } from "@luke/panel/tasks/use-open-link";
+import { type TaskLooks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -29,13 +36,8 @@ import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luk
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { useAppCommand } from "../app-commands";
-import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
-import { MemberDirectory } from "../member-directory";
-import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
@@ -68,10 +70,8 @@ import { CallBar } from "../tasks/tasks-parts";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
-import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { TaskChatTab } from "./desktop-chat";

@@ -1,3 +1,4 @@
+import { PICK_KIND, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   BufferAttribute,
   BufferGeometry,
@@ -14,7 +15,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type WorldPicking } from "../../world";
 import { curtainMaterial } from "./blast";
 import { CORE_RADIUS, type CoreZone, MAX_STRATA, PLANET_RADIUS, type PlanetLayout } from "./globe";
 import { flush, GLSL_NOISE, GLSL_OUTPUT, GLSL_ZONE, type SharedUniforms } from "./kit";

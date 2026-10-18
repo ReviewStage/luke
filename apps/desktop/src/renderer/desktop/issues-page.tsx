@@ -16,8 +16,13 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { PaneGlide } from "@luke/panel/desktop/pane-motion";
 import { type IssueChange, useIssue, useIssues } from "@luke/panel/desktop/use-issues";
+import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -49,12 +54,9 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
@@ -66,9 +68,7 @@ import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits, usePeekWidth } f
 import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
-import { PaneGlide } from "./pane-motion";
 import { createdByEntries } from "./sidebar-task-view";
-import { useRowKeys } from "./use-row-keys";
 
 /**
  * issues-page.tsx -- the window's Issues page: the listed workspace's issues on a board of a column for each status, or listed under a heading for each, and a new one filed from a card.
@@ -622,13 +622,11 @@ function tasksStartedFrom(issueId: string, listed: TasksControl["listed"]): Task
  */
 export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const work: IssueWork = {
-    onStartTask: (issue, identifier) =>
-      tasks.onNewTaskFrom({
-        id: issue.id,
-        workspaceId: issue.workspaceId,
-        identifier,
-        title: issue.title,
-      }),
+    onStartTask: (issue, identifier, agent) =>
+      tasks.onNewTaskFrom(
+        { id: issue.id, workspaceId: issue.workspaceId, identifier, title: issue.title },
+        agent,
+      ),
     tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
     onOpenTask: tasks.onSelect,
   };

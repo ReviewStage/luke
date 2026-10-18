@@ -1,8 +1,8 @@
+import { CodeBlock } from "@luke/panel/ai-elements/code-block";
+import { Fold, FoldBody, type FoldProps, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { TextButton, useDisclosureBodyDrawn } from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
-import { CodeBlock } from "./code-block";
-import { Fold, FoldBody, type FoldProps, FoldSummary } from "./fold";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.

@@ -16,6 +16,10 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { usePerson } from "@luke/panel/member-directory";
+import type { HeadingsChange, MentionNode } from "@luke/panel/plan-editor/contract";
+import { IssueMark } from "@luke/panel/tasks/issue-mark";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import {
   type ChipWhere,
   type LinkStanding,
@@ -53,8 +57,6 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
-import { usePerson } from "../member-directory";
-import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -68,13 +70,11 @@ import { providerOf } from "./coding-agent-model";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
-import { IssueMark } from "./issue-mark";
 import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
 import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.

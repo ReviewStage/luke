@@ -3,6 +3,15 @@ import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-a
 import { FACTORY_WORLD_BOUNDS, type FactoryWorld } from "@luke/features/factory-world-wire";
 import { AREA_PATH } from "@luke/features/pull-request-area";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldInstance,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -34,15 +43,6 @@ import {
 } from "three";
 import { test } from "vitest";
 import { type ScenePicking, scenePicking } from "../../scene/picking";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldInstance,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**

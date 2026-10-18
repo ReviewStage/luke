@@ -26,11 +26,13 @@ function retentionCellStyle(share: number): React.CSSProperties {
 }
 
 function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Element {
-  const provisional = cell.inProgress ? "border border-dashed border-muted-foreground/60" : "";
+  const provisional = cell.inProgress
+    ? "border border-dashed border-(--luke-color-text-muted)/60"
+    : "";
   if (cell.share === null) {
     return (
       <div
-        className={`flex min-h-9 items-center justify-center rounded-sm text-muted-foreground ${provisional}`}
+        className={`flex min-h-9 items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
         title="No accounts in this cohort"
       >
         —
@@ -44,7 +46,7 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   if (cell.share === 0) {
     return (
       <div
-        className={`flex min-h-9 items-center justify-center rounded-sm text-muted-foreground ${provisional}`}
+        className={`flex min-h-9 items-center justify-center rounded-sm text-(--luke-color-text-muted) ${provisional}`}
         title={title}
       >
         {percent}
@@ -106,40 +108,42 @@ export function RetentionGrid({
       {/* Note that the scroller bleeds across the card's inset, because cells
       scrolled out of a narrow card should pass under its edge, not stop short of it. */}
       <div className="-mx-5 overflow-x-auto px-5">
-        <div
-          className="grid min-w-[640px] gap-1 text-xs tabular-nums"
-          style={{
-            gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
-          }}
-        >
-          <div className="flex items-center uppercase">
-            <HeaderWords>Cohort</HeaderWords>
-          </div>
-          <div className="flex items-center justify-end uppercase">
-            <HeaderWords>Accounts</HeaderWords>
-          </div>
-          {offsets.map((offset) => (
-            <div key={offset} className="flex items-center justify-center uppercase">
-              <HeaderWords>Wk {offset}</HeaderWords>
+        <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
+          <div
+            className="grid min-w-160 gap-1 tabular-nums"
+            style={{
+              gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
+            }}
+          >
+            <div className="flex items-center uppercase">
+              <HeaderWords>Cohort</HeaderWords>
             </div>
-          ))}
-          {retention.cohorts.map((cohort) => (
-            <Fragment key={cohort.weekStart}>
-              <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
-              <div className="flex items-center justify-end pr-1 text-muted-foreground">
-                {formatNumber(cohort.size)}
+            <div className="flex items-center justify-end uppercase">
+              <HeaderWords>Accounts</HeaderWords>
+            </div>
+            {offsets.map((offset) => (
+              <div key={offset} className="flex items-center justify-center uppercase">
+                <HeaderWords>Wk {offset}</HeaderWords>
               </div>
-              {offsets.map((offset) => {
-                const cell = cohort.cells[offset];
-                return cell ? (
-                  <RetentionCell key={offset} cell={cell} />
-                ) : (
-                  <div key={offset} aria-hidden="true" />
-                );
-              })}
-            </Fragment>
-          ))}
-        </div>
+            ))}
+            {retention.cohorts.map((cohort) => (
+              <Fragment key={cohort.weekStart}>
+                <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
+                <div className="flex items-center justify-end pr-1 text-(--luke-color-text-muted)">
+                  {formatNumber(cohort.size)}
+                </div>
+                {offsets.map((offset) => {
+                  const cell = cohort.cells[offset];
+                  return cell ? (
+                    <RetentionCell key={offset} cell={cell} />
+                  ) : (
+                    <div key={offset} aria-hidden="true" />
+                  );
+                })}
+              </Fragment>
+            ))}
+          </div>
+        </Text>
       </div>
     </ChartFrame>
   );

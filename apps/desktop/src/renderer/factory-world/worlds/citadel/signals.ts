@@ -1,4 +1,11 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldPalette,
+  type WorldPicking,
+  type WorldPoint,
+} from "@luke/panel/factory-world/world";
 import { type TimelineEntry, ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -20,13 +27,6 @@ import {
   ShaderMaterial,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import {
-  PICK_KIND,
-  type PickTarget,
-  type WorldPalette,
-  type WorldPicking,
-  type WorldPoint,
-} from "../../world";
 import type { ZoneSite } from "./layout";
 import { HUE } from "./materials";
 import { clamp, placed, polar, seeded } from "./math";

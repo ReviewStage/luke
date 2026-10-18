@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { PlanEditorHandle } from "@luke/panel/plan-editor/contract";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorLayout } from "#testing/composer";
-import type { PlanEditorHandle } from "./contract";
 import { mountPlanEditor } from "./plan-editor";
 
 /**

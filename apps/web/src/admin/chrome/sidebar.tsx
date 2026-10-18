@@ -1,5 +1,5 @@
 import { IconButton, NAV_CURRENT, NavItemLink } from "@luke/ui";
-import { LukeMark } from "../../SiteChrome";
+import { LukeMark, WORDMARK } from "../../SiteChrome";
 import { type AdminTab, plainLeftClick, tabHref } from "../routing";
 
 /**
@@ -170,9 +170,9 @@ export function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-border bg-card px-3 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
       >
-        <span className="mr-1 inline-flex w-6 shrink-0 text-foreground" aria-hidden="true">
+        <span className="mr-1 inline-flex w-6 shrink-0 text-(--luke-color-text)" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
@@ -182,15 +182,18 @@ export function AdminSidebar({
       <nav
         aria-label="Admin sections"
         style={{ width: sidebarRailWidth(collapsed) }}
-        className="hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-card py-5 transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
+        className="hidden h-full shrink-0 flex-col overflow-hidden border-r border-(--luke-color-border) bg-(--luke-color-surface) py-5 transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
       >
         <div className="flex items-center gap-2 px-4">
-          <span className="flex w-8 shrink-0 justify-center text-foreground" aria-hidden="true">
+          <span
+            className="flex w-8 shrink-0 justify-center text-(--luke-color-text)"
+            aria-hidden="true"
+          >
             <span className="inline-flex w-6">
               <LukeMark className="h-auto w-full" />
             </span>
           </span>
-          <span className="min-w-0 overflow-hidden whitespace-nowrap font-brand text-base font-bold tracking-[-0.01em]">
+          <span className={`min-w-0 overflow-hidden whitespace-nowrap ${WORDMARK}`}>
             Luke admin
           </span>
         </div>

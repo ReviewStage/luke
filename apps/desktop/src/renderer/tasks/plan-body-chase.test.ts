@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 
 /**

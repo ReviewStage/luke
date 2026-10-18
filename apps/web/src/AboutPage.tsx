@@ -4,6 +4,7 @@ import {
   IconButtonLink,
   PublicPage,
   PublicSection,
+  TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -80,13 +81,17 @@ function FounderCard({ founder }: { readonly founder: Founder }): React.JSX.Elem
     <article className="flex items-start gap-4">
       <Avatar name={founder.name} src={founder.photoSrc} size={AVATAR_SIZE.PORTRAIT} />
       <div className="min-w-0">
-        <h3 className="m-0 text-base font-semibold tracking-[-0.01em]">{founder.name}</h3>
+        <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
+          {founder.name}
+        </Text>
         <div className="mt-0.5">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} font={TEXT_FONT.MONO}>
             {founder.role}
           </Text>
         </div>
-        <p className="mt-2 mb-0 text-sm text-pretty text-muted-foreground">{founder.bio}</p>
+        <div className="mt-2 text-pretty">
+          <Text tone={TEXT_TONE.MUTED}>{founder.bio}</Text>
+        </div>
         <FounderSocials name={founder.name} socials={founder.socials} />
       </div>
     </article>

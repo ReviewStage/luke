@@ -16,12 +16,12 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
+import { useVoiceView } from "@luke/panel/use-voice-view";
 import { EXPERIMENT } from "@luke/settings";
 import { callTabVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useVoiceView } from "../use-voice-view";
 import { avatarViewShareAtom } from "./avatar-view";
 import {
   type CallAvatarTracks,

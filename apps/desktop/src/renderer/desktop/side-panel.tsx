@@ -13,7 +13,16 @@ import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import {
+  EDGE_SIDE,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "@luke/panel/desktop/use-resizable-edge";
+import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { SpinnerRegion } from "@luke/panel/spinner";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -59,14 +68,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
-import { drawnVisibly, focusSeek } from "../focus-seek";
 import { panelTabPlace } from "../links-at-hand";
 import { type MenuRow, MenuRowList } from "../searchable-menu";
-import { SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
@@ -131,7 +137,6 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
   AddTabButton,
@@ -146,7 +151,6 @@ import {
   type WorkerStandings,
 } from "./strip-tabs";
 import { TabStrip } from "./tab-strip";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.

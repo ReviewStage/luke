@@ -9,13 +9,13 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { TasksControl } from "../tasks/use-tasks-tab";

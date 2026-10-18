@@ -1,4 +1,5 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   PULL_REQUEST_MOMENT,
@@ -9,7 +10,6 @@ import { Badge, HoverCardNote } from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref";
-import { useMemberDirectory } from "../member-directory";
 import { LinesChanged } from "./agent-published";
 import { RelativeTime } from "./relative-time";
 

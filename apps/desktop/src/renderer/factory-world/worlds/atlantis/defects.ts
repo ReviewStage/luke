@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -20,7 +21,6 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { CITY, type CityLayout, type District } from "./city";
 import {
   clamp,

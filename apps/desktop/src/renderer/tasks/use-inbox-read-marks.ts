@@ -2,9 +2,9 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { ActHandle } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { type InboxGroup, type InboxReadMark, isUnread, withReadMarks } from "./inbox-model";
 
 /**

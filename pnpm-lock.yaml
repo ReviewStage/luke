@@ -200,9 +200,6 @@ importers:
       '@pierre/diffs':
         specifier: 1.5.2
         version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)
-      '@pierre/trees':
-        specifier: 1.0.0-beta.6
-        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
@@ -872,6 +869,9 @@ importers:
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
+      '@luke/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@luke/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -887,28 +887,61 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../ui
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@pierre/trees':
+        specifier: 1.0.0-beta.6
+        version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      lucide-react:
+        specifier: 1.53.0
+        version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
       rehype-raw:
         specifier: 7.0.0
         version: 7.0.0
     devDependencies:
+      '@luke/gateway':
+        specifier: workspace:*
+        version: link:../gateway
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.4
+        version: 19.2.4(@types/react@19.2.18)
+      '@types/three':
+        specifier: 0.186.0
+        version: 0.186.0
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1(@noble/hashes@2.3.0)
+      three:
+        specifier: 0.186.1
+        version: 0.186.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
 
   packages/runtime:
     dependencies:
@@ -9255,9 +9288,8 @@ snapshots:
 
   '@pierre/theme@2.0.0': {}
 
-  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
+  '@pierre/theming@1.0.0(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
     optionalDependencies:
-      '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.5.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -9271,9 +9303,9 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.5.0
 
-  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
+  '@pierre/trees@1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
     dependencies:
-      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+      '@pierre/theming': 1.0.0(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
       preact: 11.0.0-beta.0
       preact-render-to-string: 6.6.5(preact@11.0.0-beta.0)
       react: 19.2.8

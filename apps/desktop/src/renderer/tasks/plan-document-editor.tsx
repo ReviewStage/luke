@@ -6,14 +6,6 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
-import { rendererRuntime } from "@luke/panel/renderer-runtime";
-import { Button, PROSE_CLASS } from "@luke/ui";
-import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/reactivity";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
-import { DiagramPreview } from "../plan-diagram";
 import {
   type EditorDiagram,
   type MentionNode,
@@ -22,7 +14,21 @@ import {
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
-} from "../plan-editor/contract";
+} from "@luke/panel/plan-editor/contract";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
+import {
+  EDITOR_PLACE,
+  type EditorHost,
+  type PlanEditing,
+} from "@luke/panel/tasks/use-plan-editing";
+import { Button, PROSE_CLASS } from "@luke/ui";
+import { Duration, Effect } from "effect";
+import { AsyncResult } from "effect/reactivity";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
+import { DiagramPreview } from "../plan-diagram";
 import { RetryButton } from "../retry-button";
 import { useEditorPictures } from "./editor-pictures";
 import {
@@ -33,8 +39,6 @@ import {
 } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useTaskMentions } from "./task-mentions";
-import { useKnownNames } from "./use-known-names";
-import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
  * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.

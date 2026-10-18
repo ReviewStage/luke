@@ -38,6 +38,14 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { appBridge } from "@luke/panel/app-bridge";
+import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import { DRAFT_WORD } from "@luke/panel/draft-mark";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -49,9 +57,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
 import {
   composerEditor,
   editorBundleLanded,
@@ -59,14 +65,8 @@ import {
   pressInComposer,
   typeInComposer,
 } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { runAppCommand, useAppKeymap } from "../app-commands";
-import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 

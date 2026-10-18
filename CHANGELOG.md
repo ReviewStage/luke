@@ -66,6 +66,198 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.18.0 — 2026-10-18
+
+### Continue and fork an agent
+
+Continue a coding agent that failed or ended in a new agent, or fork one at
+any of its messages. The new agent starts on a branch holding its source's
+work up to that point, keeps its start branch and pull request, and reads its
+source's transcript whole, with Luke's summary of whatever does not fit. A
+card at the top of its transcript says what it continued or forked from, and
+Continue opens as a draft you can edit before it starts.
+([#3312](https://github.com/ReviewStage/luke/pull/3312),
+[#3328](https://github.com/ReviewStage/luke/pull/3328),
+[#3330](https://github.com/ReviewStage/luke/pull/3330),
+[#3332](https://github.com/ReviewStage/luke/pull/3332),
+[#3333](https://github.com/ReviewStage/luke/pull/3333),
+[#3341](https://github.com/ReviewStage/luke/pull/3341),
+[#3370](https://github.com/ReviewStage/luke/pull/3370),
+[#3385](https://github.com/ReviewStage/luke/pull/3385),
+[#3397](https://github.com/ReviewStage/luke/pull/3397),
+[#3472](https://github.com/ReviewStage/luke/pull/3472),
+[#3476](https://github.com/ReviewStage/luke/pull/3476),
+[#3477](https://github.com/ReviewStage/luke/pull/3477),
+[#3481](https://github.com/ReviewStage/luke/pull/3481),
+[#3490](https://github.com/ReviewStage/luke/pull/3490),
+[#3495](https://github.com/ReviewStage/luke/pull/3495),
+[#3519](https://github.com/ReviewStage/luke/pull/3519),
+[#3635](https://github.com/ReviewStage/luke/pull/3635))
+
+### Review in the Pull request tab
+
+Review an agent's pull request without leaving Luke. Comment on lines in Files
+changed, see the pending review's count, and submit or discard it. Files
+changed lists every file with a filter and Collapse all, draws review threads
+on their lines, shows changed images before and after, and keeps its Viewed
+boxes in step with GitHub. Merge, close, reopen, and retitle the pull request,
+pick its reviewers and labels, and react or comment in its Conversation, all
+as yourself. The agent's pull request now stands as a row over its composer,
+and every pull request chip opens its agent's tab.
+([#3245](https://github.com/ReviewStage/luke/pull/3245),
+[#3268](https://github.com/ReviewStage/luke/pull/3268),
+[#3286](https://github.com/ReviewStage/luke/pull/3286),
+[#3294](https://github.com/ReviewStage/luke/pull/3294),
+[#3304](https://github.com/ReviewStage/luke/pull/3304),
+[#3305](https://github.com/ReviewStage/luke/pull/3305),
+[#3309](https://github.com/ReviewStage/luke/pull/3309),
+[#3313](https://github.com/ReviewStage/luke/pull/3313),
+[#3348](https://github.com/ReviewStage/luke/pull/3348),
+[#3607](https://github.com/ReviewStage/luke/pull/3607),
+[#3619](https://github.com/ReviewStage/luke/pull/3619),
+[#3624](https://github.com/ReviewStage/luke/pull/3624),
+[#3638](https://github.com/ReviewStage/luke/pull/3638),
+[#3643](https://github.com/ReviewStage/luke/pull/3643),
+[#3645](https://github.com/ReviewStage/luke/pull/3645),
+[#3646](https://github.com/ReviewStage/luke/pull/3646))
+
+### Inbox threads
+
+Every Inbox item is a thread of messages under its title, and the agent reads
+and replies on it. Answer an approval, a to-do, a note, or a choice right in
+the thread or in the agent's message box, quote the agent's words, and attach
+files. Open an item's files, pages, and pull requests in the side panel beside
+it. Each row reads as two lines, the last word in its thread under its title,
+and you mark it read or unread, or swipe it right to do so.
+([#3230](https://github.com/ReviewStage/luke/pull/3230),
+[#3279](https://github.com/ReviewStage/luke/pull/3279),
+[#3331](https://github.com/ReviewStage/luke/pull/3331),
+[#3337](https://github.com/ReviewStage/luke/pull/3337),
+[#3340](https://github.com/ReviewStage/luke/pull/3340),
+[#3469](https://github.com/ReviewStage/luke/pull/3469),
+[#3482](https://github.com/ReviewStage/luke/pull/3482),
+[#3486](https://github.com/ReviewStage/luke/pull/3486),
+[#3612](https://github.com/ReviewStage/luke/pull/3612),
+[#3618](https://github.com/ReviewStage/luke/pull/3618),
+[#3633](https://github.com/ReviewStage/luke/pull/3633),
+[#3641](https://github.com/ReviewStage/luke/pull/3641),
+[#3653](https://github.com/ReviewStage/luke/pull/3653),
+[#3657](https://github.com/ReviewStage/luke/pull/3657),
+[#3662](https://github.com/ReviewStage/luke/pull/3662),
+[#3665](https://github.com/ReviewStage/luke/pull/3665))
+
+### Improvements
+
+- Agents start other agents on a new task, a branch, or a title, continue or
+  fork another agent, stop one, and list the models and efforts they may use
+  ([#3299](https://github.com/ReviewStage/luke/pull/3299),
+  [#3307](https://github.com/ReviewStage/luke/pull/3307),
+  [#3310](https://github.com/ReviewStage/luke/pull/3310),
+  [#3458](https://github.com/ReviewStage/luke/pull/3458),
+  [#3460](https://github.com/ReviewStage/luke/pull/3460),
+  [#3501](https://github.com/ReviewStage/luke/pull/3501))
+- Coding agents open a pull request against the base branch you name
+  ([#3301](https://github.com/ReviewStage/luke/pull/3301))
+- Coding agents get the Linear issue their plan started from
+  ([#3283](https://github.com/ReviewStage/luke/pull/3283))
+- The sidebar says when the Mac is offline
+  ([#3523](https://github.com/ReviewStage/luke/pull/3523))
+- A task's plan says who created it and who last edited it under its title
+  ([#3622](https://github.com/ReviewStage/luke/pull/3622))
+- Tick a plan's checkbox without opening the editor, drawn in the accent
+  ([#3450](https://github.com/ReviewStage/luke/pull/3450),
+  [#3453](https://github.com/ReviewStage/luke/pull/3453))
+- The sidebar scrolls while you drag a row at its edge
+  ([#3616](https://github.com/ReviewStage/luke/pull/3616))
+- An Inbox row whose box holds a draft wears the Draft pencil, and a form's
+  fields stack like the message box
+  ([#3661](https://github.com/ReviewStage/luke/pull/3661),
+  [#3672](https://github.com/ReviewStage/luke/pull/3672))
+- The window's words are selectable and its controls' are not
+  ([#3455](https://github.com/ReviewStage/luke/pull/3455))
+- A toast's dismiss sits as a badge on its corner
+  ([#3652](https://github.com/ReviewStage/luke/pull/3652))
+
+### Fixes
+
+- Fixed pages, lists, and panels showing an empty or false state while they
+  load, or a red sentence when a read fails
+  ([#3345](https://github.com/ReviewStage/luke/pull/3345),
+  [#3451](https://github.com/ReviewStage/luke/pull/3451),
+  [#3608](https://github.com/ReviewStage/luke/pull/3608),
+  [#3626](https://github.com/ReviewStage/luke/pull/3626),
+  [#3627](https://github.com/ReviewStage/luke/pull/3627),
+  [#3629](https://github.com/ReviewStage/luke/pull/3629),
+  [#3634](https://github.com/ReviewStage/luke/pull/3634),
+  [#3639](https://github.com/ReviewStage/luke/pull/3639),
+  [#3640](https://github.com/ReviewStage/luke/pull/3640),
+  [#3644](https://github.com/ReviewStage/luke/pull/3644),
+  [#3647](https://github.com/ReviewStage/luke/pull/3647))
+- Fixed an agent whose session ended for good, or whose message no turn took,
+  not reading as failed
+  ([#3470](https://github.com/ReviewStage/luke/pull/3470),
+  [#3520](https://github.com/ReviewStage/luke/pull/3520),
+  [#3620](https://github.com/ReviewStage/luke/pull/3620))
+- Fixed stopped agents leaving their sandboxes held, and a coding sandbox
+  running past three hours
+  ([#3478](https://github.com/ReviewStage/luke/pull/3478),
+  [#3521](https://github.com/ReviewStage/luke/pull/3521),
+  [#3597](https://github.com/ReviewStage/luke/pull/3597))
+- Fixed a finished coding agent's run lost to Vercel's retention
+  ([#3617](https://github.com/ReviewStage/luke/pull/3617))
+- Fixed a dragged sidebar row jumping back into its list or leaving the
+  sidebar
+  ([#3611](https://github.com/ReviewStage/luke/pull/3611),
+  [#3649](https://github.com/ReviewStage/luke/pull/3649))
+- Fixed an Inbox answer's files not reaching the agent, and a first message's
+  files left uncounted
+  ([#3359](https://github.com/ReviewStage/luke/pull/3359),
+  [#3475](https://github.com/ReviewStage/luke/pull/3475),
+  [#3484](https://github.com/ReviewStage/luke/pull/3484))
+- Fixed a teammate's items of agents with no task missing from the Inbox
+  ([#3668](https://github.com/ReviewStage/luke/pull/3668))
+- Fixed an agent's mention, card, chip, and Inbox row not wearing its
+  harness's mark
+  ([#3125](https://github.com/ReviewStage/luke/pull/3125),
+  [#3637](https://github.com/ReviewStage/luke/pull/3637))
+- Fixed a bot co-author drawn without its App's logo
+  ([#3623](https://github.com/ReviewStage/luke/pull/3623))
+- Fixed a failed or stopped agent's end line showing a per-turn price
+  ([#3654](https://github.com/ReviewStage/luke/pull/3654))
+- Fixed an agent's live to-do list not running its working mark
+  ([#3329](https://github.com/ReviewStage/luke/pull/3329))
+- Fixed pull request tabs not named by their number and title
+  ([#3334](https://github.com/ReviewStage/luke/pull/3334))
+- Fixed the plan editor breaking a task item's checkbox, its layout, or a list
+  mixing bullets and task items
+  ([#3350](https://github.com/ReviewStage/luke/pull/3350),
+  [#3452](https://github.com/ReviewStage/luke/pull/3452),
+  [#3610](https://github.com/ReviewStage/luke/pull/3610))
+- Fixed the space after a chosen mention not drawn in the message box
+  ([#3448](https://github.com/ReviewStage/luke/pull/3448))
+- Fixed a joined invitation reading as spent
+  ([#3335](https://github.com/ReviewStage/luke/pull/3335))
+- Fixed the new-workspace dialog closing after a refused name
+  ([#3374](https://github.com/ReviewStage/luke/pull/3374))
+- Fixed vertical scrollers scrolling sideways, and an empty, loading column
+  drawn as a box
+  ([#3461](https://github.com/ReviewStage/luke/pull/3461),
+  [#3677](https://github.com/ReviewStage/luke/pull/3677))
+- Fixed the bars under a tab strip standing at different heights
+  ([#3320](https://github.com/ReviewStage/luke/pull/3320))
+
+### Misc
+
+- Updated the hosted service to accept the cookie session behind an origin
+  guard, and to keep its JSON answers private and uncached
+  ([#3355](https://github.com/ReviewStage/luke/pull/3355),
+  [#3365](https://github.com/ReviewStage/luke/pull/3365),
+  [#3479](https://github.com/ReviewStage/luke/pull/3479))
+- Updated agent sandboxes to keep one snapshot each and ship Chromium's
+  headless shell alone
+  ([#3595](https://github.com/ReviewStage/luke/pull/3595),
+  [#3601](https://github.com/ReviewStage/luke/pull/3601))
+
 ## 0.17.0 — 2026-10-17
 
 ### A Pull request tab for every agent

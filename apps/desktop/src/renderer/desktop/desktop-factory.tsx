@@ -1,6 +1,11 @@
 import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { EXPERIMENT } from "@luke/settings";
@@ -39,15 +44,12 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
-import { AttentionMark } from "../attention-mark";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FACTORY_CAMPUS } from "../factory-world/registry";
 import { FactoryWorldPage } from "../factory-world/world-page";
 import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -76,9 +78,7 @@ import {
   factoryOneOffWaiting,
   factoryWaiting,
 } from "./factory-model";
-import { paneTiming } from "./pane-motion";
 import { taskCardOf } from "./task-card";
-import { useRowKeys } from "./use-row-keys";
 
 /**
  * desktop-factory.tsx -- the window's Factory: the workspace's tasks being talked through, built, and shipped, as three stations on one line, each leading with what waits on the developer there.

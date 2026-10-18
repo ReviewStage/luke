@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { type FactoryWorld, LINEAR_PRIORITY } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldInstance,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import { factoryWorldViewOf, SCENE_GROUND, SIGNAL_COLOR } from "@luke/ui/factory-world";
 import {
   areaOf,
@@ -25,15 +34,6 @@ import {
   Scene,
 } from "three";
 import { test } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldInstance,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**

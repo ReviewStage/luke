@@ -13,6 +13,27 @@ import {
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { appPlatform } from "@luke/panel/app-platform";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffListSelection,
+  type DiffSelection,
+  FILE_NOTE_LINE,
+} from "@luke/panel/diff-view/contract";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import {
+  CHANGES_WORDS,
+  changedFolders,
+  changeMarks,
+  commentLines,
+  fileNotice,
+  filePatch,
+  headerPatch,
+  linesChanged,
+  listPatch,
+  STATUS_LETTER,
+  STATUS_WORDS,
+  threadsOn,
+} from "@luke/panel/tasks/changes-model";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -42,31 +63,10 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
-import {
-  DIFF_SELECTION_SIDE,
-  type DiffListSelection,
-  type DiffSelection,
-  FILE_NOTE_LINE,
-} from "../diff-view/contract";
-import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
-import {
-  CHANGES_WORDS,
-  changedFolders,
-  changeMarks,
-  commentLines,
-  fileNotice,
-  filePatch,
-  headerPatch,
-  linesChanged,
-  listPatch,
-  STATUS_LETTER,
-  STATUS_WORDS,
-  threadsOn,
-} from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list";
 import { DiffSettingsButton } from "./diff-settings";

@@ -3,6 +3,13 @@ import {
   type FactoryPlanned,
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldPalette,
+  type WorldPicking,
+  type WorldPoint,
+} from "@luke/panel/factory-world/world";
 import { ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -15,13 +22,6 @@ import {
   RingGeometry,
   ShaderMaterial,
 } from "three";
-import {
-  PICK_KIND,
-  type PickTarget,
-  type WorldPalette,
-  type WorldPicking,
-  type WorldPoint,
-} from "../../world";
 import type { ZoneSite } from "./layout";
 import { placed, polar } from "./math";
 import type { Clearing } from "./terrain";

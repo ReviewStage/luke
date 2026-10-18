@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   BoxGeometry,
   Color,
@@ -11,7 +12,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import type { WorldPalette } from "../../world";
 import { glowMaterial, hdrMaterial } from "./effects";
 import { clamp, col, hashOf, PAL, partGeo, rngOf } from "./geo";
 
