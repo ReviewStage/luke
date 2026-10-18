@@ -255,6 +255,12 @@ body {
   list-style: none;
 }
 
+/* The pointer's room over a line held to one line, as wide as the column. */
+.catalog-one-line {
+  display: block;
+  min-width: 0;
+}
+
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;

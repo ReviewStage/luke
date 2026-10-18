@@ -9,6 +9,7 @@ import {
   type CodingAgentPullRequest,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -26,9 +27,11 @@ import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   ClipboardCopyIcon,
+  CodeIcon,
   Columns2Icon,
   FileDiffIcon,
   HighlighterIcon,
+  ImageIcon,
   RotateCwIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +49,7 @@ import {
   changeMarks,
   fileNotice,
   filePatch,
+  headerPatch,
   linesChanged,
   listPatch,
   STATUS_LETTER,
@@ -60,6 +64,7 @@ import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
 import { useFileViewSettings } from "./file-view-settings";
+import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
@@ -304,36 +309,53 @@ function AboveThreads({
  * header, and its notes: each review thread under its line, and those its
  * diff draws no row for above the first hunk (`threadsOn`), on the side
  * each counts on, as GitHub's split diff has them. A file with no hunks to
- * draw stands as what is said in their place alone (`lead`), across its
- * width: why it has none, and every one of its review threads.
+ * draw, or a changed image drawn as its pictures (`image-diff.tsx`), stands
+ * as what is drawn in the place of its lines alone (`lead`), across its
+ * width: why it has none, or the pictures, and every one of its review
+ * threads.
  */
 function entryOf(
   file: CodingAgentChangedFile,
   list: ChangesList,
   threads: ChangesThreads | undefined,
+  images: ImageSides | undefined,
 ): DiffListEntry {
-  const { placed, above } = threadsOn(threads?.list ?? [], file);
-  const notice = fileNotice(file);
+  const path = file.path;
+  const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
+  // An SVG with lines to draw is text as well as a picture: its lines are drawn while its source is asked for.
+  const source = fileNotice(file) === undefined && list.asSource(path);
+  const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
+  // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
+  const drawnAs = pictured === undefined ? file : { ...file, patch: null };
+  const { placed, above } = threadsOn(threads?.list ?? [], drawnAs);
   const notes: DiffNote[] = placed.map((each) => ({
     key: each.key,
     side: each.side,
     line: each.line,
     content: threads?.draw(each.thread, THREAD_PLACE.ON_LINE),
   }));
-  if (notice !== undefined) {
+  // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
+  const notice = fileNotice(file);
+  const lead =
+    pictured !== undefined ? (
+      <ImageDiff file={file} sides={pictured} />
+    ) : notice === undefined ? undefined : (
+      <p className="diff-list-notice">{notice}</p>
+    );
+  if (lead !== undefined) {
     notes.unshift({
       key: LEAD_KEY,
       side: DIFF_SELECTION_SIDE.ADDITIONS,
       line: FILE_NOTE_LINE,
       content: (
         <>
-          <p className="diff-list-notice">{notice}</p>
+          {lead}
           {above.length === 0 ? null : <AboveThreads above={above} threads={threads} />}
         </>
       ),
     });
   }
-  for (const side of notice === undefined ? Object.values(DIFF_SELECTION_SIDE) : []) {
+  for (const side of lead === undefined ? Object.values(DIFF_SELECTION_SIDE) : []) {
     const unplaced = above.filter((each) => each.side === side);
     if (unplaced.length === 0) continue;
     notes.unshift({
@@ -343,16 +365,20 @@ function entryOf(
       content: <AboveThreads above={unplaced} threads={threads} />,
     });
   }
-  const path = file.path;
   const collapsed = list.collapsed(path);
   return {
     path,
-    patch: listPatch(file),
+    patch: pictured === undefined ? listPatch(file) : headerPatch(file),
     collapsed,
-    lead: notice !== undefined,
+    lead: lead !== undefined,
     header: (
       <FileHead
         file={file}
+        controls={
+          image === undefined || fileNotice(file) !== undefined ? null : (
+            <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+          )
+        }
         collapsed={collapsed}
         standing={list.standing === path}
         onToggle={() => list.toggle(path)}
@@ -360,6 +386,52 @@ function entryOf(
       />
     ),
     notes,
+  };
+}
+
+/** An SVG's turn between its picture and its source's lines, at the end of its header. */
+function SourceToggle({
+  source,
+  onToggle,
+}: {
+  source: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const label = source ? LIST_WORDS.SHOW_IMAGE : LIST_WORDS.SHOW_SOURCE;
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        className="icon-button diff-list-source"
+        aria-label={label}
+        onClick={onToggle}
+      >
+        {source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Where a pull request's changed images are read: its repository, named by
+ * its page on GitHub, and the commits the service named; none where the
+ * page names no repository.
+ */
+function imagesOf(
+  agentId: string,
+  pullRequest: { readonly url: string; readonly headSha?: string; readonly baseSha?: string },
+  read: number,
+): ImageSides | undefined {
+  const [owner, name] = URL.canParse(pullRequest.url)
+    ? new URL(pullRequest.url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  if (owner === undefined || name === undefined) return undefined;
+  return {
+    agentId,
+    repository: `${owner}/${name}`,
+    headSha: pullRequest.headSha,
+    baseSha: pullRequest.baseSha,
+    read,
   };
 }
 
@@ -389,12 +461,15 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
 function FilesList({
   list,
   threads,
+  images,
   filterShown,
   roomy,
   boxRef,
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
+  /** Where the pull request's changed images are read, drawn as pictures; none draws them as binary files. */
+  images: ImageSides | undefined;
   /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
   filterShown: boolean;
   roomy: boolean;
@@ -418,7 +493,7 @@ function FilesList({
         <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
       ) : (
         <PierreDiffList
-          entries={list.kept.map((file) => entryOf(file, list, threads))}
+          entries={list.kept.map((file) => entryOf(file, list, threads, images))}
           look={look}
           door={list.door}
           onTopFile={list.onTopFile}
@@ -518,6 +593,12 @@ export function AgentChangesTab({
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
+  // How many answers have landed, which a changed image is drawn anew on.
+  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
+    of: undefined,
+    count: 0,
+  });
+  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
   const room = usePaneRoom(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
@@ -619,6 +700,7 @@ export function AgentChangesTab({
         <FilesList
           list={list}
           threads={threads}
+          images={imagesOf(agentId, pullRequest, reads.current.count)}
           filterShown={room.drawn}
           roomy={roomy}
           boxRef={setDiffBox}

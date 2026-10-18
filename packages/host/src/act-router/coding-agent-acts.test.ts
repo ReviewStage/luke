@@ -310,6 +310,16 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`message:${itemId}:${text}:${files}:${clientKey}`);
           return { item: ITEM };
         }),
+      codingAgentInboxReadState: ({ itemId, unread }) =>
+        Effect.sync(() => {
+          asked.push(`read-state:${itemId}:${unread}`);
+          return { id: itemId, unread };
+        }),
+      codingAgentInboxReadAll: ({ workspaceId }) =>
+        Effect.sync(() => {
+          asked.push(`read-all:${workspaceId ?? "every workspace"}`);
+          return { marked: 3 };
+        }),
       codingAgentInboxAttachment: ({ itemId, attachmentId }) =>
         Effect.sync(() => {
           asked.push(`attachment:${itemId}:${attachmentId}`);
@@ -606,6 +616,57 @@ it.effect(
       assert.deepEqual(asked, [
         `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
         `chat-post:${WORKSPACE_ID}:${JSON.stringify(write.payload.write)}`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state; the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const unread = {
+        kind: ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
+        payload: { itemId: ITEM.id, unread: true },
+      } as const;
+
+      const refused = yield* router.performAct(unread, VOICE);
+      const marked = yield* router.performAct(unread, PANEL);
+      const read = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
+          payload: { itemId: ITEM.id, unread: false },
+        },
+        PANEL,
+      );
+      const all = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, payload: { workspaceId: "workspace-1" } },
+        PANEL,
+      );
+      const everywhere = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, payload: {} },
+        PANEL,
+      );
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX_READ_STATE].refusal,
+      });
+      assert.deepEqual(marked, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: ITEM.id, unread: true },
+      });
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: ITEM.id, unread: false },
+      });
+      assert.deepEqual(all, { status: ACT_OUTCOME_STATUS.DONE, value: { marked: 3 } });
+      assert.deepEqual(everywhere, { status: ACT_OUTCOME_STATUS.DONE, value: { marked: 3 } });
+      assert.deepEqual(asked, [
+        `read-state:${ITEM.id}:true`,
+        `read-state:${ITEM.id}:false`,
+        "read-all:workspace-1",
+        "read-all:every workspace",
       ]);
     }),
 );

@@ -164,6 +164,29 @@ const written = () =>
     request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE ? [request.payload] : [],
   );
 
+/** The placeholders standing for reads still out, each what it says it reads and how many rows it stands. */
+const placeholders = (page: HTMLElement) =>
+  [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map((status) => [
+    status.textContent,
+    status.querySelectorAll(".luke-settings-row").length,
+  ]);
+
+test("while the default and the keys are read, placeholder rows stand in each group's place, and the rows land in theirs", async () => {
+  const page = document.createElement("div");
+  document.body.append(page);
+  const root = createRoot(page);
+  roots.push(root);
+  act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
+
+  assert.deepEqual(placeholders(page), [
+    ["Loading your default", 3],
+    ["Loading your keys", 2],
+  ]);
+  await settle();
+  assert.deepEqual(placeholders(page), []);
+  assert.ok(fastSwitch(page));
+});
+
 test("a Fast the service refuses says so under Fast's own row, the switch left off and pressable again, as every settings switch's refusal does", async () => {
   const page = await mount();
   refuseWrite = true;

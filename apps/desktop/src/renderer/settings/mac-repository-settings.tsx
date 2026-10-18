@@ -8,6 +8,7 @@ import {
   ErrorState,
   SettingsLine,
   SettingsRow,
+  SettingsRowsSkeleton,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
@@ -166,7 +167,7 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
           <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
         </SettingsLine>
       ) : read.names === undefined ? (
-        <SettingsLine>Reading the repositories…</SettingsLine>
+        <SettingsRowsSkeleton label="Loading the repositories" rows={2} />
       ) : read.names.length === 0 ? (
         <SettingsLine>This workspace reaches no repositories on GitHub yet.</SettingsLine>
       ) : (

@@ -43,6 +43,9 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateParams,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -76,6 +79,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxMessagedViewSchema,
+  codingAgentInboxReadAllViewSchema,
+  codingAgentInboxReadStateViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -108,6 +113,7 @@ import {
   type FactoryWorldView,
   factoryWorldViewSchema,
 } from "@luke/features/factory-world-view";
+import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -613,6 +619,12 @@ export interface HostOperator {
   codingAgentInboxMessage(
     params: CodingAgentInboxMessageParams,
   ): Effect.Effect<CodingAgentInboxMessagedView>;
+  /** One item marked read or unread for the account; its read state, or why there is no answer. */
+  codingAgentInboxReadState(
+    params: CodingAgentInboxReadStateParams,
+  ): Effect.Effect<CodingAgentInboxReadStateView>;
+  /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
+  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
   /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentAccountInbox(
     params: CodingAgentAccountInboxParams,
@@ -1722,6 +1734,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+      ),
+    codingAgentInboxReadState: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+          itemId: params.itemId,
+          unread: params.unread,
+        }),
+        codingAgentAnswer(codingAgentInboxReadStateViewSchema),
+      ),
+    codingAgentInboxReadAll: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
+          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
+        ),
+        codingAgentAnswer(codingAgentInboxReadAllViewSchema),
       ),
     codingAgentAccountInbox: (params) =>
       Effect.map(

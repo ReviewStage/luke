@@ -31,6 +31,7 @@ import {
   inboxPreview,
   inboxReply,
   inboxSteps,
+  isUnread,
   listedItems,
   nextNeedingYou,
   proposedOptions,
@@ -38,6 +39,7 @@ import {
   settlementOf,
   taskHolder,
   tasklessGroups,
+  withReadMarks,
   withValue,
 } from "./inbox-model";
 
@@ -885,4 +887,29 @@ test("the latest message on an item's thread is its preview, open or settled, le
     inboxPreview({ ...settledAfter, settledAt: 2_500 }, previewName),
     "Agent: Backfilled 41,208 rows; staging totals match",
   );
+});
+
+test("a read mark the window made stands over the item as it was marked, and gives way to the reads once the item changes again, as a message landing may make it unread", () => {
+  const holder = taskHolder(BILLING);
+  const unread = item({ id: "h1", unread: true, updatedAt: 2_000 });
+  const read = item({ id: "h2", updatedAt: 2_000 });
+  const marks = new Map([
+    ["h1", { unread: false, updatedAt: 2_000 }],
+    ["h2", { unread: true, updatedAt: 2_000 }],
+  ]);
+  const unreadOf = (groups: ReturnType<typeof withReadMarks>) =>
+    groups.flatMap(({ items }) => items.map((each) => [each.id, isUnread(each)]));
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], marks)), [
+    ["h1", false],
+    ["h2", true],
+  ]);
+  const changed = { ...unread, updatedAt: 3_000 };
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [changed, read] }], marks)), [
+    ["h1", true],
+    ["h2", true],
+  ]);
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], new Map())), [
+    ["h1", true],
+    ["h2", false],
+  ]);
 });

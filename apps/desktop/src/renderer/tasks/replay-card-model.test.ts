@@ -194,8 +194,8 @@ test("an agent continued from an automation's run, at any remove, is drawn from 
   assert.equal(drawn.automationId, run.automationId);
   assert.equal(drawn.automationName, "Nightly triage");
   const planned = summary({ id: "55555555-5555-4555-8555-555555555555" });
-  const fromPlan = summary({ from: { agentId: planned.id, steps: 1, totalSteps: 1 } });
-  assert.equal(briefAgent(fromPlan, [planned, fromPlan]), fromPlan);
+  const fromPlanned = summary({ from: { agentId: planned.id, steps: 1, totalSteps: 1 } });
+  assert.equal(briefAgent(fromPlanned, [planned, fromPlanned]), fromPlanned);
   // A source the list does not hold leaves the agent as it is.
   assert.equal(briefAgent(continued, []), continued);
 });

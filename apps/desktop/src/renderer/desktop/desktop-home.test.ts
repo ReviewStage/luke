@@ -377,7 +377,7 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
   assert.equal(opened.newTasks, 1);
 });
 
-test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no blue dot", async () => {
+test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no unread dot on an item read", async () => {
   const { page } = mount();
   await settle();
 
@@ -391,7 +391,7 @@ test("a waiting item's row on Home reads as the Inbox's own: what it asks under 
   const head = row.querySelector(".luke-list-row-head");
   assert.equal(head?.querySelector(".home-row-context")?.textContent, "Teammate invitations");
   assert.ok(head?.querySelector(".attention-mark"), "it needs the reader");
-  assert.equal(row.querySelector(".inbox-row-dot"), null);
+  assert.equal(row.querySelector(".inbox-row-unread"), null, "a read item wears no unread dot");
 });
 
 test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {

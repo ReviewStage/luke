@@ -656,6 +656,33 @@ test("the plan template's version history keeps a call's card at the foot of its
   assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
 });
 
+test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {
+  const { promise: read, resolve: land } = Promise.withResolvers<void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: { kind: string }) =>
+      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+        ? read.then(() => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { template: "# Context\n", custom: false },
+          }))
+        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;
+
+  assert.deepEqual(
+    [shownTitle(page), placeholder()],
+    ["Plan template", "Loading your plan template"],
+  );
+  land();
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.equal(placeholder(), undefined);
+  assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
+});
+
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
