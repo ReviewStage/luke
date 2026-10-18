@@ -14,6 +14,7 @@
 
 import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/features/analytics";
 import type { FramedPage } from "@luke/features/page-frame";
+import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import type { AppCommand } from "@luke/settings/shortcuts";
 
 /** The capabilities a window's shell answers, each as the panel asks for it. */
@@ -39,6 +40,12 @@ export interface AppPlatform {
   openGitHub(url: string): void;
   /** Opens a web page outside the window. */
   openWeb(url: string): void;
+  /**
+   * Brings the shell's session recording into line with what the run allows,
+   * in either direction; the panel calls it at bootstrap and on every account
+   * transition. A shell that records nothing does nothing.
+   */
+  applySessionReplay(bootstrap: SessionReplayBootstrap): void;
 }
 
 let installed: AppPlatform | undefined;
