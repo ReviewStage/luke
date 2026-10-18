@@ -105,6 +105,7 @@ import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
+  PullRequestTitle,
   PullRequestWriteNote,
   type PullRequestWrites,
   usePullRequestWrites,
@@ -1028,12 +1029,15 @@ function PullRequestHead({
   parts,
   now,
   repository,
+  shown,
   writes,
 }: {
   parts: OverviewParts;
   now: number;
   /** The agent's repository, which the merge box keeps the method chosen by. */
   repository: string | null;
+  /** Whether the panel is on screen, which a merge asked about goes with. */
+  shown: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
@@ -1084,7 +1088,12 @@ function PullRequestHead({
         <MergeLine
           pullRequest={pullRequest}
           actions={
-            <MergeActions pullRequest={pullRequest} repository={repository} writes={writes} />
+            <MergeActions
+              pullRequest={pullRequest}
+              repository={repository}
+              shown={shown}
+              writes={writes}
+            />
           }
         />
       ) : null}
@@ -1294,8 +1303,10 @@ function ConversationPart({
 /** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them; a skeleton where neither has. */
 function HeaderTitle({
   title,
+  writes,
 }: {
   title: Pick<CodingAgentPullRequest, "title" | "number"> | undefined;
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
     return (
@@ -1307,9 +1318,7 @@ function HeaderTitle({
     );
   }
   return (
-    <h2 className="pull-request-title">
-      {title.title} <span className="pull-request-number">{pullRequestNumberLabel(title)}</span>
-    </h2>
+    <PullRequestTitle title={title.title} number={pullRequestNumberLabel(title)} writes={writes} />
   );
 }
 
@@ -1673,8 +1682,14 @@ export function AgentPullRequestTab({
         ) : (
           <>
             <header className="pull-request-header">
-              <HeaderTitle title={title} />
-              <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
+              <HeaderTitle title={title} writes={writes} />
+              <PullRequestHead
+                parts={parts}
+                now={now}
+                repository={repository}
+                shown={shown}
+                writes={writes}
+              />
             </header>
             <Tabs<PullRequestView>
               label="Pull request"

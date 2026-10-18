@@ -173,6 +173,23 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   return { page: container, opened, redraw, rerender };
 }
 
+/**
+ * Whether a row waits on the developer, as it reads: ` (waits)` where its
+ * name stands in the unread weight and the attention mark before its time
+ * says "Needs you", none where neither, and ` (?)` where only one stands
+ * or it wears the blue dot that now means unread, so a half-drawn mark fails
+ * every listing.
+ */
+function waitsOf(row: Element): string {
+  const weight = row.getAttribute("data-unread") === "true";
+  const mark =
+    row.querySelector(".sidebar-task-time .attention-mark") !== null &&
+    row.querySelector(".sidebar-task-time .visually-hidden")?.textContent === "Needs you";
+  if (row.querySelector(".inbox-row-unread, .inbox-row-dot") !== null) return " (?)";
+  if (weight && mark) return " (waits)";
+  return weight || mark ? " (?)" : "";
+}
+
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
@@ -180,7 +197,7 @@ function rows(page: HTMLElement, step: string): string[] {
   return [...region.querySelectorAll(".sidebar-task")].map((row) => {
     const words = row.querySelector(".sidebar-task-name")?.textContent;
     const context = row.querySelector(".home-row-context")?.textContent;
-    const waits = row.getAttribute("data-unread") === "true" ? " (waits)" : "";
+    const waits = waitsOf(row);
     return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
   });
 }
@@ -212,6 +229,10 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.equal(
     page.querySelector(".factory-summary")?.textContent,
     "2 need you·1 agent working·0 shipped today",
+  );
+  assert.ok(
+    page.querySelector(".factory-needs .attention-mark"),
+    "what needs you is counted beside the attention mark",
   );
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);

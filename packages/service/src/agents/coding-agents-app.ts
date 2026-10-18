@@ -90,12 +90,14 @@ import {
   replyToReviewThread,
   setAutoMerge,
   setPullRequestDraft,
+  setPullRequestOpen,
+  setPullRequestTitle,
   setReviewThreadResolved,
   submitPullRequestReview,
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
-  type GitHubPullRequest,
+  imageCommits,
   type PullRequestReadFailure,
   pullRequestByNumber,
   pullRequestChecks,
@@ -107,6 +109,7 @@ import {
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
+  HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
@@ -330,17 +333,6 @@ const QUERY = {
   ATTACHMENT: "attachment",
   PICTURE: "picture",
   SRC: "src",
-} as const;
-
-/**
- * The headers an attachment's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * what the service sniffed them to be as they were kept, and nothing on the
- * way may keep a copy, since the bytes are one account's.
- */
-const ATTACHMENT_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
 } as const;
 
 /** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
@@ -913,7 +905,8 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 
 /**
  * GET reads the agent's changes: the files of the pull request its kept
- * published answer names, and who it names (`github-people.ts`), read from
+ * published answer names, who it names (`github-people.ts`), and the
+ * commits its changed images are read at (`imageCommits`), read from
  * GitHub afresh on a token minted for the agent's repository on its task's
  * workspace installation, with who its row says it writes as, or none
  * where it names no pull request yet.
@@ -932,7 +925,7 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    // Note that the pull request itself is read beside its files for its head, which a comment on their lines is anchored to; a read that does not land names none.
+    // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
     const [files, people, whole] = yield* Effect.all(
       [
         pullRequestFiles(token, agent.repository, pullRequest),
@@ -943,7 +936,8 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
       ],
       { concurrency: "unbounded" },
     );
-    return { ...headOf(whole), ...files, ...people };
+    const commits = yield* imageCommits(token, agent.repository, whole, files.files);
+    return { ...commits, ...files, ...people };
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -966,14 +960,6 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
     },
   });
 });
-
-/** The head a pull request's files were read at, where it was read and spelled as a commit. */
-function headOf(whole: Option.Option<Pick<GitHubPullRequest, "headSha">>): { headSha?: string } {
-  return Option.match(whole, {
-    onNone: () => ({}),
-    onSome: ({ headSha }) => (/^[0-9a-f]{40}$/u.test(headSha) ? { headSha } : {}),
-  });
-}
 
 /** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 type OverviewRead<A> = (
@@ -1143,6 +1129,12 @@ function writeOf(
       return setAutoMerge(token, id, undefined);
     case PULL_REQUEST_ACTION.DEQUEUE:
       return takeOutOfMergeQueue(token, id);
+    case PULL_REQUEST_ACTION.CLOSE:
+      return setPullRequestOpen(token, id, false);
+    case PULL_REQUEST_ACTION.REOPEN:
+      return setPullRequestOpen(token, id, true);
+    case PULL_REQUEST_ACTION.EDIT_TITLE:
+      return setPullRequestTitle(token, id, request.title);
     case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
       return submitPullRequestReview(token, id, request);
     case PULL_REQUEST_ACTION.REPLY_TO_THREAD:
@@ -1252,7 +1244,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
   return HttpServerResponse.uint8Array(read.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: read.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 
@@ -1338,7 +1330,7 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 
@@ -1369,7 +1361,7 @@ const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(fu
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 

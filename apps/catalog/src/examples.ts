@@ -4,6 +4,7 @@ import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
+import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CARDS_EXAMPLE } from "./examples/cards";
@@ -29,8 +30,10 @@ import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
+import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
@@ -74,6 +77,7 @@ export const EXAMPLES: readonly Example[] = [
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
+  BANNERS_EXAMPLE,
   BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CARDS_EXAMPLE,
@@ -104,8 +108,10 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
+  ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
+  PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,

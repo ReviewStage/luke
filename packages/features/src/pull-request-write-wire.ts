@@ -22,6 +22,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_REFUSAL_CHARS: 1_000,
   /** A commit's id as GitHub spells one: forty hex digits for SHA-1, sixty-four for SHA-256. */
   MAX_COMMIT_CHARS: 64,
+  /** GitHub's own bound on a pull request's title. */
+  MAX_TITLE_CHARS: 256,
   /** The longest body a review may carry, GitHub's own bound on a comment's. */
   MAX_BODY_CHARS: 65_536,
   /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
@@ -65,6 +67,12 @@ export const PULL_REQUEST_ACTION = {
   DISABLE_AUTO_MERGE: "disable-auto-merge",
   /** Taken out of the merge queue. */
   DEQUEUE: "dequeue",
+  /** Closed without merging. */
+  CLOSE: "close",
+  /** A closed pull request opened again. */
+  REOPEN: "reopen",
+  /** Its title changed to the one named. */
+  EDIT_TITLE: "edit-title",
   /** A review submitted: the member's own pending review where they hold one, else a new one. */
   SUBMIT_REVIEW: "submit-review",
   /** A reply on a review thread of the pull request. */
@@ -143,6 +151,15 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DEQUEUE) }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.CLOSE) }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.REOPEN) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.EDIT_TITLE),
+    title: EffectSchema.Trim.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS),
+    ),
+  }),
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
     event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),

@@ -14,6 +14,9 @@
                 "headSha": {
                   "type": "string"
                 },
+                "baseSha": {
+                  "type": "string"
+                },
                 "files": {
                   "type": "array",
                   "items": {

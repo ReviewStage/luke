@@ -1535,6 +1535,94 @@
   font-size: 12.5px;
 }
 
+/* A changed image in Files changed's list (image-diff.tsx), under its
+   header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
+   checkerboard that shows what is transparent, or the after laid over the
+   before, swiped or faded with the slider under them. */
+.image-diff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  font-family: var(--luke-font-sans);
+}
+
+.image-diff-modes {
+  display: flex;
+  justify-content: center;
+}
+
+.image-diff-sides {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--luke-space-12);
+}
+
+.image-diff-side {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 200px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: 0;
+}
+
+.image-diff-side > figcaption {
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px;
+}
+
+.image-diff-picture,
+.image-diff-stack {
+  max-width: 100%;
+  max-height: 480px;
+  border: 1px solid var(--luke-color-border);
+  background:
+    repeating-conic-gradient(var(--luke-color-surface) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+.image-diff-picture {
+  object-fit: contain;
+}
+
+.image-diff-stacked {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+/* The two sides stand in one cell of a grid, as large as the larger, the
+   after over the before: each fills the cell, scaled to fit, on a
+   checkerboard of its own, so the after at full strength or swiped all the
+   way hides the before however their sizes differ. */
+.image-diff-stack {
+  display: grid;
+}
+
+.image-diff-stack > .image-diff-picture {
+  width: 100%;
+  height: 100%;
+  grid-area: 1 / 1;
+  border: 0;
+  background-color: var(--code-ground);
+}
+
+.image-diff-slider {
+  width: min(320px, 100%);
+}
+
+.image-diff-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
+}
+
 /* The tree's search field and its filter, in one row over the tree. */
 .file-tree-search {
   display: flex;
@@ -2036,6 +2124,44 @@
   user-select: text;
 }
 
+/* The title edited in place (`pull-request-writes.tsx`): its pencil stands
+   faint after the number until the title is hovered or the pencil focused,
+   and the field takes the title's own type and room. */
+.pull-request-title-edit {
+  width: 22px;
+  height: 22px;
+  margin-inline-start: var(--luke-space-2);
+  vertical-align: middle;
+  opacity: 0;
+}
+
+.pull-request-title-edit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pull-request-title-editable:hover .pull-request-title-edit,
+.pull-request-title-edit:focus-visible {
+  opacity: 1;
+}
+
+.pull-request-title-field {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.pull-request-title-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: var(--luke-space-2) var(--luke-space-4);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: inherit;
+  font: inherit;
+}
+
 .pull-request-number {
   color: var(--luke-color-text-subtle);
   font-weight: var(--luke-weight-regular);
@@ -2080,8 +2206,8 @@
 }
 
 /* The merge box's presses at the line's end (`merge-box.tsx`): what stands
-   of a merge already asked for, quiet, then the one press, a method's
-   press joined to the chevron that chooses the method. */
+   of a merge already asked for, quiet, then the one press, `@luke/ui`'s
+   Button, or its SplitButton where a chevron chooses the method. */
 .merge-box-actions {
   display: inline-flex;
   flex: 0 0 auto;
@@ -2094,41 +2220,6 @@
 
 .merge-box-note {
   color: var(--luke-color-text-muted);
-}
-
-.merge-box-split {
-  display: inline-flex;
-  align-items: stretch;
-}
-
-.merge-box-press {
-  height: 26px;
-  padding: 0 var(--luke-space-8);
-  gap: var(--luke-space-4);
-  font-size: 12px;
-}
-
-.merge-box-press svg {
-  width: 13px;
-  height: 13px;
-}
-
-.merge-box-split > .merge-box-press:not(:last-child) {
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-}
-
-.merge-box-picker {
-  height: 26px;
-  padding: 0 var(--luke-space-4);
-  border-start-start-radius: 0;
-  border-end-start-radius: 0;
-  margin-inline-start: -1px;
-}
-
-.merge-box-picker svg {
-  width: 13px;
-  height: 13px;
 }
 
 [data-merge-tone="ready"] {
@@ -4263,7 +4354,7 @@ ol.transcript-list {
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
-   (`agent-pictures.tsx`), whose chips are drawn by the rules below. */
+   (`agent-pictures.tsx`), on the same chips. */
 .attached-files {
   display: flex;
   flex-wrap: wrap;
@@ -4279,86 +4370,6 @@ ol.transcript-list {
 
 .is-user > .attached-files {
   justify-content: flex-end;
-}
-
-/* A call's picture is its thumbnail, or why it is not there, on a chip as
-   tall as the thumbnail. The chip's face is the press that opens the
-   picture, washed under the pointer as a row is. */
-.attached-file {
-  position: relative;
-  display: flex;
-  max-width: min(220px, 100%);
-  height: 48px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-surface);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.attached-file-face {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-12);
-  border-radius: var(--luke-radius-8);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.attached-file-face {
-  cursor: pointer;
-}
-
-button.attached-file-face:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-.attached-file:has(button.attached-file-face:hover) {
-  border-color: var(--luke-color-border-strong);
-}
-
-.attached-file:has(img) {
-  width: 64px;
-  overflow: visible;
-}
-
-.attached-file-face:has(img) {
-  padding: 0;
-}
-
-.attached-file img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--luke-radius-8);
-  object-fit: cover;
-  transition: filter var(--duration-hover) ease;
-}
-
-button.attached-file-face:hover img {
-  filter: brightness(1.12);
-}
-
-.attached-file-face > svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-
-.attached-file-name {
-  overflow: hidden;
-  color: var(--luke-color-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attached-file-size {
-  flex: none;
 }
 
 /* A file's type icon in its type's colour, as the file tree draws it:
@@ -4632,23 +4643,16 @@ button.attached-file-face:hover img {
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
-   why on one quiet row (`banner.tsx`), with Unarchive as the press that
-   opens it again. */
-/* The note a continued agent's box gives way to (`continue-agent.tsx`),
-   framed as the box was, on its card, edge and corner, so it stands where
-   the box stood rather than across the column. */
-.continued-composer > .banner-row {
+   why on one quiet row (`archived-task.tsx`, `@luke/ui`'s Banner), with
+   Unarchive as the press that opens it again. The note a continued agent's
+   box gives way to (`continue-agent.tsx`) is framed as the box was, on its
+   card, edge and corner, so it stands where the box stood rather than across
+   the column. */
+.continued-composer {
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-sidebar);
-}
-
-.archived-composer .banner-row > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -5829,28 +5833,6 @@ button.picture-frame {
    set in under the row's words, a picture not kept saying so. */
 .call-pictures {
   margin: var(--luke-space-2) 0 var(--luke-space-6) var(--transcript-gutter);
-}
-
-.call-picture[data-state] .attached-file-face {
-  display: grid;
-  width: 64px;
-  height: 48px;
-  place-items: center;
-  color: var(--luke-color-text-muted);
-}
-
-.call-picture[data-state="too-large"] .attached-file-face,
-.call-picture[data-state="limit"] .attached-file-face,
-.call-picture[data-state="unsupported"] .attached-file-face {
-  display: flex;
-  width: auto;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-}
-
-.call-picture svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* A version's change to a picture: written in on the green edge, struck out

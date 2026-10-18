@@ -144,10 +144,14 @@
     font-weight: var(--luke-weight-medium);
   }
 
-  /* What has not been seen reads in the heavier weight until it is, as a
-     mail app's unread rows do. */
+  /* What has not been seen reads in a heavier weight, and its description
+     in the body's ink, until it is, as a mail app's unread threads do. */
   .luke-list-row[data-unread="true"] .luke-list-row-title {
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-list-row[data-unread="true"] .luke-list-row-description {
+    color: var(--luke-color-text);
   }
 
   .luke-list-row-description,
@@ -198,5 +202,41 @@
     align-items: center;
     gap: var(--luke-space-4);
     padding-inline-end: var(--luke-space-12);
+  }
+
+  /* Acts offered to the row in hand stand over its metadata's end, at the
+     title's line where the metadata stands there, and come in while the
+     pointer rests on the row or it holds the keyboard, the metadata
+     stepping aside so nothing moves. The press keeps its end inset, since
+     the acts take no room beside it. */
+  .luke-list-row[data-actions="hover"] {
+    position: relative;
+  }
+
+  .luke-list-row[data-actions="hover"] > .luke-list-row-main {
+    padding-inline-end: var(--luke-space-12);
+  }
+
+  .luke-list-row[data-actions="hover"] > .luke-list-row-actions {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-list-row[data-actions="hover"][data-meta="title"] > .luke-list-row-actions {
+    inset-block: var(--luke-space-8) auto;
+    height: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) > .luke-list-row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) .luke-list-row-meta {
+    visibility: hidden;
   }
 }

@@ -453,6 +453,14 @@ export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessa
 
 export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
 
+/** One item marked read or unread for the account, as the window asks it: the item, and whether it is to read as unread. */
+export const codingAgentInboxReadStateParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  unread: EffectSchema.Boolean,
+});
+
+export type CodingAgentInboxReadStateParams = typeof codingAgentInboxReadStateParamsSchema.Type;
+
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([
   inboxReadStateSchema,
