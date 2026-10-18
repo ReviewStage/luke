@@ -1,9 +1,9 @@
 import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { identityHue, identityLetter } from "@luke/ui/actor-model";
 import { useEffect, useReducer, useState } from "react";
-import { useAct } from "../act";
 
 /**
  * workspace-tile.tsx -- a workspace's mark: its photo, its owner's picture on a personal one, or the first letter of its name on a square of one of six hues.

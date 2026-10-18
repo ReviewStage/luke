@@ -49,6 +49,7 @@
     "@luke/gateway": "workspace:*",
     "@luke/host": "workspace:*",
     "@luke/live": "workspace:*",
+    "@luke/panel": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/ui": "workspace:*",
     "@luke/voice": "workspace:*",

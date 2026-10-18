@@ -20,6 +20,7 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -31,7 +32,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { MemberDirectory } from "../member-directory";
 import { AgentTab } from "./agent-tab";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the

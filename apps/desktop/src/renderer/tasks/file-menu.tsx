@@ -1,7 +1,7 @@
+import { appPlatform } from "@luke/panel/app-platform";
 import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";

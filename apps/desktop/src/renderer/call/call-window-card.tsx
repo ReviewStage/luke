@@ -3,9 +3,9 @@
  */
 
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { useAct } from "@luke/panel/act";
 import { callCard } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
-import { useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { useAppState } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";

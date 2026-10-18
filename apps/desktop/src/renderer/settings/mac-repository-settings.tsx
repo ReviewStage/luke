@@ -1,5 +1,6 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
   BUTTON_TYPE,
@@ -15,7 +16,6 @@ import {
   TextField,
 } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
 
 /**
  * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.

@@ -4,9 +4,9 @@
 
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { ACT_KIND } from "@luke/host/acts";
-import { askAct, tellAct } from "./act";
-import { appBridge } from "./app-bridge";
-import type { AppPlatform } from "./app-platform";
+import { askAct, tellAct } from "@luke/panel/act";
+import { appBridge } from "@luke/panel/app-bridge";
+import type { AppPlatform } from "@luke/panel/app-platform";
 
 /**
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,

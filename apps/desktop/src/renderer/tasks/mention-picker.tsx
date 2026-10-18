@@ -12,6 +12,7 @@ import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import {
   ArrowLeftIcon,
   type ComboboxGroup,
@@ -40,7 +41,6 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
-import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import { useMemberDirectory } from "../member-directory";

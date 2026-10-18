@@ -28,6 +28,9 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ActHandle } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -115,8 +118,6 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
@@ -142,7 +143,6 @@ import {
 } from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { useInboxPages } from "./use-inbox-pages";
 import { useLastTask } from "./use-last-task";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";

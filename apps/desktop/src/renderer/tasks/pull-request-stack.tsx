@@ -1,12 +1,12 @@
 import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import { dropBelowStart, useMenu } from "@luke/ui";
 import { GitPullRequestDraftIcon, GitPullRequestIcon, LayersIcon } from "lucide-react";
-import { useAct } from "../act";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { useOpenPlace } from "./use-open-link";
 
 /**
  * pull-request-stack.tsx -- the stack a pull request stands in, on its header, as stage-cli shows one: "Stack 2/4", whose menu lists the stack from its tip down to its base and opens any of it.

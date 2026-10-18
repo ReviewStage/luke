@@ -3,7 +3,7 @@ import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
+import { useAct } from "../act.js";
 
 /**
  * use-taskless-inbox-items.ts -- the items of each agent with no task that something waits on, for the window's Inbox, each agent read whole once and again only when main says its items moved.

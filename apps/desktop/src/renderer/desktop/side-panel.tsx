@@ -12,6 +12,9 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -55,9 +58,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -100,7 +101,6 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { PullRequestsOnGitHub } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,

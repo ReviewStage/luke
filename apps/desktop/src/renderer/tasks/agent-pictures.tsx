@@ -7,6 +7,7 @@ import {
 import type { FileChip } from "@luke/features/attachment-model";
 import type { KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -26,7 +27,6 @@ import {
   useReducer,
   useState,
 } from "react";
-import { useAct } from "../act";
 import { PictureBlock } from "../picture-block";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
