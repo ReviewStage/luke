@@ -1466,12 +1466,73 @@
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
-   of its own, in the panel's look (diff-view/index.ts); its box fills the
-   File tab's place and scrolls as a File tab's lines do. */
+/* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
+   (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
+   the panel's look (diff-view/index.ts); the list's box fills the File
+   tab's place and scrolls as a File tab's lines do. */
 .diff-view {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Files changed's list of diffs (diff-list.tsx): every file under a header
+   of its own, which Pierre keeps at the top while the file's lines scroll
+   under it, so it is drawn opaque, on the code's ground, at the height the
+   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
+   stage-cli's keys stand on is ringed as a focused control is. */
+.diff-list-head {
+  border-top: 1px solid var(--luke-color-border);
+  background: var(--code-ground);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+}
+
+.diff-list-head-row {
+  display: flex;
+  box-sizing: border-box;
+  height: 33px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  background: var(--luke-color-surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.diff-list-head[data-standing] {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-inset);
+}
+
+.diff-list-fold > svg {
+  transform: rotate(90deg);
+  transition: transform var(--duration-quick) ease;
+}
+
+.diff-list-head[data-collapsed] .diff-list-fold > svg {
+  transform: none;
+}
+
+.diff-list-path {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--luke-font-mono);
+  text-overflow: ellipsis;
+}
+
+/* Why a file has no hunks to draw, in their place under its header in the
+   list (diff-view/index.ts draws it across the file's width). */
+.diff-list-notice {
+  margin: 0;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
 }
 
 /* The tree's search field and its filter, in one row over the tree. */
@@ -2292,7 +2353,7 @@ button.pull-request-check:hover {
 /* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
    InlineThread): Pierre stands it under its line, in the diff's light DOM,
    so the window's own type and card draw it, inset from the code's edges
-   as GitHub's are; an outdated one stands in a list above the diff. */
+   as GitHub's are; one the diff draws no row for stands in a list above it. */
 .diff-note {
   padding: var(--luke-space-6) var(--luke-space-12);
   font-family: var(--luke-font-sans);
