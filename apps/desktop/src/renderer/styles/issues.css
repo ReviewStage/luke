@@ -1,14 +1,29 @@
 /* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
-   title are the window's own: the Automations page's view and scroll, Home's
-   sections and rows, a person's page's column, and a task's heading. Only
+   title are the window's own: the list's page is @luke/ui's CollectionPage
+   under the toolbar, an issue's the Automations page's view and scroll, and
+   Home's sections and rows and a task's heading. Only
    what an issue adds is drawn here: its group's heading, its identifier, its
    status and priority marks, its properties' row, and its description's
    editor. Tokens only. */
 
-/* The pages and the new issue's card share one root, which C is read
-   against; it draws no box of its own. */
+/* The pages and the new issue's card share one root, which C and the
+   arrows are read against; it draws no box of its own. */
 .issues-pages {
   display: contents;
+}
+
+/* The list's status groups, a section's gap apart, as Home's are. Note
+   that the list and the board set Home's rows at the window's own leading,
+   as Home does, rather than at the page's body leading around them. */
+.issue-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-24);
+}
+
+.issue-groups,
+.issue-board {
+  line-height: normal;
 }
 
 /* A status group's heading and its count, on its rows' inset. */
@@ -25,8 +40,16 @@
   flex: none;
   min-width: 7ch;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
+}
+
+/* In the list the identifier leads the row's title on its line, in the
+   column's width and the body's weight, so the titles start level. */
+.home-section .issue-row-identifier {
+  display: inline-block;
+  margin-inline-end: var(--luke-space-8);
+  font-weight: var(--luke-weight-regular);
 }
 
 /* Each status's glyph wears the state colour the rest of the window gives that standing. */
@@ -36,8 +59,8 @@
 }
 
 .issue-status-glyph svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .issue-status-glyph[data-status="todo"] {
@@ -90,7 +113,7 @@
 .issue-description-empty {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* The description at rest is a press away from its field: the Markdown it
@@ -98,7 +121,7 @@
 .issue-description {
   margin: 0 calc(var(--luke-space-8) * -1);
   padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: 8px;
+  border-radius: var(--luke-control-radius);
   cursor: text;
   transition: background-color var(--duration-hover) ease;
 }
@@ -124,28 +147,18 @@
 .issue-description-refused {
   margin: 0;
   color: var(--luke-color-danger-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
-/* The board scrolls sideways in a scroller of its own, so its columns stand
-   side by side at every width rather than one over the next; it never
-   scrolls down, since each column scrolls its own cards. */
-.issue-board-scroll {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: var(--luke-space-16) var(--content-inset);
-}
-
-/* The columns fill the scroller's height and share its width, each at least
-   a card's width, past which the board scrolls. */
+/* The board fills the page's height, so it never scrolls down and each
+   column scrolls its own cards; its columns share the page's width, each at
+   least a card's, past which the page scrolls sideways. */
 .issue-board {
   position: relative;
   display: flex;
   min-width: min-content;
-  flex: 1 0 0;
+  min-height: 0;
+  flex: 1 1 0;
   gap: var(--luke-space-8);
 }
 

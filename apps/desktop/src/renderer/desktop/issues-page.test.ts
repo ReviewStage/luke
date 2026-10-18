@@ -275,7 +275,7 @@ function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
       group.querySelector("h2")?.textContent ?? "",
-      [...group.querySelectorAll(".sidebar-task-item")].map(
+      [...group.querySelectorAll("li")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
       ),
@@ -998,14 +998,22 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
 
 /**
  * The board laid out as a narrow window lays it: each column 300px wide,
- * side by side from the scroller's start, in a scroller 700px wide that
- * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
- * browser would. Answers each scroller's sideways scroll as it stands.
+ * side by side from the page's scroll's start, in that scroll 700px wide,
+ * which scrolls sideways. jsdom lays nothing out and reads no stylesheet,
+ * so this answers the geometry and the overflow the browser would. Answers
+ * the page's sideways scroll as it stands.
  */
 function layBoardOut(): () => number {
   const COLUMN = 300;
   const scrolled = new WeakMap<Element, number>();
-  const scroller = () => document.querySelector(".issue-board-scroll");
+  const SCROLL = ".luke-collection-page-scroll";
+  const scroller = () => document.querySelector<HTMLElement>(SCROLL);
+  const computed = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = computed(element, pseudo);
+    if (element.matches(SCROLL)) style.overflowX = "auto";
+    return style;
+  });
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
     return scrolled.get(this) ?? 0;
   });
@@ -1016,7 +1024,7 @@ function layBoardOut(): () => number {
     scrolled.set(this, left);
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".issue-board-scroll") ? 700 : 0;
+    return this.matches(SCROLL) ? 700 : 0;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -1026,7 +1034,9 @@ function layBoardOut(): () => number {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    const shift = scrolled.get(scroller() ?? this) ?? 0;
+    if (this.matches(".issue-board")) return new DOMRect(-shift, 0, columns.length * COLUMN, 0);
+    const left = at < 0 ? 0 : at * COLUMN - shift;
     return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
   });
   return () => {
@@ -1070,8 +1080,7 @@ test("View options lays the page out as the list and back as the board, and an i
 
   showList();
   const listed = page.querySelector(".home-section") !== null;
-  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
-  assert.ok(row);
+  const row = listRowOf(page, issue(1));
   act(() => row.click());
   await settle();
   act(() => button("Issues").click());
@@ -1084,6 +1093,28 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(stillListed, "the list is what the page goes back to");
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
+});
+
+test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+  standing = [issue(1)];
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
+  const list = mount();
+  const reading = list.querySelector('[role="status"]')?.textContent;
+  await settle();
+  const read = list.querySelector('[role="status"]');
+  const listedGroups = groups(list);
+  act(() => root?.unmount());
+
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
+  const board = mount();
+  const boardReading = board.querySelector('[role="status"]');
+  await settle();
+
+  assert.equal(reading, "Reading issues");
+  assert.equal(read, null);
+  assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.equal(boardReading, null);
+  assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 
 test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
@@ -1138,7 +1169,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
   await settle();
 
   assert.ok(page.querySelector(".home-section"), "the list stands");
-  assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+  assert.doesNotMatch(document.activeElement?.textContent ?? "", /ACME-1/u);
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
@@ -1202,6 +1233,15 @@ function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
   return found;
 }
 
+/** The press of the list's row for the issue given, found by the identifier it reads. */
+function listRowOf(page: HTMLElement, listed: Issue): HTMLButtonElement {
+  const found = [...page.querySelectorAll<HTMLButtonElement>(".home-section button")].find((each) =>
+    each.textContent?.startsWith(`ACME-${listed.number}`),
+  );
+  assert.ok(found, `no row for ACME-${listed.number}`);
+  return found;
+}
+
 /** A right-click on an element, at a point in the window, as the pointer makes one. */
 function rightClick(target: HTMLElement): void {
   act(() => {
@@ -1245,7 +1285,7 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
   await settle();
   showList();
 
-  const row = cardOf(page, issue(1).id);
+  const row = listRowOf(page, issue(1));
   act(() => row.focus());
   act(() => {
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
@@ -1257,6 +1297,26 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
     { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
   ]);
   assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("a list row's right-click opens its menu, and Escape hands the keyboard back to the row", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(2));
+  rightClick(row);
+  assert.ok(menuItem("Status"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.equal(document.querySelector("[role=menu]"), null);
+  assert.ok(document.activeElement === row, "the row holds the keyboard");
 });
 
 test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
@@ -1322,6 +1382,26 @@ test("a card moved by a status picked from its menu keeps the keyboard in its ne
   const holding = document.activeElement?.closest<HTMLElement>("[data-issue-id]");
   assert.equal(holding?.dataset.issueId, issue(1).id);
   assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
+});
+
+test("a list row moved by a status picked from its menu keeps the keyboard under its new heading", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(1));
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement;
+  assert.ok(holding instanceof HTMLButtonElement, "a row holds the keyboard");
+  assert.match(holding.textContent ?? "", /^ACME-1/u);
+  assert.equal(holding.closest("section")?.getAttribute("aria-label"), "Done");
 });
 
 test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
