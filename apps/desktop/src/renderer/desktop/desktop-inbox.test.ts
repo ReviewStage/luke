@@ -2978,6 +2978,113 @@ test("a thread draws its messages after the question in the order they were writ
   assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
+/** Selects the words drawn in the item's pane as `words`, from `from` through `to`, as a drag lets them go. */
+function selectInPane(page: HTMLElement, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(itemPane(page), NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** Reply, where it stands over the window. */
+function replyPress(): HTMLButtonElement | undefined {
+  return [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
+    (each) => each.textContent === "Reply",
+  );
+}
+
+test("words selected in the agent's part of a thread stand Reply over them, which quotes them into the box: a settled item's message sends the quote set apart over the words typed under it, and a teammate's words offer no Reply", async () => {
+  const threaded: InboxItem = {
+    ...RETRY,
+    updatedAt: 5_300,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000041",
+        { member: TEAMMATE },
+        "Should it page at night too?",
+        4_500,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000042",
+        "agent",
+        "Only in business hours. Nights wait for the morning.",
+        5_100,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, threaded]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const sent = heldMessages(writtenOn(threaded, "c1b2c3d4-0000-4000-8000-000000000043"));
+  const pane = itemPane(page);
+
+  selectInPane(page, "Should it page", "Should", "too?");
+  assert.equal(replyPress(), undefined, "a teammate's words are not the agent's");
+
+  selectInPane(page, "Only in business hours.", "Only", "hours.");
+  const reply = replyPress() ?? assert.fail("Reply stands over the agent's words");
+  act(() => reply.click());
+  await settle();
+  assert.equal(replyPress(), undefined, "Reply goes once pressed");
+  assert.equal(document.activeElement, composerEditor(pane), "the box takes the caret");
+  typeInComposer(pane, "Page at night for a full outage.");
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["> Only in business hours.\n\nPage at night for a full outage."],
+  );
+});
+
+test("words selected in an open item's question quote into its box, and its answer's note carries the quote", async () => {
+  const asking: InboxItem = {
+    ...THRESHOLD,
+    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Usage alerts fire at 80% of the plan's quota." }],
+  };
+  inboxes = new Map([
+    [BILLING.id, [asking]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+
+  selectInPane(page, "Usage alerts fire", "Usage", "quota.");
+  const reply = replyPress() ?? assert.fail("Reply stands over the agent's question");
+  act(() => reply.click());
+  await settle();
+  typeInComposer(pane, "Make it 90%.");
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ itemId, note }) => ({ itemId, note })),
+    [
+      {
+        itemId: THRESHOLD.id,
+        note: "> Usage alerts fire at 80% of the plan's quota.\n\nMake it 90%.",
+      },
+    ],
+  );
+});
+
 test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {
   const { page } = mount();
   await settle();

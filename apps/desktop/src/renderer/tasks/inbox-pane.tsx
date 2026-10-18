@@ -73,7 +73,7 @@ import { AttachedFileChips } from "./attached-file-chips";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
-import { InboxAnswerBox } from "./inbox-answer-box";
+import { boxTakesWords, InboxAnswerBox } from "./inbox-answer-box";
 import {
   CODE_READ,
   CODE_READ_FAILED,
@@ -102,6 +102,7 @@ import {
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { RelativeTime } from "./relative-time";
+import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { SentWords } from "./skill-chip";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
@@ -174,6 +175,13 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * wrote, a code block the repository's lines, and an image block a picture of what it rendered,
  * so its thread is out of the session recording (`ph-no-capture`), and the
  * viewer, drawn over the window outside it, is out of it on its own.
+ *
+ * Words selected in what the agent wrote, its question's Markdown, its
+ * messages on the thread, and why it took the item back, stand Reply over
+ * them, as an agent's words do in its tab (`reply-to-selection.tsx`): a
+ * press lays them into the box as a quote block, so an answer or a message
+ * can answer the agent point by point. Reply stands only while the box
+ * takes words, never while an answer is out.
  */
 
 /** What the thread says under its item where the task's inbox could not be read. */
@@ -407,8 +415,9 @@ function KnownBlock({
 }): React.JSX.Element {
   switch (block.type) {
     case INBOX_BLOCK.MARKDOWN:
+      // The agent's words, which a selection inside may be replied to.
       return (
-        <div data-inbox-markdown="">
+        <div data-inbox-markdown="" {...{ [REPLY_SCOPE]: "" }}>
           <TranscriptWords text={block.text} />
         </div>
       );
@@ -988,7 +997,11 @@ function Withdrawn({
         </>
       }
     >
-      {settled.words === undefined ? undefined : <p className="inbox-words">{settled.words}</p>}
+      {settled.words === undefined ? undefined : (
+        <p className="inbox-words" {...{ [REPLY_SCOPE]: "" }}>
+          {settled.words}
+        </p>
+      )}
     </Comment>
   );
 }
@@ -1044,7 +1057,12 @@ function Message({
         onRetryImage={onRetryImage}
       />
       {message.text === "" ? null : (
-        <div className="inbox-words" data-inbox-message-text="">
+        <div
+          className="inbox-words"
+          data-inbox-message-text=""
+          // The agent's words alone may be replied to, as in its tab, never a member's.
+          {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
+        >
           <SentWords text={message.text} />
         </div>
       )}
@@ -1453,6 +1471,8 @@ export function InboxPane({
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
+  // The door the box hands Reply, which lays a quote in at its caret.
+  const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
   useLayoutEffect(() => {
     if (board.current !== null) board.current.scrollTop = 0;
@@ -1540,9 +1560,14 @@ export function InboxPane({
             agentName={by.subject.name}
             skills={agents.readSkills}
             keywords={answerKeywords(holder, item)}
+            replyDoor={replyDoor}
           />
         </AnswerMentions>
       </div>
+      {/* Note that Reply stands only while the box takes words, as in the agent's tab. */}
+      {hidden || !boxTakesWords(item) || control.sending.has(item.id) ? null : (
+        <ReplyToSelection scope={board} onReply={(words) => replyDoor.current?.(words)} />
+      )}
     </section>
   );
 }
