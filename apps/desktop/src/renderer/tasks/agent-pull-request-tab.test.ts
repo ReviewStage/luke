@@ -26,6 +26,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   type PullRequestState,
+  REACTION,
   REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
@@ -910,6 +911,83 @@ test("a review that only left line comments draws each thread under it: its file
     /Moved away\./u,
     "a press opens it",
   );
+});
+
+test("the description, a comment, a review, and a thread comment wear their reactions under their words, each its emoji and count, the reader's own lit only where the read named them among who gave it", async () => {
+  const dana = { login: "danak", bot: false, userId: "user-dana" };
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.APPROVED,
+    html: '<p dir="auto">Good.</p>',
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    reactions: [{ content: REACTION.HOORAY, count: 1, by: [CHARLES_ON_GITHUB] }],
+    threads: [
+      thread({
+        comments: [
+          {
+            by: CHARLES_ON_GITHUB,
+            html: '<p dir="auto">Why?</p>',
+            body: "",
+            at: 2_000,
+            url: `${PAGE}#discussion_r1`,
+            reactions: [{ content: REACTION.THUMBS_DOWN, count: 3 }],
+          },
+        ],
+      }),
+    ],
+  } as const;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            descriptionReactions: [
+              { content: REACTION.THUMBS_UP, count: 12, by: [CHARLES_ON_GITHUB, dana] },
+              { content: REACTION.ROCKET, count: 1, by: [CHARLES_ON_GITHUB] },
+            ],
+            conversation: [
+              review,
+              {
+                kind: CONVERSATION_ENTRY.COMMENT,
+                by: CHARLES_ON_GITHUB,
+                html: '<p dir="auto">Thanks.</p>',
+                body: "",
+                at: 3_000,
+                url: `${PAGE}#issuecomment-2`,
+                reactions: [{ content: REACTION.EYES, count: 2, by: [dana, CHARLES_ON_GITHUB] }],
+              },
+            ],
+          },
+        }),
+    }),
+  );
+  /** Each pill under the element given: what it says to a reader, and whether it is lit as the reader's. */
+  const pills = (under: Element | null) =>
+    [...(under?.querySelectorAll(".pull-request-reaction") ?? [])].map((pill) => [
+      pill.textContent,
+      pill.getAttribute("aria-label"),
+      pill.getAttribute("data-mine"),
+    ]);
+  assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
+    ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
+    ["🚀1", "Charles Pan reacted with rocket", "false"],
+  ]);
+  const [reviewed, commented] = [...tab.querySelectorAll(".pull-request-entry")];
+  assert.deepEqual(pills(reviewed?.querySelector(":scope > .pull-request-reactions") ?? null), [
+    ["🎉1", "Charles Pan reacted with hooray", "false"],
+  ]);
+  assert.deepEqual(
+    pills(reviewed?.querySelector(".pull-request-thread-comment") ?? null),
+    [["👎3", "3 reacted with thumbs down", "false"]],
+    "a reaction the read only counted is never lit",
+  );
+  assert.deepEqual(pills(commented ?? null), [
+    ["👀2", "You and Charles Pan reacted with eyes", "true"],
+  ]);
 });
 
 /** The switch of the Conversation's filter named as given. */

@@ -24,6 +24,7 @@ import {
   type PullRequestDeployment,
   type PullRequestReviewer,
   REVIEW_STATE,
+  type ReactionGroup,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
@@ -90,6 +91,7 @@ import { useFileViewSettings } from "./file-view-settings";
 import { blockedWords, MergeActions } from "./merge-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
+import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
 import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
@@ -157,7 +159,9 @@ import { useWorkingNow, workingTime } from "./working-time";
  * end of the hunk it was made on, drawn as Files changed draws a diff with
  * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
  * outdated by a later push is folded closed under its head, which says
- * which, until opened. Over the conversation, stage-cli's two filters,
+ * which, until opened. The description and every comment wear their
+ * reactions under their words, as GitHub draws them
+ * (`pull-request-reactions.tsx`). Over the conversation, stage-cli's two filters,
  * Hide bots and Hide resolved, each counting what it leaves out and kept
  * across launches (`conversation-filters.ts`). Every name and word here is
  * the repository's, so the tab is left out of the screen recording
@@ -894,6 +898,7 @@ function ThreadComments({
               <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
             </span>
             <EntryWords entry={comment} picture={picture} />
+            <Reactions reactions={comment.reactions} />
           </li>
         ))}
       </ol>
@@ -979,6 +984,7 @@ function EntryCard({
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
+      <Reactions reactions={entry.reactions} />
       {threads.length === 0 ? null : (
         <ol className="pull-request-threads">
           {threads.map((thread, at) => (
@@ -1178,12 +1184,14 @@ function ChecksPart({
   );
 }
 
-/** The description, as the pull request's read carries it; a skeleton while that read is out, and nothing where it failed, whose failure stands under the title. */
+/** The description, as the pull request's read carries it, with the reactions it wears once the conversation's read, which carries them, lands; a skeleton while its read is out, and nothing where it failed, whose failure stands under the title. */
 function DescriptionPart({
   part,
+  reactions,
   picture,
 }: {
   part: Part<CodingAgentOverviewPullRequest>;
+  reactions: readonly ReactionGroup[] | undefined;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
@@ -1201,6 +1209,7 @@ function DescriptionPart({
           <GitHubWords html={part.value.html} picture={picture} />
         </div>
       )}
+      {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} />}
     </Section>
   );
 }
@@ -1504,7 +1513,11 @@ function ConversationView({
         hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
       />
       <div className="pull-request-page">
-        <DescriptionPart part={parts.pullRequest} picture={picture} />
+        <DescriptionPart
+          part={parts.pullRequest}
+          reactions={landed(parts.conversation)?.descriptionReactions}
+          picture={picture}
+        />
         <ConversationPart
           parts={parts}
           filters={filters.filters}
