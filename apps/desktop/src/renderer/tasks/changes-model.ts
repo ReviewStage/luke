@@ -357,8 +357,24 @@ interface DrawnLines {
   readonly [DIFF_SIDE.RIGHT]: ReadonlySet<number>;
 }
 
+/**
+ * Each file's drawn lines, read once for the file as the changes answered
+ * it, because the view asks again on every draw and a patch is parsed to
+ * answer.
+ */
+const DRAWN_LINES = new WeakMap<CodingAgentChangedFile, DrawnLines>();
+
 /** The lines a file's diff draws a row for, on each of GitHub's sides; none where it draws no hunks. */
 function drawnLines(file: CodingAgentChangedFile): DrawnLines {
+  const kept = DRAWN_LINES.get(file);
+  if (kept !== undefined) return kept;
+  const lines = linesDrawnBy(file);
+  DRAWN_LINES.set(file, lines);
+  return lines;
+}
+
+/** The lines a file's diff draws a row for, read off its patch. */
+function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
   const patch = fileNotice(file) === undefined ? file.patch : null;
   const rows = patch === null ? [] : (patchHunks(patch) ?? []).flatMap((hunk) => hunk.rows);
   return {
@@ -385,9 +401,11 @@ export function threadsOn(
   threads: readonly ReviewThread[],
   file: CodingAgentChangedFile,
 ): FileThreads {
-  const lines = drawnLines(file);
   const placed: PlacedThread[] = [];
   const above: PlacedThread[] = [];
+  // Note that a file no thread is on reads none of its lines, which would parse its patch.
+  if (!threads.some((thread) => thread.path === file.path)) return { placed, above };
+  const lines = drawnLines(file);
   for (const thread of threads) {
     const key = thread.comments[0]?.url;
     if (thread.path !== file.path || key === undefined) continue;
@@ -475,13 +493,24 @@ export function headerPatch(file: CodingAgentChangedFile): string {
 }
 
 /**
+ * Each file's place in the list, spelled once for the file as the changes
+ * answered it, so a draw of the list hands the bundle the very string it
+ * was handed before, which it compares at once.
+ */
+const LIST_PATCHES = new WeakMap<CodingAgentChangedFile, string>();
+
+/**
  * What a file's place in the list draws: its patch as a whole unified diff,
  * or, where it has no hunks to draw, its header alone (`headerPatch`), so
  * the file still stands in the list under its header, with why it has none
  * said there (`fileNotice`).
  */
 export function listPatch(file: CodingAgentChangedFile): string {
-  return filePatch(file) ?? headerPatch(file);
+  const kept = LIST_PATCHES.get(file);
+  if (kept !== undefined) return kept;
+  const patch = filePatch(file) ?? headerPatch(file);
+  LIST_PATCHES.set(file, patch);
+  return patch;
 }
 
 /** The files whose path holds `query`, whatever its case, as the tree's search narrows its rows; every file for a query of nothing but spaces. */

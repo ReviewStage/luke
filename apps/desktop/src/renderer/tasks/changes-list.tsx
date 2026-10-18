@@ -1,5 +1,5 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
-import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
@@ -7,6 +7,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -178,6 +179,20 @@ export function useChangesList(
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [standing, setStanding] = useState<string | undefined>(undefined);
   const [top, setTop] = useState<string | undefined>(undefined);
+  // Note that the file at the top is kept as the list scrolls but drawn only
+  // while no file is stood on, because the bar names the one stood on then,
+  // and a draw of the whole view for each file scrolled past is the cost.
+  const latestTop = useRef(top);
+  const standingNow = useRef(standing);
+  standingNow.current = standing;
+  const onTopFile = useCallback((path: string) => {
+    latestTop.current = path;
+    if (standingNow.current === undefined) setTop(path);
+  }, []);
+  const letGo = useCallback(() => {
+    setTop(latestTop.current);
+    setStanding(undefined);
+  }, []);
   const [sources, setSources] = useState<ReadonlySet<string>>(new Set());
   const door = useRef<DiffListDoor | null>(null);
   const ordered = useMemo(() => treeOrder(files), [files]);
@@ -205,16 +220,24 @@ export function useChangesList(
     for (const path of paths)
       foldChoices.current.set(path, (foldChoices.current.get(path) ?? 0) + 1);
   }, []);
+  const latestFolds = useRef(folds);
+  latestFolds.current = folds;
+  // Note that the doors a file's header holds stay the same doors across
+  // draws, reading the folds and the marks as they stand, so a header the
+  // view keeps from its last draw still turns its file as it is now.
   const toggle = useCallback(
     (path: string) => {
       choose([path]);
-      setChosen((was) => new Map(was).set(path, folds.get(path) !== true));
+      setChosen((was) => new Map(was).set(path, latestFolds.current.get(path) !== true));
     },
-    [folds, choose],
+    [choose],
   );
   // A file marked viewed folds, and one unmarked opens, whatever was chosen for it before, which comes back where GitHub would not take the press.
+  const latestMarks = useRef({ marks, chosen });
+  latestMarks.current = { marks, chosen };
   const markViewed = useCallback(
     (path: string) => {
+      const { marks, chosen } = latestMarks.current;
       if (marks === undefined) return;
       const before = chosen.get(path);
       const folding = !marks.viewed(path);
@@ -231,7 +254,7 @@ export function useChangesList(
         });
       });
     },
-    [marks, chosen, choose],
+    [choose],
   );
   const asSource = useCallback((path: string) => sources.has(path), [sources]);
   const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
@@ -264,7 +287,7 @@ export function useChangesList(
     // Note that an answered press goes no further, because the window's keymap would run the Inbox's J and K too.
     event.preventDefault();
     event.stopPropagation();
-    if (key === FILE_KEY.LET_GO) return setStanding(undefined);
+    if (key === FILE_KEY.LET_GO) return letGo();
     if (key === FILE_KEY.TOGGLE_ALL) return toggleAll();
     if (key === FILE_KEY.VIEWED) {
       // The file marked folds, and the keys step on to the next, so pressing V again marks it.
@@ -292,7 +315,7 @@ export function useChangesList(
     toggleAll,
     standing: keptStanding,
     current,
-    onTopFile: setTop,
+    onTopFile,
     go,
     stand: setStanding,
     onKeyDown,
@@ -311,6 +334,12 @@ export function useChangesList(
  * its row. Pierre keeps it at the top of the list
  * while the file's lines scroll under it, at the height it reserves for it,
  * so nothing more stands in it.
+ *
+ * Its two hints, the fold's and the letter's, are mounted the first time
+ * the pointer or the keyboard comes to the header, because a list of
+ * hundreds of files would otherwise mount two for every one of them up
+ * front. Mounting them draws the fold anew, so where the keyboard's arrival
+ * on the fold is what mounted them, the fold takes the focus back.
  */
 export function FileHead({
   file,
@@ -329,28 +358,52 @@ export function FileHead({
   onToggle: () => void;
   onStand: () => void;
 }): React.JSX.Element {
+  const [near, setNear] = useState(false);
+  const foldRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!near || !refocus.current) return;
+    refocus.current = false;
+    foldRef.current?.focus();
+  }, [near]);
   const label = collapsed ? "Expand file" : "Collapse file";
+  const fold = (
+    <IconButton
+      ref={foldRef}
+      icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
+      label={label}
+      aria-expanded={!collapsed}
+      aria-keyshortcuts={shortcutAria(FOLD_CHORD.ONE)}
+      onClick={onToggle}
+    />
+  );
+  const letter = (
+    <span className="file-view-status" data-status={file.status}>
+      {STATUS_LETTER[file.status]}
+    </span>
+  );
   return (
     <div
       className="diff-list-head"
       data-standing={standing ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
       onPointerDown={onStand}
+      onPointerEnter={() => setNear(true)}
+      onFocusCapture={(event) => {
+        if (near) return;
+        refocus.current = foldRef.current?.contains(event.target) === true;
+        setNear(true);
+      }}
     >
       <div className="diff-list-head-row">
-        <Tooltip label={label} chord={FOLD_CHORD.ONE}>
-          <IconButton
-            icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
-            label={label}
-            aria-expanded={!collapsed}
-            onClick={onToggle}
-          />
-        </Tooltip>
-        <Tooltip label={STATUS_WORDS[file.status]}>
-          <span className="file-view-status" data-status={file.status}>
-            {STATUS_LETTER[file.status]}
-          </span>
-        </Tooltip>
+        {near ? (
+          <Tooltip label={label} chord={FOLD_CHORD.ONE}>
+            {fold}
+          </Tooltip>
+        ) : (
+          fold
+        )}
+        {near ? <Tooltip label={STATUS_WORDS[file.status]}>{letter}</Tooltip> : letter}
         <span className="diff-list-path">
           {file.previousPath === null ? null : (
             <>

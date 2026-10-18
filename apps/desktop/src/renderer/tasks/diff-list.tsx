@@ -56,6 +56,28 @@ function placeOf({ key, side, line }: DiffAnnotation): DiffAnnotation {
   return { key, side, line };
 }
 
+/**
+ * Each entry as the bundle is handed it, made once for the entry, so a
+ * draw that keeps an entry hands the bundle the very file it was handed
+ * before, which is the same at a glance.
+ */
+const LIST_FILES = new WeakMap<DiffListEntry, DiffListFile>();
+
+/** An entry as the bundle is handed it: its place, patch, fold, and its notes' places. */
+function listFileOf(entry: DiffListEntry): DiffListFile {
+  const kept = LIST_FILES.get(entry);
+  if (kept !== undefined) return kept;
+  const file = {
+    path: entry.path,
+    patch: entry.patch,
+    collapsed: entry.collapsed,
+    lead: entry.lead,
+    annotations: entry.notes.map(placeOf),
+  };
+  LIST_FILES.set(entry, file);
+  return file;
+}
+
 /** Whether two lists of files draw alike: the same files in the same order, each with the same patch, fold, and notes. */
 function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): boolean {
   return (
@@ -63,12 +85,13 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
     a.every((file, at) => {
       const other = b[at];
       return (
-        other !== undefined &&
-        file.path === other.path &&
-        file.patch === other.patch &&
-        file.collapsed === other.collapsed &&
-        file.lead === other.lead &&
-        sameNotes(file.annotations, other.annotations)
+        file === other ||
+        (other !== undefined &&
+          file.path === other.path &&
+          file.patch === other.patch &&
+          file.collapsed === other.collapsed &&
+          file.lead === other.lead &&
+          sameNotes(file.annotations, other.annotations))
       );
     })
   );
@@ -135,13 +158,7 @@ export function PierreDiffList({
   const comment = useRef(onComment);
   comment.current = onComment;
   const tellComment = useCallback((picked: DiffListSelection) => comment.current?.(picked), []);
-  const files = entries.map((entry) => ({
-    path: entry.path,
-    patch: entry.patch,
-    collapsed: entry.collapsed,
-    lead: entry.lead,
-    annotations: entry.notes.map(placeOf),
-  }));
+  const files = entries.map(listFileOf);
   const props: DiffListProps = {
     files,
     look,

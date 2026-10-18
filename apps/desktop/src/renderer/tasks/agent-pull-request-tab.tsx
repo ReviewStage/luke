@@ -80,12 +80,18 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId, useState } from "react";
+import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { AgentChangesTab, THREAD_PLACE, type ThreadPlace, useAgentRead } from "./agent-changes-tab";
+import {
+  AgentChangesTab,
+  type ChangesThreads,
+  THREAD_PLACE,
+  type ThreadPlace,
+  useAgentRead,
+} from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import {
@@ -1696,6 +1702,19 @@ export function AgentPullRequestTab({
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
   const options = useReviewOptions(agentId, control.readReviewOptions);
+  // Note that Files changed is handed the same threads while the conversation
+  // and the minute stand, because a file a thread is on draws its notes anew
+  // for new ones.
+  const conversation = landed(parts.conversation);
+  const threadList = useMemo(() => reviewThreadsOf(conversation), [conversation]);
+  const drawThread = useCallback<ChangesThreads["draw"]>(
+    (thread, place) => <InlineThread thread={thread} place={place} now={now} picture={picture} />,
+    [now, picture],
+  );
+  const changesThreads = useMemo<ChangesThreads>(
+    () => ({ list: threadList, draw: drawThread, refresh: conversationRead.ask }),
+    [threadList, drawThread, conversationRead.ask],
+  );
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1778,13 +1797,7 @@ export function AgentPullRequestTab({
             shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
             repository={repository}
             tree={tree}
-            threads={{
-              list: reviewThreadsOf(landed(parts.conversation)),
-              draw: (thread, place) => (
-                <InlineThread thread={thread} place={place} now={now} picture={picture} />
-              ),
-              refresh: ask.conversation,
-            }}
+            threads={changesThreads}
             lineComments={{ pending: pendingReview, onWritten: written }}
           />
         </div>
