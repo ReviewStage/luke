@@ -1,3 +1,4 @@
+import type { PickTarget, WorldPalette } from "@luke/panel/factory-world/world";
 import {
   BoxGeometry,
   type Color,
@@ -9,7 +10,6 @@ import {
   MeshBasicMaterial,
   Object3D,
 } from "three";
-import type { PickTarget, WorldPalette } from "../../world";
 import { col, PAL, partGeo } from "./geo";
 import { Path, type Spot } from "./layout";
 

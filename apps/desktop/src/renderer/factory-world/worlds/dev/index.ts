@@ -1,5 +1,13 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldModule,
+  type WorldPalette,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   AGENT_STATE,
   type AgentState,
   agentDrawnUnder,
@@ -19,14 +27,6 @@ import {
   Object3D,
   OctahedronGeometry,
 } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldModule,
-  type WorldPalette,
-  type WorldState,
-} from "../../world";
 
 /**
  * index.ts -- the test pattern: the plainest world that draws every part of the reading, so the scene host can be stood up and checked with no world of its own.

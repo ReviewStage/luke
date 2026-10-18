@@ -3,12 +3,12 @@
 import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
 import { PageCard } from "./page-card";
 
 /**

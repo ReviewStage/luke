@@ -1,8 +1,13 @@
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
+import type {
+  ComposerChip,
+  ComposerEditorHandle,
+  ComposerTrigger,
+} from "@luke/panel/plan-editor/contract";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import { namedServers } from "@luke/ui/agent-servers-model";
 import type { ReactNode, RefObject } from "react";
-import type { IntegrationStatuses } from "../integration-statuses";
-import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
 import type { ComposerFieldMentions } from "./composer-field";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
@@ -11,7 +16,6 @@ import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
 import { useTaskMentions } from "./task-mentions";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * composer-pickers.tsx -- what a box written to an agent offers inside its field, alike in the agent's message box and the Inbox's answer box: the `@` list of mentions, the `/` list of skills, dictation, and the keys that work them.

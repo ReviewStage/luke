@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { TerminalHandle } from "@luke/panel/terminal/contract";
 import { afterEach, beforeEach, test } from "vitest";
-import type { TerminalHandle } from "./contract";
 import { terminal } from "./index";
 
 /**

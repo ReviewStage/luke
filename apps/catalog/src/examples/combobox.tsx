@@ -2,6 +2,7 @@ import {
   Combobox,
   ComboboxList,
   type ComboboxOption,
+  ComboboxOptionItem,
   ComposeIcon,
   comboboxOptionId,
   DocumentIcon,
@@ -21,7 +22,9 @@ import { CatalogSection } from "../section";
  * editor's `@` hangs one, a row that opens a further list wearing its
  * chevron, and its note where nothing matches; and a list too short to
  * search, holding the keys itself, with a model that cannot be chosen now,
- * the one chosen checked, and a note after them.
+ * the one chosen checked, and a note after them; and rows a list engine of
+ * the app's owns, each drawn as `ComboboxOptionItem`, the second lit as the
+ * engine's `aria-selected` says.
  */
 
 /** Synthetic issues, as a tracker would list them. */
@@ -137,6 +140,26 @@ function Models(): React.JSX.Element {
   );
 }
 
+/** Rows as a list engine (cmdk) would hand them through its `asChild`, the second the engine's selected one. */
+function EngineRows(): React.JSX.Element {
+  return (
+    <div className="catalog-popover catalog-column" role="listbox" aria-label="Results">
+      <ComboboxOptionItem
+        option={{ id: "new-task", label: "New task", icon: <ComposeIcon />, hint: "⌘N" }}
+        aria-selected={false}
+      />
+      <ComboboxOptionItem
+        option={{ id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" }}
+        aria-selected
+      />
+      <ComboboxOptionItem
+        option={{ id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" }}
+        aria-selected={false}
+      />
+    </div>
+  );
+}
+
 function Comboboxes(): React.JSX.Element {
   return (
     <>
@@ -161,6 +184,9 @@ function Comboboxes(): React.JSX.Element {
         title="A list with no field: a dimmed option, the chosen one, and a note"
       >
         <Models />
+      </CatalogSection>
+      <CatalogSection id="combobox-engine-rows" title="Rows a list engine owns">
+        <EngineRows />
       </CatalogSection>
     </>
   );

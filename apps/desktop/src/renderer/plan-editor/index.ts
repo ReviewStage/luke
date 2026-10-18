@@ -1,5 +1,5 @@
+import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
 import { mountComposer } from "./composer-editor";
-import type { PlanEditorModule } from "./contract";
 import { mountPlanEditor } from "./plan-editor";
 
 /**

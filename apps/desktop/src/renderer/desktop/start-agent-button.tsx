@@ -1,11 +1,11 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
 import { ERROR_STATE_PLACEMENT, ErrorState, PlayIcon, SplitButton } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { choiceLabel } from "../tasks/coding-agent-model";
 import { ModelMenu, settledChoice } from "../tasks/model-menu";
-import { useRepositoryRemedy } from "../tasks/repository-remedy";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { Tooltip } from "../tooltip";
 

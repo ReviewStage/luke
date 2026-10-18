@@ -1,3 +1,10 @@
+import type {
+  MentionNode,
+  PlanEditorHandle,
+  PlanEditorPictures,
+  PlanEditorPlacement,
+  PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
 import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
@@ -10,13 +17,6 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import type {
-  MentionNode,
-  PlanEditorHandle,
-  PlanEditorPictures,
-  PlanEditorPlacement,
-  PlanEditorProps,
-} from "./contract";
 import { diagramPreview } from "./diagram-preview";
 import {
   documentManager,

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
 
@@ -11,7 +11,9 @@ import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding
  * back, a `FoldingButton` whose words fold away where its toolbar says so.
  * A crumb that opens something says what it opens and whether it stands
  * open, and its press is handed the crumb, which the caller hangs what it
- * opens from and hands the keyboard back to.
+ * opens from and hands the keyboard back to. A crumb may wear a glyph
+ * before its words, as a tab names its kind, and hang a card in its hint's
+ * place, the app's hint raising it as it raises a pill.
  *
  * Two looks: a bar's path in the caption type, every crumb a quiet pill
  * that narrows by its share, cut short at its end, the current one last of
@@ -61,6 +63,14 @@ export const BREADCRUMB_POPUP = {
 
 export type BreadcrumbPopup = (typeof BREADCRUMB_POPUP)[keyof typeof BREADCRUMB_POPUP];
 
+/**
+ * The app's hint a path hangs from its crumbs: the words a crumb raises, or
+ * the card it hangs in their place, and a folded way back's words.
+ */
+export type BreadcrumbHint = ComponentType<
+  ComponentProps<FoldingButtonHint> & { card?: ReactNode | undefined }
+>;
+
 /** What every crumb holds: its words, its press, and the widths it is drawn at. */
 interface CrumbBase {
   /** Its words. */
@@ -74,6 +84,10 @@ interface CrumbBase {
 /** A crumb of words, or a quiet pill a press reaches. */
 interface PathCrumb extends CrumbBase {
   readonly icon?: undefined;
+  /** A glyph before its words, as a tab names its kind; decoration, since the words say what it is. */
+  readonly glyph?: ReactNode;
+  /** The card its hint hangs in the words' place. */
+  readonly card?: ReactNode;
   /** Its name for a reader, where its words alone do not say it ("…"). */
   readonly name?: string | undefined;
   /** The words its hint raises, where the app hands the path one. */
@@ -94,6 +108,8 @@ interface PathCrumb extends CrumbBase {
 interface WayBackCrumb extends CrumbBase {
   readonly icon: ReactNode;
   readonly onPress: (crumb: HTMLElement) => void;
+  readonly glyph?: undefined;
+  readonly card?: undefined;
   readonly name?: undefined;
   readonly hint?: undefined;
   readonly current?: undefined;
@@ -180,13 +196,27 @@ function CrumbChevron({ at }: { at: Widths | undefined }): React.JSX.Element | n
   return at === undefined ? null : <Chevron at={at} />;
 }
 
+/** A crumb's face: its glyph, where it wears one, then its words. */
+function CrumbFace({ glyph, label }: { glyph: ReactNode; label: string }): React.JSX.Element {
+  return (
+    <>
+      {glyph === undefined ? null : (
+        <span className="luke-breadcrumb-glyph" aria-hidden="true">
+          {glyph}
+        </span>
+      )}
+      <span className="luke-breadcrumb-label">{label}</span>
+    </>
+  );
+}
+
 /** One crumb's control: words, a quiet pill, or the toolbar's folding way back. */
 function CrumbControl({
   crumb,
   hint: Hint,
 }: {
   crumb: Crumb;
-  hint: FoldingButtonHint | undefined;
+  hint: BreadcrumbHint | undefined;
 }): React.JSX.Element {
   const { label, icon, onPress } = crumb;
   const current = crumb.current === true ? "page" : undefined;
@@ -201,30 +231,30 @@ function CrumbControl({
       />
     );
   }
-  if (onPress === undefined) {
-    return (
+  const control =
+    onPress === undefined ? (
       <span className="luke-breadcrumb-words" aria-current={current}>
-        {label}
+        <CrumbFace glyph={crumb.glyph} label={label} />
       </span>
+    ) : (
+      <button
+        type="button"
+        className="luke-breadcrumb-button"
+        aria-label={crumb.name}
+        aria-current={current}
+        aria-haspopup={crumb.popup}
+        aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
+        onClick={(event) => onPress(event.currentTarget)}
+      >
+        <CrumbFace glyph={crumb.glyph} label={label} />
+      </button>
     );
-  }
-  const button = (
-    <button
-      type="button"
-      className="luke-breadcrumb-button"
-      aria-label={crumb.name}
-      aria-current={current}
-      aria-haspopup={crumb.popup}
-      aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
-      onClick={(event) => onPress(event.currentTarget)}
-    >
-      {label}
-    </button>
-  );
-  return Hint === undefined || crumb.hint === undefined ? (
-    button
+  return Hint === undefined || (crumb.hint === undefined && crumb.card === undefined) ? (
+    control
   ) : (
-    <Hint label={crumb.hint}>{button}</Hint>
+    <Hint label={crumb.hint} card={crumb.card}>
+      {control}
+    </Hint>
   );
 }
 
@@ -242,8 +272,8 @@ export function Breadcrumbs({
   label: string;
   crumbs: readonly Crumb[];
   variant?: BreadcrumbsVariant;
-  /** The app's hint, raising a crumb's `hint`, and a folded way back's words. */
-  hint?: FoldingButtonHint | undefined;
+  /** The app's hint, raising a crumb's `hint` or hanging its `card`, and a folded way back's words. */
+  hint?: BreadcrumbHint | undefined;
 }): React.JSX.Element {
   return (
     <nav className="luke-breadcrumbs" data-variant={variant} aria-label={label}>

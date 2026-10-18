@@ -4,13 +4,15 @@ import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   editorBundleLanded,
@@ -18,12 +20,10 @@ import {
   pressInComposer,
   typeInComposer,
 } from "#testing/composer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { OpenSettingsProvider } from "../open-settings";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
-import type { NewTaskAgent, NewTaskPreset } from "./use-tasks-tab";
+import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab";
 
 /**
  * New task as the developer meets it: a card over the window holding the
@@ -106,6 +106,7 @@ async function mount(
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
+  const agentsAtOnce: (boolean | undefined)[] = [];
   const defaults: ModelChoice[] = [];
   const fromIssues: (string | undefined)[] = [];
   const fromWorkspaceIssues: (string | undefined)[] = [];
@@ -136,12 +137,12 @@ async function mount(
           repository: string | null,
           workspaceId: string | undefined,
           planning: boolean,
-          from?: { readonly linearIssueId?: string; readonly issueId?: string },
-          agent?: NewTaskAgent,
+          from?: NewTaskStart,
         ) => {
           starts.push([name, repository]);
           planned.push(planning);
-          agents.push(agent);
+          agents.push(from?.handed);
+          agentsAtOnce.push(from?.agent);
           fromIssues.push(from?.linearIssueId);
           fromWorkspaceIssues.push(from?.issueId);
           startedIn.push(workspaceId);
@@ -200,8 +201,10 @@ async function mount(
     startedIn,
     /** Whether each start asked for its planning phase. */
     planned,
-    /** The coding agent each start asked for, where it asked for one. */
+    /** The coding agent each start handed its words, where it asked for one. */
     agents,
+    /** Whether each start asked an agent to start on its task's plan at once. */
+    agentsAtOnce,
     /** Every model the chip kept as the account's default. */
     defaults,
     /** Every Settings link the dialog's presses followed. */
@@ -1011,11 +1014,47 @@ test("opened on one of the workspace's issues, the card says so, starts named by
   assert.equal(document.querySelector(LINEAR_CHIP), null, "no Linear chip is offered");
   await card.key("l", { metaKey: true });
   assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "Command-L opens nothing");
+  await card.key("Enter");
   card.type("Make them last a week");
   await card.key("Enter");
 
+  assert.deepEqual(card.starts, [
+    ["Invites expire", "acme/web"],
+    ["Invites expire", "acme/web"],
+  ]);
+  assert.deepEqual(
+    card.agentsAtOnce,
+    [true, undefined],
+    "with nothing written the agent starts on the plan",
+  );
+  assert.equal(card.agents[1]?.prompt, "Make them last a week");
+  assert.deepEqual(card.fromWorkspaceIssues, ["issue-1", "issue-1"]);
+  assert.deepEqual(card.fromIssues, [undefined, undefined]);
+  assert.deepEqual(card.startedIn, ["workspace-2", "workspace-2"]);
+});
+
+test("opened as a new agent's card on an issue, it offers no Plan toggle, holds Start until a repository is chosen, and asks an agent to start on the task at once", async () => {
+  keptInLukeMode();
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-2",
+    identifier: "ACME-7",
+    title: "Invites expire",
+  };
+  const card = await mount(undefined, { issue, agent: true }, { recent: [] });
+
+  assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New agent from ACME-7\b/);
+  assert.equal(card.controls().includes("Plan with Luke first"), false);
+  await card.key("Enter");
+  assert.deepEqual(card.starts, [], "no agent is asked for with no repository to work in");
+  assert.match(card.dialog()?.textContent ?? "", /An agent needs a repository/u);
+
+  await card.rechoose({ recent: ["acme/web"] });
+  act(() => card.startButton().click());
+  await settle();
+
   assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
+  assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
-  assert.deepEqual(card.fromIssues, [undefined]);
-  assert.deepEqual(card.startedIn, ["workspace-2"]);
+  assert.deepEqual(card.agentsAtOnce, [true]);
 });

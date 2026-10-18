@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { agoText } from "@luke/panel/tasks/task-time";
 import {
   ACTOR_KIND,
@@ -18,7 +19,6 @@ import {
 } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef, LukeCard, PersonCard } from "../actor-ref";
-import { useMemberDirectory } from "../member-directory";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { agentGlyphState, providerOf } from "./coding-agent-model";

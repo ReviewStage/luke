@@ -47,7 +47,17 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  appCommandOffered,
+  runAppCommand,
+  useAppCommand,
+  useOverlayHold,
+} from "@luke/panel/app-commands";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { settingsPageOf, settingsPageShown } from "@luke/panel/settings/pages";
+import { Shortcut } from "@luke/panel/shortcut";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { type ReadMarks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
@@ -70,6 +80,7 @@ import {
 import {
   CHIP_LOOK,
   Chip,
+  ComboboxOptionItem,
   ErrorState,
   GearIcon,
   PinIcon,
@@ -88,18 +99,14 @@ import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search";
-import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
@@ -107,7 +114,6 @@ import { refusalLine } from "../tasks/file-tab-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { markReadItem } from "../tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
-import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
@@ -896,30 +902,41 @@ function PaletteItem({
   const detail = creatorExplains(row, query, tokens)
     ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
     : row.detail;
+  const words =
+    detail === undefined && row.workspace === undefined ? undefined : (
+      <>
+        {row.workspace === undefined ? null : (
+          <WorkspaceRef
+            workspace={row.workspace}
+            name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+          />
+        )}
+        {row.workspace === undefined || detail === undefined ? null : " · "}
+        {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
+      </>
+    );
+  // Spoken, since a palette row is an option, which carries no
+  // `aria-keyshortcuts` to say the chord for it.
+  const end =
+    row.command === undefined && row.endMark === undefined ? undefined : (
+      <>
+        {row.command === undefined ? null : (
+          <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
+        )}
+        {row.endMark}
+      </>
+    );
   const item = (
-    <Command.Item className="menu-item" value={value} onSelect={row.onChoose}>
-      {row.icon === undefined ? null : <span className="menu-item-glyph">{row.icon}</span>}
-      <span className="command-palette-name">
-        <Highlighted text={row.label} tokens={tokens} />
-      </span>
-      {detail === undefined && row.workspace === undefined ? null : (
-        <span className="command-palette-detail">
-          {row.workspace === undefined ? null : (
-            <WorkspaceRef
-              workspace={row.workspace}
-              name={<Highlighted text={row.workspace.name} tokens={tokens} />}
-            />
-          )}
-          {row.workspace === undefined || detail === undefined ? null : " · "}
-          {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
-        </span>
-      )}
-      {/* Spoken, since a palette row is an option, which carries no
-          `aria-keyshortcuts` to say the chord for it. */}
-      {row.command === undefined ? null : (
-        <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="menu-item-hint" spoken />
-      )}
-      {row.endMark === undefined ? null : <span className="menu-item-end">{row.endMark}</span>}
+    <Command.Item asChild value={value} onSelect={row.onChoose}>
+      <ComboboxOptionItem
+        option={{
+          id: value,
+          label: <Highlighted text={row.label} tokens={tokens} />,
+          icon: row.icon,
+          detail: words,
+          hint: end,
+        }}
+      />
     </Command.Item>
   );
   if (row.card === undefined) return item;
@@ -1280,7 +1297,14 @@ export function CommandPalette({
           <NoticeLine notice={notice} />
         )}
         {sections.map((section) => (
-          <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
+          <Command.Group
+            key={section.kind}
+            heading={
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                {FILTER_LABEL[section.kind]}
+              </Text>
+            }
+          >
             {section.rows.map((row) => {
               place += 1;
               return (

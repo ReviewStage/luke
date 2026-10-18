@@ -1,6 +1,6 @@
+import type { MentionNode } from "@luke/panel/plan-editor/contract";
 import { type JSONContent, Node } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
-import type { MentionNode } from "./contract";
 
 /**
  * mention-node.ts -- a mention in the editors' words: an atom holding the name it was written with and its link's target, drawn by the panel, written back as the link it was read from.

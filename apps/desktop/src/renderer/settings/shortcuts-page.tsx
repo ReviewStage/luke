@@ -1,8 +1,8 @@
+import { Shortcut } from "@luke/panel/shortcut";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
 import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
-import { Shortcut } from "../shortcut";
 
 /**
  * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts, grouped as the menu bar groups them, listed to be found rather than changed.

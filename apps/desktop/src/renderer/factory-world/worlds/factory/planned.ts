@@ -3,6 +3,7 @@ import {
   type FactoryPlanned,
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   type BufferGeometry,
@@ -19,7 +20,6 @@ import {
   PlaneGeometry,
   ShaderMaterial,
 } from "three";
-import type { WorldPalette } from "../../world";
 import { col, hashOf, PRIM, partGeo } from "./geo";
 
 /**

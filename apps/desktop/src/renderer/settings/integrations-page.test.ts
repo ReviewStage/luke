@@ -20,7 +20,12 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { GitHubConnectProvider } from "@luke/panel/github-connect";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { SettingsPage } from "@luke/ui";
@@ -31,11 +36,6 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
-import { runAppCommand } from "../app-commands";
-import { GitHubConnectProvider } from "../github-connect";
-import { OpenSettingsProvider } from "../open-settings";
 import { IntegrationsSection } from "./integrations-page";
 
 /**

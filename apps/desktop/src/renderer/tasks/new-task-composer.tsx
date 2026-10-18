@@ -7,6 +7,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
@@ -32,10 +33,9 @@ import { PICKER_ALIGN } from "../settings/picker-row";
 import { Tooltip } from "../tooltip";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
-import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { AgentComposerControl } from "./use-agent-composer";
-import type { NewTaskIssue, TasksControl } from "./use-tasks-tab";
+import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, or Luke plans with, and the chips that say where and how the task starts.
@@ -77,6 +77,12 @@ import type { NewTaskIssue, TasksControl } from "./use-tasks-tab";
  * mode and named by it, Luke researches it in Plan mode as he always did,
  * and in Agent mode the agent is handed a mention of it before the words
  * (`agentPromptOf`), so an issue picked and Return starts an agent on it.
+ *
+ * Opened on one of the workspace's own issues, the task is named by it and
+ * linked to it, and Agent mode's Start stands with nothing written, which
+ * starts an agent on the task's plan at once, the issue's, rather than on
+ * words. Opened from that issue's Start agent…, the card stands in Agent mode
+ * and offers no Plan toggle.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
  * box with neither words nor files starts a bare task: an empty plan, no
@@ -203,7 +209,10 @@ export function NewTaskComposer({
   /** Whether the owner hands the words focus as the card first draws, as the dialog does; the words take it themselves otherwise. */
   focusedByOwner?: boolean;
 }): React.JSX.Element {
-  const [mode, setMode] = useNewTaskMode();
+  const [kept, setMode] = useNewTaskMode();
+  // An issue's Start agent… asks for an agent alone, so its card stands in Agent mode and offers no Plan toggle.
+  const agentOnly = newTask.preset?.agent === true;
+  const mode = agentOnly ? NEW_TASK_MODE.AGENT : kept;
   const [words, setWords] = useState("");
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
@@ -239,28 +248,28 @@ export function NewTaskComposer({
   const planning = mode === NEW_TASK_MODE.PLAN;
   const said = words.trim();
   const filled = hasWordsOrFiles(said, attachments);
-  // Agent mode needs a repository to work in, and something to say: words, files, or an issue.
+  // Agent mode needs a repository to work in, and something to work on:
+  // words, files, a Linear issue, or the workspace's own issue it was opened on.
+  const onIssue = issue !== undefined || from !== undefined;
   const blocked = !planning && repository === null;
-  const canStart = planning || (!blocked && (filled || issue !== undefined));
+  const canStart = planning || (!blocked && (filled || onIssue));
   const issueName = issue === undefined ? from?.title : taskNameOfIssue(issue);
 
-  const begin = (name: string, withCall: boolean, agent: boolean) => {
+  const begin = (
+    name: string,
+    withCall: boolean,
+    agent: Pick<NewTaskStart, "agent" | "handed"> = {},
+  ) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
     newTask
-      .start(
-        name,
-        repository,
-        workspaceId,
-        withCall,
-        {
-          ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
-          ...(from === undefined ? undefined : { issueId: from.id }),
-        },
-        agent ? { prompt: agentPromptOf(issue, said), attachments, choice } : undefined,
-      )
+      .start(name, repository, workspaceId, withCall, {
+        ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
+        ...(from === undefined ? undefined : { issueId: from.id }),
+        ...agent,
+      })
       .then((refused) => {
         setNote(
           refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused },
@@ -271,16 +280,22 @@ export function NewTaskComposer({
         onStarting?.(false);
       });
   };
+  // Note that an agent on the workspace's own issue with nothing written is
+  // started on the task's plan, the issue's, as its Start agent… starts one.
   const start = () => {
     if (!canStart) return;
-    if (planning) begin(issueName ?? taskNameOfWords(said), true, false);
-    else begin(issueName ?? "", false, true);
+    if (planning) begin(issueName ?? taskNameOfWords(said), true);
+    else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
+    else {
+      const handed = { prompt: agentPromptOf(issue, said), attachments, choice };
+      begin(issueName ?? "", false, { handed });
+    }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin(issueName ?? "", false, false);
+  const bare = () => begin(issueName ?? "", false);
 
   const onKey = (event: KeyboardEvent): boolean => {
-    if (turnsMode(event)) {
+    if (turnsMode(event) && !agentOnly) {
       // Note that the dialog's card traps Tab, so the turn is the field's alone.
       event.preventDefault();
       event.stopPropagation();
@@ -325,7 +340,7 @@ export function NewTaskComposer({
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
         wording={MODE_WORDS[mode]}
-        sendsEmpty={planning || issue !== undefined}
+        sendsEmpty={planning || onIssue}
         sendable={!blocked}
         model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
@@ -369,19 +384,21 @@ export function NewTaskComposer({
           </>
         }
         actions={
-          <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-            <Chip
-              look={CHIP_LOOK.FILTER}
-              aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-              aria-pressed={planning}
-              aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-              disabled={starting}
-              onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-            >
-              <PencilIcon />
-              <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-            </Chip>
-          </Tooltip>
+          agentOnly ? undefined : (
+            <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
+              <Chip
+                look={CHIP_LOOK.FILTER}
+                aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
+                aria-pressed={planning}
+                aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
+                disabled={starting}
+                onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
+              >
+                <PencilIcon />
+                <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
+              </Chip>
+            </Tooltip>
+          )
         }
       />
       {blocked ? (

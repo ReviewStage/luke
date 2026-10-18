@@ -331,6 +331,22 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
+/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
+.mention-menu-crumb-glyph {
+  display: inline-flex;
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.mention-menu-crumb-glyph svg {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+}
+
 /* A folder's path too long for the crumb is cut short. */
 .mention-menu-crumb-title {
   min-width: 0;
@@ -1124,58 +1140,6 @@
   white-space: nowrap;
 }
 
-/* A path drawn in the bar's breadcrumbs' own rows rather than `@luke/ui`'s
-   `Breadcrumbs`, as the Inbox pane's is: each crumb gives way, by its
-   share, down to its first letters and the ellipsis, clipped past the
-   keyboard's ring on a crumb, the last giving way last of all. */
-.file-breadcrumbs {
-  position: relative;
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-}
-
-.file-breadcrumbs ol {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.file-breadcrumbs li {
-  display: flex;
-  min-width: calc(2.5em + 12px);
-  flex: 0 9 auto;
-  align-items: center;
-}
-
-/* Note that the last crumb's share is a whole one, because shares summing
-   to less than one leave the rest of the overflow standing. */
-.file-breadcrumbs li:last-child {
-  flex-shrink: 1;
-}
-
-/* Note that a chevron standing as a crumb of its own, as the Inbox pane's
-   does, takes no crumb's floor, which would stand it a name's width wide. */
-.file-breadcrumbs .file-breadcrumb-separator {
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-.file-breadcrumb-separator {
-  display: flex;
-  align-items: center;
-  color: var(--luke-color-text-subtle);
-}
-
-.file-breadcrumb-separator svg {
-  width: 12px;
-  height: 12px;
-}
-
 /* A crumb's tree, hung under the crumb over the window on a menu's surface
    (file-breadcrumbs.tsx). */
 .file-crumb-tree {
@@ -1524,6 +1488,17 @@
   overflow: hidden;
   font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
+}
+
+/* A file's Viewed box, GitHub's own (viewed-files.ts), at the end of its
+   header's row. */
+.diff-list-viewed {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Why a file has no hunks to draw, in their place under its header in the
@@ -2471,11 +2446,9 @@
   background: var(--luke-color-fill-hover);
 }
 
-.pull-request-thread-head > svg {
-  width: 14px;
-  height: 14px;
+.pull-request-thread-turn {
+  display: flex;
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
 }
 
 /* A long path is cut at its start rather than its end, so its file's name
@@ -2691,6 +2664,8 @@ button.pull-request-reaction:disabled {
    stands in a diff. Lines unwrapped scroll sideways under it while it
    keeps to the tab's width in view. */
 .file-note {
+  display: grid;
+  align-items: center;
   margin: var(--luke-space-6) var(--luke-space-12);
   overflow: hidden;
   border: 1px solid var(--luke-color-border-strong);
@@ -2699,6 +2674,7 @@ button.pull-request-reaction:disabled {
   color: var(--luke-color-text);
   font-family: var(--luke-font-sans);
   font-size: var(--luke-type-body-size);
+  grid-template-columns: minmax(0, 1fr) auto;
   line-height: var(--luke-type-body-leading);
 }
 
@@ -2707,54 +2683,37 @@ button.pull-request-reaction:disabled {
   left: var(--luke-space-12);
 }
 
-/* The note's words select with the lines around it; its header is the card's controls. */
-.file-note-header {
-  display: flex;
+/* The fold's line, its age and link beside it, then its words the card's
+   whole width under both: the fold's parts stand in the card's own grid. */
+.file-note-fold {
+  display: contents;
+}
+
+.file-note-fold > summary {
   min-width: 0;
+  margin: var(--luke-space-2);
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.file-note-fold::details-content {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+/* The note's words select with the lines around it; its line and what
+   stands beside it are the card's controls. */
+.file-note-actions {
+  display: flex;
   align-items: center;
   gap: var(--luke-space-6);
-  padding: var(--luke-space-2) var(--luke-space-8) var(--luke-space-2) var(--luke-space-2);
+  padding-right: var(--luke-space-8);
   font-size: var(--luke-type-caption-size);
+  grid-column: 2;
+  grid-row: 1;
   line-height: var(--luke-type-caption-leading);
   -webkit-user-select: none;
   user-select: none;
-}
-
-.file-note-fold {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-4);
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.file-note-fold:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* The note's card clips what it holds, so its fold's ring is drawn inside. */
-.file-note-fold:focus-visible {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-}
-
-.file-note-fold > svg:first-child {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-  transition: transform var(--duration-quick) var(--motion-exit);
-}
-
-.file-note[data-folded="true"] .file-note-fold > svg:first-child {
-  transform: rotate(-90deg);
 }
 
 .file-note-author {
@@ -2794,7 +2753,7 @@ button.pull-request-reaction:disabled {
     display: none;
   }
 
-  .file-note-header {
+  .file-note-actions {
     --luke-fold: folded;
   }
 }
@@ -3731,6 +3690,7 @@ ol.transcript-list {
 }
 
 .todos-dock-chevron {
+  display: flex;
   margin-left: auto;
 }
 
@@ -4843,19 +4803,41 @@ ol.transcript-list {
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field
-   first, then one row per server under Connected and Not connected, and
-   Manage in Settings pinned at its foot. A row is its mark, its name, how
-   many tools it offers in the muted detail type, and at its end its switch,
-   or Connect as Settings › Integrations draws it (`@luke/ui`'s Button), a
-   control's height inside the menu's row. A row that opens onto its
-   tools shows its chevron while it holds the highlight; a row with nothing
-   to press is dimmed as the menu's other disabled rows are. The list is
-   taller than the searchable menu's, as tall as a server's page, so going
-   in and back keeps the popover's size, and never taller than the window
-   leaves above the composer once the field and the foot are drawn, so the
-   field stays on screen in the shortest window. */
-.agent-servers-menu .agent-servers-list {
+   first (`@luke/ui`'s SearchField), then one row per server under Connected
+   and Not connected (its List rows), and Manage in Settings pinned at its
+   foot. A row is its mark, its name, how many tools it offers in the muted
+   detail type, and beside it its switch, or Connect as Settings ›
+   Integrations draws it (`@luke/ui`'s Button); a row that opens onto its
+   tools wears the row's chevron. The list is taller than the searchable
+   menu's, as tall as a server's page, so going in and back keeps the
+   popover's size, and never taller than the window leaves above the
+   composer once the field and the foot are drawn, so the field stays on
+   screen in the shortest window. */
+.agent-servers-list {
   max-height: clamp(160px, 100vh - 320px, 400px);
+  padding: var(--luke-menu-inset);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A section's heading over its rows, inset as a row's words are, and what
+   the list says in its rows' place, centred at a row or two's height. */
+.agent-servers-heading {
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
+}
+
+.agent-servers-heading:first-child {
+  padding-top: var(--luke-space-2);
+}
+
+.agent-servers-note {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--luke-space-4) var(--luke-space-12);
+  text-align: center;
 }
 
 /* The searchable menu's class rides a box drawn as its contents
@@ -4864,12 +4846,22 @@ ol.transcript-list {
   display: contents;
 }
 
-.agent-servers-row[data-opens="true"] {
-  cursor: default;
+/* A server's words, one line beside its mark: its name, its count, and
+   why it lists no tools, each giving way so the reason stays in sight. */
+.agent-servers-words {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--luke-icon-gap);
 }
 
-.agent-servers-row .task-compose-menu-name {
+.agent-servers-name {
+  min-width: 0;
   flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-servers-count {
@@ -4888,26 +4880,11 @@ ol.transcript-list {
   margin-left: auto;
 }
 
-.agent-servers-chevron {
-  display: flex;
-  color: var(--luke-color-text-subtle);
-  visibility: hidden;
-}
-
-.agent-servers-chevron svg {
-  width: 12px;
-  height: 12px;
-}
-
-.agent-servers-row[data-highlighted="true"] .agent-servers-chevron {
-  visibility: visible;
-}
-
 /* Why a connected server lists no tools, after its name in the attention
-   tint at the count's size, cut where the row's button begins while the
-   name keeps its width; the whole line is the row's title. */
-.agent-servers-row:has(.agent-servers-problem) .task-compose-menu-name {
-  flex: none;
+   tint at the count's size, cut where the row's buttons begin; a long name
+   gives way first past most of the line, so the reason stays in sight. */
+.agent-servers-name:has(~ .agent-servers-problem) {
+  max-width: 60%;
 }
 
 .agent-servers-problem {
@@ -4930,14 +4907,6 @@ ol.transcript-list {
 
 .agent-servers-waiting {
   display: flex;
-}
-
-/* A tool a search found: its name in the code face at the row's size, and
-   its server's name after it as the count is drawn. */
-.agent-servers-hit .integration-tool-id {
-  flex: 0 1 auto;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
@@ -4969,16 +4938,6 @@ ol.transcript-list {
 .agent-servers-tool-page .integration-tool-detail-body {
   height: clamp(200px, 100vh - 280px, 440px);
   flex: none;
-}
-
-/* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
-.agent-servers-manage {
-  color: var(--luke-color-text-muted);
-}
-
-.agent-servers-manage svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* The context ring beside the MCP button: the window's one icon button

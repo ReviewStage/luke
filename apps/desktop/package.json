@@ -1,7 +1,7 @@
 {
   "name": "@luke/desktop",
   "productName": "Luke",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",
@@ -55,7 +55,6 @@
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@pierre/diffs": "1.5.2",
-    "@pierre/trees": "1.0.0-beta.6",
     "@sentry/esbuild-plugin": "5.4.0",
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",

@@ -4,6 +4,7 @@ import {
   LINEAR_PRIORITY,
   type LinearPriority,
 } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -24,7 +25,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import {
   anchorOf,
   PLANET_RADIUS,

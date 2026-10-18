@@ -1,13 +1,13 @@
-import type { ReactNode } from "react";
 import {
   Fold,
   FoldBody,
   type FoldBodyProps,
-  FoldChevron,
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
-} from "./fold";
+} from "@luke/panel/ai-elements/fold";
+import { DisclosureChevron } from "@luke/ui";
+import type { ReactNode } from "react";
 
 /** How an opened card sets what it holds: as running words, or as blocks stacked a group's gap apart. */
 export const PLAN_BODY_LAYOUT = {
@@ -47,7 +47,7 @@ export type TaskHeaderProps = Omit<FoldSummaryProps, "className">;
 export function PlanHeader({ children, ...props }: TaskHeaderProps): ReactNode {
   return (
     <FoldSummary className="plan-card-head" {...props}>
-      <FoldChevron />
+      <DisclosureChevron />
       {children}
     </FoldSummary>
   );

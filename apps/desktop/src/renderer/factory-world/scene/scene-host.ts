@@ -1,3 +1,9 @@
+import type {
+  PickTarget,
+  WorldHost,
+  WorldInstance,
+  WorldState,
+} from "@luke/panel/factory-world/world";
 import { SCENE_GROUND, SIGNAL_COLOR } from "@luke/ui/factory-world";
 import {
   ACESFilmicToneMapping,
@@ -16,7 +22,6 @@ import {
   WebGLRenderer,
 } from "three";
 import type { FactorySceneHandle, FactorySceneProps } from "../contract";
-import type { PickTarget, WorldHost, WorldInstance, WorldState } from "../world";
 import { cameraRig } from "./camera-rig";
 import { type PickPointer, sameTarget, scenePicking } from "./picking";
 

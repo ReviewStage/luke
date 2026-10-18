@@ -2,16 +2,16 @@ import { useAtomValue } from "@effect/atom-react";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import type { ComposerEditorHandle, ComposerMark } from "@luke/panel/plan-editor/contract";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { base64Of } from "@luke/panel/tasks/attached-files";
 import { appSettingsNow, appStateNow, capabilityNow } from "@luke/panel/use-app-state";
+import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract";
-import { openPreferredMicrophone } from "../voice/microphone-choice";
-import { base64Of } from "./attached-files";
 
 /**
  * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Luke's service, and the words put at the caret.

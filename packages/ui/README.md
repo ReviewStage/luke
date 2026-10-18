@@ -98,6 +98,11 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   `Stack` or `Inline` with a `GAP` role, or a page pattern.
 - **Data and callbacks in.** A component never reaches an app's bridge, its
   network, or its shortcuts; the app's adapter hands it values and handlers.
+- **A row a list engine owns.** Where a library of the app's owns a list's
+  items and their keys (cmdk's palette), each item is drawn as
+  `ComboboxOptionItem`, handed through the engine's `asChild`: the engine's
+  role, names, handlers, and ref pass through, no class or style does, and
+  the row is lit by the `aria-selected` the engine sets.
 - **Heavy dependencies stay off the barrel.** The chart is `@luke/ui/chart`;
   each view model is its own subpath (`@luke/ui/<name>`, see `package.json`).
 
@@ -107,7 +112,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `Card`, `Prose` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
-| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` |
+| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxOptionItem`) |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |

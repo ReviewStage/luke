@@ -1,3 +1,9 @@
+import type {
+  ComposerTrigger,
+  HeadingsChange,
+  MentionNode,
+  PlanEditorMentions,
+} from "@luke/panel/plan-editor/contract";
 import type { Editor } from "@tiptap/core";
 import type { MarkdownManager } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
@@ -9,7 +15,6 @@ import {
   type Transaction,
 } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import type { ComposerTrigger, HeadingsChange, MentionNode, PlanEditorMentions } from "./contract";
 import { MENTION_NODE } from "./mention-node";
 
 /**

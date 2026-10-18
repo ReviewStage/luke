@@ -13,6 +13,9 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { type IntegrationToolsReads, useIntegrationTools } from "@luke/panel/integration-tools";
+import { useMemberDirectory } from "@luke/panel/member-directory";
+import type { ComposerTrigger, MentionNode } from "@luke/panel/plan-editor/contract";
 import {
   ArrowLeftIcon,
   type ComboboxGroup,
@@ -42,9 +45,6 @@ import {
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
-import { useMemberDirectory } from "../member-directory";
-import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
@@ -785,7 +785,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
           onClick={back}
         />
       )}
-      <span className="menu-item-glyph">
+      <span className="mention-menu-crumb-glyph">
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
       </span>
       <span className="mention-menu-crumb-title">

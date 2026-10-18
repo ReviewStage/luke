@@ -1,3 +1,4 @@
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -15,7 +16,6 @@ import {
   Vector3,
 } from "three";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { MAX_MOONS, type MoonZone, moonMatrix, type PlanetLayout } from "./globe";
 import {
   clamp,

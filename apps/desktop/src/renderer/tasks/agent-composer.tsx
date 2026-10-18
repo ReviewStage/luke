@@ -17,6 +17,19 @@ import {
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+  submitPromptInput,
+} from "@luke/panel/ai-elements/prompt-input";
+import { imageFiles } from "@luke/panel/feedback-images";
+import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
+import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
+import {
   BUTTON_TYPE,
   EllipsisIcon,
   ErrorState,
@@ -31,19 +44,8 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input";
 import { useSideBundles } from "../bundle-loader";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { imageFiles } from "../feedback-images";
-import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
-import { useIntegrationStatuses } from "../integration-statuses";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
@@ -51,12 +53,10 @@ import { AgentModelChip } from "./agent-model-chip";
 import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { ComposerQuoteView } from "./reply-to-selection";
-import { useRepositoryRemedy } from "./repository-remedy";
 import type { SkillSource } from "./skill-picker";
 import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";

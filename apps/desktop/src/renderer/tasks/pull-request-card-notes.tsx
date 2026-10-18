@@ -1,4 +1,5 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   PULL_REQUEST_MOMENT,
@@ -9,7 +10,6 @@ import { Badge, HoverCardNote } from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref";
-import { useMemberDirectory } from "../member-directory";
 import { LinesChanged } from "./agent-published";
 import { RelativeTime } from "./relative-time";
 
@@ -133,22 +133,24 @@ function CountsNote({
 }): React.JSX.Element | null {
   if (comments === undefined && commits === undefined) return null;
   return (
-    <p className="luke-hover-card-note card-counts">
-      {comments === undefined ? null : (
-        <span className="card-count">
-          <MessageSquareIcon aria-hidden="true" />
-          {comments}
-          <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
-        </span>
-      )}
-      {commits === undefined ? null : (
-        <span className="card-count">
-          <GitCommitHorizontalIcon aria-hidden="true" />
-          {commits}
-          <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
-        </span>
-      )}
-    </p>
+    <HoverCardNote>
+      <span className="card-counts">
+        {comments === undefined ? null : (
+          <span className="card-count">
+            <MessageSquareIcon aria-hidden="true" />
+            {comments}
+            <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
+          </span>
+        )}
+        {commits === undefined ? null : (
+          <span className="card-count">
+            <GitCommitHorizontalIcon aria-hidden="true" />
+            {commits}
+            <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
+          </span>
+        )}
+      </span>
+    </HoverCardNote>
   );
 }
 

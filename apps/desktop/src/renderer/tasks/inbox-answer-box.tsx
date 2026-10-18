@@ -9,6 +9,17 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+  submitPromptInput,
+} from "@luke/panel/ai-elements/prompt-input";
+import { imageFiles } from "@luke/panel/feedback-images";
+import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
@@ -21,20 +32,9 @@ import {
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input";
 import { useSideBundles } from "../bundle-loader";
-import { imageFiles } from "../feedback-images";
-import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";

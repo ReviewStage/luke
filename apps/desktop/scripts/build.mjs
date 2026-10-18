@@ -255,7 +255,7 @@ const WINDOW_ENTRIES = {
 const SIDE_BUNDLE_ENTRIES = {
   "plan-editor": "src/renderer/plan-editor/index.ts",
   whiteboard: "src/renderer/whiteboard/index.tsx",
-  "file-tree": "src/renderer/file-tree/index.ts",
+  "file-tree": "../../packages/panel/src/file-tree/index.ts",
   terminal: "src/renderer/terminal/index.ts",
   diagram: "src/renderer/diagram/index.ts",
   "diff-view": "src/renderer/diff-view/index.ts",

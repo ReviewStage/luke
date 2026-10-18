@@ -1,6 +1,11 @@
+import {
+  PICK_KIND,
+  type PickKind,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import type { ZoneView } from "@luke/ui/factory-world";
 import { Vector3 } from "three";
-import { PICK_KIND, type PickKind, type WorldModule, type WorldState } from "../../world";
 import { bridgesOf } from "./bridges";
 import { buildersOf } from "./builders";
 import { defectsOf } from "./defects";

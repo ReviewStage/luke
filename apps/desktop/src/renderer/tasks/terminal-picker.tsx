@@ -2,11 +2,19 @@ import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
+import { Shortcut } from "@luke/panel/shortcut";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { PlusIcon, SearchIcon } from "@luke/ui";
+import {
+  ComboboxOptionItem,
+  PlusIcon,
+  SearchIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Shortcut } from "../shortcut";
 import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -61,12 +69,15 @@ function AgentRow({
 }): React.JSX.Element {
   const sandbox = useAtomValue(sandboxRead(agent.id))?.sandbox;
   return (
-    <Command.Item className="menu-item" value={agent.id} keywords={[name]} onSelect={onPick}>
-      <span className="menu-item-glyph">
-        <AgentGlyph agent={agent} />
-      </span>
-      <span className="command-palette-name">{name}</span>
-      <span className="command-palette-detail">{rowDetail(agent, sandbox, last)}</span>
+    <Command.Item asChild value={agent.id} keywords={[name]} onSelect={onPick}>
+      <ComboboxOptionItem
+        option={{
+          id: agent.id,
+          label: name,
+          icon: <AgentGlyph agent={agent} />,
+          detail: rowDetail(agent, sandbox, last),
+        }}
+      />
     </Command.Item>
   );
 }
@@ -150,21 +161,28 @@ export function TerminalPicker({
           <div className="command-palette-empty">Reading the task’s agents…</div>
         ) : listed.length === 0 ? (
           <Command.Item
-            className="menu-item"
+            asChild
             value={START_ROW}
             disabled={!start.available}
             onSelect={() => choose(onStartAgent)}
           >
-            <span className="menu-item-glyph">
-              <PlusIcon />
-            </span>
-            <span className="command-palette-name">Start a coding agent</span>
-            {start.available || start.reason === undefined ? null : (
-              <span className="command-palette-detail">{start.reason}</span>
-            )}
+            <ComboboxOptionItem
+              option={{
+                id: START_ROW,
+                label: "Start a coding agent",
+                icon: <PlusIcon />,
+                detail: start.available ? undefined : start.reason,
+              }}
+            />
           </Command.Item>
         ) : (
-          <Command.Group heading="Coding agents">
+          <Command.Group
+            heading={
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                Coding agents
+              </Text>
+            }
+          >
             {listed.map((agent) => (
               <AgentRow
                 key={agent.id}

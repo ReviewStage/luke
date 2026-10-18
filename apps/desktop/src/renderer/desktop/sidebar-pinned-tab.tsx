@@ -1,5 +1,6 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import {
   BUTTON_SIZE,
   CopyIcon,
@@ -27,7 +28,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request";
-import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { PinnedTab } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip";

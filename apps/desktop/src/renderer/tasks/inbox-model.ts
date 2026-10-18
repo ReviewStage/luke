@@ -38,10 +38,12 @@ import { plainWords } from "./tool-call-model";
  *
  * The list holds every item of every plan it is handed, the latest changed
  * first, under its plan, under the person whose agent asks it, or in one
- * run. An item is the reader's where they started the agent that asks it,
+ * run with no groups, the items its tab takes: what needs the reader, what
+ * is unread, every open item, or everything, each tab counting its own.
+ * An item is the reader's where they started the agent that asks it,
  * or where the service does not say who did, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through it keep the
+ * them: Needs you lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
@@ -809,14 +811,40 @@ export function tasklessGroups(
   }));
 }
 
-/** How the window's Inbox lists its items: under each task, or in one list. */
+/**
+ * How the window's Inbox groups its items: under each task, under each
+ * person, or in one list with no groups. Note that None keeps the value
+ * "Newest first" was kept by, so a list kept that way stays so.
+ */
 export const INBOX_GROUPING = {
   TASK: "plan",
-  NEWEST: "newest",
   PERSON: "person",
+  NONE: "newest",
 } as const;
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
+
+/**
+ * Which items an Inbox lists, as the tabs under its title choose: what needs
+ * the reader (`needsReader`), anything unread, anyone's, every open item, or
+ * everything, open and settled.
+ */
+export const INBOX_SHOW = {
+  NEEDS_YOU: "needs-you",
+  UNREAD: "unread",
+  OPEN: "open",
+  ALL: "all",
+} as const;
+
+export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
+
+/** How many items each tab lists, filtered out by the tab shown or not. */
+export interface InboxCounts {
+  readonly [INBOX_SHOW.NEEDS_YOU]: number;
+  readonly [INBOX_SHOW.UNREAD]: number;
+  readonly [INBOX_SHOW.OPEN]: number;
+  readonly [INBOX_SHOW.ALL]: number;
+}
 
 /** One holder, a task or an automation, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
@@ -848,7 +876,7 @@ export interface InboxPersonGroup {
  */
 export type InboxListView = { readonly readerId: string | undefined } & (
   | { readonly grouping: typeof INBOX_GROUPING.TASK; readonly groups: readonly InboxGroup[] }
-  | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] }
+  | { readonly grouping: typeof INBOX_GROUPING.NONE; readonly items: readonly InboxListed[] }
   | {
       readonly grouping: typeof INBOX_GROUPING.PERSON;
       readonly groups: readonly InboxPersonGroup[];
@@ -921,8 +949,8 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
  * The list from every task's items: each item the latest changed first,
  * under its plan, under the person whose agent asks it, or in one run, the
  * tasks in the order their latest item changed and the people as
- * `personGroups` orders them. Needs you lists only what needs the reader,
- * and the item chosen where one is given. Note that the rows a list draws are given none,
+ * `personGroups` orders them. The tab shown lists only the items it takes
+ * (`showsItem`), and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
  * through the list are given the item the pane shows, which keeps its place
  * among them so K, J, and Next still reach the rows either side of it.
@@ -931,7 +959,7 @@ export function inboxList(
   tasks: readonly InboxGroup[],
   view: {
     readonly grouping: InboxGrouping;
-    readonly waitingOnly: boolean;
+    readonly show: InboxShow;
     readonly chosen: string | undefined;
     /** The signed-in account's id, whose own open items alone need them; none counts every item as theirs. */
     readonly readerId: string | undefined;
@@ -939,7 +967,7 @@ export function inboxList(
 ): InboxListView {
   const { readerId } = view;
   const shows = (item: InboxItem) =>
-    !view.waitingOnly || needsReader(item, readerId) || item.id === view.chosen;
+    showsItem(view.show, item, readerId) || item.id === view.chosen;
   const groups = tasks
     .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(newestFirst) }))
     .filter((group) => group.items.length > 0)
@@ -950,8 +978,8 @@ export function inboxList(
   const items = groups
     .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => newestFirst(a.item, b.item));
-  if (view.grouping === INBOX_GROUPING.NEWEST) {
-    return { grouping: INBOX_GROUPING.NEWEST, items, readerId };
+  if (view.grouping === INBOX_GROUPING.NONE) {
+    return { grouping: INBOX_GROUPING.NONE, items, readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
 }
@@ -959,6 +987,35 @@ export function inboxList(
 /** Whether an item is unread for the reader: changed since they last read it, or marked unread; an item from a service before read state reads as read. */
 export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
+}
+
+/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything all of them. */
+function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
+  switch (show) {
+    case INBOX_SHOW.NEEDS_YOU:
+      return needsReader(item, readerId);
+    case INBOX_SHOW.UNREAD:
+      return isUnread(item);
+    case INBOX_SHOW.OPEN:
+      return item.status === INBOX_STATUS.OPEN;
+    case INBOX_SHOW.ALL:
+      return true;
+  }
+}
+
+/** How many of every task's items each tab lists. */
+export function inboxCounts(
+  tasks: readonly InboxGroup[],
+  readerId: string | undefined,
+): InboxCounts {
+  const items = tasks.flatMap((group) => group.items);
+  const count = (show: InboxShow) => items.filter((item) => showsItem(show, item, readerId)).length;
+  return {
+    [INBOX_SHOW.NEEDS_YOU]: count(INBOX_SHOW.NEEDS_YOU),
+    [INBOX_SHOW.UNREAD]: count(INBOX_SHOW.UNREAD),
+    [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
+    [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
+  };
 }
 
 /**
@@ -998,14 +1055,9 @@ export function anyUnread(tasks: readonly InboxGroup[]): boolean {
   return tasks.some(({ items }) => items.some(isUnread));
 }
 
-/** Whether any task's item needs the reader, listed or filtered out. */
-export function anyNeedsYou(tasks: readonly InboxGroup[], readerId: string | undefined): boolean {
-  return tasks.some(({ items }) => items.some((item) => needsReader(item, readerId)));
-}
-
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
   if (view.grouping === INBOX_GROUPING.PERSON) return view.groups.flatMap(({ items }) => items);
   return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
@@ -1029,7 +1081,7 @@ function rowedItems(
   folded: (key: string) => boolean,
   chosen: string | undefined,
 ): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
   if (view.grouping === INBOX_GROUPING.PERSON) {
     return view.groups.flatMap(({ key, items }) =>
       folded(key) ? items.filter(({ item }) => item.id === chosen) : items,

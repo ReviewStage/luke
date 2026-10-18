@@ -3,6 +3,8 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useMemberDirectory } from "@luke/panel/member-directory";
+import { SentTime } from "@luke/panel/tasks/sent-time";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
@@ -31,7 +33,6 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { useFindOpen } from "../find-in-tab";
-import { useMemberDirectory } from "../member-directory";
 import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import {
@@ -47,7 +48,6 @@ import {
   stepView,
   summaryLine,
 } from "./replay-card-model";
-import { SentTime } from "./sent-time";
 import { useMentionDoors } from "./task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks";

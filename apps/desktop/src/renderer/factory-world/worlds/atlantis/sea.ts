@@ -1,3 +1,4 @@
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   Color,
   FogExp2,
@@ -7,7 +8,6 @@ import {
   ShaderMaterial,
   type ShaderMaterialParameters,
 } from "three";
-import type { WorldPalette } from "../../world";
 
 /**
  * sea.ts -- the water every part of Atlantis is seen through: its fog, the caustic light it throws on whatever faces up, the clock its shaders share, and the two moods it is drawn in.

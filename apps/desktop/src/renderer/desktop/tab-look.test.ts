@@ -11,20 +11,20 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
-import { NO_LOOKS } from "../tasks/use-task-looks";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**

@@ -10,6 +10,9 @@ import {
   INTEGRATION_STATUS,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { useIntegrationGrant } from "@luke/panel/integration-grant";
+import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
+import { useIntegrationTools } from "@luke/panel/integration-tools";
 import {
   AnchoredPopover,
   ArrowLeftIcon,
@@ -17,18 +20,27 @@ import {
   Button,
   CHIP_LOOK,
   CHIP_WIDTH,
-  ChevronRightIcon,
   Chip,
   GearIcon,
   IconButton,
+  LIST_DENSITY,
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
+  type ListRowHint,
   McpIcon,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PROVIDER_MARK_SIZE,
   ProviderMark,
-  SearchIcon,
+  SEARCH_FIELD_LOOK,
+  SearchField,
   Spinner,
   Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import {
   namedServers,
@@ -45,11 +57,18 @@ import {
 } from "@luke/ui/agent-servers-model";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useIntegrationGrant } from "../integration-grant";
-import type { IntegrationStatuses } from "../integration-statuses";
+import {
+  cloneElement,
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
-import { useIntegrationTools } from "../integration-tools";
 import { PopoverPanel } from "../popover-panel";
 import { Highlighted } from "../search-field";
 import { Tooltip } from "../tooltip";
@@ -171,8 +190,10 @@ function ServerSwitch({
  */
 export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
-    <>
-      <span className="task-compose-menu-name">{row.name}</span>
+    // Note that the words stand in a line of their own, because a list row's
+    // title would otherwise clip the reason behind a long name.
+    <span className="agent-servers-words">
+      <span className="agent-servers-name">{row.name}</span>
       {row.tools !== undefined ? (
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
       ) : null}
@@ -195,7 +216,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
           </span>
         </Tooltip>
       ) : null}
-    </>
+    </span>
   );
 }
 
@@ -230,6 +251,11 @@ export function useServerRows(
   });
 }
 
+/** Where the caret stands in the field a key was pressed in, heard where it bubbles. */
+function caretOf(event: React.KeyboardEvent<HTMLElement>): number | null | undefined {
+  return event.target instanceof HTMLInputElement ? event.target.selectionStart : undefined;
+}
+
 /** The search field at the top of either page, which holds the focus while the popover is open. */
 function SearchRow({
   field,
@@ -242,24 +268,64 @@ function SearchRow({
   value: string;
   placeholder: string;
   onChange: (value: string) => void;
-  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }): React.JSX.Element {
   return (
-    <div className="task-compose-menu-search">
-      <SearchIcon />
-      <input
+    // Note that the field's keys are heard as they bubble out of it, because
+    // the popover steers its rows by keys of its own.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the keys are the field's; the box only hears them.
+    <div onKeyDown={onKeyDown}>
+      <SearchField
         ref={field}
-        type="text"
-        value={value}
+        look={SEARCH_FIELD_LOOK.MENU}
+        label={placeholder}
         placeholder={placeholder}
-        aria-label={placeholder}
-        spellCheck={false}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        onKeyDown={onKeyDown}
+        value={value}
+        onChange={onChange}
       />
     </div>
   );
 }
+
+/** What the popover's list says in its rows' place. */
+function ServersNote({ words }: { words: string }): React.JSX.Element {
+  return (
+    <div className="agent-servers-note">
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        {words}
+      </Text>
+    </div>
+  );
+}
+
+/** The heading over a run of the home's rows. */
+function ServersHeading({ words }: { words: string }): React.JSX.Element {
+  return (
+    <div className="agent-servers-heading" aria-hidden="true">
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        {words}
+      </Text>
+    </div>
+  );
+}
+
+/** What makes a row the highlighted one, where the pointer coming onto it moves the highlight. */
+const RowHighlight = createContext<(() => void) | undefined>(undefined);
+
+/**
+ * The pointer coming onto a row's press makes it the highlighted one, as a
+ * menu's highlight follows the pointer. Note that it rides the row's hint
+ * slot, the one door to its press's pointer handlers, and raises no words.
+ */
+const PointerHighlight: ListRowHint = ({ children }) => {
+  const highlight = useContext(RowHighlight);
+  return cloneElement(children, {
+    onPointerEnter: (event) => {
+      children.props.onPointerEnter?.(event);
+      highlight?.();
+    },
+  });
+};
 
 function ServersPopover({
   id,
@@ -391,8 +457,8 @@ function ServersPopover({
     if (row.kind === SERVER_ROW.RETRY) void statuses.read();
   };
 
-  const onHomeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    const caretAtEnd = event.currentTarget.selectionStart === query.length;
+  const onHomeKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const caretAtEnd = caretOf(event) === query.length;
     const pick = picks[at];
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -413,8 +479,8 @@ function ServersPopover({
     }
   };
 
-  const onPageKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    const caretAtEnd = event.currentTarget.selectionStart === filter.length;
+  const onPageKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const caretAtEnd = caretOf(event) === filter.length;
     const highlighted = pageTools[pageAt];
     if ((event.key === "ArrowLeft" || event.key === "Backspace") && filter === "") {
       event.preventDefault();
@@ -448,16 +514,7 @@ function ServersPopover({
   const end = (row: ServerRow): React.JSX.Element | null => {
     switch (row.kind) {
       case SERVER_ROW.SWITCH:
-        return (
-          <>
-            {opensTools(row) ? (
-              <span className="agent-servers-chevron" aria-hidden="true">
-                <ChevronRightIcon />
-              </span>
-            ) : null}
-            <ServerSwitch row={row} servers={servers} />
-          </>
-        );
+        return <ServerSwitch row={row} servers={servers} />;
       case SERVER_ROW.CONNECT:
       case SERVER_ROW.RECONNECT:
         return (
@@ -536,51 +593,62 @@ function ServersPopover({
   const pickIndex = (row: ServerRow, tool?: IntegrationTool) =>
     picks.findIndex((pick) => pick.row === row && pick.tool === tool);
 
-  const serverRow = (row: ServerRow) => {
-    const index = pickIndex(row);
+  /** A row of the home: its place among the picks names its id and its highlight, and the pointer coming onto its press moves the highlight there. */
+  const homeRow = (input: {
+    key: string;
+    index: number;
+    row: ServerRow;
+    title: React.ReactNode;
+    meta?: React.ReactNode;
+    actions?: React.ReactNode;
+    onPress: (() => void) | undefined;
+  }) => {
+    const { index } = input;
     return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: the row's press is the field's Enter for the pointer; its switch and button are the controls.
-      // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
-      <div
-        key={row.connection}
-        id={index < 0 ? undefined : `${rowsId}-${index}`}
-        className="menu-item agent-servers-row"
-        data-highlighted={index === at ? "true" : undefined}
-        data-opens={opensTools(row) ? "true" : undefined}
-        aria-disabled={row.kind === SERVER_ROW.QUIET ? "true" : undefined}
-        onMouseMove={() => index >= 0 && index !== at && setHighlight(index)}
-        onMouseDown={keepFieldFocus}
-        onClick={() => opensTools(row) && open(row)}
+      <RowHighlight.Provider
+        key={input.key}
+        value={index < 0 || index === at ? undefined : () => setHighlight(index)}
       >
-        <ProviderMark provider={row.provider} />
-        <ServerRowWords row={row} />
-        <span className="agent-servers-end">{end(row)}</span>
-      </div>
+        <ListRow
+          id={index < 0 ? undefined : `${rowsId}-${index}`}
+          leading={<ProviderMark provider={input.row.provider} />}
+          title={input.title}
+          meta={input.meta}
+          actions={input.actions}
+          current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
+          chevron={input.onPress !== undefined}
+          keepFocus
+          tabbable={false}
+          onPress={input.onPress}
+          hint={{ Hint: PointerHighlight, label: input.row.name }}
+        />
+      </RowHighlight.Provider>
     );
   };
 
-  const toolRow = ({ row, tool }: ToolHit) => {
-    const index = pickIndex(row, tool);
-    return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: as a server's row, a press is the field's Enter for the pointer.
-      // biome-ignore lint/a11y/useKeyWithClickEvents: the keys reach the row through the field, which holds the focus.
-      <div
-        key={`${row.connection}:${tool.name}`}
-        id={`${rowsId}-${index}`}
-        className="menu-item agent-servers-row agent-servers-hit"
-        data-highlighted={index === at ? "true" : undefined}
-        onMouseMove={() => index !== at && setHighlight(index)}
-        onMouseDown={keepFieldFocus}
-        onClick={() => open(row, query)}
-      >
-        <ProviderMark provider={row.provider} />
-        <span className="task-compose-menu-name integration-tool-id">
+  const serverRow = (row: ServerRow) =>
+    homeRow({
+      key: row.connection,
+      index: pickIndex(row),
+      row,
+      title: <ServerRowWords row={row} />,
+      actions: end(row),
+      onPress: opensTools(row) ? () => open(row) : undefined,
+    });
+
+  const toolRow = ({ row, tool }: ToolHit) =>
+    homeRow({
+      key: `${row.connection}:${tool.name}`,
+      index: pickIndex(row, tool),
+      row,
+      title: (
+        <span className="integration-tool-id">
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
         </span>
-        <span className="agent-servers-count">{row.name}</span>
-      </div>
-    );
-  };
+      ),
+      meta: row.name,
+      onPress: () => open(row, query),
+    });
 
   const home = (
     <>
@@ -594,26 +662,26 @@ function ServersPopover({
         }}
         onKeyDown={onHomeKey}
       />
-      <div ref={list} className="task-compose-menu-list agent-servers-list">
-        {rows.length === 0 ? <p className="task-compose-menu-note">{SERVERS_NONE}</p> : null}
+      <div ref={list} className="agent-servers-list">
+        {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
         {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
-          <p className="task-compose-menu-note">{SEARCH.NONE}</p>
+          <ServersNote words={SEARCH.NONE} />
         ) : null}
         {groups.map((group) => (
-          // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
-          <div key={group.heading ?? "unread"} role="group" aria-label={group.heading}>
-            {group.heading !== undefined ? (
-              <div className="menu-heading">{group.heading}</div>
-            ) : null}
-            {group.rows.map(serverRow)}
-          </div>
+          <Fragment key={group.heading ?? "unread"}>
+            {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
+            <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT}>
+              {group.rows.map(serverRow)}
+            </List>
+          </Fragment>
         ))}
         {found.tools.length > 0 ? (
-          // biome-ignore lint/a11y/useSemanticElements: a menu's section of rows, as the searchable menu's are, which a <fieldset> of form controls is not.
-          <div role="group" aria-label={SEARCH.TOOLS}>
-            <div className="menu-heading">{SEARCH.TOOLS}</div>
-            {found.tools.map(toolRow)}
-          </div>
+          <>
+            <ServersHeading words={SEARCH.TOOLS} />
+            <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
+              {found.tools.map(toolRow)}
+            </List>
+          </>
         ) : null}
       </div>
     </>
@@ -643,8 +711,8 @@ function ServersPopover({
           }}
           onKeyDown={onPageKey}
         />
-        <div ref={list} className="task-compose-menu-list agent-servers-list">
-          {pageTools.length === 0 ? <p className="task-compose-menu-note">{PAGE.NONE}</p> : null}
+        <div ref={list} className="agent-servers-list">
+          {pageTools.length === 0 ? <ServersNote words={PAGE.NONE} /> : null}
           <IntegrationToolList
             server={row.name}
             tools={pageTools}
@@ -698,18 +766,17 @@ function ServersPopover({
             ? serverPage(page)
             : home}
         <div className="task-compose-menu-foot">
-          <button
-            type="button"
-            className="menu-item agent-servers-manage"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<GearIcon />}
+            keepFocus
             onClick={() => {
               onClose();
               servers.onOpenSettings();
             }}
           >
-            <GearIcon />
-            <span className="task-compose-menu-name">{SERVERS_SETTINGS}</span>
-          </button>
+            {SERVERS_SETTINGS}
+          </Button>
         </div>
       </div>
     </PopoverPanel>

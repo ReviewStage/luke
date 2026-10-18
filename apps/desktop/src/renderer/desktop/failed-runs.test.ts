@@ -3,13 +3,13 @@
 import assert from "node:assert/strict";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { ToastHost } from "@luke/panel/toast";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
-import { ToastHost } from "../toast";
 import { type FailedRunPlace, useFailedRunsMark, useFailedRunToasts } from "./failed-runs";
 
 /** A run failed to start as main hands it to the window's toast. */

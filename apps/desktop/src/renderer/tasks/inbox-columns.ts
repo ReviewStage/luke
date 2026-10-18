@@ -18,9 +18,9 @@
  * narrows onto its item again.
  */
 
+import { useAppCommand } from "@luke/panel/app-commands";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 
 /**
  * The Inbox's widths, in CSS pixels, between which it shows one column or
@@ -109,9 +109,9 @@ export interface InboxColumns {
   readonly rows: InboxRowPresses;
 }
 
-/** The list head's Needs you, the list's one steady control, found by the glyph it alone wears. */
-export function needsYouButton(list: ParentNode | null): HTMLElement | null {
-  return list?.querySelector(".inbox-needs-you-glyph")?.closest("button") ?? null;
+/** The list head's tab shown, the list's one steady control. */
+export function listHeadControl(list: ParentNode | null): HTMLElement | null {
+  return list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -182,9 +182,9 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     }
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
     if (shown === INBOX_COLUMNS.ITEM) return;
-    // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
+    // An item chosen that the list holds no row for, as a link's missing item or one its tab leaves out, hands the keyboard to the first row instead, or to the tab shown, the list's one steady control, where no row stands.
     const row = (chosen === undefined ? undefined : rows.find(chosen)) ?? rows.first();
-    (row ?? needsYouButton(held.querySelector(".inbox-tasks")))?.focus();
+    (row ?? listHeadControl(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);
   }, [shown, chosen, showAlls, rows]);
 

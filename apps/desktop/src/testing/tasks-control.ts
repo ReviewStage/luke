@@ -2,6 +2,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
@@ -10,7 +11,6 @@ import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/task-summary";
 import type { CodingAgentsControl } from "../renderer/tasks/use-coding-agents";
-import { MAIN_TAB } from "../renderer/tasks/use-main-tabs";
 import { HISTORY_READ } from "../renderer/tasks/use-plan-history";
 import {
   SIDE_PANEL_TAB,
@@ -134,6 +134,7 @@ export function codingAgentsControl(
     readOverviewChecks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readOverviewConversation: () =>
       Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequestViewed: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),

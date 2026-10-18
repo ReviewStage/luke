@@ -24,7 +24,8 @@ import {
  * current as the page beside the list is announced so, and the app's hint
  * hung from a row's press raises its words for the press. A row whose
  * metadata stands on its title's line reads it after the title and before
- * the line under it. A row swiped right rests open on its act's button
+ * the line under it, and one whose lead names what it belongs to reads it
+ * between the two, on the line under the title. A row swiped right rests open on its act's button
  * after a short swipe and does the act on a long one's release, by pointer
  * or by a trackpad's wheel; a cancelled pointer, a swipe whose act changed
  * under it, a swipe left, and a press up or down never act. A row that keeps
@@ -171,6 +172,30 @@ test("a row whose metadata ends its title's line reads it after the title and be
     }),
   );
   expect(button(container, "Ada LovelaceOwnerada@example.com")).toBeTruthy();
+});
+
+test("a row's lead stands on the line under its title, before the description's words, its glyph hidden from a reader and its whole name read though it is drawn cut short", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Threads",
+      children: createElement(ListRow, {
+        title: "Retry the webhook?",
+        description: "Choice · 2 options",
+        lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
+        meta: "2h",
+        metaAt: LIST_ROW_META.TITLE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(
+    container,
+    "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
+  );
+  const lead = row.querySelector(".luke-list-row-lead");
+  expect(lead?.closest(".luke-list-row-description")).not.toBeNull();
+  expect(lead?.closest(".luke-list-row-head")).toBeNull();
+  expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
 test("Tab meets a row, then its acts, then the next row, none taken out of the order", () => {

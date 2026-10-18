@@ -2,7 +2,10 @@ import { Schema as EffectSchema } from "effect";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  codingAgentStartRequestFields,
+  codingAgentSummarySchema,
   PULL_REQUEST_STATE,
+  startBrief,
   tasklessAgentSchema,
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
@@ -118,6 +121,32 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
+ * The coding agent a task's start starts on it: an agent Start's own fields
+ * (`coding-agent-wire.ts`), its key, which a retry carries again, the choice,
+ * a prompt and its files, and the servers switched off, held to the same
+ * words-or-files rule, but never `from` or a note, since a new task has no
+ * agent to take over from. The prompt travels as `prompt`, the key the
+ * desktop's own Start params name it by: the `task` an agent Start's body
+ * spells it as is a released desktop's, which never sends this.
+ */
+export const taskAgentStartSchema = EffectSchema.Struct({
+  idempotencyKey: codingAgentStartRequestFields.idempotencyKey,
+  model: codingAgentStartRequestFields.model,
+  effort: codingAgentStartRequestFields.effort,
+  contextWindow: codingAgentStartRequestFields.contextWindow,
+  prompt: codingAgentStartRequestFields.prompt,
+  attachments: codingAgentStartRequestFields.attachments,
+  disabledServers: codingAgentStartRequestFields.disabledServers,
+}).check(startBrief);
+
+export type TaskAgentStart = typeof taskAgentStartSchema.Type;
+
+/** Whether a start asking for an agent asks for no planning phase beside it: the agent is the start, so no call is opened on the plan. */
+function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: boolean }): boolean {
+  return request.agent === undefined || request.planning !== true;
+}
+
+/**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
  * the account's first workspace where none is, and the Linear issue it
@@ -128,7 +157,11 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * as the untouched template, or empty where `planning` is false: a task
  * started without its planning phase, whose window opens no call on it
  * either. A name left out, or nothing but whitespace, starts the plan as
- * `UNTITLED_PLAN_NAME` until it is renamed.
+ * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
+ * agent on the task in the same request, as the agent's own Start would
+ * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
+ * refused, and the service refuses it without a repository, as it refuses
+ * an agent's Start on a task with none, before anything is written.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -139,7 +172,8 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
   issueId: EffectSchema.optionalKey(wireUuidSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
+  agent: EffectSchema.optionalKey(taskAgentStartSchema),
+}).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -482,6 +516,30 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
 
 export type TaskAnswer = typeof taskAnswerSchema.Type;
+
+/**
+ * Why the agent a start asked for was not started beside the task it made,
+ * in the service's own word, as the agent's Start would have refused it.
+ * Note that it carries no `unreached`, because the start confirmed the
+ * repository reachable as it made the task.
+ */
+export const taskAgentRefusalSchema = EffectSchema.Struct({ error: EffectSchema.String });
+
+export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
+
+/**
+ * A started task (POST): the task, and, where the start asked for an agent,
+ * the agent started on it, or, the task made all the same, why the agent
+ * was refused. A retry carrying the agent's key again answers the task and
+ * the agent the first start made, and starts neither again.
+ */
+export const taskStartAnswerSchema = EffectSchema.Struct({
+  plan: taskSchema,
+  agent: EffectSchema.optionalKey(codingAgentSummarySchema),
+  agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
+});
+
+export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
 /** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });

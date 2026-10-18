@@ -1,8 +1,8 @@
 import type { Workspace } from "@luke/features/workspace-wire";
+import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { HoverCard, HoverCardHead } from "@luke/ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip";
-import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**
  * workspace-ref.tsx -- a workspace named wherever the window names one: its tile, its photo or its letter, and its name beside it, at a line's, a row's, or the sidebar head's size.

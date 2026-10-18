@@ -1,5 +1,5 @@
+import type { WorldPoint } from "@luke/panel/factory-world/world";
 import { ZONE_LAYER, type ZoneLayer, type ZoneView } from "@luke/ui/factory-world";
-import type { WorldPoint } from "../../world";
 import { angleBetween, clamp, polar, TAU } from "./math";
 import { HILL, INNER_GATES, KEEP_GATES } from "./terrain";
 
