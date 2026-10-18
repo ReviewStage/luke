@@ -129,6 +129,8 @@ let refusePhoto = false;
 let refuseRole = false;
 /** Each repository's clone and command set on this Mac, as its settings file holds them. */
 let macRepositories: MacRepository[] = [];
+/** While set, the Repositories group's save waits on it before it is answered. */
+let macSaveHeld: Promise<void> | undefined;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
@@ -307,6 +309,11 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.MAC_REPOSITORIES:
       return Promise.resolve(done({ repositories: macRepositories }));
     case ACT_KIND.MAC_REPOSITORY_SET: {
+      if (macSaveHeld !== undefined) {
+        const held = macSaveHeld;
+        macSaveHeld = undefined;
+        return held.then(() => answer({ ...request }));
+      }
       const entry = request.payload;
       macRepositories = [
         ...macRepositories.filter(
@@ -346,6 +353,7 @@ beforeEach(() => {
   refuseRole = false;
   automations = undefined;
   macRepositories = [];
+  macSaveHeld = undefined;
   githubRepositories = [];
   fakeAppBridge({ act: answer });
   handCapabilities(DESKTOP_CAPABILITIES);
@@ -1867,4 +1875,35 @@ test("the Repositories group lists the workspace's repositories and those set he
     [{ repository: "acme/app", command: "pnpm dev" }],
   );
   assert.equal(field("acme/app").value, "pnpm dev");
+});
+
+test("a repository's Save is named Saving while its command is sent, and Save again once it is kept", async () => {
+  githubRepositories = ["acme/app"];
+  let release: () => void = () => undefined;
+  macSaveHeld = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  const { page } = await mount(ACME);
+  const group = page.querySelector<HTMLElement>(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
+  );
+  assert.ok(group !== null);
+  const typed = group.querySelector<HTMLInputElement>("form input");
+  assert.ok(typed !== null);
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      typed,
+      "pnpm dev",
+    );
+    typed.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const save = button(group, "Save");
+
+  act(() => typed.form?.requestSubmit());
+  const during = [save.getAttribute("aria-label"), save.getAttribute("aria-busy")];
+  release();
+  await settle();
+
+  assert.deepEqual(during, ["Saving", "true"]);
+  assert.deepEqual([save.getAttribute("aria-label"), save.getAttribute("aria-busy")], [null, null]);
 });

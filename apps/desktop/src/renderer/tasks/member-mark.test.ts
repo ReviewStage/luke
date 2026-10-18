@@ -56,7 +56,7 @@ for (const small of [false, true]) {
     assert.equal(drawn(who(MEMBER_KIND.HUMAN, "ada"), small).textContent, "A");
     act(() => root?.unmount());
 
-    const luke = drawn(who(MEMBER_KIND.PLANNER, "Luke"), small);
+    const luke = drawn(who(MEMBER_KIND.LUKE, "Luke"), small);
     assert.equal(luke.textContent, "", "Luke's mark holds no letter");
     assert.ok(luke.querySelector("svg"), "Luke's mark is his face");
     act(() => root?.unmount());

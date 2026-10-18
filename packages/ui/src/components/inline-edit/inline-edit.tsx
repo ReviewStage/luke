@@ -22,12 +22,14 @@ import { useLayoutEffect, useRef } from "react";
  */
 
 /**
- * How the field is drawn: on a field's own ground inside a hairline, or
- * bare in the type around it, where what it stands in is a well that rings
- * it, as a tab's is.
+ * How the field is drawn: on a field's own ground inside a hairline, as a
+ * list's row renames; in a settings input's box, as a settings row's label
+ * renames; or bare in the type around it, where what it stands in is a well
+ * that rings it, as a tab's is.
  */
 export const INLINE_EDIT_LOOK = {
   FIELD: "field",
+  INPUT: "input",
   WELL: "well",
 } as const;
 

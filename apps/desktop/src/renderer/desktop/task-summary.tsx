@@ -572,10 +572,11 @@ function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
       <Tooltip label={entry.row.terms?.[0] ?? entry.row.label}>
-        <button type="button" className="icon-button" onClick={entry.onPick}>
-          <span className="task-summary-glyph">{entry.row.icon}</span>
-          <span className="visually-hidden">{entry.row.label}</span>
-        </button>
+        <IconButton
+          icon={<span className="task-summary-glyph">{entry.row.icon}</span>}
+          label={entry.row.label}
+          onClick={entry.onPick}
+        />
       </Tooltip>
     </li>
   );
@@ -719,16 +720,11 @@ function SummaryCard({
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
     >
-      <Tooltip label="Collapse summary">
-        <button
-          type="button"
-          className="icon-button task-summary-collapse"
-          aria-label="Collapse summary"
-          onClick={collapse}
-        >
-          <ChevronsRightIcon />
-        </button>
-      </Tooltip>
+      <span className="task-summary-collapse">
+        <Tooltip label="Collapse summary">
+          <IconButton icon={<ChevronsRightIcon />} label="Collapse summary" onClick={collapse} />
+        </Tooltip>
+      </span>
       <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
     </div>
   );
@@ -753,19 +749,21 @@ function SummaryChevron({
   const pinned = layout.mode === SUMMARY_MODE.COLUMN;
   const label = pinned ? "Collapse summary" : "Expand summary";
   const hangs = !pinned && !(layout.wide && layout.card === undefined);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button task-summary-chevron"
-        aria-label={label}
-        {...(hangs ? cardControl(layout, cardId) : {})}
-        data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
-        onClick={pinned ? layout.onToggle : layout.onExpand}
-      >
-        {pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
-      </button>
-    </Tooltip>
+    <span
+      className="task-summary-chevron"
+      data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
+    >
+      <Tooltip label={label}>
+        <IconButton
+          icon={pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+          label={label}
+          {...(hangs ? cardControl(layout, cardId) : {})}
+          onClick={pinned ? layout.onToggle : layout.onExpand}
+        />
+      </Tooltip>
+    </span>
   );
 }
 

@@ -93,7 +93,7 @@ export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): R
     kind === MEMBER_KIND.AGENT ? (
       // Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now.
       <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
-    ) : kind === MEMBER_KIND.PLANNER ? (
+    ) : kind === MEMBER_KIND.LUKE ? (
       <WingFace />
     ) : undefined;
   return (
