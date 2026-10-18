@@ -722,6 +722,18 @@ no address resolves to the data centre's own location and the privacy claim in
 `PRIVACY.md` becomes false; the project's IP-capture setting should be set to
 discard as well, so the guarantee does not rest on one property in one file.
 
+The service counts its own half under the same key: the core loop the desktop
+cannot see (a task, workspace, issue, or automation made, a coding agent
+started, an agent's pull request opened, an Inbox answer, a member's Chat post,
+an integration connected or disconnected), recorded where each is committed
+through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
+Its vocabulary is typed per event and holds only fixed words, booleans, and
+catalog ids, and each event carries the account's id as `distinct_id`, so it
+joins the desktop's person and is erased with it. The `ProductAnalytics`
+service is read optionally, so a runtime or test without it records nothing,
+and a deployment without `POSTHOG_PROJECT_API_KEY` builds one that records
+nothing.
+
 The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
 is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never

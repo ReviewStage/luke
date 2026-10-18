@@ -72,6 +72,7 @@ import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effe
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
 import {
@@ -1523,6 +1524,11 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const asked = readEither(inboxAnswerRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { revision, clientKey, attachments = [], ...reply } = asked.success;
+  // An answer sent again under the key it was taken under is the same answer, counted once.
+  const counted =
+    stored.value.answerKey === clientKey
+      ? Effect.void
+      : recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
   const taken = yield* takenAnswer(userId, stored.value, {
     revision,
     clientKey,
@@ -1536,6 +1542,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
   if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer, taken.answerFiles)) {
+    yield* counted;
     return inboxAnswered(taken, true);
   }
   const answer = taken.answer;
@@ -1559,6 +1566,8 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
       ),
     ),
   );
+  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
+  yield* counted;
   return inboxAnswered(taken, true);
 });
 

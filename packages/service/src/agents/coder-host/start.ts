@@ -47,6 +47,11 @@ import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import {
+  recordServerEvent,
+  SERVER_AGENT_START_KIND,
+  SERVER_EVENT,
+} from "../../events/server-events.js";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
@@ -818,6 +823,18 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       agentId: agent.id,
     }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
   }
+  yield* recordServerEvent(SERVER_EVENT.AGENT_START, userId, {
+    model: choice.model,
+    effort: choice.effort,
+    start_kind:
+      from === undefined
+        ? SERVER_AGENT_START_KIND.FRESH
+        : continued
+          ? SERVER_AGENT_START_KIND.CONTINUE
+          : SERVER_AGENT_START_KIND.FORK,
+    is_from_automation: ask.automationId !== undefined && ask.automationId !== null,
+    has_task: ask.taskId !== null,
+  });
   return { agent, created };
 });
 

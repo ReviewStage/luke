@@ -190,6 +190,7 @@ import {
   userMetadataOf,
 } from "../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
@@ -463,6 +464,13 @@ const NO_KEYS: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: undefined,
 };
 
+/** What the endpoints counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** How many of one event the account was counted for. */
+const countedFor = (userId: string, name: string) =>
+  ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
+
 /**
  * The group over the test's own database, GitHub, and eve, stood once and
  * answering every request of the test, so what it keeps between two
@@ -489,6 +497,7 @@ const standing = (
       github.layer,
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+      ANALYTICS.layer,
     );
     const seams = {
       resolveUserId: (incoming: Request) =>
@@ -4625,6 +4634,37 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "an Inbox answer is counted once it stands: not where its hand-off failed and was withdrawn, and once however often it is sent again under its key",
+    () =>
+      Effect.gen(function* () {
+        const refused = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const lost = yield* refused.post(QUESTION);
+        assert.ok(Result.isSuccess(lost));
+        const withdrawn = yield* refused.answer(lost.success.id, {
+          revision: lost.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Say hello.",
+        });
+        assert.equal(withdrawn.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.equal(countedFor(refused.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
+
+        const { owner, post, answer } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const body = {
+          revision: asked.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Say hello.",
+        };
+        assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(countedFor(owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
+      }),
+  );
+
+  it.effect(
     "a message the agent's session did not take is taken back off the thread, so the thread never shows what the agent was not told",
     () =>
       Effect.gen(function* () {
@@ -7703,6 +7743,34 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a member's answer to an ask is counted as their reply in the thread, once however often it is sent again under its key",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat(fakeEve());
+        const asked = yield* chat.agentAsks("Ship with seven-day invites?");
+        const before = countedFor(chat.owner, SERVER_EVENT.CHAT_MESSAGE_SEND);
+        const answer = {
+          answer: { seq: asked.message.seq, revision: 1, reply: { reply: CHAT_REPLY.APPROVED } },
+          clientKey: randomUUID(),
+        };
+
+        const taken = yield* chat.wrote(answer);
+        assert.ok("ask" in taken);
+        assert.equal(taken.taken, true);
+        const again = yield* chat.wrote(answer);
+        assert.ok("ask" in again);
+        assert.equal(again.taken, true);
+        assert.equal(countedFor(chat.owner, SERVER_EVENT.CHAT_MESSAGE_SEND), before + 1);
+        assert.deepEqual(
+          ANALYTICS.recorded.findLast(
+            (event) => event.userId === chat.owner && event.name === SERVER_EVENT.CHAT_MESSAGE_SEND,
+          )?.properties,
+          { is_reply: true },
+        );
       }),
   );
 

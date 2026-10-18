@@ -62,6 +62,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   agentWorkspace,
@@ -1195,11 +1196,10 @@ const newTaskOf = (caller: AgentCaller, name: string) =>
     return Result.succeed(yield* newTaskReading(userId, workspace.value, made.id, made.name));
   });
 
-/** Takes away a task made for a start that failed; one an agent stands on after all, a retry's that raced it, is left. */
+/** Takes away a task made for a start that failed, answering whether it went; one an agent stands on after all, a retry's that raced it, is left. */
 const discardNewTask = (userId: string, taskId: string) =>
   deleteTask(userId, taskId, { stoppedAgentIds: new Set(), beforeDelete: () => Effect.void }).pipe(
     Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(false)),
-    Effect.asVoid,
   );
 
 /**
@@ -1608,10 +1608,20 @@ export function runStartAgent(
         ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       // A new task stands only under the agent its own call made (see above).
-      if (made !== undefined && (Result.isFailure(started) || !started.success.created)) {
-        yield* discardNewTask(userId, made.id);
-        const standing = yield* startedBefore(call, true);
-        if (Option.isSome(standing)) return standing.value;
+      if (made !== undefined) {
+        const discarding = Result.isFailure(started) || !started.success.created;
+        // Counted once it is known to stand: never where the discard took it back, and still where an agent kept it.
+        const stands = discarding ? !(yield* discardNewTask(userId, made.id)) : true;
+        if (stands) {
+          yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+            source: SERVER_TASK_SOURCE.AGENT,
+            has_issue: false,
+          });
+        }
+        if (discarding) {
+          const standing = yield* startedBefore(call, true);
+          if (Option.isSome(standing)) return standing.value;
+        }
       }
       if (Result.isFailure(started)) {
         const refusal = started.failure;

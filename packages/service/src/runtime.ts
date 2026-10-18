@@ -11,6 +11,7 @@ import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
+import { productAnalyticsFromEnvironment } from "./events/server-events.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
 import {
   integrationConnectFromEnvironment,
@@ -79,6 +80,9 @@ export const webServices = Layer.mergeAll(
   workspaceLinearConnectFromEnvironment,
   webLogger,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
+  productAnalyticsFromEnvironment.pipe(
+    Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
+  ),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */

@@ -65,6 +65,8 @@ type PosthogPropertyValue = string | number | boolean | PosthogPerson;
 /** One item of the documented batch document, as this build builds it. */
 export interface PosthogBatchItem {
   event: string;
+  /** Who the event belongs to, at the item's top level as the capture docs ask. */
+  distinct_id: string;
   timestamp: string;
   properties: Readonly<Record<string, PosthogPropertyValue>>;
 }
