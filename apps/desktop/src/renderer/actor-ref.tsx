@@ -18,6 +18,8 @@ import {
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
+  TEXT_BUTTON_LINES,
+  TextButton,
   WingFace,
 } from "@luke/ui";
 import {
@@ -359,9 +361,9 @@ function ActorHead({
           ) : onOpen === undefined ? (
             name
           ) : (
-            <button type="button" className="card-name-link" onClick={onOpen}>
+            <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={onOpen}>
               {name}
-            </button>
+            </TextButton>
           )
         }
         sub={sub}

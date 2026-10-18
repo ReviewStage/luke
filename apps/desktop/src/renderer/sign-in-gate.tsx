@@ -3,10 +3,12 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/cr
 import {
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   WingFace,
 } from "@luke/ui";
 
@@ -78,9 +80,9 @@ export function SignInGate({
           <div role="status">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Finish in your browser.{" "}
-              <button type="button" className="sign-in-cancel" onClick={onCancel}>
+              <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onCancel}>
                 Cancel
-              </button>
+              </TextButton>
             </Text>
           </div>
         ) : failure ? (

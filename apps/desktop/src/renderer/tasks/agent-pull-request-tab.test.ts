@@ -579,7 +579,11 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "plain",
     "a comment GitHub sent no rendering of stands as its markdown",
   );
-  assert.equal(tab.querySelector(".pull-request-earlier"), null, "nothing was left on GitHub");
+  assert.equal(
+    tab.querySelector(".pull-request-earlier button"),
+    null,
+    "nothing was left on GitHub",
+  );
 
   await choose(tab, "Checks");
   const checks = tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks stand");
@@ -771,7 +775,7 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
   assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5");
   const earlier =
-    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier") ??
+    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier button") ??
     assert.fail("the earlier entries are counted");
   assert.equal(earlier.textContent, "3 earlier comments on GitHub");
   await act(async () => earlier.click());
@@ -889,7 +893,7 @@ test("a review that only left line comments draws each thread under it: its file
     "once",
   );
   const more =
-    open.querySelector<HTMLButtonElement>(".pull-request-thread-more") ??
+    open.querySelector<HTMLButtonElement>(".pull-request-thread-more button") ??
     assert.fail("the replies left on GitHub are counted");
   assert.equal(more.textContent, "2 more replies on GitHub");
   await act(async () => more.click());

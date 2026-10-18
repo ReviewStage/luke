@@ -30,6 +30,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  ChevronDownIcon,
   ChevronRightIcon,
   ConfirmDialog,
   ErrorState,
@@ -44,6 +45,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
@@ -294,9 +296,7 @@ function ToolsLine({
   return (
     <span className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
-      <button
-        type="button"
-        className="integration-tools-toggle"
+      <TextButton
         aria-label={`${tools.expanded ? "Hide" : "Show"} ${name} tools`}
         aria-expanded={tools.expanded}
         aria-controls={tools.expanded ? panelId : undefined}
@@ -305,8 +305,8 @@ function ToolsLine({
         {tools.found
           ? `${tools.shown.length} of ${toolsCount(tools.all.length)} match`
           : toolsCount(tools.all.length)}
-        <ChevronRightIcon />
-      </button>
+        {tools.expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+      </TextButton>
     </span>
   );
 }
