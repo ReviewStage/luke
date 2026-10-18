@@ -41,6 +41,7 @@ import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
+import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -86,6 +87,7 @@ export const EXAMPLES: readonly Example[] = [
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  TEXT_LINKS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,

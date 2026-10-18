@@ -116,9 +116,9 @@ function drawn(node: ReactNode): HTMLElement {
 
 /** Each plain link drawn: what it says, and whether it wears the ↗ of an address cut short. */
 function plainLinks(container: HTMLElement): [string | null, boolean][] {
-  return [...container.querySelectorAll<HTMLElement>(".text-link")].map((link) => [
+  return [...container.querySelectorAll<HTMLElement>(".luke-text-link")].map((link) => [
     link.textContent,
-    link.querySelector(".text-link-out") !== null,
+    link.querySelector("svg") !== null,
   ]);
 }
 
@@ -197,7 +197,7 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
     }),
   );
 
-  for (const link of container.querySelectorAll<HTMLElement>(".text-link")) {
+  for (const link of container.querySelectorAll<HTMLElement>(".luke-text-link")) {
     act(() => link.click());
   }
   await act(async () => undefined);
@@ -212,7 +212,7 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
 test("a plain link pressed in a version or a note opens in the browser", () => {
   for (const surface of [drawn(createElement(Version)), drawn(createElement(Note))]) {
     sent = [];
-    const docs = [...surface.querySelectorAll<HTMLElement>(".text-link")].find(
+    const docs = [...surface.querySelectorAll<HTMLElement>(".luke-text-link")].find(
       (link) => link.textContent === "the docs",
     );
     assert.ok(docs !== undefined);
@@ -239,8 +239,11 @@ test("a bare address an edit or a change marks inside is drawn whole, its caret 
   for (const surface of [changed, typed]) {
     assert.deepEqual(plainLinks(surface), [[BARE, false]]);
   }
-  assert.equal(changed.querySelector(".text-link ins.markdown-inserted")?.textContent, "current");
-  assert.notEqual(typed.querySelector(".text-link .markdown-caret"), null);
+  assert.equal(
+    changed.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
+    "current",
+  );
+  assert.notEqual(typed.querySelector(".luke-text-link .markdown-caret"), null);
 });
 
 test("a plain link to an address the window refuses to open is drawn going nowhere", () => {
@@ -255,7 +258,7 @@ test("a plain link to an address the window refuses to open is drawn going nowhe
       sectionLinks: SECTION_LINKS,
     }),
   );
-  const link = container.querySelector<HTMLElement>(".text-link");
+  const link = container.querySelector<HTMLElement>(".luke-text-link");
   assert.ok(link !== null);
 
   act(() => link.click());
@@ -269,7 +272,7 @@ test("a plain link hangs its whole address in the window's hint, an address past
   const container = drawn(
     createElement(MarkdownMessage, { words: `See ${BARE} and [the long page](${long}).` }),
   );
-  const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".text-link")];
+  const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".luke-text-link")];
   assert.ok(bare !== undefined && longLink !== undefined);
   const hint = (link: HTMLElement): string | null | undefined => {
     act(() => link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
