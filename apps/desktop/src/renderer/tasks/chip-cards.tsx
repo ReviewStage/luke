@@ -237,7 +237,7 @@ export function InboxItemChipCard({
   const inbox = useAppState()?.inbox;
   const now = useMinute();
   const item = [
-    ...(inbox?.waiting ?? []).flatMap((plan) => plan.items),
+    ...(inbox?.waiting ?? []).flatMap((task) => task.items),
     ...(inbox?.taskless ?? []),
   ].find((each) => each.id === itemId);
   if (item === undefined) return fallback;

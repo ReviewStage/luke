@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, createElement, StrictMode } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 
 /**
@@ -8,15 +9,17 @@ import { afterEach, expect, test, vi } from "vitest";
  * title with a status saying it is loading, the navigation marks that view
  * as the current page, and a press on another section moves both; the
  * account menu opens over the page from its avatar and closes on Escape or a
- * press outside it. The page
- * runs as it does in the browser, mounted on its own `#root`; the network,
- * the HTTP boundary to Luke and Better Auth, is a fake that answers the
- * session and leaves every admin read hanging.
+ * press outside it. The page runs as its entry mounts it in the browser, on
+ * its own `#root`, and is unmounted after each test so no render it scheduled
+ * outlives jsdom; the network, the HTTP boundary to Luke and Better Auth, is
+ * a fake that answers the session and leaves every admin read hanging.
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const SESSION_PATH = "/api/auth/get-session";
+
+let root: Root | undefined;
 
 const SIGNED_IN = {
   session: { id: "session-1" },
@@ -37,14 +40,18 @@ async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   });
   window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
   window.history.replaceState(null, "", address);
-  const root = document.createElement("div");
-  root.id = "root";
-  document.body.replaceChildren(root);
+  const container = document.createElement("div");
+  container.id = "root";
+  document.body.replaceChildren(container);
+  // Note that the dashboard is imported afresh, because its session lives in
+  // module state and each test signs in anew.
   vi.resetModules();
+  const { AdminDashboard } = await import("../src/AdminDashboard");
+  root = createRoot(container);
   await act(async () => {
-    await import("../src/admin");
+    root?.render(createElement(StrictMode, null, createElement(AdminDashboard)));
   });
-  return root;
+  return container;
 }
 
 /** The names of the navigation links marked as the current page. */
@@ -65,6 +72,14 @@ function saysLoading(page: HTMLElement): boolean {
 }
 
 afterEach(() => {
+  // Note that the session store stops a second after its last reader leaves,
+  // on a timer the unmount arms, and that stop reaches for `window`; so the
+  // unmount runs on a fake clock that is run out while jsdom still stands.
+  vi.useFakeTimers();
+  act(() => root?.unmount());
+  root = undefined;
+  vi.runOnlyPendingTimers();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.clear();
   document.body.replaceChildren();

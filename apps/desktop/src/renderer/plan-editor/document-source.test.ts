@@ -270,3 +270,50 @@ test("a task item emptied above its nested checklist is saved as a checkbox and 
   reopened.editor.commands.insertContent("again");
   assert.equal(reopened.handedOver(), "- [ ] again\n  - [ ] nested\n");
 });
+
+test("a list mixing bullets and task items opens editable, untouched byte for byte, and an edit to a task item changes its line alone", () => {
+  const text = "## Notes\n\n- one\n- two\n\n- [x] test\n- [ ] &nbsp;\n\nAfter.\n";
+  const { host, editor, handedOver } = opened(text);
+
+  assert.equal(host.querySelector("[data-raw-block]"), null);
+  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 2);
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "test") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.deepEqual(changedLines(text, handedOver()), ["-- [x] test", "+- [x] test again"]);
+});
+
+test("a tight list switching between bullets and task items is handed over untouched byte for byte, and stays tight around an edit", () => {
+  const text = "- one\n- [x] two\n- three\n- [ ] four\n";
+  const { editor, handedOver } = opened(text);
+
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "two") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.equal(handedOver(), text.replace("two", "two again"));
+});
+
+test("a checklist laid in after a list that ends the text without a line break starts on a line of its own", () => {
+  const { editor, handedOver } = opened("- one");
+
+  editor.commands.insertContentAt(editor.state.doc.content.size, {
+    type: "taskList",
+    content: [
+      {
+        type: "taskItem",
+        attrs: { checked: false },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "two" }] }],
+      },
+    ],
+  });
+
+  assert.equal(handedOver(), "- one\n- [ ] two");
+});

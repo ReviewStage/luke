@@ -343,7 +343,7 @@ export interface EditorPictures {
  * the place names no workspace to address them under, as the template does.
  */
 export function useEditorPictures(
-  planId: string,
+  taskId: string,
   workspace: string | undefined,
   handle: React.RefObject<PlanEditorHandle | undefined>,
 ): EditorPictures {
@@ -369,7 +369,7 @@ export function useEditorPictures(
       settled(taken.upload, { kind: UPLOAD.SENDING, url });
       const failed = (reason: string) =>
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId, picture: url }).catch(
+      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
         () => undefined,
       );
       if (kept === undefined || "failure" in kept) {
@@ -379,14 +379,14 @@ export function useEditorPictures(
             : UPLOAD_WORDS.FAILED,
         );
       }
-      keepPictureRead(planId, kept.id, url);
+      keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId: planId, attachmentId: kept.id }, workspace),
+        planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
-    [act, handle, planId, settled, workspace],
+    [act, handle, taskId, settled, workspace],
   );
   // Note that a picture of another plan is read as that plan's before it is kept again.
   const begin = useCallback(
@@ -442,7 +442,7 @@ export function useEditorPictures(
       },
       copies: (src) => {
         const named = planAttachmentOf(src);
-        return named !== undefined && named.taskId !== planId;
+        return named !== undefined && named.taskId !== taskId;
       },
     };
   }

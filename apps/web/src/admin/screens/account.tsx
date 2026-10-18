@@ -1,16 +1,6 @@
 import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import {
-  BADGE_TONE,
-  Badge,
-  GAP,
-  Inline,
-  Stack,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@luke/ui";
+import { BADGE_TONE, Badge, GAP, Inline, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "@luke/ui/admin-format";
 import { ActivityCalendar } from "../charts/activity-calendar";
@@ -18,7 +8,7 @@ import { SectionHeading, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../cha
 import { UsageChart } from "../charts/usage-chart";
 import { BackLink } from "../chrome/back-link";
 import { AdminErrorCard, Centered, ForbiddenCard, SignInCard } from "../chrome/cards";
-import { PLAIN_BUTTON, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
+import { Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AccountActivityNote } from "../chrome/notes";
 import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
@@ -38,9 +28,8 @@ const ACCOUNT_SHAPES: readonly SkeletonShape[] = [
     kind: SKELETON_SHAPE.MASTHEAD,
     avatar: true,
     lines: [
-      { box: "h-8", bone: "h-6 w-48" },
-      { box: "h-5", bone: "h-3.5 w-56" },
-      { box: "h-4", bone: "h-3 w-40" },
+      { variant: TEXT_VARIANT.BODY, width: "224px" },
+      { variant: TEXT_VARIANT.CAPTION, width: "160px" },
     ],
   },
   { kind: SKELETON_SHAPE.HEADING, label: "Daily use · hosted tier" },
@@ -96,14 +85,11 @@ export function AccountScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
       return frame(
-        <Centered title="No such account">
-          No account carries this id — it may have been deleted since its row was read.
-          <div className="mt-6">
-            <button type="button" className={PLAIN_BUTTON} onClick={onBack}>
-              Back to users
-            </button>
-          </div>
-        </Centered>,
+        <Centered
+          title="No such account"
+          description="No account carries this id — it may have been deleted since its row was read."
+          action={{ label: "Back to users", onPress: onBack }}
+        />,
       );
     case "error":
       return frame(
@@ -122,42 +108,28 @@ export function AccountScreen({
 
       return frame(
         <AdminPage
-          title="Account"
+          title={accountLabel(subject)}
           account={account}
           onSignOut={signOut}
           controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
         >
-          <RefreshFailureNotice
-            failure={state.refreshFailure}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-
-          <div
-            className="transition-opacity duration-150 data-[busy=true]:opacity-50"
-            data-busy={refreshing}
-            aria-busy={refreshing}
-          >
-            <BackLink tab="users" label="All users" onBack={onBack} />
-
-            <div className="mt-6 flex flex-wrap items-center gap-4">
-              <AccountAvatar
-                account={{
-                  name: subject.name,
-                  email: subject.email,
-                  image: subject.image ?? undefined,
-                }}
-                size="large"
-              />
-              <div className="min-w-0">
+          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
+            <Stack gap={GAP.LOOSE}>
+              <BackLink tab="users" label="All users" onBack={onBack} />
+              <Inline gap={GAP.FIELD}>
+                <AccountAvatar
+                  account={{
+                    name: subject.name,
+                    email: subject.email,
+                    image: subject.image ?? undefined,
+                  }}
+                  size="large"
+                />
                 <Stack gap={GAP.TIGHT}>
                   <Inline>
-                    <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
-                      {accountLabel(subject)}
-                    </Text>
+                    <Text tone={TEXT_TONE.MUTED}>{subject.email}</Text>
                     {subject.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
                   </Inline>
-                  <Text tone={TEXT_TONE.MUTED}>{subject.email}</Text>
                   <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                     Joined {formatDate(subject.createdAt)}
                     {subject.signInMethods.length > 0
@@ -165,8 +137,8 @@ export function AccountScreen({
                       : ""}
                   </Text>
                 </Stack>
-              </div>
-            </div>
+              </Inline>
+            </Stack>
 
             <SectionHeading>Daily use · hosted tier</SectionHeading>
             <div className={STAT_ROW}>
@@ -245,7 +217,7 @@ export function AccountScreen({
               </div>
             </div>
             <AccountActivityNote />
-          </div>
+          </Refreshing>
         </AdminPage>,
       );
     }

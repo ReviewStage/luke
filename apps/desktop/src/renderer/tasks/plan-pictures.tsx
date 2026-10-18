@@ -80,11 +80,11 @@ function chipOf(url: string, name: string): FileChip {
  * words or code, and that a picture drawn twice is named by its first
  * section, as the viewer walks each picture once.
  */
-function sectionOfPicture(text: string, planId: string, id: string): string | undefined {
+function sectionOfPicture(text: string, taskId: string, id: string): string | undefined {
   return planSections(text).find((section) =>
     taskPicturesIn(section.text).some((address) => {
       const named = planAttachmentOf(address);
-      return named?.taskId === planId && named.attachmentId === id;
+      return named?.taskId === taskId && named.attachmentId === id;
     }),
   )?.heading;
 }
@@ -96,7 +96,7 @@ function sectionOfPicture(text: string, planId: string, id: string): string | un
  * section it stands in.
  */
 export function PlanPictures({
-  planId,
+  planId: taskId,
   text,
   sectionNote,
   children,
@@ -116,13 +116,13 @@ export function PlanPictures({
   );
   const door = useMemo<PlanPicturesDoor>(
     () => ({
-      planId,
+      planId: taskId,
       read,
       name: (id, alt) => names.current.set(id, alt),
       // Note that the viewer walks the pictures read by the press, since one still being read has nothing to show.
       open: (id) => {
-        const shown = planAttachmentIdsIn(text, planId).flatMap((each) => {
-          const state = pictureNow(planId, each);
+        const shown = planAttachmentIdsIn(text, taskId).flatMap((each) => {
+          const state = pictureNow(taskId, each);
           if (state.kind !== PICTURE_STATE.READY) return [];
           return [
             { id: each, chip: chipOf(state.url, names.current.get(each) || UNNAMED_PICTURE) },
@@ -138,10 +138,10 @@ export function PlanPictures({
         }
       },
     }),
-    [planId, read, text],
+    [taskId, read, text],
   );
   const shownId = viewing?.ids[viewing.at];
-  const heading = shownId === undefined ? undefined : sectionOfPicture(text, planId, shownId);
+  const heading = shownId === undefined ? undefined : sectionOfPicture(text, taskId, shownId);
   return (
     <PlanPicturesContext.Provider value={door}>
       {children}

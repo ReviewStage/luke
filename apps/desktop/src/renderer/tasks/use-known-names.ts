@@ -25,11 +25,11 @@ export function useKnownNames(automationId?: string): KnownNames {
   const planning = state?.tasks;
   const inbox = state?.inbox;
   const held = useMemo(() => {
-    const plans = new Map(planning?.tasks.map((plan) => [plan.id, plan.name]));
+    const tasks = new Map(planning?.tasks.map((task) => [task.id, task.name]));
     const agents = new Map<string, string>();
     const agentModels = new Map<string, string>();
-    for (const plan of planning?.tasks ?? []) {
-      for (const agent of plan.agents?.agents ?? []) {
+    for (const task of planning?.tasks ?? []) {
+      for (const agent of task.agents?.agents ?? []) {
         if (agent.title !== null) agents.set(agent.id, agent.title);
         agentModels.set(agent.id, agent.model);
       }
@@ -47,11 +47,11 @@ export function useKnownNames(automationId?: string): KnownNames {
     }
     const pages = new Map(planning?.pages?.map((page) => [page.id, page.title]));
     const inboxItems = new Map(
-      [...(inbox?.waiting ?? []).flatMap((plan) => plan.items), ...(inbox?.taskless ?? [])].map(
+      [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].map(
         (item) => [item.id, item.title],
       ),
     );
-    return { plans, agents, agentModels, pages, inboxItems, automations };
+    return { plans: tasks, agents, agentModels, pages, inboxItems, automations };
   }, [planning, inbox]);
   const people = useMemo(
     () => new Map([...(former ?? []), ...(members ?? [])].map((each) => [each.userId, each.name])),

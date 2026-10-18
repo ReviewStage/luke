@@ -11,6 +11,7 @@ import {
   CircleSlashIcon,
   FileDiffIcon,
   MessageSquareIcon,
+  UsersIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorLine, ActorRef, ActorStack, type StackFace } from "../actor-ref";
@@ -82,8 +83,11 @@ export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Ele
 /** The reviewers as a facepile, each face wearing where they stand and hanging their card. */
 function ReviewerPile({
   reviewers,
+  drawn = 5,
 }: {
   reviewers: NonNullable<CodingAgentChangesPeople["reviewers"]>;
+  /** How many faces stand before the rest are counted. */
+  drawn?: number;
 }): React.JSX.Element {
   const name = useNamer();
   const faces: StackFace[] = reviewers.map(({ state }) => ({
@@ -94,7 +98,7 @@ function ReviewerPile({
     <ActorStack
       actors={reviewers.map(({ by }) => name(by))}
       faces={faces}
-      drawn={5}
+      drawn={drawn}
       label="Reviewers"
     />
   );
@@ -133,6 +137,23 @@ export function ReviewersLine({
     <ActorLine>
       {"Reviewers "}
       <ReviewerPile reviewers={reviewers} />
+    </ActorLine>
+  );
+}
+
+/** How many reviewers' faces a pull request's header draws before it counts the rest, as stage-cli's header does. */
+const HEADER_FACES = 3;
+
+/** The reviewers compactly, as a pull request's header names them: a glyph for what they are, then their first faces and a count of the rest. */
+export function HeaderReviewers({
+  reviewers,
+}: {
+  reviewers: NonNullable<CodingAgentChangesPeople["reviewers"]>;
+}): React.JSX.Element {
+  return (
+    <ActorLine>
+      <UsersIcon className="pull-request-reviewers-glyph" aria-hidden="true" />
+      <ReviewerPile reviewers={reviewers} drawn={HEADER_FACES} />
     </ActorLine>
   );
 }

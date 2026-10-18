@@ -99,9 +99,9 @@ const ask = (request: Request) =>
     } satisfies Answered;
   });
 
-function upload(planId: string, userId: string, picture: string): Request {
+function upload(taskId: string, userId: string, picture: string): Request {
   const url = new URL(ATTACHMENTS, ORIGIN);
-  url.searchParams.set("id", planId);
+  url.searchParams.set("id", taskId);
   return new Request(url, {
     method: "POST",
     headers: { authorization: `Bearer ${userId}` },
@@ -109,9 +109,9 @@ function upload(planId: string, userId: string, picture: string): Request {
   });
 }
 
-function read(planId: string, attachmentId: string, userId: string): Request {
+function read(taskId: string, attachmentId: string, userId: string): Request {
   const url = new URL(ATTACHMENT, ORIGIN);
-  url.searchParams.set("id", planId);
+  url.searchParams.set("id", taskId);
   url.searchParams.set("attachment", attachmentId);
   return new Request(url, { headers: { authorization: `Bearer ${userId}` } });
 }
@@ -132,8 +132,8 @@ const openSharedTask = Effect.gen(function* () {
   const outsider = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const { id: planId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
-  return { owner, teammate, outsider, planId };
+  const { id: taskId } = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
+  return { owner, teammate, outsider, planId: taskId };
 });
 
 it.layer(getTestDB())("a plan's picture routes", (it) => {
@@ -141,24 +141,24 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
     "a picture a teammate keeps on the plan is served to every member as its bytes, and to nobody else",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId } = yield* openSharedTask;
+        const { owner, teammate, outsider, planId: taskId } = yield* openSharedTask;
 
-        const kept = yield* ask(upload(planId, teammate, PNG_URL));
+        const kept = yield* ask(upload(taskId, teammate, PNG_URL));
 
         assert.equal(kept.status, HOSTED_HTTP_STATUS.CREATED);
         const answer = uploaded(kept);
         assert.ok("id" in answer);
-        const served = yield* ask(read(planId, answer.id, owner));
+        const served = yield* ask(read(taskId, answer.id, owner));
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.contentType, PICTURE_TYPE.PNG);
         assert.equal(served.cache, "private, no-store");
         assert.deepEqual([...served.bytes], [...PNG_BYTES]);
         assert.equal(
-          (yield* ask(read(planId, answer.id, outsider))).status,
+          (yield* ask(read(taskId, answer.id, outsider))).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
         assert.equal(
-          (yield* ask(upload(planId, outsider, PNG_URL))).status,
+          (yield* ask(upload(taskId, outsider, PNG_URL))).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
       }),
@@ -166,10 +166,10 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
 
   it.effect("bytes that are not the image their label names are refused, and nothing is kept", () =>
     Effect.gen(function* () {
-      const { owner, planId } = yield* openSharedTask;
+      const { owner, planId: taskId } = yield* openSharedTask;
       const mislabelled = PNG_URL.replace("image/png", "image/webp");
 
-      const refused = yield* ask(upload(planId, owner, mislabelled));
+      const refused = yield* ask(upload(taskId, owner, mislabelled));
 
       assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
       assert.equal(
@@ -181,11 +181,11 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
 
   it.effect("a plan holding its bound of pictures refuses one more in band", () =>
     Effect.gen(function* () {
-      const { owner, planId } = yield* openSharedTask;
+      const { owner, planId: taskId } = yield* openSharedTask;
       const db = yield* Database;
       yield* db.insert(planAttachment).values(
         Array.from({ length: PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN }, () => ({
-          taskId: planId,
+          taskId: taskId,
           userId: owner,
           contentType: PICTURE_TYPE.PNG,
           byteCount: PNG_BYTES.length,
@@ -194,7 +194,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
         })),
       );
 
-      const refused = yield* ask(upload(planId, owner, PNG_URL));
+      const refused = yield* ask(upload(taskId, owner, PNG_URL));
 
       assert.equal(refused.status, HOSTED_HTTP_STATUS.OK);
       assert.deepEqual(uploaded(refused), { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY });

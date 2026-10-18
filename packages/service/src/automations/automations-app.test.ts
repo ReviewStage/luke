@@ -560,8 +560,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "an edit whose action names no servers keeps the ones switched off, as a desktop from before sends it, and one that names none on switches every one back",
     () =>
       Effect.gen(function* () {
-        const { owner, task: plan, ask } = yield* openAccounts;
-        const made = weekdays(plan.id);
+        const { owner, task, ask } = yield* openAccounts;
+        const made = weekdays(task.id);
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -609,13 +609,13 @@ it.layer(getTestDB())("the automation routes", (it) => {
     "a run whose agent failed is read back in the history with why it failed, as the agent's own end line says it",
     () =>
       Effect.gen(function* () {
-        const { owner, task: plan, ask } = yield* openAccounts;
+        const { owner, task, ask } = yield* openAccounts;
         const { automation } = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: weekdays(plan.id),
+            body: weekdays(task.id),
           }),
         );
         const { run } = readAnswer(

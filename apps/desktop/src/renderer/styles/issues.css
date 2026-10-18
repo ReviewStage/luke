@@ -110,30 +110,35 @@
   line-height: var(--luke-type-caption-leading);
 }
 
+/* An issue with no description says so in the words the empty editor
+   says it in, at the text's own size, so opening it moves nothing. */
 .issue-description-empty {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-body-size);
 }
 
-/* The description at rest is a press away from its field: the Markdown it
-   is, washed on hover so the press is found. */
+/* The description at rest is drawn as the plan's text is
+   (`.plan-document-block`): the words take the text cursor and nothing
+   else marks them, since a click into them edits them in place, and the
+   keyboard's focus wears the plan's soft tint a little past its words. */
 .issue-description {
-  margin: 0 calc(var(--luke-space-8) * -1);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
+  position: relative;
+  isolation: isolate;
   cursor: text;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.issue-description:hover {
-  background: var(--luke-color-input);
+.issue-description:focus-visible {
+  outline: none; /* no ring: the tint below marks it */
 }
 
-.issue-description-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
+.issue-description:focus-visible::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .issue-description-refused {
