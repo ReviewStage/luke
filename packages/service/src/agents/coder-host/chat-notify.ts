@@ -24,10 +24,10 @@ import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
-  CHAT_NOTICE_CLOSING,
   CHAT_NOTICE_LEAD,
-  CHAT_TOOL,
   type ChatReadBlock,
+  chatNoticeAsksLine,
+  chatNoticeReplyLine,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
@@ -266,11 +266,8 @@ function noticeText(from: ChatMemberRow, channel: ChatChannelRow, message: ChatM
     .map(blockWords)
     .filter((part) => part !== "")
     .join("\n\n");
-  const asks =
-    message.ask === null
-      ? ""
-      : `${CHAT_NOTICE_CLOSING.ASKS} (${message.ask.response.type}): answer it in its thread.`;
-  const reply = `${CHAT_NOTICE_CLOSING.REPLY} ${CHAT_TOOL.POST}({ replyTo: ${message.seq}, text }).`;
+  const asks = message.ask === null ? "" : chatNoticeAsksLine(message.ask.response.type);
+  const reply = chatNoticeReplyLine(message.seq);
   const text = [header, words, asks, reply].filter((part) => part !== "").join("\n\n");
   return text.slice(0, CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
 }

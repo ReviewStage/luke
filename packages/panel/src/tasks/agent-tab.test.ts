@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -780,7 +781,7 @@ test("a notice another coding agent posted names it by its own chip in the handl
         text: [
           "Chat · @agent-2 in #teammate-invitations (m 43):",
           "Are you changing the memberships columns?",
-          "Reply with chat_post({ replyTo: 43, text }).",
+          chatNoticeReplyLine(43),
         ].join("\n\n"),
       },
     ],

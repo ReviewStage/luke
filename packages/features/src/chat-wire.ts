@@ -261,26 +261,39 @@ export const CHAT_TARGET_SIGIL = {
  */
 export const CHAT_NOTICE_LEAD = "Chat";
 
-/** How a notice's closing lines open, which tell the agent how to answer: what a message asks, and how to reply. */
-export const CHAT_NOTICE_CLOSING = {
-  ASKS: "It asks you",
-  REPLY: "Reply with",
-} as const;
+/** A notice's closing line telling the agent what the message asks, by the kind of answer it asks for. */
+export function chatNoticeAsksLine(response: string): string {
+  return `It asks you (${response}): answer it in its thread.`;
+}
+
+/** A notice's closing line telling the agent how to reply to the message at its place. */
+export function chatNoticeReplyLine(seq: number): string {
+  return `Reply with ${CHAT_TOOL.POST}({ replyTo: ${seq}, text }).`;
+}
+
+/** The closing lines as `chatNoticeAsksLine` and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
+const CHAT_NOTICE_CLOSINGS = [
+  /^It asks you \([a-z-]+\): answer it in its thread\.$/u,
+  new RegExp(`^Reply with ${CHAT_TOOL.POST}\\(\\{ replyTo: \\d+, text \\}\\)\\.$`, "u"),
+] as const;
 
 /**
  * A notice's own words as a person reads them: the message, without the head
  * naming who said it where, which the card says in its own head, and without
- * the closing lines telling the agent how to answer, which are the model's
- * alone. A text of no notice's shape is answered as it is.
+ * the closing lines at its end telling the agent how to answer, which are the
+ * model's alone. Only lines of the closings' whole shape, after the message,
+ * are taken away, so a message that itself opens "Reply with" keeps every
+ * word. A text of no notice's shape is answered as it is.
  */
 export function chatNoticeWords(text: string): string {
-  const paragraphs = text.split("\n\n");
-  const [head, ...rest] = paragraphs;
+  const [head, ...rest] = text.split("\n\n");
   if (head === undefined || !head.startsWith(`${CHAT_NOTICE_LEAD} · @`)) return text;
-  const closings = Object.values(CHAT_NOTICE_CLOSING);
-  const words = rest.filter(
-    (paragraph) => !closings.some((closing) => paragraph.startsWith(closing)),
-  );
+  const words = [...rest];
+  // The reply line ends every notice, and the asks line stands before it where the message asks.
+  for (const closing of [...CHAT_NOTICE_CLOSINGS].reverse()) {
+    const last = words.at(-1);
+    if (last !== undefined && closing.test(last)) words.pop();
+  }
   return words.join("\n\n").trim();
 }
 
