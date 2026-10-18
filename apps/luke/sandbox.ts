@@ -11,8 +11,8 @@ import { defineSandbox } from "eve/sandbox";
  * which eve hands the session's sandbox as the tool runs. The sandbox is
  * opened on the first call that needs it and kept for the session across
  * turns, so the checkout the first call makes is what later calls read; a
- * sandbox Vercel stopped for idleness resumes from its snapshot with the
- * checkout intact. The network is eve's default, open internet: the
+ * sandbox Vercel stopped at its timeout, which runs whether it is busy or
+ * not, resumes from its snapshot with the checkout intact. The network is eve's default, open internet: the
  * checkout's credential is set at the firewall for the clone alone and never
  * enters the sandbox. The worker subagent shares this sandbox
  * (`subagents/worker/sandbox.ts`), so its reads see the same checkout.
