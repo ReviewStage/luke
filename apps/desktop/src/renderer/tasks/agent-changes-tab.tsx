@@ -7,7 +7,9 @@ import {
   type CodingAgentChangedFile,
   type CodingAgentChangesPeople,
   type CodingAgentPullRequest,
+  type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -22,36 +24,47 @@ import {
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   ClipboardCopyIcon,
+  CodeIcon,
   Columns2Icon,
   FileDiffIcon,
   HighlighterIcon,
+  ImageIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
+import { DIFF_SELECTION_SIDE, type DiffSelection, FILE_NOTE_LINE } from "../diff-view/contract";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
+import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
 import {
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
   fileNotice,
   filePatch,
+  headerPatch,
   linesChanged,
+  listPatch,
   STATUS_LETTER,
   STATUS_WORDS,
+  threadsOn,
 } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
+import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list";
 import { DiffSettingsButton } from "./diff-settings";
-import { PierreDiff, useDiffLook, useSplitRoom } from "./file-diff";
+import { useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
 import { useFileViewSettings } from "./file-view-settings";
+import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
@@ -74,28 +87,34 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * what the reviews said stands in the tab's overview, whole, in its
  * conversation.
  *
- * Otherwise the tab is a File view (`file-view.tsx`) over the diff: its bar
- * names the chosen file as breadcrumbs, whose trees list only the changed
- * files, with the letter of what became of it and the lines it adds and
- * removes quietly beside, then the pull request's files on GitHub, the
- * diff settings, every one stage-cli offers in a popover
- * (`diff-settings.tsx`), the ⋯ (the file's name or its patch copied, the
- * patch saved, the changes read again, the File tabs' two settings, and
- * two of the diff's as quick checks: Split view, offered dimmed while the
- * diff is too narrow to split (`file-diff.tsx`), and Highlight changed
- * words), and the tree's toggle, which shows and hides the tree for every
- * File and Changes tab alike. The tree
- * is a File tab's own pane (`file-tree-pane.tsx`) narrowed to the changed
- * files, every folder open, each row lettered A, M, D, or R, searched in
- * place, with the pull request's count under it, or under the diff while
- * the tree is hidden; choosing a file there or
- * in a crumb's tree shows its diff. The diff is drawn by Pierre's diffs in
- * a bundle of its own (`../diff-view/`), on the File tab's ground, in its
- * type and colours, unified or split, numbered and wrapped as the File
- * tabs' settings say, its numbers left out of the find and of a copy as a
- * File tab's are; what is a diff's alone is the tint of a line added or
- * removed, the words a changed line changed, and the count of unchanged
- * lines between two hunks.
+ * Otherwise the tab is a File view (`file-view.tsx`) over its files' diffs,
+ * every file in one list as stage-cli draws them (`diff-list.tsx`), each
+ * under a header of its own that folds it, names it, with the letter of
+ * what became of it and the lines it adds and removes, and stays at the top
+ * while its lines scroll by; a file with no hunks says why under its header.
+ * Its bar names the file the keys stand on, or else the one at the top of
+ * the list, as breadcrumbs, whose trees list only the changed files, the
+ * same letter and lines quietly beside, then the pull request's files on
+ * GitHub, the diff settings, every one stage-cli offers in a popover
+ * (`diff-settings.tsx`), Collapse all or Expand all, the ⋯ (the file's name
+ * or its patch copied, the patch saved, the changes read again, the File
+ * tabs' two settings, and two of the diff's as quick checks: Split view,
+ * offered dimmed while the list is too narrow to split (`file-diff.tsx`),
+ * and Highlight changed words), and the tree's toggle, which shows and
+ * hides the tree for every File and Changes tab alike. The tree is a File
+ * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
+ * every folder open, each row lettered A, M, D, or R, its search the
+ * list's filter, narrowing the list to the files whose path holds it as it
+ * narrows the rows, said over the list while the tree is hidden, with the
+ * pull request's count under it, or under the list while the tree is
+ * hidden; choosing a file there or in a crumb's tree scrolls the list to
+ * it. stage-cli's keys walk the list (`changes-list.tsx`). The diffs are
+ * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
+ * File tab's ground, in its type and colours, unified or split, numbered
+ * and wrapped as the File tabs' settings say, their numbers left out of the
+ * find and of a copy as a File tab's are; what is a diff's alone is the
+ * tint of a line added or removed, the words a changed line changed, and
+ * the count of unchanged lines between two hunks.
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
@@ -238,34 +257,248 @@ function ChangesMenu({
   );
 }
 
-/** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
-function FileDiff({
-  file,
+/** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
+export interface ChangesThreads {
+  readonly list: readonly ReviewThread[];
+  /** Draws one, under its line or above the diff, where it names the lines it is on. */
+  readonly draw: (thread: ReviewThread, place: ThreadPlace) => ReactNode;
+  /** Reads the threads again, as Refresh changes reads the files again, so the two describe the same push. */
+  readonly refresh?: (() => void) | undefined;
+}
+
+/** Where a review thread is drawn in a file's diff: under the line it stands on, or above the diff, which draws no row for it. */
+export const THREAD_PLACE = {
+  ON_LINE: "on-line",
+  ABOVE: "above",
+} as const;
+
+export type ThreadPlace = (typeof THREAD_PLACE)[keyof typeof THREAD_PLACE];
+
+/**
+ * The key each side's review threads with no drawn row stand above a
+ * file's first hunk by, in a list of their own; a review thread's note is
+ * keyed by its page, which neither is.
+ */
+const ABOVE_KEY = {
+  [DIFF_SELECTION_SIDE.DELETIONS]: "above-deletions",
+  [DIFF_SELECTION_SIDE.ADDITIONS]: "above-additions",
+} as const satisfies Record<DiffSelection["side"], string>;
+
+/** The key of what stands in the place of the lines of a file that draws none; a review thread's note is keyed by its page, which this never is. */
+const LEAD_KEY = "lead";
+
+/** A file's review threads that stand above its lines, as one list. */
+function AboveThreads({
+  above,
+  threads,
+}: {
+  above: readonly { readonly key: string; readonly thread: ReviewThread }[];
+  threads: ChangesThreads | undefined;
+}): React.JSX.Element {
+  return (
+    <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
+      {above.map((each) => (
+        <li key={each.key}>{threads?.draw(each.thread, THREAD_PLACE.ABOVE)}</li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * A file of the list as the bundle is handed it: its patch, its fold, its
+ * header, and its notes: each review thread under its line, and those its
+ * diff draws no row for above the first hunk (`threadsOn`), on the side
+ * each counts on, as GitHub's split diff has them. A file with no hunks to
+ * draw, or a changed image drawn as its pictures (`image-diff.tsx`), stands
+ * as what is drawn in the place of its lines alone (`lead`), across its
+ * width: why it has none, or the pictures, and every one of its review
+ * threads.
+ */
+function entryOf(
+  file: CodingAgentChangedFile,
+  list: ChangesList,
+  threads: ChangesThreads | undefined,
+  images: ImageSides | undefined,
+): DiffListEntry {
+  const path = file.path;
+  const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
+  // An SVG with lines to draw is text as well as a picture: its lines are drawn while its source is asked for.
+  const source = fileNotice(file) === undefined && list.asSource(path);
+  const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
+  // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
+  const drawnAs = pictured === undefined ? file : { ...file, patch: null };
+  const { placed, above } = threadsOn(threads?.list ?? [], drawnAs);
+  const notes: DiffNote[] = placed.map((each) => ({
+    key: each.key,
+    side: each.side,
+    line: each.line,
+    content: threads?.draw(each.thread, THREAD_PLACE.ON_LINE),
+  }));
+  // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
+  const notice = fileNotice(file);
+  const lead =
+    pictured !== undefined ? (
+      <ImageDiff file={file} sides={pictured} />
+    ) : notice === undefined ? undefined : (
+      <p className="diff-list-notice">{notice}</p>
+    );
+  if (lead !== undefined) {
+    notes.unshift({
+      key: LEAD_KEY,
+      side: DIFF_SELECTION_SIDE.ADDITIONS,
+      line: FILE_NOTE_LINE,
+      content: (
+        <>
+          {lead}
+          {above.length === 0 ? null : <AboveThreads above={above} threads={threads} />}
+        </>
+      ),
+    });
+  }
+  for (const side of lead === undefined ? Object.values(DIFF_SELECTION_SIDE) : []) {
+    const unplaced = above.filter((each) => each.side === side);
+    if (unplaced.length === 0) continue;
+    notes.unshift({
+      key: ABOVE_KEY[side],
+      side,
+      line: FILE_NOTE_LINE,
+      content: <AboveThreads above={unplaced} threads={threads} />,
+    });
+  }
+  const collapsed = list.collapsed(path);
+  return {
+    path,
+    patch: pictured === undefined ? listPatch(file) : headerPatch(file),
+    collapsed,
+    lead: lead !== undefined,
+    header: (
+      <FileHead
+        file={file}
+        controls={
+          image === undefined || fileNotice(file) !== undefined ? null : (
+            <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+          )
+        }
+        collapsed={collapsed}
+        standing={list.standing === path}
+        onToggle={() => list.toggle(path)}
+        onStand={() => list.stand(path)}
+      />
+    ),
+    notes,
+  };
+}
+
+/** An SVG's turn between its picture and its source's lines, at the end of its header. */
+function SourceToggle({
+  source,
+  onToggle,
+}: {
+  source: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const label = source ? LIST_WORDS.SHOW_IMAGE : LIST_WORDS.SHOW_SOURCE;
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        className="icon-button diff-list-source"
+        aria-label={label}
+        onClick={onToggle}
+      >
+        {source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Where a pull request's changed images are read: its repository, named by
+ * its page on GitHub, and the commits the service named; none where the
+ * page names no repository.
+ */
+function imagesOf(
+  agentId: string,
+  pullRequest: { readonly url: string; readonly headSha?: string; readonly baseSha?: string },
+  read: number,
+): ImageSides | undefined {
+  const [owner, name] = URL.canParse(pullRequest.url)
+    ? new URL(pullRequest.url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  if (owner === undefined || name === undefined) return undefined;
+  return {
+    agentId,
+    repository: `${owner}/${name}`,
+    headSha: pullRequest.headSha,
+    baseSha: pullRequest.baseSha,
+    read,
+  };
+}
+
+/** Collapse all or Expand all, for the files the filter keeps, in the bar. */
+function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
+  const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
+  return (
+    <Tooltip label={label} chord={FOLD_CHORD.ALL}>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={label}
+        disabled={list.kept.length === 0}
+        onClick={list.toggleAll}
+      >
+        {list.allCollapsed ? (
+          <ChevronsUpDownIcon aria-hidden="true" />
+        ) : (
+          <ChevronsDownUpIcon aria-hidden="true" />
+        )}
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The list of files, or the words saying the filter keeps none, and over it the filter where the tree that holds it is hidden. */
+function FilesList({
+  list,
+  threads,
+  images,
+  filterShown,
   roomy,
   boxRef,
 }: {
-  file: CodingAgentChangedFile;
-  /** Whether the diff is wide enough to split. */
+  list: ChangesList;
+  threads: ChangesThreads | undefined;
+  /** Where the pull request's changed images are read, drawn as pictures; none draws them as binary files. */
+  images: ImageSides | undefined;
+  /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
+  filterShown: boolean;
   roomy: boolean;
-  /** Handed the box the diff is drawn in, which the view measures for a split's room. */
   boxRef: (element: HTMLDivElement | null) => void;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
-  // A file with no notice has a patch with hunks, headed as git writes one for Pierre to read.
-  const patch = fileNotice(file) === undefined ? filePatch(file) : undefined;
+  const query = list.query.trim();
   return (
-    <section className="file-tab" aria-label={`Diff of ${file.path}`}>
-      {file.previousPath === null ? null : (
+    <section className="file-tab" aria-label="Diffs of the changed files">
+      {query === "" || filterShown ? null : (
         <div className="file-tab-notice">
-          <p>
-            Renamed from <bdi>{file.previousPath}</bdi>
+          <p className="m-0">
+            {LIST_WORDS.FILTERED} “<bdi>{query}</bdi>”
           </p>
+          <button type="button" className="toolbar-button" onClick={() => list.onQuery("")}>
+            {LIST_WORDS.CLEAR_FILTER}
+          </button>
         </div>
       )}
-      {patch === undefined ? (
-        <p className="side-panel-empty">{fileNotice(file) ?? CHANGES_WORDS.UNREADABLE}</p>
+      {list.kept.length === 0 ? (
+        <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
       ) : (
-        <PierreDiff patch={patch} look={look} boxRef={boxRef} />
+        <PierreDiffList
+          entries={list.kept.map((file) => entryOf(file, list, threads, images))}
+          look={look}
+          door={list.door}
+          onTopFile={list.onTopFile}
+          boxRef={boxRef}
+        />
       )}
     </section>
   );
@@ -344,6 +577,7 @@ export function AgentChangesTab({
   shown,
   repository,
   tree,
+  threads,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -353,11 +587,18 @@ export function AgentChangesTab({
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };
+  /** The pull request's review threads, drawn on their lines in each file's diff; none draws none. */
+  threads?: ChangesThreads | undefined;
 }): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
-  const [chosen, setChosen] = useState<string | undefined>(undefined);
+  // How many answers have landed, which a changed image is drawn anew on.
+  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
+    of: undefined,
+    count: 0,
+  });
+  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
   const room = usePaneRoom(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
@@ -367,19 +608,20 @@ export function AgentChangesTab({
   const changed = useMemo(() => {
     const files = pullRequest?.files ?? [];
     const paths = files.map((file) => file.path);
-    return { paths, marks: changeMarks(files), folders: changedFolders(paths) };
+    return { files, paths, marks: changeMarks(files), folders: changedFolders(paths) };
   }, [pullRequest]);
+  const list = useChangesList(changed.files);
   const { closeOver } = room;
-  // A file chosen in the tree floating over the diff takes the tree down, to show the file.
+  const { go } = list;
+  // A file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
     (path: string) => {
       closeOver();
-      setChosen(path);
+      go(path);
     },
-    [closeOver],
+    [closeOver, go],
   );
-  const shownFile =
-    pullRequest?.files.find((file) => file.path === chosen) ?? pullRequest?.files[0];
+  const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={CHANGES_WORDS.READING} />;
@@ -412,7 +654,15 @@ export function AgentChangesTab({
     </>
   );
   return (
-    <div className="file-view ph-no-capture" {...room.root}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
+    <div
+      className="file-view ph-no-capture"
+      {...room.root}
+      onKeyDown={(event) => {
+        room.root.onKeyDown(event);
+        list.onKeyDown(event);
+      }}
+    >
       <FileViewBar
         path={{
           path: shownFile.path,
@@ -426,7 +676,16 @@ export function AgentChangesTab({
         menu={
           <>
             <DiffSettingsButton roomy={roomy} />
-            <ChangesMenu file={shownFile} reading={out} onRefresh={ask} roomy={roomy} />
+            <FoldAllButton list={list} />
+            <ChangesMenu
+              file={shownFile}
+              reading={out}
+              onRefresh={() => {
+                ask();
+                threads?.refresh?.();
+              }}
+              roomy={roomy}
+            />
           </>
         }
         tree={room.toggles}
@@ -438,7 +697,14 @@ export function AgentChangesTab({
         </div>
       ) : null}
       <div className="file-view-body" {...room.body}>
-        <FileDiff key={shownFile.path} file={shownFile} roomy={roomy} boxRef={setDiffBox} />
+        <FilesList
+          list={list}
+          threads={threads}
+          images={imagesOf(agentId, pullRequest, reads.current.count)}
+          filterShown={room.drawn}
+          roomy={roomy}
+          boxRef={setDiffBox}
+        />
         {room.drawn ? (
           <FileTreePane
             file={shownFile.path}
@@ -447,6 +713,7 @@ export function AgentChangesTab({
             label="Changed files"
             foot={counted}
             listFolder={changed.folders}
+            search={{ query: list.query, onQuery: list.onQuery }}
             onOpen={choose}
             pane={room.beside.pane}
             float={room.pane}
@@ -454,7 +721,7 @@ export function AgentChangesTab({
           />
         ) : null}
       </div>
-      {/* The count stands under the tree, and under the diff while the tree
+      {/* The count stands under the tree, and under the list while the tree
           stands nowhere beside it, which the stylesheet says (tasks.css). */}
       <p className="file-tree-foot">{counted}</p>
     </div>

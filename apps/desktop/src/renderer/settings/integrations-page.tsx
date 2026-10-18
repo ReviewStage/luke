@@ -30,6 +30,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  ChevronDownIcon,
   ChevronRightIcon,
   ConfirmDialog,
   ErrorState,
@@ -37,13 +38,14 @@ import {
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
-  SETTINGS_LINE_KIND,
   SearchField,
   SettingsLine,
   SettingsSection,
+  SettingsSectionsSkeleton,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
@@ -159,6 +161,9 @@ const PAGE_LINE = {
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
 } as const;
 
+/** How many rows each section stands while the statuses are read: a few connected, more not. */
+const INTEGRATIONS_SKELETON = [2, 4] as const;
+
 /** What a row offers to mend its connection, on its button or in its ⋯. */
 const ROW_ACT = {
   RECONNECT: "Reconnect",
@@ -253,11 +258,7 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
 function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
     <span className="settings-state" data-state={line.state}>
-      {line.state === LINE_STATE.WAITING ? (
-        <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
-          <SpinnerRing />
-        </span>
-      ) : null}
+      {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
       {line.text}
     </span>
   );
@@ -294,9 +295,7 @@ function ToolsLine({
   return (
     <span className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
-      <button
-        type="button"
-        className="integration-tools-toggle"
+      <TextButton
         aria-label={`${tools.expanded ? "Hide" : "Show"} ${name} tools`}
         aria-expanded={tools.expanded}
         aria-controls={tools.expanded ? panelId : undefined}
@@ -305,8 +304,8 @@ function ToolsLine({
         {tools.found
           ? `${tools.shown.length} of ${toolsCount(tools.all.length)} match`
           : toolsCount(tools.all.length)}
-        <ChevronRightIcon />
-      </button>
+        {tools.expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+      </TextButton>
     </span>
   );
 }
@@ -332,7 +331,7 @@ function RowToolsPanel({
 }): React.JSX.Element {
   const shown = byName(tools.shown);
   const [held, setHeld] = useState<string | undefined>(undefined);
-  const rows = useRef(new Map<string, HTMLButtonElement>());
+  const rows = useRef(new Map<string, HTMLElement>());
   const body = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // A tool the search no longer finds hands its place to the first that it does.
@@ -343,10 +342,10 @@ function RowToolsPanel({
     setHeld(tool.name);
     const row = rows.current.get(tool.name);
     row?.focus({ preventScroll: true });
-    keepInView(list.current, row?.closest(".integration-tool") ?? null);
+    keepInView(list.current, row?.closest("li") ?? null);
   };
 
-  const onRowKey = (event: React.KeyboardEvent<HTMLButtonElement>, tool: IntegrationTool) => {
+  const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
     const at = shown.indexOf(tool);
     const to = movedTo(event.key, at, shown.length);
     if (to !== undefined) {
@@ -735,7 +734,13 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) {
-    return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading the integrations</SettingsLine>;
+    return (
+      <SettingsSectionsSkeleton
+        label="Loading the integrations"
+        sections={INTEGRATIONS_SKELETON}
+        marked
+      />
+    );
   }
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);

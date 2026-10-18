@@ -134,6 +134,13 @@ const CHANGES = {
 };
 
 /** That pull request itself, its checks, and its conversation, as its Pull request tab's overview reads them. */
+/** What the reviewer and label pickers offer, as the service answers it. */
+const REVIEW_OPTIONS = {
+  labels: [{ name: "bug", color: "d73a4a" }],
+  users: [{ login: "priyan", bot: false }],
+  teams: [{ slug: "reviewers", name: "Reviewers" }],
+};
+
 const OVERVIEW = {
   pullRequest: {
     pullRequest: {
@@ -310,6 +317,11 @@ function fakeService() {
         asked.push(`overview-pull-request:${agentId}`);
         return OVERVIEW.pullRequest;
       }),
+    reviewOptions: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`review-options:${agentId}`);
+        return REVIEW_OPTIONS;
+      }),
     overviewChecks: (agentId) =>
       Effect.sync(() => {
         asked.push(`overview-checks:${agentId}`);
@@ -398,6 +410,21 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      }),
+    markInboxItemRead: (itemId) =>
+      Effect.sync(() => {
+        asked.push(`inbox-read:${itemId}`);
+        return { id: itemId, unread: false };
+      }),
+    markInboxItemUnread: (itemId) =>
+      Effect.sync(() => {
+        asked.push(`inbox-unread:${itemId}`);
+        return { id: itemId, unread: true };
+      }),
+    markInboxRead: (request) =>
+      Effect.sync(() => {
+        asked.push(`inbox-read-all:${request?.workspaceId ?? ""}`);
+        return { marked: 2 };
       }),
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
@@ -593,6 +620,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       OVERVIEW.pullRequest,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
+      REVIEW_OPTIONS,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
       OVERVIEW.checks,
     );
@@ -675,6 +706,21 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
+      { id: ITEM.id, unread: true },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+        itemId: ITEM.id,
+        unread: false,
+      }),
+      { id: ITEM.id, unread: false },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+      { marked: 2 },
+    );
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
@@ -717,6 +763,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `overview-pull-request:${AGENT_ID}`,
+      `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,
       `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
@@ -726,6 +773,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
+      `inbox-unread:${ITEM.id}`,
+      `inbox-read:${ITEM.id}`,
+      `inbox-read-all:${WORKSPACE_ID}`,
       `account-inbox:${INBOX_CURSOR_START}`,
       `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,

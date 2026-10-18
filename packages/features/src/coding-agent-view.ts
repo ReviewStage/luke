@@ -16,6 +16,7 @@ import {
   codingAgentPinRequestSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestFields,
   codingAgentSummarySchema,
@@ -375,6 +376,15 @@ export const codingAgentOverviewConversationAnswerViewSchema = EffectSchema.Unio
 export type CodingAgentOverviewConversationAnswerView =
   typeof codingAgentOverviewConversationAnswerViewSchema.Type;
 
+/** What the reviewer and label pickers of an agent's Pull request tab offer, as the window hears it: the labels, users, and teams, or why there is no answer. */
+export const codingAgentReviewOptionsAnswerViewSchema = EffectSchema.Union([
+  codingAgentReviewOptionsAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentReviewOptionsAnswerView =
+  typeof codingAgentReviewOptionsAnswerViewSchema.Type;
+
 /** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
 export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -452,6 +462,14 @@ export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParams
 export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
 
 export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
+
+/** One item marked read or unread for the account, as the window asks it: the item, and whether it is to read as unread. */
+export const codingAgentInboxReadStateParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  unread: EffectSchema.Boolean,
+});
+
+export type CodingAgentInboxReadStateParams = typeof codingAgentInboxReadStateParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([

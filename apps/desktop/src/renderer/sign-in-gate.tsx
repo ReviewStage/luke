@@ -1,71 +1,22 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import {
-  ProviderMark,
-  SpinnerRing,
+  PROVIDER_BUTTON_SIZE,
+  ProviderButton,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   WingFace,
 } from "@luke/ui";
-import { useId } from "react";
 
-/**
- * A provider's button, which says so while it is the sign-in being waited on.
- * The one marked last used wears the badge on its top-right corner, a sibling
- * hung over the button rather than a word inside it, so the button is still
- * named by its label alone and the badge describes it.
- */
-function ProviderButton({
-  provider,
-  name,
-  primary,
-  lastUsed,
-  waiting,
-  disabled,
-  onBegin,
-}: {
-  provider: AccountProvider;
-  name: string;
-  /** The filled one of the two. */
-  primary: boolean;
-  /** The way in this Mac took last. */
-  lastUsed: boolean;
-  waiting: boolean;
-  disabled: boolean;
-  onBegin: (provider: AccountProvider) => void;
-}): React.JSX.Element {
-  const badge = useId();
-  return (
-    <div className="sign-in-provider-slot">
-      <button
-        type="button"
-        className="sign-in-provider"
-        data-provider={provider}
-        data-primary={String(primary)}
-        data-waiting={String(waiting)}
-        disabled={disabled}
-        aria-describedby={lastUsed ? badge : undefined}
-        onClick={() => onBegin(provider)}
-      >
-        {waiting ? (
-          <span className="sign-in-provider-wait">
-            <SpinnerRing />
-          </span>
-        ) : (
-          <ProviderMark provider={provider} />
-        )}
-        {waiting ? "Waiting for browser…" : `Continue with ${name}`}
-      </button>
-      {lastUsed ? (
-        <span id={badge} className="sign-in-last-used">
-          Last used
-        </span>
-      ) : null}
-    </div>
-  );
-}
+/** Each way in, in the order the gate stands them, with the name it says. */
+const WAYS_IN = [
+  { provider: ACCOUNT_PROVIDER.GOOGLE, name: "Google" },
+  { provider: ACCOUNT_PROVIDER.GITHUB, name: "GitHub" },
+] as const;
 
 /**
  * The sign-in, alone in the window: Luke's resting face over the two ways in.
@@ -107,24 +58,20 @@ export function SignInGate({
         Welcome to Luke
       </Text>
       <div className="sign-in-actions">
-        <ProviderButton
-          provider={ACCOUNT_PROVIDER.GOOGLE}
-          name="Google"
-          primary={primary === ACCOUNT_PROVIDER.GOOGLE}
-          lastUsed={lastUsed === ACCOUNT_PROVIDER.GOOGLE}
-          waiting={waiting === ACCOUNT_PROVIDER.GOOGLE}
-          disabled={busy}
-          onBegin={onBegin}
-        />
-        <ProviderButton
-          provider={ACCOUNT_PROVIDER.GITHUB}
-          name="GitHub"
-          primary={primary === ACCOUNT_PROVIDER.GITHUB}
-          lastUsed={lastUsed === ACCOUNT_PROVIDER.GITHUB}
-          waiting={waiting === ACCOUNT_PROVIDER.GITHUB}
-          disabled={busy}
-          onBegin={onBegin}
-        />
+        {WAYS_IN.map(({ provider, name }) => (
+          <ProviderButton
+            key={provider}
+            provider={provider}
+            name={name}
+            size={PROVIDER_BUTTON_SIZE.GATE}
+            primary={primary === provider}
+            lastUsed={lastUsed === provider}
+            pending={waiting === provider}
+            pendingLabel="Waiting for browser…"
+            disabled={busy}
+            onPress={() => onBegin(provider)}
+          />
+        ))}
       </div>
       {/* The line under the buttons is held open whether or not it says
           anything, so beginning a wait does not move the column. */}
@@ -133,9 +80,9 @@ export function SignInGate({
           <div role="status">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               Finish in your browser.{" "}
-              <button type="button" className="sign-in-cancel" onClick={onCancel}>
+              <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onCancel}>
                 Cancel
-              </button>
+              </TextButton>
             </Text>
           </div>
         ) : failure ? (

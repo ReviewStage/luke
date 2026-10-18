@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useClipped } from "../../use-clipped.js";
+import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
@@ -15,6 +15,15 @@ import { useClipped } from "../../use-clipped.js";
  * and so wrapped to three lines, or one line faded at its end, and a rule
  * before what a card lists under it.
  *
+ * A card's rows are set as a menu's rows are: a glyph on the head's glyph
+ * column, words on one line cut short with an ellipsis, and what stands at
+ * the row's end, muted. A quieter row under the name (`DETAIL`) says where
+ * the subject lives or who made it; a row of a list under a rule (`LINE`)
+ * names one of the things the subject holds. Either is a button where a
+ * press opens what it names and text where nothing does, in the same place
+ * either way, washed under the pointer as a menu row is. A list counts what
+ * it leaves out on a last line of its own.
+ *
  * What is drawn here is the card's words alone. The surface it stands on,
  * when it shows, how long it lingers for the pointer to cross onto it, and
  * what its subject is read from are the app's.
@@ -29,23 +38,13 @@ import { useClipped } from "../../use-clipped.js";
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
 
-/** A name or a note on one line, faded at its end where it is cut short. */
-function OneLine({
-  className,
-  as: Element,
-  children,
-}: {
-  className: string;
-  as: "span" | "p";
-  children: ReactNode;
-}): React.JSX.Element {
-  const [line, clipped] = useClipped();
-  return (
-    <Element ref={line} className={className} data-one-line="" data-overflow={String(clipped)}>
-      {children}
-    </Element>
-  );
-}
+/** How a card's row is set: a quieter line under its name, or a row of a list under a rule. */
+export const HOVER_CARD_ROW_LOOK = {
+  DETAIL: "detail",
+  LINE: "line",
+} as const;
+
+export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
 
 /** A card's root: its parts in a column, one gap apart. */
 export function HoverCard({
@@ -81,9 +80,13 @@ export function HoverCardHead({
       {glyph === undefined ? null : <span className="luke-hover-card-glyph">{glyph}</span>}
       <div className="luke-hover-card-title">
         {oneLine ? (
-          <OneLine className="luke-hover-card-name" as="span">
+          <ClippedLine
+            className="luke-hover-card-name"
+            as={ONE_LINE_ELEMENT.SPAN}
+            end={ONE_LINE_END.FADE}
+          >
             {name}
-          </OneLine>
+          </ClippedLine>
         ) : (
           <span className="luke-hover-card-name">{name}</span>
         )}
@@ -103,9 +106,9 @@ export function HoverCardNote({
   children: ReactNode;
 }): React.JSX.Element {
   return oneLine ? (
-    <OneLine className="luke-hover-card-note" as="p">
+    <ClippedLine className="luke-hover-card-note" as={ONE_LINE_ELEMENT.P} end={ONE_LINE_END.FADE}>
       {children}
-    </OneLine>
+    </ClippedLine>
   ) : (
     <p className="luke-hover-card-note">{children}</p>
   );
@@ -114,4 +117,57 @@ export function HoverCardNote({
 /** The hairline before what a card lists under its head. */
 export function HoverCardRule(): React.JSX.Element {
   return <hr className="luke-hover-card-rule" />;
+}
+
+/** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
+export function HoverCardRow({
+  look = HOVER_CARD_ROW_LOOK.LINE,
+  glyph,
+  label,
+  end,
+  onPress,
+}: {
+  look?: HoverCardRowLook;
+  glyph: ReactNode;
+  label: ReactNode;
+  /** What stands muted at the row's end: a size, a time, or a mark. */
+  end?: ReactNode;
+  /** Opens what the row names; a row without it is text. */
+  onPress?: (() => void) | undefined;
+}): React.JSX.Element {
+  const row = (
+    <>
+      <span className="luke-hover-card-row-glyph">{glyph}</span>
+      <span className="luke-hover-card-row-label">{label}</span>
+      {end === undefined ? null : <span className="luke-hover-card-row-end">{end}</span>}
+    </>
+  );
+  return onPress === undefined ? (
+    <span className="luke-hover-card-row" data-look={look}>
+      {row}
+    </span>
+  ) : (
+    <button type="button" className="luke-hover-card-row" data-look={look} onClick={onPress}>
+      {row}
+    </button>
+  );
+}
+
+/** A list a card holds under a rule, named by `label`: its rows, each an `li` of the caller's, and a last line counting what it leaves out. */
+export function HoverCardList({
+  label,
+  more,
+  children,
+}: {
+  label: string;
+  /** How many it leaves out, in words ("2 more"); nothing where it leaves nothing out. */
+  more?: string | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <ul className="luke-hover-card-list" aria-label={label}>
+      {children}
+      {more === undefined ? null : <li className="luke-hover-card-more">{more}</li>}
+    </ul>
+  );
 }

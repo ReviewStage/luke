@@ -91,7 +91,7 @@ const readShown = Schema.decodeUnknownOption(
     inboxTaskId: Schema.NullOr(Schema.String),
     chatShown: Schema.optionalKey(
       Schema.NullOr(
-        Schema.Struct({ workspaceId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+        Schema.Struct({ workspaceId: Schema.String, taskId: Schema.NullOr(Schema.String) }),
       ),
     ),
   }),
@@ -136,7 +136,7 @@ function mount(
   /** Which task's Inbox main was told is shown, each time it was told. */
   const shownInboxes: (string | null)[] = [];
   /** Which Chat main was told is on screen, each time it was told. */
-  const shownChats: ({ workspaceId: string; planId: string | null } | null)[] = [];
+  const shownChats: ({ workspaceId: string; taskId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -1244,7 +1244,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
 /** A task's inbox waiting on the developer: `count` open items, each asked by one agent. */
 function waitingIn(taskId: string, count: number): AppInboxTask {
   return {
-    taskId: taskId,
+    taskId,
     items: Array.from({ length: count }, (_, index) => ({
       id: `${taskId}-item-${index}`,
       agentId: `${taskId}-agent`,
@@ -1639,7 +1639,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     tasks: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-      tasks: tasks,
+      tasks,
     },
   });
   act(() => active.control().onChooseWorkspace(ACME.id));
@@ -1651,7 +1651,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     tasks: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: false } }],
-      tasks: tasks,
+      tasks,
     },
   });
   act(() => suspended.control().onChooseWorkspace(ACME.id));
@@ -2020,7 +2020,7 @@ const LAUNCHING: TasksView = { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READIN
 
 /** The view once the list is read with nothing open, holding `plans`. */
 function listRead(tasks: TasksView["tasks"]): TasksView {
-  return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks: tasks };
+  return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks };
 }
 
 /** A select's payload, read back as the act's own schema admits it. */
@@ -2400,7 +2400,7 @@ test("a chat notification's click, listing the workspace its message waits in an
   });
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.equal(tab.control().chatView.open, true);
-  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, planId: null });
+  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
 test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
@@ -2429,8 +2429,8 @@ test("main is told a task's Chat tab on screen shows only its plan's channel, wh
   const onTab = tab.shownChats.at(-1);
   act(() => tab.control().chatView.onOpen());
 
-  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, planId: TASK.id });
-  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, planId: null });
+  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, taskId: TASK.id });
+  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, taskId: null });
   assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
 });
 
@@ -2443,7 +2443,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
     readSeq: 0,
     members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
     channels: [
-      { id: channelId, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false, planId: TASK.id },
+      { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
     ],
     messages: [
       {

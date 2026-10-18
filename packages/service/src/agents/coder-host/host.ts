@@ -1,4 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
@@ -17,6 +18,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -287,6 +289,19 @@ export interface CoderHost extends HostAdmission {
    * answers no, so the stop goes ahead as it would with no terminal.
    */
   sandboxHeld(admitted: AdmittedConversation): Effect.Effect<boolean, never, DatabaseServices>;
+  /**
+   * Settles failed for its session's end the turn still queued or running
+   * of the coding agent whose conversation records the session eve said
+   * ended, failed or completed, or cancelled where a Stop was asked of it
+   * (`abandoned-turns.ts`'s `settleEndedSession`),
+   * so the agent reads as failed at once rather than running until the
+   * sweep's day-long bound. eve names the session itself, from inside its
+   * own run, so nothing is admitted: a session no agent's conversation
+   * records settles nothing. Never fails, since its caller is eve's channel
+   * adapter: a store failure is logged and dropped, and the sweep's bound
+   * still ends the turn in time.
+   */
+  sessionEnded(sessionId: string): Effect.Effect<void, never, DatabaseServices>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -772,6 +787,18 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         ),
       ),
 
+    sessionEnded: (sessionId) =>
+      Effect.gen(function* () {
+        const writer = yield* seams.writer();
+        yield* settleEndedSession(writer, sessionId, { now: seams.now() });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            `The turn of ended session ${sessionId} was not settled: ${causeKind(cause)}`,
+          ),
+        ),
+      ),
+
     relayChild: (event, session, state) =>
       Effect.gen(function* () {
         const found = yield* delegatedChildOf(session);
@@ -835,7 +862,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const { taskId } = found.success;
         if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
         // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, taskId: taskId }, input);
+        return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
@@ -869,7 +896,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         }
         const { id: agentId, taskId, repository } = found.success;
         const self = { kind: MEMBER_KIND.AGENT, agentId };
-        const reader = { userId: admitted.target.userId, planId: taskId, self };
+        const reader = { userId: admitted.target.userId, taskId, self };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
         if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // An archived agent, or one on an archived task, posts nothing until it is brought back.
@@ -907,7 +934,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const { id: agentId, taskId } = found.success;
         return yield* chatDigest({
           userId: admitted.target.userId,
-          planId: taskId,
+          taskId,
           self: { kind: MEMBER_KIND.AGENT, agentId },
         });
       }).pipe(

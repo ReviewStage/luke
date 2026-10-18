@@ -3,7 +3,7 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { PUBLIC_TITLE, PublicPage, PublicSection } from "./public-page.js";
+import { PUBLIC_SECTIONS, PUBLIC_TITLE, PublicPage, PublicSection } from "./public-page.js";
 
 /**
  * public-page.test.ts -- what a reader of a public page meets: a banner, a
@@ -108,4 +108,25 @@ test("a page that is a title alone draws its title and nothing after it", async 
   const container = await render(createElement(PublicPage, { title: "About" }));
   expect(container.querySelector("main")?.textContent).toBe("About");
   expect(container.querySelector("main")?.lastElementChild?.textContent).toBe("About");
+});
+
+test("a page beneath another names its way back as a link before its title", async () => {
+  const container = await render(
+    createElement(PublicPage, {
+      back: { href: "/changelog", label: "Changelog" },
+      title: "Luke 2.4.0",
+      sections: PUBLIC_SECTIONS.RULED,
+      children: createElement(PublicSection, { children: "Notes" }),
+    }),
+  );
+  const back = container.querySelector("main a");
+  const title = heading(container, 1, "Luke 2.4.0");
+  expect(back?.getAttribute("href")).toBe("/changelog");
+  expect(back?.textContent).toBe("← Changelog");
+  expect(back?.querySelector("[aria-hidden='true']")?.textContent).toBe("← ");
+  expect(
+    title !== undefined &&
+      back !== null &&
+      (back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+  ).toBe(true);
 });

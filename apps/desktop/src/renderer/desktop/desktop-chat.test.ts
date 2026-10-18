@@ -19,7 +19,7 @@ import {
   stagedAnswer,
   stagedPost,
 } from "../tasks/chat-fixture";
-import { DesktopChat } from "./desktop-chat";
+import { DesktopChat, TaskChatTab } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */
 const AT = Date.parse("2026-10-14T10:00:00Z");
@@ -45,7 +45,9 @@ afterEach(() => {
 });
 
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
-function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTMLElement {
+function mount(
+  change: (chat: FixtureChat) => FixtureChat | undefined = (chat) => chat,
+): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
     const [chat, setChat] = useState<FixtureChat | undefined>(() => {
@@ -157,7 +159,7 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Dean Stratakos",
   ]);
   const toggle = page.querySelector<HTMLButtonElement>(
-    '.chat-message[data-seq="43"] .chat-thread-toggle',
+    '.chat-message[data-seq="43"] button[aria-expanded]',
   );
   assert.equal(toggle?.textContent, "View thread · 2 replies");
   act(() => toggle?.click());
@@ -255,7 +257,7 @@ test("an open choice in For you is answered by a pick and its send, which marks 
   const page = mount();
   const card = page.querySelector<HTMLElement>('.chat-ask[data-status="open"]');
   assert.ok(card, "the choice's card stands open");
-  const fourteen = [...card.querySelectorAll<HTMLButtonElement>(".inbox-option")].find((option) =>
+  const fourteen = [...card.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((option) =>
     option.textContent?.startsWith("14 days"),
   );
   act(() => fourteen?.click());
@@ -268,7 +270,9 @@ test("an open choice in For you is answered by a pick and its send, which marks 
   act(() => railRow(page, "teammate-invitations").click());
   const settled = page.querySelector('.chat-ask[data-status="answered"]');
   assert.equal(
-    settled?.querySelector('[data-picked="true"]')?.textContent?.startsWith("14 days"),
+    [...(settled?.querySelectorAll("li") ?? [])]
+      .find((option) => option.textContent?.includes("Picked"))
+      ?.textContent?.startsWith("14 days"),
     true,
   );
   assert.equal(
@@ -291,7 +295,7 @@ test("an approval is answered by its press, and a reply typed under an opened th
 
   act(() => railRow(page, "teammate-invitations").click());
   const toggle = page.querySelector<HTMLButtonElement>(
-    '.chat-message[data-seq="48"] .chat-thread-toggle',
+    '.chat-message[data-seq="48"] button[aria-expanded]',
   );
   act(() => toggle?.click());
   const reply = boxNamed(page, "Reply in thread");
@@ -358,7 +362,7 @@ test("a form's answer stands under its card field by field, and the reply in its
   );
   act(() =>
     page
-      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] .chat-thread-toggle')
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] button[aria-expanded]')
       ?.click(),
   );
   assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);
@@ -392,4 +396,32 @@ test("the arrows and Escape an input method composes with move its candidates, n
   }
   assert.equal(highlighted(), before, "the highlight stays where it was");
   assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
+});
+
+/** The plan's own Chat tab while the chat is still being read. */
+function mountTaskTabReading(): HTMLElement {
+  const base = tasksControl();
+  const tasks = tasksControl({ chatView: { ...base.chatView, open: true, available: true } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(AtomRegistry.make(), createElement(TaskChatTab, { tasks, taskId: "plan-1" })),
+    ),
+  );
+  return container;
+}
+
+test("until the chat is read, its wait stands centred in the window's Chat and in the plan's Chat tab, rather than as a ring in the corner", () => {
+  const chat = mount(() => undefined);
+  const windowWait = chat.querySelector('.chat-stream [role="status"]');
+  assert.ok(windowWait, "the window's Chat says it is waiting");
+  assert.ok(windowWait.closest(".luke-spinner-region"), "the wait fills the window's Chat");
+  act(() => root?.unmount());
+
+  const tab = mountTaskTabReading();
+  const tabWait = tab.querySelector('.task-chat [role="status"]');
+  assert.ok(tabWait, "the plan's Chat tab says it is waiting");
+  assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
 });

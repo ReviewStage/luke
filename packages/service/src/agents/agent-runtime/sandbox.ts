@@ -35,6 +35,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
+import { BRAIN_HOST } from "../brain-host/bounds.js";
 import { CODER } from "../coder-host/bounds.js";
 import { PREPARE_TMUX } from "../terminal/tmux.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
@@ -127,26 +128,60 @@ export interface SandboxRecord {
   readonly credentialAt?: number;
 }
 
+/** How many snapshots Vercel keeps of a sandbox, as a bounds module names it. */
+interface SnapshotBound {
+  readonly count: number;
+  readonly expiration: Duration.Duration;
+  readonly deleteEvicted: boolean;
+}
+
+/** Vercel's retention of a sandbox's snapshots, as its create takes it. */
+type Retention = NonNullable<VercelSandboxRuntimeOptions["keepLastSnapshots"]>;
+
+/**
+ * The options a session's own sandbox opens with. Note that a retention is
+ * required here, because the open is the one create eve forwards it on
+ * whose sandbox snapshots at every stop; the template, which is created
+ * from `environment`, snapshots once and is left alone.
+ */
+type SessionOpen = VercelSandboxRuntimeOptions & { readonly keepLastSnapshots: Retention };
+
 /** What each policy does with a sandbox: how it opens one, and what the store hook does with it as the stream runs. */
 interface SandboxLifecycle {
   /** The options a session's own sandbox opens with; none for a worker, which opens no sandbox of its own. */
-  readonly open: VercelSandboxRuntimeOptions | undefined;
+  readonly open: SessionOpen | undefined;
   readonly renewsCredential: boolean;
   readonly stopsAtTurnEnd: boolean;
+}
+
+/** The bound as Vercel's create takes it, its expiration in milliseconds. */
+function retentionOf(bound: SnapshotBound): Retention {
+  return { ...bound, expiration: Duration.toMillis(bound.expiration) };
 }
 
 /**
  * The coding agent's sandbox lives the platform's maximum, so a long run is
  * never cut off mid-turn, and is stopped the moment a turn ends rather than
  * waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. A brain sandbox
- * opens at the defaults and is never stopped by Luke: Vercel stops it for
- * idleness, and it resumes from its snapshot with the checkout intact.
+ * chosen at open, so a stopped sandbox resumes at it. A brain sandbox opens
+ * at the defaults and is never stopped by Luke: Vercel stops it when eve's
+ * default timeout of thirty minutes runs out, counted from its start or
+ * resume whether it is busy or not, and it resumes from its snapshot with
+ * the checkout intact. Every stop snapshots the sandbox, so each keeps its
+ * newest snapshot alone.
  */
 const SANDBOX_LIFECYCLE = {
-  [SANDBOX_POLICY.READ_SHALLOW_LAZY]: { open: {}, renewsCredential: false, stopsAtTurnEnd: false },
+  [SANDBOX_POLICY.READ_SHALLOW_LAZY]: {
+    open: { keepLastSnapshots: retentionOf(BRAIN_HOST.SANDBOX_SNAPSHOTS) },
+    renewsCredential: false,
+    stopsAtTurnEnd: false,
+  },
   [SANDBOX_POLICY.WRITE_FULL_EAGER]: {
-    open: { timeout: CODER.SANDBOX_TIMEOUT_MS, resources: { vcpus: CODER.SANDBOX_VCPUS } },
+    open: {
+      timeout: CODER.SANDBOX_TIMEOUT_MS,
+      resources: { vcpus: CODER.SANDBOX_VCPUS },
+      keepLastSnapshots: retentionOf(CODER.SANDBOX_SNAPSHOTS),
+    },
     renewsCredential: true,
     stopsAtTurnEnd: true,
   },

@@ -405,7 +405,7 @@ function MentionCard({
   standing: LinkStanding | undefined;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    planId: doors.taskId,
+    taskId: doors.taskId,
     workspace: doors.place.workspace,
   });
   const repository = doors.place.repository ?? undefined;
@@ -540,7 +540,7 @@ function bareName(
     case MENTION_KIND.LINK:
       return standing === undefined ? written : `${standing.key} ${standing.title}`;
     case MENTION_KIND.TASK:
-      return known.plans.get(mention.taskId) ?? written;
+      return known.tasks.get(mention.taskId) ?? written;
     case MENTION_KIND.PAGE:
       return known.pages.get(mention.pageId) ?? written;
     case MENTION_KIND.AGENT:
@@ -572,7 +572,7 @@ function MentionChip({
   const openLink = useOpenLink();
   const known = useKnownNames();
   const standing = useLinkStanding(mention, {
-    planId: doors.taskId,
+    taskId: doors.taskId,
     workspace: doors.place.workspace,
   });
   const name = bareName(mention, written, bare, known, standing);
@@ -745,7 +745,7 @@ function PlaceCard({
   fallback: ReactNode;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    planId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
+    taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
     workspace,
   });
   switch (place.kind) {
@@ -846,7 +846,7 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
 /** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
-  readonly planId: string;
+  readonly taskId: string;
   /** The plan's text as the place holds it. */
   readonly text: () => string;
 }
@@ -855,7 +855,7 @@ export interface PastedNames {
 function pastedName(mention: Mention, said: string, names: PastedNames): string {
   if (mention.kind !== MENTION_KIND.SECTION)
     return bareName(mention, said, true, names.known, undefined);
-  if (mention.taskId !== names.planId) return said;
+  if (mention.taskId !== names.taskId) return said;
   const headings = planSections(names.text()).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(mention.anchor)] ?? said;
 }

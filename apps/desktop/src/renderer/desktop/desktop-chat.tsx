@@ -10,7 +10,7 @@ import {
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
-import { SPINNER_SIZE, Spinner } from "../spinner";
+import { SpinnerRegion } from "../spinner";
 import { ChatPane, MemberMark } from "../tasks/chat-pane";
 import { useMinute } from "../tasks/task-time";
 import { useOpenLink } from "../tasks/use-open-link";
@@ -99,7 +99,7 @@ export function DesktopChat({
         {CHAT_FAILED}
       </ErrorState>
     ) : view.available ? (
-      <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+      <SpinnerRegion label="Loading chat" />
     ) : (
       <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
     );
@@ -190,7 +190,7 @@ export function TaskChatTab({
   const listed = tasks.tasks;
   const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
   const channel = read?.answer.channels.find(
-    (each) => each.kind === CHANNEL_KIND.PLAN && each.planId === taskId,
+    (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
   );
   if (read === undefined || channel === undefined) {
     return (
@@ -200,7 +200,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+          <SpinnerRegion label="Loading chat" />
         ) : (
           <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
         )}

@@ -206,9 +206,19 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("Escape pressed while Settings is still loading leaves Settings for the plans, as it does once Settings stands", () => {
+test("while Settings is still loading its frame stands, a page of placeholder sections beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
-  mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
+
+  assert.deepEqual(
+    [
+      page.querySelector('nav[aria-label="Settings pages"]') !== null,
+      placeholder?.textContent,
+      placeholder?.querySelectorAll(".luke-settings-section-card").length,
+    ],
+    [true, "Loading Settings", 2],
+  );
 
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_SETTINGS), "Settings' way out is offered");
@@ -370,9 +380,9 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
       ignore,
       { collapsed: false },
     );
-    const row = page.querySelector(".sidebar-task");
+    const row = page.querySelector(".sidebar-tasks > li > button");
     assert.ok(row, "the plan's row stands in the sidebar");
-    const unread = row.getAttribute("data-unread");
+    const unread = String(row.textContent?.includes("(unread)") === true);
     act(() => root?.unmount());
     window.localStorage.clear();
     return unread;
@@ -423,16 +433,16 @@ function mountListing(
 
 /** The sidebar's row for the plan of this name. */
 function sidebarRow(name: string): HTMLButtonElement {
-  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === name,
-  );
+  const row = [
+    ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
+  ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
   assert.ok(row, `the sidebar lists ${name}`);
   return row;
 }
 
 /** Whether the plan's row is drawn in the unread weight. */
 function rowUnread(name: string): string | null {
-  return sidebarRow(name).getAttribute("data-unread");
+  return String(sidebarRow(name).textContent?.includes("(unread)") === true);
 }
 
 /** The read mark the row's right-click menu offers, chosen when `choose` says so. */
@@ -566,7 +576,7 @@ test("the Automations page's sidebar row and its command stand only while the ac
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
-test("Escape pressed while the Automations pages are still loading closes Automations, as the list does once it stands", async () => {
+test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
     open: false,
@@ -601,7 +611,11 @@ test("Escape pressed while the Automations pages are still loading closes Automa
   );
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
-  assert.equal(loading.childElementCount, 0, "their chunk has not loaded yet");
+  assert.equal(loading.querySelector("h1")?.textContent, "Automations");
+  const wait = loading.querySelector("[role=status]");
+  assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
   });

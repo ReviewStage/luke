@@ -45,6 +45,17 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * can neither withdraw nor edit a message once it queues one, so there is
  * no queue, and a developer who wants the agent to finish first waits to
  * send.
+ *
+ * The channel also hears the end of a session, which eve tells only its
+ * channel adapter and never the stream-event hooks the relay is fed from
+ * (`eve/execution/publish-session-events`'s `publishTerminalSessionEvent`):
+ * `session.failed` where the session's run threw, and `session.completed`
+ * where it expired. Either way nothing will end a turn the session
+ * was still running, so each is handed to `sessionEnded`, which settles that
+ * turn failed for its session's end (`host.ts`'s `sessionEnded`) and the
+ * agent reads as failed at once. A completed session is settled with the
+ * same word as a failed one, because to the developer the two are one: the
+ * agent is gone and no message reaches it.
  */
 const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
 
@@ -109,6 +120,7 @@ export function coderChannelInput(
   resolveUserId: BearerAccount,
   ownership: SessionOwnership,
   deployment: DeploymentActor,
+  sessionEnded: (sessionId: string) => Promise<void>,
 ): EveChannelInput {
   return {
     auth: ownedAuth(
@@ -118,5 +130,9 @@ export function coderChannelInput(
     turnPolicy: TURN_POLICY,
     uploadPolicy: UPLOAD_POLICY,
     onMessage: (ctx) => ({ auth: messageAuth(ctx) }),
+    events: {
+      "session.failed": (data) => sessionEnded(data.sessionId),
+      "session.completed": (_data, _channel, ctx) => sessionEnded(ctx.session.id),
+    },
   };
 }

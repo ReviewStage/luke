@@ -30,8 +30,9 @@ import { entriesOf } from "./folder-listings";
  * An agent's Changes tab stands the same pane beside its diff
  * (`agent-changes-tab.tsx`), over its pull request's files alone: the tree
  * shows only them, every folder open, each row marked with what became of
- * its file, the search narrowing those rows, no filter beside it, and a
- * line under the tree counting them.
+ * its file, the search narrowing those rows, held by the tab, which narrows
+ * its list of diffs by the same words, no filter beside it, and a line under
+ * the tree counting them.
  */
 
 /**
@@ -88,6 +89,7 @@ export function FileTreePane({
   shown,
   only,
   marks,
+  search,
   label = "Files",
   foot,
   listFolder,
@@ -105,6 +107,8 @@ export function FileTreePane({
   only?: readonly string[] | undefined;
   /** What became of each file of a change set, lettered on its row. */
   marks?: readonly FileMark[] | undefined;
+  /** What the search holds and the door that sets it, where its holder narrows more than the tree by it; none keeps it in the pane. */
+  search?: { readonly query: string; readonly onQuery: (query: string) => void } | undefined;
   /** What the pane is called. */
   label?: string;
   /** What stands under the tree, such as a change set's count. */
@@ -127,7 +131,9 @@ export function FileTreePane({
   const handle = useRef<FileTreeHandle | undefined>(undefined);
   const revealed = useRef<string | undefined>(undefined);
   const field = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
+  const [ownQuery, setOwnQuery] = useState("");
+  const query = search?.query ?? ownQuery;
+  const setQuery = search?.onQuery ?? setOwnQuery;
   const [onlyShown, setOnlyShown] = useState(false);
   const [scope, setScope] = useState<SearchScope>(SEARCH_SCOPE.UNREAD);
   const everything = useRef<readonly FolderEntry[] | undefined>(undefined);

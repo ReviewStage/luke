@@ -12,6 +12,7 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
+  DetailPage,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -39,8 +40,8 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
-import { IssueBoard, useBoardKeys } from "./issue-board";
-import { IssueCrumbs, IssueDetail } from "./issue-detail";
+import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
+import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
@@ -89,8 +90,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
 
-/** What the list's page is read as while its issues are. */
+/** What the list's page is read as while its issues are, and one issue's page while its issue is. */
 const READING_LINE = "Reading issues";
+const READING_ONE_LINE = "Reading the issue";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
@@ -142,8 +144,9 @@ function keyboardLeftWith(issueId: string): boolean {
 /**
  * What the list's page stands, by its read and its layout. Note that an
  * empty board still stands its columns, each saying it holds none, so only
- * the list says there are none yet; and that a board being read stands
- * nothing, since the page's loading rows are a list's shape, not a board's.
+ * the list says there are none yet; and that a board being read stands as
+ * ready, drawing its own columns of blocks (`IssueBoardSkeleton`), since
+ * the page's loading rows are a list's shape, not a board's.
  */
 function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
   if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
@@ -154,7 +157,7 @@ function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean)
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   root,
-  plans: tasks,
+  tasks,
   issues,
   focused,
   layout,
@@ -165,7 +168,7 @@ function ListPage({
 }: {
   /** What the arrows move through the rows of: the pages' own root. */
   root: HTMLElement | null;
-  plans: TasksControl;
+  tasks: TasksControl;
   issues: ReturnType<typeof useIssues>;
   /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
@@ -236,7 +239,10 @@ function ListPage({
         </ErrorState>
       }
     >
-      {listed === undefined ? null : onBoard ? (
+      {/* Note that the children stand only once ready, which a page still being read is only on the board. */}
+      {listed === undefined ? (
+        <IssueBoardSkeleton label={READING_LINE} />
+      ) : onBoard ? (
         <IssueBoard
           issues={listed}
           workspaceName={workspaceName}
@@ -306,7 +312,7 @@ function ViewOptions({
   );
 }
 
-/** One issue's page while its issue is not drawn: its empty frame while it is read, or why it could not be, with Retry. */
+/** One issue's page while its issue is not drawn: its page in blocks while it is read, or why it could not be, with Retry. */
 function DetailFrame({
   failure,
   onRetry,
@@ -318,21 +324,26 @@ function DetailFrame({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
   return (
-    <section className="automations-view" aria-label="Issue">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <IssueCrumbs onBack={onBack} />
-          <ExperimentTag />
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        {failure === undefined ? null : (
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-          </ErrorState>
-        )}
-      </div>
-    </section>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Issue"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <IssueCrumbs onBack={onBack} />
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+    >
+      {failure === undefined ? (
+        <IssueDetailSkeleton label={READING_ONE_LINE} />
+      ) : (
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+        </ErrorState>
+      )}
+    </DetailPage>
   );
 }
 
@@ -341,13 +352,13 @@ function DetailFrame({
  * holds it until then, and every change sent through the list, so the list
  * it goes back to already holds what was kept.
  */
-function DetailPage({
-  plans: tasks,
+function IssuePage({
+  tasks,
   issueId,
   issues,
   onBack,
 }: {
-  plans: TasksControl;
+  tasks: TasksControl;
   issueId: string;
   issues: ReturnType<typeof useIssues>;
   onBack: () => void;
@@ -450,7 +461,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
           root={pages}
-          plans={tasks}
+          tasks={tasks}
           issues={issues}
           focused={cameFrom}
           layout={layout}
@@ -466,9 +477,9 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
         />
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
-        <DetailPage
+        <IssuePage
           key={place.issueId}
-          plans={tasks}
+          tasks={tasks}
           issueId={place.issueId}
           issues={issues}
           onBack={back}

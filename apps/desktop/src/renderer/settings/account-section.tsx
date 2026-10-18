@@ -6,6 +6,7 @@ import {
   Button,
   ConfirmDialog,
   DIALOG_TONE,
+  OneLine,
   ProviderMark,
   SettingsRow,
   SettingsSection,
@@ -14,7 +15,7 @@ import {
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { OneLine } from "./one-line";
+import { wholeWordsHint } from "../tooltip";
 
 /**
  * Who is signed in, and the two ways out of that, at the head of the Account
@@ -55,7 +56,7 @@ export function AccountSection({
         <SettingsRow
           // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.
           leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
-          label={<OneLine as="span" text={account.email} />}
+          label={<OneLine hint={wholeWordsHint(account.email)}>{account.email}</OneLine>}
           description={
             <span className="account-provider">
               Signed in with

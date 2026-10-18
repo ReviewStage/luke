@@ -11,8 +11,13 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  List,
+  ListRow,
   PAGE_FRAME,
   PAGE_WIDTH,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -33,6 +38,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { AttentionMark } from "../attention-mark";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -49,7 +55,7 @@ import { useMinute } from "../tasks/task-time";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
@@ -100,10 +106,12 @@ import { useRowKeys } from "./use-row-keys";
  * build offers a world, shows one of the Factory's worlds in the board's
  * place (`../factory-world/`); the board is its first entry and what the
  * page opens on, and Escape in a world steps back to its overview before it
- * leaves. Until the plan list is read nothing stands, a list that could not
- * be read says so with Retry, above the line where an earlier read still
- * stands, and with nothing on a call, built, or shipped the page is the
- * app's empty state. It is an experiment
+ * leaves. Until the plan list is read the line stands in blocks, its
+ * stations named and holding placeholder rows in a row's own shape, so the
+ * rows land where the blocks stood; a list that could not be read says so
+ * with Retry, above the line where an earlier read still stands, and with
+ * nothing on a call, built, or shipped the page is the app's empty state.
+ * It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -188,7 +196,7 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const board = useMemo(
     () =>
       factoryBoard({
-        plans: listed,
+        tasks: listed,
         waiting,
         callTaskId: tasks.callTaskId,
         oneOff,
@@ -212,8 +220,10 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
     const timing = paneTiming(root);
     const seen = last.current;
     const next = new Map<string, { step: string | undefined; rect: DOMRect }>();
-    for (const row of root.querySelectorAll<HTMLElement>("[data-factory-row]")) {
-      const key = row.dataset.factoryRow ?? "";
+    for (const mark of root.querySelectorAll<HTMLElement>("[data-factory-row]")) {
+      // Note that the key rides the row's glyph, so the item around it is what slides.
+      const row = mark.closest<HTMLElement>("li") ?? mark;
+      const key = mark.dataset.factoryRow ?? "";
       const step = row.closest<HTMLElement>("[data-step]")?.dataset.step;
       const rect = row.getBoundingClientRect();
       const was = seen.get(key);
@@ -263,12 +273,12 @@ function useFocusFollows(root: HTMLElement | null, board: FactoryBoard): void {
     const was = held.current;
     if (root === null || was === null || was.isConnected) return;
     const lost = document.activeElement === null || document.activeElement === document.body;
-    const key = was.closest<HTMLElement>("[data-factory-row]")?.dataset.factoryRow;
+    const key = was.querySelector<HTMLElement>("[data-factory-row]")?.dataset.factoryRow;
     if (!lost || key === undefined) return;
-    const row = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
+    const mark = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
       (each) => each.dataset.factoryRow === key,
     );
-    row?.querySelector<HTMLElement>(".sidebar-task")?.focus();
+    mark?.closest("li")?.querySelector<HTMLElement>(":scope > button")?.focus();
   }, [root, board]);
 }
 
@@ -317,39 +327,46 @@ function FactoryRow({
   const menu = useMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
-    <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>
-      <Tooltip label={words} card={card}>
-        <button
-          type="button"
-          className="sidebar-task"
-          data-unread={String(waiting)}
-          onClick={onOpen}
-          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-        >
-          <span className="sidebar-task-line">
-            <span className="home-row-picture">{glyph}</span>
-            <span className="sidebar-task-name">{words}</span>
-            {external ? (
-              <span className="factory-external">
-                <ArrowUpRightIcon />
-                <span className="visually-hidden">(opens on GitHub)</span>
-              </span>
-            ) : null}
-            {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            {actor === undefined ? null : <CreatorHeard actor={actor} />}
-            <span className="sidebar-task-time">
+    <>
+      <RowHintOptions card={card}>
+        <ListRow
+          leading={
+            <span className="home-row-picture" data-factory-row={slide}>
+              {glyph}
+            </span>
+          }
+          title={
+            <>
+              {words}
+              {external ? (
+                <span className="factory-external">
+                  <ArrowUpRightIcon />
+                  <span className="visually-hidden">(opens on GitHub)</span>
+                </span>
+              ) : null}
+              {actor === undefined ? null : <CreatorHeard actor={actor} />}
+            </>
+          }
+          meta={
+            <span className="home-row-meta">
+              {context === undefined ? null : <span className="home-row-context">{context}</span>}
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
+              {waiting ? (
+                <span className="inbox-row-attention">
+                  <AttentionMark />
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : null}
               <RelativeTime at={at} now={now} hint={false} />
             </span>
-            {waiting ? (
-              <span className="inbox-row-dot">
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-              </span>
-            ) : null}
-          </span>
-        </button>
-      </Tooltip>
+          }
+          unread={waiting}
+          hint={{ Hint: RowHint, label: words }}
+          onPress={onOpen}
+          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+        />
+      </RowHintOptions>
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label="Row actions"
@@ -358,7 +375,7 @@ function FactoryRow({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }
 
@@ -398,11 +415,15 @@ function Station({
         </Text>
       ) : null}
       {needs.length === 0 ? null : (
-        <ul className="sidebar-tasks factory-rows" data-needs="">
-          {needs}
-        </ul>
+        <div className="factory-rows" data-needs="">
+          <List label={`${name}, ${NEEDS_YOU.LABEL}`}>{needs}</List>
+        </div>
       )}
-      {rows.length === 0 ? null : <ul className="sidebar-tasks factory-rows">{rows}</ul>}
+      {rows.length === 0 ? null : (
+        <div className="factory-rows">
+          <List label={name}>{rows}</List>
+        </div>
+      )}
     </section>
   );
 }
@@ -513,7 +534,7 @@ function Line({
     if (stop.kind === FACTORY_STOP.ONE_OFF_QUESTION || stop.kind === FACTORY_STOP.ONE_OFF_FAILED) {
       return oneOffStopRow(stop);
     }
-    const { plan: task } = stop;
+    const { task } = stop;
     if (stop.kind === FACTORY_STOP.QUESTION) {
       const agent = task.agents?.agents.find((each) => each.id === stop.item.agentId);
       return (
@@ -567,7 +588,7 @@ function Line({
         />
       );
     }
-    const { plan: task } = work;
+    const { task } = work;
     if (work.kind === FACTORY_WORK.AGENT) {
       const { agent } = work;
       return (
@@ -602,7 +623,7 @@ function Line({
       />
     );
   };
-  const blockRow = ({ kind, plan: task, pullRequest }: FactoryBlock) => (
+  const blockRow = ({ kind, task, pullRequest }: FactoryBlock) => (
     <FactoryRow
       key={pullRequest.url ?? pullRequest.number}
       slide={pullRequest.url ?? task.id}
@@ -675,7 +696,7 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
         </Text>
       ) : (
         <span className="factory-needs">
-          <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
+          <AttentionMark />
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
           </Text>
@@ -694,7 +715,36 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
 }
 
 /** What the line's page is read as while the list is. */
-const READING_LINE = "Reading tasks";
+const READING_LINE = "Reading tasks…";
+
+/** One placeholder row: how wide its words and the task it is about stand, so the rows read as rows of their own. */
+interface SkeletonRowShape {
+  readonly words: string;
+  readonly context: string;
+}
+
+/** The placeholder rows each station holds while the list is read, a few apiece as a working day's line holds. */
+const SKELETON_ROWS = {
+  [FACTORY_STEP.TALK]: [{ words: "136px", context: "60%" }],
+  [FACTORY_STEP.BUILD]: [
+    { words: "168px", context: "72%" },
+    { words: "120px", context: "56%" },
+    { words: "148px", context: "64%" },
+  ],
+  [FACTORY_STEP.SHIP]: [
+    { words: "96px", context: "68%" },
+    { words: "112px", context: "52%" },
+  ],
+} as const satisfies Record<FactoryStep, readonly SkeletonRowShape[]>;
+
+/** How wide the summary's placeholder parts stand: what waits, what works, and what shipped. */
+const SKELETON_SUMMARY = ["104px", "112px", "96px"] as const;
+
+/** How wide a placeholder row's glyph stands, a row's picture at its size (`.home-row-picture`). */
+const SKELETON_GLYPH = "16px";
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
 
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
@@ -702,12 +752,82 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
+/** A placeholder row in a row's own line: a block for its glyph, its words, the task it is about, and its time. It opens nothing. */
+function SkeletonRow({ shape }: { shape: SkeletonRowShape }): React.JSX.Element {
+  return (
+    <li className="home-row inbox-row factory-skeleton-row">
+      <span className="sidebar-task-line">
+        <span className="home-row-picture">
+          <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />
+        </span>
+        <span className="sidebar-task-name">
+          <Skeleton width={shape.words} />
+        </span>
+        <span className="home-row-context">
+          <Skeleton width={shape.context} />
+        </span>
+        <span className="sidebar-task-time">
+          <Skeleton width={SKELETON_TIME} />
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/**
+ * The line while the plan list is first read: the summary in blocks over
+ * the three stations, each named as it will be and holding placeholder
+ * rows, laid out by the line's own rules, so the line stands side by side
+ * or stacked as the room has it and the rows land where the blocks stood.
+ * The region says what is being read and nothing else to a reader.
+ */
+function LineSkeleton(): React.JSX.Element {
+  const station = (step: FactoryStep) => {
+    const { name, Icon } = STEPS[step];
+    return (
+      <div className="factory-step">
+        <div className="factory-head">
+          <Icon className="factory-glyph" />
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
+            {name}
+          </Text>
+        </div>
+        <ul className="sidebar-tasks factory-rows">
+          {SKELETON_ROWS[step].map((shape) => (
+            <SkeletonRow key={shape.words} shape={shape} />
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  return (
+    <SkeletonRegion label={READING_LINE}>
+      <div aria-hidden="true">
+        <p className="factory-summary">
+          {SKELETON_SUMMARY.map((width) => (
+            <Text key={width} as={TEXT_ELEMENT.SPAN}>
+              <Skeleton width={width} />
+            </Text>
+          ))}
+        </p>
+        <div className="factory-line-up">
+          {station(FACTORY_STEP.TALK)}
+          <Arrow />
+          {station(FACTORY_STEP.BUILD)}
+          <Arrow />
+          {station(FACTORY_STEP.SHIP)}
+        </div>
+      </div>
+    </SkeletonRegion>
+  );
+}
+
 /**
  * What the line's page stands. Note that until the list is read it stands
- * nothing, since what the line says hangs on it and the page's loading rows
- * are a list's shape, not the line's; a read that failed with nothing
- * listed says so in the line's place, and one that failed over a list read
- * before says so above the line.
+ * the line's own placeholder (`LineSkeleton`) rather than the page's loading
+ * rows, since those are a list's shape, not the line's; a read that failed
+ * with nothing listed says so in the line's place, and one that failed over
+ * a list read before says so above the line.
  */
 function lineState(tasks: TasksControl, empty: boolean): CollectionState {
   if (tasks.listFailed && empty) return COLLECTION_STATE.ERROR;
@@ -791,7 +911,9 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
         >
           <div className="factory-board">
             {questionsUnread}
-            {!tasks.listRead && !tasks.listFailed ? null : (
+            {!tasks.listRead && !tasks.listFailed ? (
+              <LineSkeleton />
+            ) : (
               <>
                 {tasks.listFailed ? (
                   <ErrorState onRetry={tasks.onRetryList}>{UNREAD_LINE}</ErrorState>

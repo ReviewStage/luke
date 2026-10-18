@@ -113,6 +113,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   PULL_REQUEST_STATE,
@@ -188,9 +189,11 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import { tasksApp } from "../tasks/tasks-app.js";
+import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
@@ -275,6 +278,14 @@ const CHAT = "/api/workspaces/chat";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+
+/** Where the group serves an image an agent's pull request's overview names. */
+const AGENT_GITHUB_IMAGE = "/api/agents/github-image";
+
+/** An SVG a repository might hold, with a script in it that must never run as a page of the service. */
+const SCRIPTED_SVG = new TextEncoder().encode(
+  '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/plans")</script></svg>',
+);
 
 /** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
@@ -532,6 +543,7 @@ function request(
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
+    src?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -541,6 +553,7 @@ function request(
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
+  if (init.src !== undefined) url.searchParams.set("src", init.src);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -1278,10 +1291,45 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
       }),
   );
+
+  it.effect(
+    "an SVG of the agent's own repository that its pull request's overview names is served as its bytes, sandboxed so it never runs as a page of the service",
+    () =>
+      Effect.gen(function* () {
+        const contents = `/repos/${RELAY_FULL_NAME}/contents/docs/diagram.svg`;
+        const { owner, task, ask, fetch } = yield* openTask({
+          github: (sent) =>
+            new URL(sent.url).pathname === contents
+              ? new Response(SCRIPTED_SVG, {
+                  headers: { "content-type": "application/vnd.github.raw" },
+                })
+              : undefined,
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const served = yield* fetch(
+          request(AGENT_GITHUB_IMAGE, owner, {
+            id: agent.id,
+            src: `https://raw.githubusercontent.com/${RELAY_FULL_NAME}/main/docs/diagram.svg`,
+          }),
+        );
+
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), "image/svg+xml");
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          SCRIPTED_SVG,
+        );
+      }),
+  );
 });
 
 const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
 
 /** The GraphQL id GitHub gives the published pull request. */
 const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
@@ -1318,13 +1366,43 @@ function graphqlAnswering(
   };
 }
 
-/** A change to the agent's pull request as the bearer given. */
-function actionAs(bearer: string, agentId: string, action: string): Request {
+/** A change to the agent's pull request as the bearer given, with the fields beside its action given. */
+function actionAs(
+  bearer: string,
+  agentId: string,
+  action: string,
+  fields: Readonly<Record<string, string>> = {},
+): Request {
   return request(AGENT_PULL_REQUEST_ACTION, bearer, {
     method: "POST",
     id: agentId,
-    body: { action },
+    body: { action, ...fields },
   });
+}
+
+/** How the published pull request may be merged, as GitHub's GraphQL answers the merge box's read. */
+const MERGING_ANSWER = {
+  data: {
+    repository: {
+      mergeCommitAllowed: false,
+      squashMergeAllowed: true,
+      rebaseMergeAllowed: true,
+      autoMergeAllowed: true,
+      pullRequest: {
+        headRefOid: PUBLISHED.headSha,
+        isMergeQueueEnabled: false,
+        mergeQueueEntry: null,
+        autoMergeRequest: { mergeMethod: "SQUASH" },
+        reviewDecision: "REVIEW_REQUIRED",
+        commits: { nodes: [{ commit: { statusCheckRollup: { state: "PENDING" } } }] },
+      },
+    },
+  },
+} as const;
+
+/** The mutation a GraphQL call made, by the field it named; none for a read. */
+function mutationOf(call: GraphqlCall): string | undefined {
+  return /mutation[^{]*\{\s*(\w+)/u.exec(call.query)?.[1];
 }
 
 /** A review submitted on the agent's pull request as the bearer given. */
@@ -1442,6 +1520,149 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           name: RELAY.name,
           number: PUBLISHED.number,
         });
+      }),
+  );
+
+  it.effect(
+    "a merge, auto-merge on and off, and leaving the merge queue are each made on GitHub as the member, a merge and auto-merge against the head they saw",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+        const head = { headSha: PUBLISHED.headSha };
+
+        const answers = [
+          yield* ask(actionAs(other, agent.id, "merge", { method: "squash", ...head })),
+          yield* ask(actionAs(other, agent.id, "enable-auto-merge", { method: "rebase", ...head })),
+          yield* ask(actionAs(other, agent.id, "enable-auto-merge", head)),
+          yield* ask(actionAs(other, agent.id, "disable-auto-merge")),
+          yield* ask(actionAs(other, agent.id, "dequeue")),
+        ];
+
+        assert.deepEqual(
+          answers.map((answer) => answer.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const id = PULL_REQUEST_NODE_ID;
+        assert.deepEqual(
+          calls.flatMap((call) => {
+            const mutation = mutationOf(call);
+            return mutation === undefined ? [] : [[mutation, call.variables]];
+          }),
+          [
+            ["mergePullRequest", { id, method: "SQUASH", head: PUBLISHED.headSha }],
+            ["enablePullRequestAutoMerge", { id, head: PUBLISHED.headSha, method: "REBASE" }],
+            ["enablePullRequestAutoMerge", { id, head: PUBLISHED.headSha }],
+            ["disablePullRequestAutoMerge", { id }],
+            ["dequeuePullRequest", { id }],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "closing, reopening, and retitling are each made on GitHub as the member, and a blank title is refused before GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const answers = [
+          yield* ask(actionAs(other, agent.id, "close")),
+          yield* ask(actionAs(other, agent.id, "reopen")),
+          yield* ask(
+            actionAs(other, agent.id, "edit-title", { title: "  Expire invitations weekly " }),
+          ),
+        ];
+        const blank = yield* ask(actionAs(other, agent.id, "edit-title", { title: "   " }));
+
+        assert.deepEqual(
+          answers.map((answer) => answer.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const id = PULL_REQUEST_NODE_ID;
+        assert.deepEqual(
+          calls.flatMap((call) => {
+            const mutation = mutationOf(call);
+            return mutation === undefined ? [] : [[mutation, call.variables]];
+          }),
+          [
+            ["closePullRequest", { id }],
+            ["reopenPullRequest", { id }],
+            ["updatePullRequest", { id, title: "Expire invitations weekly" }],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a merge naming no head, or a head that is no commit, is refused before anything reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({});
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          yield* ask(actionAs(other, agent.id, "merge", { method: "squash" })),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(
+            actionAs(other, agent.id, "merge", { method: "squash", headSha: "main; drop" }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "the pull request's header read says how it may be merged, read on the App's token, and stands without it where GitHub would not say",
+    () =>
+      Effect.gen(function* () {
+        let answering = true;
+        const { owner, agent, calls, ask } = yield* published({
+          answer: () =>
+            answering
+              ? Response.json(MERGING_ANSWER)
+              : Response.json({ message: "Server Error" }, { status: 502 }),
+        });
+        const header = () =>
+          Effect.map(
+            ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewPullRequestAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest,
+          );
+
+        const read = yield* header();
+        answering = false;
+        const without = yield* header();
+
+        assert.deepEqual(read?.merging, {
+          methods: ["squash", "rebase"],
+          autoMergeAllowed: true,
+          queue: false,
+          queued: null,
+          autoMerge: { method: "squash" },
+          headSha: PUBLISHED.headSha,
+          review: "review-required",
+          checks: "pending",
+        });
+        assert.ok(
+          calls.every(
+            (call) => call.authorization === `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+          ),
+        );
+        assert.equal(without?.title, read?.title);
+        assert.equal(without?.merging, undefined);
       }),
   );
 
@@ -1756,6 +1977,230 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.deepEqual(calls, []);
+      }),
+  );
+});
+
+/** One REST write as GitHub saw it: the bearer, the method, the path, and the body. */
+interface RestWrite {
+  readonly authorization: string | null;
+  readonly method: string;
+  readonly path: string;
+  readonly body: unknown;
+}
+
+/** The published pull request's repository, writing down every write to its requested reviewers or labels and answering it as `answer` says. */
+function peopleAndLabelsAnswering(
+  writes: RestWrite[],
+  answer: (write: RestWrite) => Response = () => Response.json({}, { status: 201 }),
+): RepositoryScript {
+  return (sent) => {
+    const path = decodeURIComponent(new URL(sent.url).pathname);
+    const reviewersOrLabels = /\/(requested_reviewers|labels)(\/|$)/u.test(path);
+    if (!reviewersOrLabels || sent.method === "GET") return publishedPullRequest(sent);
+    const write = {
+      authorization: sent.headers.get("authorization"),
+      method: sent.method,
+      path,
+      body: sent.body === "" ? undefined : JSON.parse(sent.body),
+    };
+    writes.push(write);
+    return answer(write);
+  };
+}
+
+/** A change naming a reviewer or a label, as the bearer given. */
+function changeAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+it.layer(getTestDB())("asking reviews and labelling an agent's pull request", (it) => {
+  const published = (repository: RepositoryScript, otherToken = "ghu_teammate") =>
+    Effect.gen(function* () {
+      const opened = yield* openTask({ github: repository, otherToken });
+      yield* joinWorkspace(opened.task.workspaceId, opened.other);
+      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      return { ...opened, agent };
+    });
+
+  it.effect(
+    "a teammate asks a review of a team, asks one of a user no longer, puts a label on and takes one off, each a REST write on the teammate's own token",
+    () =>
+      Effect.gen(function* () {
+        const writes: RestWrite[] = [];
+        const { other, agent, ask } = yield* published(peopleAndLabelsAnswering(writes));
+        const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+        const issue = `/repos/${RELAY.owner}/${RELAY.name}/issues/${PUBLISHED.number}`;
+
+        const answers = [
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "team", name: "reviewers" },
+            }),
+          ),
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "remove-review-request",
+              reviewer: { kind: "user", name: "priyan" },
+            }),
+          ),
+          yield* ask(changeAs(other, agent.id, { action: "add-label", label: "bug" })),
+          yield* ask(changeAs(other, agent.id, { action: "remove-label", label: "needs review" })),
+        ];
+
+        assert.ok(
+          answers.every((answered) => answered.status === HOSTED_HTTP_STATUS.OK),
+          "every change is answered",
+        );
+        assert.deepEqual(
+          answers.map((answered) => answered.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.deepEqual(
+          writes.map(({ method, path, body }) => ({ method, path, body })),
+          [
+            {
+              method: "POST",
+              path: `${pull}/requested_reviewers`,
+              body: { team_reviewers: ["reviewers"] },
+            },
+            {
+              method: "DELETE",
+              path: `${pull}/requested_reviewers`,
+              body: { reviewers: ["priyan"] },
+            },
+            { method: "POST", path: `${issue}/labels`, body: { labels: ["bug"] } },
+            { method: "DELETE", path: `${issue}/labels/needs review`, body: undefined },
+          ],
+        );
+        assert.ok(writes.every((write) => write.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a review GitHub will not ask is answered in its words, and a reviewer the wire does not name is refused before GitHub",
+    () =>
+      Effect.gen(function* () {
+        const writes: RestWrite[] = [];
+        const { other, agent, ask } = yield* published(
+          peopleAndLabelsAnswering(writes, () =>
+            Response.json(
+              { message: "Reviews may only be requested from collaborators." },
+              { status: 422 },
+            ),
+          ),
+        );
+
+        assert.deepEqual(
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "user", name: "stranger" },
+            }),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: {
+              outcome: "refused",
+              words: "Reviews may only be requested from collaborators.",
+            },
+          },
+        );
+        assert.deepEqual(
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "everyone", name: "all" },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(writes.length, 1);
+      }),
+  );
+});
+
+const AGENT_REVIEW_OPTIONS = "/api/agents/review-options";
+
+it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
+  it.effect(
+    "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
+    () =>
+      Effect.gen(function* () {
+        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+        const asked: SentToGitHub[] = [];
+        const { owner, task, ask } = yield* openTask({
+          github: (sent) => {
+            const path = new URL(sent.url).pathname;
+            if (path.startsWith(repository)) asked.push(sent);
+            switch (path) {
+              case `${repository}/labels`:
+                return Response.json([{ name: "bug", color: "d73a4a" }]);
+              case `${repository}/collaborators`:
+                return Response.json([
+                  {
+                    login: "priyan",
+                    id: 1002,
+                    type: "User",
+                    avatar_url: "https://avatars.githubusercontent.com/u/1002?v=4",
+                  },
+                ]);
+              case `${repository}/teams`:
+                return Response.json(
+                  { message: "Resource not accessible by integration" },
+                  { status: 403 },
+                );
+              default:
+                return publishedPullRequest(sent);
+            }
+          },
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            labels: [{ name: "bug", color: "d73a4a" }],
+            users: [
+              {
+                login: "priyan",
+                bot: false,
+                avatarUrl: "https://avatars.githubusercontent.com/u/1002?v=4",
+              },
+            ],
+            teams: [],
+          },
+        });
+        assert.ok(
+          asked.every((sent) => !sent.headers.get("authorization")?.includes("ghu_")),
+          "the repository is read on an installation token, never a member's",
+        );
+      }),
+  );
+
+  it.effect(
+    "a listing GitHub did not answer fails the read rather than offering an empty list, so the picker reads it again",
+    () =>
+      Effect.gen(function* () {
+        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+        const { owner, task, ask } = yield* openTask({
+          github: (sent) =>
+            new URL(sent.url).pathname === `${repository}/labels`
+              ? Response.json({ message: "Service unavailable" }, { status: 503 })
+              : new URL(sent.url).pathname.startsWith(`${repository}/`) &&
+                  !new URL(sent.url).pathname.startsWith(`${repository}/pulls`)
+                ? Response.json([])
+                : publishedPullRequest(sent),
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+
+        assert.notEqual(answered.status, HOSTED_HTTP_STATUS.OK);
       }),
   );
 });
@@ -2871,7 +3316,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           mentionMarkdown(
             taskId === undefined
               ? { kind: MENTION_KIND.AGENT, agentId }
-              : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
+              : { kind: MENTION_KIND.AGENT, taskId, agentId },
             name,
             place,
           );
@@ -3614,7 +4059,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
+    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed, not to be cached, and never to run as a page, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, fetch, ask, post, read } = yield* openInbox();
@@ -3642,6 +4087,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
 
         assert.deepEqual(
@@ -3686,7 +4132,7 @@ const picture = (mark: number) => ({
 
 it.layer(getTestDB())("an agent's pictures", (it) => {
   it.effect(
-    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed and not to be cached, to whoever may read the agent, and through its own transcript alone",
+    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed, not to be cached, and never to run as a page, to whoever may read the agent, and through its own transcript alone",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, fetch } = yield* openTask();
@@ -3720,6 +4166,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
           picture(1).bytes,
@@ -4327,7 +4774,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         agents.push({
           userId: opened.owner,
-          planId: opened.task.id,
+          taskId: opened.task.id,
           self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
           repository: RELAY_FULL_NAME,
           telling,
@@ -4399,7 +4846,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           },
         ]);
         assert.deepEqual(unread.channels, [
-          { name: "#teammate-invitations", kind: CHANNEL_KIND.PLAN, unread: 0 },
+          { name: "#teammate-invitations", kind: CHANNEL_KIND.TASK, unread: 0 },
         ]);
         const again = yield* chat.read(chat.second);
         assert.ok("messages" in again);
@@ -4528,7 +4975,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
           ["#general", CHANNEL_KIND.GENERAL],
           ["#releases", CHANNEL_KIND.TOPIC],
-          ["#teammate-invitations", CHANNEL_KIND.PLAN],
+          ["#teammate-invitations", CHANNEL_KIND.TASK],
         ]);
       }),
   );
@@ -4589,7 +5036,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           .update(codingAgent)
           .set({ taskId: null })
           .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
-        const taskless = { ...chat.first, planId: null };
+        const taskless = { ...chat.first, taskId: null };
         const posted = yield* chat.post(taskless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);
         assert.deepEqual([posted.in, posted.unresolved], ["#general", ["@luke"]]);

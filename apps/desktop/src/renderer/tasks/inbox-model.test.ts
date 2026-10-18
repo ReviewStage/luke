@@ -31,6 +31,7 @@ import {
   inboxPreview,
   inboxReply,
   inboxSteps,
+  isUnread,
   listedItems,
   nextNeedingYou,
   proposedOptions,
@@ -38,7 +39,7 @@ import {
   settlementOf,
   taskHolder,
   tasklessGroups,
-  withChoice,
+  withReadMarks,
   withValue,
 } from "./inbox-model";
 
@@ -134,13 +135,8 @@ test("a choice is answered by its option with the note beside it, or by the deve
   );
 });
 
-test("a press picks one option at a time on a choice and any number where the choice allows several, pressing a picked one again lets it go, and the picks are the answer in the order pressed", () => {
-  const one = withChoice(withChoice(EMPTY_INBOX_DRAFT, "Postgres", false), "Redis", false);
-  assert.deepEqual(one.choices, ["Redis"]);
-  assert.deepEqual(withChoice(one, "Redis", false).choices, []);
-  const several = withChoice(withChoice(EMPTY_INBOX_DRAFT, "Slack", true), "Email", true);
-  assert.deepEqual(several.choices, ["Slack", "Email"]);
-  assert.deepEqual(withChoice(several, "Slack", true).choices, ["Email"]);
+test("the picks are the answer in the order pressed, and a choice of one takes no two", () => {
+  const several = { ...EMPTY_INBOX_DRAFT, choices: ["Slack", "Email"] };
   assert.deepEqual(inboxReply(CHANNELS, several), {
     reply: INBOX_REPLY.CHOSE,
     choices: ["Slack", "Email"],
@@ -891,4 +887,29 @@ test("the latest message on an item's thread is its preview, open or settled, le
     inboxPreview({ ...settledAfter, settledAt: 2_500 }, previewName),
     "Agent: Backfilled 41,208 rows; staging totals match",
   );
+});
+
+test("a read mark the window made stands over the item as it was marked, and gives way to the reads once the item changes again, as a message landing may make it unread", () => {
+  const holder = taskHolder(BILLING);
+  const unread = item({ id: "h1", unread: true, updatedAt: 2_000 });
+  const read = item({ id: "h2", updatedAt: 2_000 });
+  const marks = new Map([
+    ["h1", { unread: false, updatedAt: 2_000 }],
+    ["h2", { unread: true, updatedAt: 2_000 }],
+  ]);
+  const unreadOf = (groups: ReturnType<typeof withReadMarks>) =>
+    groups.flatMap(({ items }) => items.map((each) => [each.id, isUnread(each)]));
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], marks)), [
+    ["h1", false],
+    ["h2", true],
+  ]);
+  const changed = { ...unread, updatedAt: 3_000 };
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [changed, read] }], marks)), [
+    ["h1", true],
+    ["h2", true],
+  ]);
+  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], new Map())), [
+    ["h1", true],
+    ["h2", false],
+  ]);
 });

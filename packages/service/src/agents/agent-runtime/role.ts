@@ -36,7 +36,9 @@ export type ConnectionPolicy = (typeof CONNECTION_POLICY)[keyof typeof CONNECTIO
  * How a role's session comes by its sandbox, and what is done with the
  * sandbox between turns (`sandbox.ts`). A read checkout is a depth-1 clone
  * on a read token, made by the first `run_in_repository` that needs it and
- * kept between turns, so a voice call never waits on a sandbox resuming. A
+ * kept between turns, so a later call reads it without cloning again. The
+ * sandbox is never stopped at a turn's end, but it stops when its timeout
+ * runs out, busy or not, so a call after that waits on it resuming. A
  * write checkout is the whole repository on a write token, made as the
  * sandbox opens, with its credential renewed at the firewall as it ages and
  * the sandbox stopped at each turn's end. A worker reads in its parent's

@@ -75,6 +75,7 @@ import {
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { account } from "@luke/database/schemas/auth";
+import { githubAppAvatarUrl } from "@luke/features/account-picture";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -416,6 +417,8 @@ export interface GitHubAppService {
   readonly installUrl: Effect.Effect<string, GitHubAppNotConfigured>;
   /** The login the App's own bot acts under on GitHub, `<slug>[bot]`: who Luke's agents are in a delivery. */
   readonly botLogin: Effect.Effect<string, GitHubAppNotConfigured>;
+  /** The logo GitHub draws the App's own bot by, its App's by the App's id, which no read of a co-author's trailer names. */
+  readonly botAvatarUrl: Effect.Effect<string, GitHubAppNotConfigured>;
   /** A JWT the App speaks as itself with, good for a few minutes from now. */
   readonly appJwt: Effect.Effect<Redacted.Redacted, GitHubAppNotConfigured>;
   /** One installation of this App by the id GitHub hands the Setup URL; none for an id that is not this App's. */
@@ -915,6 +918,20 @@ export function githubPost<Body extends object>(
     HttpClientRequest.setHeaders(GITHUB_HEADERS),
     HttpClientRequest.bodyJsonUnsafe(body),
   );
+}
+
+/** One write of the API under the bearer given by the method given, its JSON body where one is given, the path rooted at the API's origin. */
+export function githubSendRequest<Body extends object>(
+  method: "POST" | "DELETE",
+  path: string,
+  bearer: Redacted.Redacted,
+  body?: Body,
+): HttpClientRequest.HttpClientRequest {
+  const request = HttpClientRequest.make(method)(`${GITHUB_API}${path}`).pipe(
+    HttpClientRequest.bearerToken(bearer),
+    HttpClientRequest.setHeaders(GITHUB_HEADERS),
+  );
+  return body === undefined ? request : HttpClientRequest.bodyJsonUnsafe(request, body);
 }
 
 /** The one write the App makes as itself: a token mint, its JSON body under the App's own JWT. */
@@ -1431,6 +1448,7 @@ function githubAppService(
     const service: GitHubAppService = {
       installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
       botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
+      botAvatarUrl: Effect.map(ready, (app) => githubAppAvatarUrl(Number(app.appId))),
       appJwt,
       installation,
       authorizeUrl: (request) =>

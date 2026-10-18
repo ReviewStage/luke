@@ -75,7 +75,7 @@ test("a person's agents at work and their other agents are theirs alone, newest 
   const page = personPage(CHARLES.userId, TASKS);
 
   assert.deepEqual(
-    page.working.map(({ plan: summary, agent }) => [summary.name, agent.title]),
+    page.working.map(({ task: summary, agent }) => [summary.name, agent.title]),
     [
       ["Cache keys", "Agent 2"],
       ["Relay retries", "Agent 1"],

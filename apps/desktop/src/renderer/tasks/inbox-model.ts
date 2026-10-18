@@ -110,13 +110,6 @@ export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   };
 }
 
-/** The draft with the option pressed: picked where it was not, let go where it was; one at a time unless the choice allows several. */
-export function withChoice(draft: InboxDraft, label: string, multiple: boolean): InboxDraft {
-  const picked = draft.choices.includes(label);
-  if (picked) return { ...draft, choices: draft.choices.filter((each) => each !== label) };
-  return { ...draft, choices: multiple ? [...draft.choices, label] : [label] };
-}
-
 /** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;
@@ -789,6 +782,48 @@ export function inboxList(
     return { grouping: INBOX_GROUPING.NEWEST, items, readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
+}
+
+/** Whether an item is unread for the reader: changed since they last read it, or marked unread; an item from a service before read state reads as read. */
+export function isUnread(item: InboxItem): boolean {
+  return item.unread === true;
+}
+
+/**
+ * A read mark the window made that the reads may not hold yet: whether the
+ * item now reads as unread, and when it last changed as it was marked.
+ */
+export interface InboxReadMark {
+  readonly unread: boolean;
+  readonly updatedAt: number;
+}
+
+/**
+ * The groups with the window's own read marks laid over what the reads
+ * hold, so a dot flips the moment it is marked rather than when the
+ * service's held read next answers. A mark stands only over the item as it
+ * was marked: once the item changes again, a message landing on its thread
+ * say, the reads' word on it stands, since that change may make it unread
+ * again.
+ */
+export function withReadMarks(
+  groups: readonly InboxGroup[],
+  marks: ReadonlyMap<string, InboxReadMark>,
+): readonly InboxGroup[] {
+  if (marks.size === 0) return groups;
+  return groups.map(({ holder, items }) => ({
+    holder,
+    items: items.map((item) => {
+      const mark = marks.get(item.id);
+      if (mark === undefined || mark.updatedAt !== item.updatedAt) return item;
+      return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
+    }),
+  }));
+}
+
+/** Whether any task's item is unread, listed or filtered out. */
+export function anyUnread(tasks: readonly InboxGroup[]): boolean {
+  return tasks.some(({ items }) => items.some(isUnread));
 }
 
 /** Whether any task's item needs the reader, listed or filtered out. */

@@ -1,3 +1,4 @@
+import { PublicMedia } from "@luke/ui";
 import { useEffect, useRef } from "react";
 
 /**
@@ -6,11 +7,8 @@ import { useEffect, useRef } from "react";
  * the player's own controls pause it, scrub it, and turn the sound on.
  * Under reduced motion it waits on its first frame for a press of play.
  *
- * The frame draws wider than the page's column, up to 960px, and centres on
- * the page. It sizes against the page's own width (`cqw`, read off
- * PublicPage's container) rather than the viewport's, which would count a
- * classic scrollbar's gutter, and it keeps the page's inset from either edge,
- * so on a phone it lines up with the words above it.
+ * The frame is PublicPage's media bleed: wider than the page's column,
+ * centred on the page, and on a phone lined up with the words above it.
  */
 
 const DEMO = {
@@ -40,11 +38,10 @@ export function DemoVideo(): React.JSX.Element {
   }, []);
 
   return (
-    <div className="mx-[calc(50%-min(480px,50cqw-var(--luke-page-inset)))] mt-12">
+    <PublicMedia>
       {/* biome-ignore lint/a11y/useMediaCaption: Luke's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
       <video
         ref={video}
-        className="block h-auto w-full rounded-[var(--luke-radius-14)] border border-border bg-black shadow-xl"
         src={DEMO.SOURCE}
         poster={DEMO.POSTER}
         width={DEMO.WIDTH}
@@ -55,6 +52,6 @@ export function DemoVideo(): React.JSX.Element {
         playsInline
         preload="auto"
       />
-    </div>
+    </PublicMedia>
   );
 }

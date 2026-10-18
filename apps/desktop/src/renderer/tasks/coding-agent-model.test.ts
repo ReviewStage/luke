@@ -40,7 +40,6 @@ import {
   readModelChoice,
   type SentLine,
   settledPlanEdits,
-  showsPublishedRow,
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -244,7 +243,7 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, or closed, the chip says it to a reader without its colour, and the row is drawn only once the agent has ended with one", () => {
+test("the row says where the pull request stands only once it is a draft, merged, or closed, and the mark says it to a reader without its colour", () => {
   assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
     undefined,
     "Draft",
@@ -255,15 +254,6 @@ test("the row says where the pull request stands only once it is a draft, merged
     pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
     "Pull request #123, merged",
   );
-  const published = { repository: "acme/relay", branch: "luke/x", pullRequest: PULL_REQUEST };
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, published), true);
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.CANCELLED, published), true);
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.RUNNING, published), false);
-  assert.equal(
-    showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, { ...published, pullRequest: null }),
-    false,
-  );
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
 });
 
 test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {

@@ -4,30 +4,37 @@ import {
   BUTTON_SIZE,
   CopyIcon,
   DocumentIcon,
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   IconButton,
+  LIST_DENSITY,
+  LIST_ROW_ACTIONS,
+  LIST_ROW_CURRENT,
+  LIST_ROW_INK,
+  ListRow,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy";
 import type { PullRequestReader } from "../tasks/use-agent-pull-request";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { PinnedTab } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
-import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
+import { PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -71,7 +78,10 @@ function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
     const { agents } = tasks.agents;
     return agents !== undefined && !agents.some((agent) => agent.id === agentId);
   }
-  if (!isFileTab(tab) || tasks.shownCode === undefined) return false;
+  // Note that a task Luke showed no code on says nothing of its files, because a file pinned there was browsed to rather than shown.
+  if (!isFileTab(tab) || tasks.shownCode === undefined || tasks.shownCode.length === 0) {
+    return false;
+  }
   return !shownFiles(tasks.shownCode).some((ref) => ref.path === tab.file);
 }
 
@@ -219,19 +229,22 @@ function PinnedTabCard({
   return (
     <HoverCard data-pinned-tab-card="">
       <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
-      <div className="task-card-rows">
-        <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
-        {repository === null ? null : (
-          <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
-        )}
-      </div>
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={<DocumentIcon />}
+        label={task.name}
+        onPress={onOpenTask}
+      />
+      {repository === null ? null : (
+        <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
+      )}
       {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
       {pullRequest === undefined ? null : (
         <>
           <HoverCardRule />
-          <ul className="task-card-rows" aria-label="Pull request">
+          <HoverCardList label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
-          </ul>
+          </HoverCardList>
         </>
       )}
     </HoverCard>
@@ -265,20 +278,23 @@ export function SidebarPinnedTab({
   /** Opens the task the tab is of, as its own row does. */
   onOpenTask: () => void;
 }): React.JSX.Element {
-  const [words, clipped] = useClipped();
   const copied = useTranscriptCopier();
   const menu = useMenu(tasks.shown && inSight);
-  const row = useRef<HTMLButtonElement | null>(null);
-  const item = useRef<HTMLLIElement | null>(null);
+  const row = useRef<HTMLElement | null>(null);
+  const item = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control.
+  const hold = useCallback((press: HTMLElement | null) => {
+    row.current = press;
+    item.current = press?.parentElement ?? null;
+  }, []);
   const gone = pinGone(pin, tasks);
   const agent = pinAgent(pin, task, tasks);
   // The row is what the menu rings and hands focus back to, even when the
   // right-click lands on Unpin over its end.
   const showMenu = menu.contextMenu(row);
   return (
-    <li ref={item} className="sidebar-task-item sidebar-pinned-tab">
-      <Tooltip
-        label={pin.label}
+    <>
+      <RowHintOptions
         card={
           <PinnedTabCard
             pin={pin}
@@ -292,38 +308,44 @@ export function SidebarPinnedTab({
         cardBeside
         cardRegion={item}
       >
-        <button
-          ref={row}
-          type="button"
-          className="sidebar-task"
-          aria-current={current ? "page" : undefined}
-          aria-disabled={gone}
-          data-menu-open={String(menu.open !== undefined)}
-          onClick={() => {
+        <ListRow
+          ref={hold}
+          density={LIST_DENSITY.DENSE}
+          ink={LIST_ROW_INK.SIDEBAR}
+          leading={
+            <span className="sidebar-pinned-tab-glyph">{tabLook(pinSubject(pin, agent)).icon}</span>
+          }
+          title={
+            gone ? (
+              <span className="sidebar-pinned-tab-gone">
+                {pin.label}
+                <span className="luke-visually-hidden">(unavailable)</span>
+              </span>
+            ) : (
+              pin.label
+            )
+          }
+          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+          menuOpen={menu.open !== undefined}
+          hint={{ Hint: RowHint, label: pin.label }}
+          onPress={() => {
             menu.close(false);
             if (!gone) onOpen();
           }}
           onContextMenu={showMenu}
-        >
-          <span className="sidebar-task-line">
-            <span className="sidebar-pinned-tab-glyph">{tabLook(pinSubject(pin, agent)).icon}</span>
-            <span ref={words} className="sidebar-pinned-tab-name" data-overflow={String(clipped)}>
-              {pin.label}
-            </span>
-          </span>
-        </button>
-      </Tooltip>
-      <span className="sidebar-task-marks">
-        <Tooltip label="Unpin">
-          <IconButton
-            icon={<UnpinIcon />}
-            label={`Unpin ${pin.label}`}
-            size={BUTTON_SIZE.COMPACT}
-            onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
-            onContextMenu={showMenu}
-          />
-        </Tooltip>
-      </span>
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          actions={
+            <Tooltip label="Unpin">
+              <IconButton
+                icon={<UnpinIcon />}
+                label={`Unpin ${pin.label}`}
+                size={BUTTON_SIZE.COMPACT}
+                onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
+              />
+            </Tooltip>
+          }
+        />
+      </RowHintOptions>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${pin.label} actions`}
@@ -332,6 +354,6 @@ export function SidebarPinnedTab({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }

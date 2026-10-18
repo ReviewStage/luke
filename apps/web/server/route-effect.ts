@@ -1,3 +1,4 @@
+import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { Effect } from "effect";
@@ -22,11 +23,19 @@ type WebHandler = (request: Request) => Promise<Response>;
  * The router's own request logger is disabled: a function's request line is
  * already the platform's to record, and a URL Luke wrote to its own output is
  * a place a token in a query could land.
+ *
+ * Every request meets the cookie origin guard first, so a state-changing
+ * request a browser's cookie carried from a page this deployment does not
+ * serve is refused before any route reads the cookie
+ * (`packages/service/src/http/origin-guard.ts`).
  */
 export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
+  const refuseCrossSite = cookieOriginGuard(process.env);
   let building: Promise<WebHandler> | undefined;
   return {
     async fetch(request: Request): Promise<Response> {
+      const refusal = refuseCrossSite(request);
+      if (refusal !== undefined) return refusal;
       building ??= runWeb(Effect.context<WebServices>()).then((context) => {
         const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
         return (incoming: Request) => handler(incoming, context);

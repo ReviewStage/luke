@@ -166,7 +166,7 @@ function sections(container: HTMLElement) {
 
 /** Each tool on a server's page: its name and its badge, where it wears one. */
 function tools(container: HTMLElement) {
-  return [...container.querySelectorAll(".integration-tool")].map((tool) => [
+  return [...container.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
     (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
       ?.textContent,
     tool.querySelector(".luke-badge")?.textContent,
@@ -184,7 +184,7 @@ function openVercel(container: HTMLElement) {
 
 /** The name of the tool a server's page holds highlighted. */
 function highlighted(container: HTMLElement) {
-  const row = container.querySelector('.integration-tool[data-current="true"]');
+  const row = container.querySelector('ul[aria-label$=" tools"] > li:has([aria-current="true"])');
   return (
     row?.querySelector(".integration-tool-id") ?? row?.querySelector(".integration-tool-title")
   )?.textContent;
@@ -378,13 +378,31 @@ test("Escape, Left, and Backspace on a tool's page each go back to its server's 
   assert.equal(container.querySelector(".agent-servers-menu"), null);
 });
 
+test("on a server's page the pointer coming onto a tool's row moves the highlight to it", async () => {
+  const { container } = await opened();
+  openVercel(container);
+  assert.equal(highlighted(container), "delete_domain");
+  const row =
+    [
+      ...container.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button'),
+    ].find((button) => button.textContent?.startsWith("delete_project")) ??
+    assert.fail("delete_project has its row");
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  assert.equal(highlighted(container), "delete_project");
+});
+
 test("a press on a tool opens its page with the popover standing open, and its back goes back to the server's page", async () => {
   const { container } = await opened();
   openVercel(container);
   const head =
-    [...container.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find((button) =>
-      button.textContent?.startsWith("delete_project"),
-    ) ?? assert.fail("delete_project has its row");
+    [
+      ...container.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button'),
+    ].find((button) => button.textContent?.startsWith("delete_project")) ??
+    assert.fail("delete_project has its row");
 
   // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
   const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });

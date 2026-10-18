@@ -123,7 +123,7 @@ export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
 export type ChatMemberSubject =
   | { readonly kind: typeof MEMBER_KIND.HUMAN; readonly userId: string }
   | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string }
-  | { readonly kind: typeof MEMBER_KIND.LUKE; readonly planId: string };
+  | { readonly kind: typeof MEMBER_KIND.LUKE; readonly taskId: string };
 
 /** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
 const MAX_PAST = 200;
@@ -154,7 +154,7 @@ const ChatMemberRowSchema = Schema.Struct({
   kind: Schema.Literals(Object.values(MEMBER_KIND)),
   userId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
-  planId: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
   handle: Schema.String,
   ordinal: Schema.Number,
   readSeq: Schema.Number,
@@ -171,7 +171,7 @@ const ChatChannelRowSchema = Schema.Struct({
   organizationId: Schema.String,
   kind: Schema.Literals(Object.values(CHANNEL_KIND)),
   name: Schema.NullOr(Schema.String),
-  planId: Schema.NullOr(Schema.String),
+  taskId: Schema.NullOr(Schema.String),
   dmAMemberId: Schema.NullOr(Schema.String),
   dmBMemberId: Schema.NullOr(Schema.String),
   createdByMemberId: Schema.NullOr(Schema.String),
@@ -272,7 +272,7 @@ const MEMBER_COLUMNS = {
   kind: chatMember.kind,
   userId: chatMember.userId,
   agentId: chatMember.agentId,
-  planId: chatMember.planId,
+  taskId: chatMember.taskId,
   handle: chatMember.handle,
   ordinal: chatMember.ordinal,
   readSeq: chatMember.readSeq,
@@ -286,7 +286,7 @@ const CHANNEL_COLUMNS = {
   organizationId: chatChannel.organizationId,
   kind: chatChannel.kind,
   name: chatChannel.name,
-  planId: chatChannel.planId,
+  taskId: chatChannel.taskId,
   dmAMemberId: chatChannel.dmAMemberId,
   dmBMemberId: chatChannel.dmBMemberId,
   createdByMemberId: chatChannel.createdByMemberId,
@@ -343,7 +343,7 @@ const SubjectKeySchema = Schema.Struct({
 const SUBJECT_COLUMN = {
   [MEMBER_KIND.HUMAN]: chatMember.userId,
   [MEMBER_KIND.AGENT]: chatMember.agentId,
-  [MEMBER_KIND.LUKE]: chatMember.planId,
+  [MEMBER_KIND.LUKE]: chatMember.taskId,
 } as const;
 
 const findMemberOfSubject = SqlSchema.findOneOption({
@@ -433,13 +433,13 @@ const findAgentWorkspace = SqlSchema.findOneOption({
 
 /** A plan the account reaches, with its workspace and its name. */
 const findReachableTask = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({
     organizationId: Schema.String,
     name: Schema.String,
     archivedAt: Schema.NullOr(InstantColumnSchema),
   }),
-  execute: ({ userId, planId: taskId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select({
@@ -467,7 +467,7 @@ const insertMember = SqlSchema.findOne({
     kind: Schema.Literals(Object.values(MEMBER_KIND)),
     userId: Schema.NullOr(Schema.String),
     agentId: Schema.NullOr(Schema.String),
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     handle: Schema.String,
     ordinal: Schema.Number,
     now: Schema.Date,
@@ -482,7 +482,7 @@ const insertMember = SqlSchema.findOne({
           kind: row.kind,
           userId: row.userId,
           agentId: row.agentId,
-          planId: row.planId,
+          taskId: row.taskId,
           handle: row.handle,
           ordinal: row.ordinal,
           joinedAt: row.now,
@@ -569,7 +569,7 @@ const findTaskChannel = SqlSchema.findOneOption({
       db
         .select(CHANNEL_COLUMNS)
         .from(chatChannel)
-        .where(and(eq(chatChannel.planId, taskId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
+        .where(and(eq(chatChannel.taskId, taskId), eq(chatChannel.kind, CHANNEL_KIND.TASK))),
     ),
 });
 
@@ -632,7 +632,7 @@ const insertChannel = SqlSchema.findAll({
     organizationId: Schema.String,
     kind: Schema.Literals(Object.values(CHANNEL_KIND)),
     name: Schema.NullOr(Schema.String),
-    planId: Schema.NullOr(Schema.String),
+    taskId: Schema.NullOr(Schema.String),
     dmAMemberId: Schema.NullOr(Schema.String),
     dmBMemberId: Schema.NullOr(Schema.String),
     createdByMemberId: Schema.NullOr(Schema.String),
@@ -649,7 +649,7 @@ const insertChannel = SqlSchema.findAll({
           organizationId: row.organizationId,
           kind: row.kind,
           name: row.name,
-          planId: row.planId,
+          taskId: row.taskId,
           dmAMemberId: row.dmAMemberId,
           dmBMemberId: row.dmBMemberId,
           createdByMemberId: row.createdByMemberId,
@@ -747,11 +747,11 @@ const findChannelInWorkspace = SqlSchema.findOneOption({
 
 const findAgentTask = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ planId: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({ taskId: Schema.NullOr(Schema.String) }),
   execute: (agentId) =>
     Database.use((db) =>
       db
-        .select({ planId: codingAgent.taskId })
+        .select({ taskId: codingAgent.taskId })
         .from(codingAgent)
         .where(eq(codingAgent.id, agentId)),
     ),
@@ -1109,7 +1109,7 @@ function subjectInWorkspace(
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
     case MEMBER_KIND.LUKE:
-      return Effect.map(findTaskWorkspace(subject.planId), (found) =>
+      return Effect.map(findTaskWorkspace(subject.taskId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
   }
@@ -1123,7 +1123,7 @@ function subjectId(subject: ChatMemberSubject): string {
     case MEMBER_KIND.AGENT:
       return subject.agentId;
     case MEMBER_KIND.LUKE:
-      return subject.planId;
+      return subject.taskId;
   }
 }
 
@@ -1218,13 +1218,13 @@ function taskOfContext(
   channel: ChatChannelRow,
   author: ChatMemberRow,
 ): ChatStoreEffect<Option.Option<string>> {
-  if (channel.planId !== null) return Effect.succeed(Option.some(channel.planId));
-  if (author.planId !== null) return Effect.succeed(Option.some(author.planId));
+  if (channel.taskId !== null) return Effect.succeed(Option.some(channel.taskId));
+  if (author.taskId !== null) return Effect.succeed(Option.some(author.taskId));
   if (author.agentId === null) return Effect.succeed(Option.none());
   // An agent that works no plan names no planner, so its `@luke` answers to no one.
   return Effect.map(
     findAgentTask(author.agentId),
-    Option.flatMap((row) => Option.fromNullishOr(row.planId)),
+    Option.flatMap((row) => Option.fromNullishOr(row.taskId)),
   );
 }
 
@@ -1237,7 +1237,7 @@ function namedMember(
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   if (handle !== LUKE_HANDLE) return findMemberByHandle({ organizationId, handle });
   if (Option.isNone(taskId)) return Effect.succeed(Option.none());
-  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, planId: taskId.value });
+  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, taskId: taskId.value });
 }
 
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
@@ -1298,7 +1298,7 @@ export function ensureMember(
         kind: subject.kind,
         userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
         agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-        planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
+        taskId: subject.kind === MEMBER_KIND.LUKE ? subject.taskId : null,
         handle,
         ordinal,
         now,
@@ -1344,7 +1344,7 @@ export function ensureGeneral(
       organizationId,
       kind: CHANNEL_KIND.GENERAL,
       name: GENERAL_CHANNEL,
-      planId: null,
+      taskId: null,
       dmAMemberId: null,
       dmBMemberId: null,
       createdByMemberId: null,
@@ -1366,7 +1366,7 @@ export function ensureTaskChannel(
 ): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return transaction(
     Effect.gen(function* () {
-      const reached = yield* findReachableTask({ userId, planId: taskId });
+      const reached = yield* findReachableTask({ userId, taskId });
       if (Option.isNone(reached)) return Option.none();
       const standing = yield* findTaskChannel(taskId);
       if (Option.isSome(standing)) return standing;
@@ -1387,9 +1387,9 @@ export function ensureTaskChannel(
       const now = yield* DateTime.nowAsDate;
       const made = yield* insertChannel({
         organizationId,
-        kind: CHANNEL_KIND.PLAN,
+        kind: CHANNEL_KIND.TASK,
         name,
-        planId: taskId,
+        taskId,
         dmAMemberId: null,
         dmBMemberId: null,
         createdByMemberId: null,
@@ -1441,7 +1441,7 @@ export function openTopicChannel(
         organizationId,
         kind: CHANNEL_KIND.TOPIC,
         name,
-        planId: null,
+        taskId: null,
         dmAMemberId: null,
         dmBMemberId: null,
         createdByMemberId: openedBy,
@@ -1485,7 +1485,7 @@ export function findOrMakeDm(
       ...pair,
       kind: CHANNEL_KIND.DM,
       name: null,
-      planId: null,
+      taskId: null,
       createdByMemberId: fromMemberId,
       now,
     });
@@ -1494,13 +1494,13 @@ export function findOrMakeDm(
 }
 
 const stampTaskChannelArchive = SqlSchema.void({
-  Request: Schema.Struct({ planId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
-  execute: ({ planId: taskId, archivedAt }) =>
+  Request: Schema.Struct({ taskId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
+  execute: ({ taskId, archivedAt }) =>
     Database.use((db) =>
       db
         .update(chatChannel)
         .set({ archivedAt })
-        .where(and(eq(chatChannel.planId, taskId), eq(chatChannel.kind, CHANNEL_KIND.PLAN))),
+        .where(and(eq(chatChannel.taskId, taskId), eq(chatChannel.kind, CHANNEL_KIND.TASK))),
     ),
 });
 
@@ -1511,7 +1511,7 @@ const stampTaskChannelArchive = SqlSchema.void({
  * returns. Nothing where the plan has no channel.
  */
 export function followTaskArchive(taskId: string, archivedAt: Date | null): ChatStoreEffect<void> {
-  return stampTaskChannelArchive({ planId: taskId, archivedAt });
+  return stampTaskChannelArchive({ taskId, archivedAt });
 }
 
 /**
@@ -2340,7 +2340,7 @@ export type ChatAskScope = { readonly authorMemberId: string } | { readonly chan
 /** One ask that waits on a person, with the plan of the channel it was asked in, where it was asked in a plan's channel. */
 export interface WaitingAsk {
   readonly message: ChatMessageRow;
-  readonly planId: string | null;
+  readonly taskId: string | null;
 }
 
 /** Where an ask that waits stands, without what it says: what a held read compares between looks. */
@@ -2436,14 +2436,14 @@ function waitingOnAccount(userId: string): SQL | undefined {
 
 const findWaiting = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String }),
-  Result: Schema.Struct({ ...ChatMessageRowSchema.fields, planId: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({ ...ChatMessageRowSchema.fields, taskId: Schema.NullOr(Schema.String) }),
   execute: ({ userId }) =>
     Database.use((db) =>
       db
-        .select({ ...MESSAGE_COLUMNS, planId: chatChannel.planId })
+        .select({ ...MESSAGE_COLUMNS, taskId: chatChannel.taskId })
         .from(chatMessage)
         .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
-        .leftJoin(task, eq(task.id, chatChannel.planId))
+        .leftJoin(task, eq(task.id, chatChannel.taskId))
         .where(waitingOnAccount(userId))
         .orderBy(...WAITING_ORDER),
     ),
@@ -2468,7 +2468,7 @@ const findWaitingStamps = SqlSchema.findAll({
         })
         .from(chatMessage)
         .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
-        .leftJoin(task, eq(task.id, chatChannel.planId))
+        .leftJoin(task, eq(task.id, chatChannel.taskId))
         .where(waitingOnAccount(userId))
         .orderBy(...WAITING_ORDER),
     ),
@@ -2505,7 +2505,7 @@ export function openAsksOf(
 /** Every ask that waits on the account across its workspaces, as `waitingOnAccount` reads them, the latest changed first. */
 export function waitingOn(userId: string): ChatStoreEffect<readonly WaitingAsk[]> {
   return Effect.map(findWaiting({ userId }), (rows) =>
-    rows.map(({ planId: taskId, ...message }) => ({ message, planId: taskId })),
+    rows.map(({ taskId, ...message }) => ({ message, taskId })),
   );
 }
 
@@ -2771,9 +2771,9 @@ const findChannelMessages = SqlSchema.findAll({
 
 /** The members a task's move takes along: its Luke, and the agents of the task, in the workspace it leaves. */
 const findTaskMembers = SqlSchema.findAll({
-  Request: Schema.Struct({ planId: Schema.String, organizationId: Schema.String }),
+  Request: Schema.Struct({ taskId: Schema.String, organizationId: Schema.String }),
   Result: ChatMemberRowSchema,
-  execute: ({ planId: taskId, organizationId }) =>
+  execute: ({ taskId, organizationId }) =>
     Database.use((db) =>
       db
         .select(MEMBER_COLUMNS)
@@ -2782,7 +2782,7 @@ const findTaskMembers = SqlSchema.findAll({
           and(
             eq(chatMember.organizationId, organizationId),
             or(
-              eq(chatMember.planId, taskId),
+              eq(chatMember.taskId, taskId),
               inArray(
                 chatMember.agentId,
                 queryBuilder
@@ -2815,7 +2815,7 @@ const releaseMember = SqlSchema.void({
     Database.use((db) =>
       db
         .update(chatMember)
-        .set({ agentId: null, planId: null, leftAt: now })
+        .set({ agentId: null, taskId: null, leftAt: now })
         .where(eq(chatMember.id, memberId)),
     ),
 });
@@ -2931,7 +2931,7 @@ function memberAcross(
     const subject = !ofTask
       ? undefined
       : member.kind === MEMBER_KIND.LUKE
-        ? ({ kind: MEMBER_KIND.LUKE, planId: taskId } as const)
+        ? ({ kind: MEMBER_KIND.LUKE, taskId } as const)
         : member.agentId === null
           ? undefined
           : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
@@ -2958,7 +2958,7 @@ function mintFormer(
       kind: member.kind,
       userId: null,
       agentId: null,
-      planId: null,
+      taskId: null,
       handle: member.kind === MEMBER_KIND.LUKE ? LUKE_HANDLE : `agent-${ordinal}`,
       ordinal,
       now,
@@ -2983,7 +2983,7 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       kind: subject.kind,
       userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
       agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-      planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
+      taskId: subject.kind === MEMBER_KIND.LUKE ? subject.taskId : null,
       handle,
       ordinal,
       now,
@@ -3037,7 +3037,7 @@ export function moveTaskChat(taskId: string, organizationId: string): ChatStoreE
           ...(row.answeredByMemberId === null ? [] : [row.answeredByMemberId]),
         ]),
       );
-      const ours = yield* findTaskMembers({ planId: taskId, organizationId: from });
+      const ours = yield* findTaskMembers({ taskId, organizationId: from });
       const others = yield* findMembersByIds({
         ids: [...named].filter((id) => !ours.some((row) => row.id === id)),
       });

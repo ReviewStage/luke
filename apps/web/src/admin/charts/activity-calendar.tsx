@@ -2,6 +2,7 @@ import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
+import { ChartTooltipFrame } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChartFrame } from "./chart-frame";
@@ -193,23 +194,18 @@ export function ActivityCalendar({
       title={`This account's ${spanLabel}, week by week`}
       overlay={
         anchor !== undefined ? (
-          <div
-            ref={tooltipRef}
-            className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
-          >
-            <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
-            <div className="flex w-full items-center gap-2">
-              <div
-                className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                style={{ backgroundColor: USAGE_CHART.calls.color }}
-              />
-              <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                <span className="text-muted-foreground">{USAGE_CHART.calls.label}</span>
-                <span className="font-mono font-medium text-foreground tabular-nums">
-                  {formatNumber(anchor.day.calls)}
-                </span>
-              </div>
-            </div>
+          <div ref={tooltipRef} className="pointer-events-none absolute z-10">
+            <ChartTooltipFrame
+              label={formatTooltipDay(anchor.day.day, partialDay)}
+              rows={[
+                {
+                  key: "calls",
+                  color: USAGE_CHART.calls.color,
+                  name: USAGE_CHART.calls.label,
+                  value: formatNumber(anchor.day.calls),
+                },
+              ]}
+            />
           </div>
         ) : null
       }

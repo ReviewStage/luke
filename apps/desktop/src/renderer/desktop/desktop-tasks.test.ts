@@ -157,6 +157,83 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
+/** The Code tab as the task's page draws it over the code the task holds, and whether its work read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, workFailed = false): HTMLElement {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopTasks, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      tasks: tasksControl({
+        page: TASKS_PAGE.DOCUMENT,
+        activeTaskId: TASK.id,
+        region: { kind: DOCUMENT_REGION.READY, task: TASK },
+        sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+        shownCode,
+        workFailed,
+      }),
+    }),
+  );
+  const page = document.createElement("div");
+  page.innerHTML = markup;
+  return page;
+}
+
+test("the Code tab waits while the task's code is unread, and says there is none only once it is read as none", () => {
+  const tab = (page: HTMLElement) => {
+    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+    assert.ok(panel, "the panel shows its tab");
+    return panel;
+  };
+  const unread = tab(codeTab(undefined));
+  assert.ok(unread.querySelector("[role=status]"), "the tab says it is waiting");
+  assert.doesNotMatch(unread.textContent ?? "", /No code yet\./u);
+
+  const none = tab(codeTab([]));
+  assert.match(none.textContent ?? "", /No code yet\./u);
+  assert.equal(none.querySelector("[role=status]"), null);
+});
+
+test("the Code tab whose work read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+  let retries = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+          shownCode: undefined,
+          workFailed: true,
+          onRetryWork: () => {
+            retries += 1;
+          },
+        }),
+      }),
+    ),
+  );
+  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  assert.match(tab?.textContent ?? "", /The code could not be read\./u);
+  assert.equal(tab?.querySelector("[role=status]"), null, "the tab no longer waits");
+  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retries, 1);
+  act(() => root.unmount());
+  container.remove();
+
+  // Code already held stays drawn through a read that did not land.
+  const held = codeTab([], true).querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  assert.match(held?.textContent ?? "", /No code yet\./u);
+  assert.doesNotMatch(held?.textContent ?? "", /could not be read/u);
+});
+
 test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -249,6 +326,8 @@ async function narrowTaskInbox(
   width = 700,
   /** What the read held open past the first answers, where a test settles it; else it stays open. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
+  /** What the first read answers, where a test holds it open; else the items given. */
+  first: Promise<CodingAgentInboxAnswerView> = Promise.resolve({ items, cursor: "1" }),
 ) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -282,7 +361,7 @@ async function narrowTaskInbox(
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               readInbox: ({ after }) =>
                 after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items, cursor: "1" })
+                  ? first
                   : after === "1"
                     ? later
                     : new Promise(() => undefined),
@@ -350,9 +429,9 @@ async function narrowTaskInbox(
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
       ].find((button) => button.textContent === "Inbox") ?? null,
     row: (title: string) =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find((each) =>
-        each.textContent?.includes(title),
-      ),
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+      ].find((each) => each.textContent?.includes(title)),
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -456,6 +535,26 @@ function heldAnswer(): HeldAnswer {
     },
   };
 }
+
+test("while a task's Inbox is first read, its list stands placeholder rows under a status saying the inbox is being read, with no ring in its corner; once the read lands, the items stand", async () => {
+  const read = heldAnswer();
+  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
+  const inbox = await narrowTaskInbox([], false, 1_200, undefined, read.promise);
+  const list = document.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  await read.settle({ items: [asked], cursor: "1" });
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.unmount();
+});
 
 test("with Needs you on, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says nothing needs you", async () => {
   window.localStorage.clear();
@@ -566,7 +665,7 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("a plan's document opens on its Edited by line, with no crumb over it", () => {
+test("a plan's document opens on its title, with who created it and last edited it under the title, and no crumb over it", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -603,12 +702,15 @@ test("a plan's document opens on its Edited by line, with no crumb over it", () 
       ),
     ),
   );
-  const scroll = container.querySelector(".desktop-document .plan-document-scroll");
-  const first = scroll?.firstElementChild;
+  const body = container.querySelector(".desktop-document .plan-document-scroll .plan-body");
+  const first = body?.firstElementChild;
+  const byline = first?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.ok(first?.classList.contains("plan-edit-note"), "the Edited by line leads the document");
-  assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
+  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
+  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
   container.remove();
 });
@@ -812,4 +914,44 @@ test("with Chat off for the account, a Chat tab kept on the task's strip draws n
   assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
   act(() => off.root.unmount());
   off.container.remove();
+});
+
+test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
+  const marked: string[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
+        const { itemId, unread } = request.payload;
+        marked.push(`${unread ? "unread" : "read"}:${itemId}`);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: itemId, unread } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    },
+  });
+  const SHIP = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a1", "Ship it?", 2),
+    unread: true,
+  };
+  const ROLL = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a2", "Roll back?", 1),
+    unread: true,
+  };
+  const inbox = await narrowTaskInbox([SHIP, ROLL], false, 1400);
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.equal(inbox.title(), "Ship it?");
+  assert.deepEqual(marked, [`read:${SHIP.id}`]);
+  const dot = (title: string) =>
+    inbox.row(title)?.querySelector(".inbox-row-gutter .inbox-row-unread") !== null;
+  assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
+  const mark = inbox
+    .row("Roll back?")
+    ?.closest("li")
+    ?.querySelector<HTMLButtonElement>('.luke-list-row-actions button[aria-label="Mark as read"]');
+  assert.ok(mark, "an unread row offers Mark as read over its time");
+  await act(async () => mark.click());
+  assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
+  assert.equal(dot("Roll back?"), false);
+  inbox.unmount();
 });

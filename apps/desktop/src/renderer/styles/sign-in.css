@@ -35,95 +35,14 @@
   gap: var(--luke-space-12);
 }
 
-/* Each button and its badge, the badge pinned to the button's top-right corner. */
-.sign-in-provider-slot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Forty pixels tall, the height a devtool's sign-in button stands at, on the
-   window's control corner. The primary one is filled, drawn in the text
-   colour the way a composer's send press is — the provider last signed in
-   with, or Google with none kept — and the other is the quiet one beside it. */
-.sign-in-provider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-icon-gap);
-  height: 40px;
-  padding: 0 var(--luke-space-16);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-semibold);
-  -webkit-app-region: no-drag;
-  transition:
-    background-color var(--duration-hover) ease,
-    opacity var(--duration-hover) ease;
-}
-
-.sign-in-provider:hover:not(:disabled) {
-  background: var(--luke-color-fill-strong);
-}
-
-.sign-in-provider[data-primary="true"] {
-  background: var(--luke-color-text);
-  box-shadow: none;
-  color: var(--luke-color-ink-inverse);
-}
-
-.sign-in-provider[data-primary="true"]:hover:not(:disabled) {
-  background: var(--luke-color-ink);
-}
-
-/* Held while a sign-in is out: the button waited on stays as it was, saying
-   so; the other steps back. */
-.sign-in-provider:disabled[data-waiting="false"],
-.sign-in-provider:disabled[data-waiting="false"] + .sign-in-last-used {
-  opacity: 0.4;
-}
-
-/* "Last used": a small pill hung on the top-right corner of the filled button
-   it marks, overhanging it, the way a devtool's sign-in marks the way in taken
-   last. It wears the button's own ink at a tint, the tint laid over the
-   button's fill rather than over nothing, so the half that overhangs the
-   ground is the same solid pill as the half over the button. Its border is
-   clear and only keeps the pill's box. It lets a press fall through to the
-   button. */
-.sign-in-last-used {
-  position: absolute;
-  top: calc(-1 * var(--luke-space-8));
-  right: calc(-1 * var(--luke-space-6));
-  padding: 0 var(--luke-space-6);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--luke-color-ground) 16%, var(--luke-color-text));
-  color: color-mix(in srgb, var(--luke-color-ground) 72%, transparent);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-  white-space: nowrap;
-  pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
-}
-
-/* The provider's own mark, at the size its guidelines draw beside a label,
-   and the spinner that stands in its place while its sign-in is waited on. */
-.sign-in-provider :is(.provider-mark, .sign-in-provider-wait) {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
 /* The one line under the buttons, a caption's height whether or not it says
    anything: what the wait is for and the way to take it back, or why the
    last attempt did not land, in the attention ink. */
+/* Note that its Cancel is a press, so the line takes no part in a drag. */
 .sign-in-note {
   min-height: var(--luke-type-caption-leading);
   margin-top: var(--luke-space-20);
+  -webkit-app-region: no-drag;
 }
 
 .sign-in-error {
@@ -131,16 +50,4 @@
   color: var(--luke-color-attention);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-.sign-in-cancel {
-  padding: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
-  -webkit-app-region: no-drag;
-}
-
-.sign-in-cancel:hover {
-  text-decoration: underline;
 }

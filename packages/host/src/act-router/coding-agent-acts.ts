@@ -20,6 +20,9 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateParams,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -38,6 +41,7 @@ import {
   type CodingAgentPullRequestParams,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -54,6 +58,7 @@ import {
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
+import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect } from "effect";
 import { ACT, ACT_KIND } from "../acts.js";
@@ -113,6 +118,9 @@ export interface CodingAgentActsDependencies {
     codingAgentOverviewPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+    codingAgentReviewOptions(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
     codingAgentOverviewChecks(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
@@ -150,6 +158,12 @@ export interface CodingAgentActsDependencies {
     codingAgentInboxMessage(
       params: CodingAgentInboxMessageParams,
     ): Effect.Effect<CodingAgentInboxMessagedView>;
+    codingAgentInboxReadState(
+      params: CodingAgentInboxReadStateParams,
+    ): Effect.Effect<CodingAgentInboxReadStateView>;
+    codingAgentInboxReadAll(
+      params: InboxReadAllRequest,
+    ): Effect.Effect<CodingAgentInboxReadAllView>;
     codingAgentInboxAttachment(
       params: CodingAgentInboxAttachmentParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
@@ -197,6 +211,7 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
+  | typeof ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
   | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
@@ -214,6 +229,8 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
   | typeof ACT_KIND.CODING_AGENTS_INBOX_MESSAGE
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_READ_ALL
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
   | typeof ACT_KIND.CODING_AGENTS_PICTURE
   | typeof ACT_KIND.CODING_AGENTS_CHAT
@@ -342,6 +359,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, sender);
       return host.codingAgentOverviewPullRequest(params);
     },
+    [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, sender);
+      return host.codingAgentReviewOptions(params);
+    },
     [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, sender);
       return host.codingAgentOverviewChecks(params);
@@ -410,6 +431,14 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, sender);
       return host.codingAgentInboxMessage(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, sender);
+      return host.codingAgentInboxReadState(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, sender);
+      return host.codingAgentInboxReadAll(params);
     },
     [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, sender);

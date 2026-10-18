@@ -1,0 +1,128 @@
+/* banner.css -- a notice's glyph, words, and presses on one row, in any of
+   its three looks. Each banner is a container of its own, so it answers its
+   own width rather than the window's. */
+
+@layer components {
+  .luke-banner {
+    --luke-banner-gap: var(--luke-icon-gap);
+    --luke-banner-ink: var(--luke-color-text-muted);
+    container: luke-banner / inline-size;
+    flex: none;
+  }
+
+  .luke-banner[data-tone="attention"] {
+    --luke-banner-ink: var(--luke-color-attention);
+  }
+
+  .luke-banner-row {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-banner-gap);
+  }
+
+  .luke-banner-glyph {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-banner-glyph > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-banner-words {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+  }
+
+  .luke-banner-actions {
+    display: flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  /* A strip: one slim line across its column on a faint tint of its tone,
+     a hairline of it beneath, its words starting on the column's content
+     edge. Its words are cut short rather than wrapped while the line is wide
+     enough to read them, so the line keeps its height, and its presses never
+     take more than half the line, their words cut short at the end rather
+     than pushed out of the column. */
+  .luke-banner[data-look="strip"] {
+    padding: var(--luke-space-2) var(--luke-space-12) var(--luke-space-2) var(--luke-space-20);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--luke-banner-ink) 30%, var(--luke-color-border));
+    background: color-mix(in srgb, var(--luke-banner-ink) 9%, var(--luke-color-ground));
+  }
+
+  .luke-banner[data-look="strip"] .luke-banner-row {
+    min-height: var(--luke-control-height);
+  }
+
+  .luke-banner[data-look="strip"] .luke-banner-words {
+    display: block;
+    overflow: hidden;
+    color: var(--luke-color-text-body);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-banner[data-look="strip"] .luke-banner-actions {
+    max-width: 50%;
+  }
+
+  /* A card: its glyph in a disc, its words a section's heading and the
+     muted line under it. */
+  .luke-banner[data-look="card"] {
+    --luke-banner-gap: var(--luke-space-12);
+    box-sizing: border-box;
+    padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
+    border: 1px solid var(--luke-color-border-strong);
+    border-radius: var(--luke-dialog-radius);
+    background: var(--luke-color-well);
+  }
+
+  .luke-banner[data-look="card"] .luke-banner-glyph {
+    width: 32px; /* off-scale: the card's glyph disc */
+    height: 32px;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-banner[data-look="card"][data-tone="attention"] .luke-banner-glyph {
+    background: color-mix(in srgb, var(--luke-banner-ink) 14%, transparent);
+    color: var(--luke-banner-ink);
+  }
+
+  /* Narrow, the presses leave the words' line for one of their own beneath
+     it, each as wide as the line allows, and the words wrap at their own
+     width rather than being squeezed past it or cut short. */
+  @container luke-banner (max-width: 479px) {
+    .luke-banner-row {
+      flex-wrap: wrap;
+    }
+
+    .luke-banner-actions,
+    .luke-banner[data-look="strip"] .luke-banner-actions {
+      max-width: none;
+      flex: 1 0 100%;
+    }
+
+    .luke-banner-actions > * {
+      flex: 1 1 0%;
+    }
+
+    .luke-banner[data-look="strip"] .luke-banner-words {
+      white-space: normal;
+    }
+  }
+}

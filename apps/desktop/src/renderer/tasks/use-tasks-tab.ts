@@ -439,6 +439,10 @@ export interface TasksControl {
   };
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
+  /** Whether the last read of the workspaces did not land, those held still drawn. */
+  workspacesFailed: boolean;
+  /** Reads the workspaces again after a read that did not land. */
+  onRetryWorkspaces: () => void;
   /** The workspace the sidebar lists and New task starts in; absent while none is listed, when every task is listed. */
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new task in it. */
@@ -489,6 +493,10 @@ export interface TasksControl {
   board: Board | undefined;
   /** Every code Luke showed on the open task, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
+  /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
+  workFailed: boolean;
+  /** Reads the open task's work and code again after a read that did not land. */
+  onRetryWork: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** What was said on the open task's calls, the call standing now included, and the retry of a read that failed. */
@@ -1283,30 +1291,30 @@ export function useTasksTab(input: {
   // an Archive; a call already in the work when the plan opens is read with
   // the plan.
   const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
-  const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
-    planId: undefined,
+  const startsSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+    taskId: undefined,
     ids: new Set(),
   });
   const readAgents = agents.onRetryList;
   useEffect(() => {
     const seen = startsSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.planId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
-    startsSeen.current = { planId: taskId, ids: new Set(startedByLuke) };
+    const landed = seen.taskId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
+    startsSeen.current = { taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
   // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
   // again, as one lands in the work of the task it was made on.
   const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
-  const newTasksSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
-    planId: undefined,
+  const newTasksSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+    taskId: undefined,
     ids: new Set(),
   });
   useEffect(() => {
     const seen = newTasksSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.planId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
-    newTasksSeen.current = { planId: taskId, ids: new Set(newTasksByLuke) };
+    const landed = seen.taskId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
+    newTasksSeen.current = { taskId, ids: new Set(newTasksByLuke) };
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
   }, [newTasksByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
@@ -1411,7 +1419,7 @@ export function useTasksTab(input: {
   const tabChannel =
     columnShown && mainTabs.tab === MAIN_TAB.CHAT
       ? liveChat.chat?.channels.find(
-          (channel) => channel.kind === CHANNEL_KIND.PLAN && channel.planId === viewed.activeTaskId,
+          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
         )?.id
       : undefined;
   if (tabChannel !== tabReading) setTabReading(tabChannel);
@@ -1436,12 +1444,12 @@ export function useTasksTab(input: {
     !shown || listedWorkspace === undefined
       ? null
       : standIn?.kind === STAND_IN.CHAT
-        ? { workspaceId: listedWorkspace.id, planId: null }
+        ? { workspaceId: listedWorkspace.id, taskId: null }
         : columnShown && mainTabs.tab === MAIN_TAB.CHAT && viewed.activeTaskId !== undefined
-          ? { workspaceId: listedWorkspace.id, planId: viewed.activeTaskId }
+          ? { workspaceId: listedWorkspace.id, taskId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
-  const chatShownTask = chatShown?.planId ?? null;
+  const chatShownTask = chatShown?.taskId ?? null;
   const reportedTab = useRef<
     | {
         agentId: string | null;
@@ -1473,7 +1481,7 @@ export function useTasksTab(input: {
       chatShown:
         chatShownWorkspace === null
           ? null
-          : { workspaceId: chatShownWorkspace, planId: chatShownTask },
+          : { workspaceId: chatShownWorkspace, taskId: chatShownTask },
     });
   }, [shownAgent, shownInbox, chatShownWorkspace, chatShownTask, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
@@ -1547,7 +1555,7 @@ export function useTasksTab(input: {
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
-      act(ACT_KIND.TASKS_SELECT, { taskId: taskId }).then((opened) => {
+      act(ACT_KIND.TASKS_SELECT, { taskId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
@@ -1657,7 +1665,7 @@ export function useTasksTab(input: {
   shownNow.current = shown;
   const deleteTask = async (taskId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId: taskId }).catch(() => false);
+    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) {
       toast({ words: TASK_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -1672,7 +1680,7 @@ export function useTasksTab(input: {
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
     setRenames((held) => new Map(held).set(taskId, name));
-    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId: taskId, name }).catch(() => false);
+    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
     if (!renamed) {
       setRenames((held) =>
         held.get(taskId) === name
@@ -1702,8 +1710,8 @@ export function useTasksTab(input: {
     setMarks((held) => new Map(held).set(taskId, next));
     const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
     const asked = pinning
-      ? act(ACT_KIND.TASKS_PIN, { taskId: taskId, pinned: mark === TASK_MARK.PIN })
-      : act(ACT_KIND.TASKS_ARCHIVE, { taskId: taskId, archived: mark === TASK_MARK.ARCHIVE });
+      ? act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
+      : act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: mark === TASK_MARK.ARCHIVE });
     asked
       .catch(() => false)
       .then((changed) => {
@@ -1910,7 +1918,7 @@ export function useTasksTab(input: {
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
     const answers = asked.map(({ taskId }) =>
-      act(ACT_KIND.TASKS_ARCHIVE, { taskId: taskId, archived: true }).catch(() => false),
+      act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: true }).catch(() => false),
     );
     Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
@@ -2130,7 +2138,7 @@ export function useTasksTab(input: {
     repository: string | null,
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId: taskId, repository }).then(
+    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
       (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
@@ -2148,7 +2156,7 @@ export function useTasksTab(input: {
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return act(ACT_KIND.TASKS_MOVE, { taskId: taskId, workspaceId })
+    return act(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
       .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2168,7 +2176,7 @@ export function useTasksTab(input: {
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
   const edit = (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
     if (fixture !== undefined) return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: request });
+    return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
   };
 
   // The chip's menu stands on the open task's toolbar, so another task's is
@@ -2189,11 +2197,11 @@ export function useTasksTab(input: {
     (): PlanHistorySource => ({
       readPage: (taskId, before) =>
         act(ACT_KIND.TASKS_REVISIONS, {
-          taskId: taskId,
+          taskId,
           ...(before === undefined ? undefined : { before }),
         }),
-      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId: taskId, seq }),
-      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId: taskId, seq }),
+      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
+      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
     [act],
   );
@@ -2319,7 +2327,7 @@ export function useTasksTab(input: {
       showColumnTab(taskId, { agent: source.agentId });
       return;
     }
-    setReveal({ taskId: taskId, source });
+    setReveal({ taskId, source });
     showPanelTab(taskId, SIDE_PANEL_TAB.CALL);
   };
 
@@ -2680,6 +2688,9 @@ export function useTasksTab(input: {
     },
     listedAgents,
     workspaces: viewed.workspaces,
+    workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
+    // A failed read is taken as stale, so the refresh reads the workspaces again at once.
+    onRetryWorkspaces: () => tell(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
@@ -2742,6 +2753,8 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
+    workFailed: tasks.workStatus === TASKS_READ.FAILED,
+    onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     transcript: {
       region: transcript,
@@ -2917,7 +2930,7 @@ export function useTasksTab(input: {
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callCard({ view: voice.view, tasks: tasks }).taskName),
+      question: secondCallQuestion(callCard({ view: voice.view, tasks }).taskName),
     },
     onShowTask: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.

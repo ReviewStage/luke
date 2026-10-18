@@ -65,7 +65,7 @@ const HTTP_METHOD = {
 } as const;
 
 const QUERY = {
-  PLAN: "id",
+  TASK: "id",
   THREAD: "thread",
   AFTER: "after",
 } as const;
@@ -160,7 +160,7 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   if (incoming.method === HTTP_METHOD.GET) {
-    const taskId = yield* idOf(request, QUERY.PLAN);
+    const taskId = yield* idOf(request, QUERY.TASK);
     const userId = yield* resolvedUserId(seams, request);
     const after = yield* cursorQueryOf(request);
     const read = yield* hostedStoreOrUnavailable(planCommentsPast(userId, taskId, after));
@@ -169,7 +169,7 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
   }
   if (incoming.method !== HTTP_METHOD.POST)
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  const taskId = yield* idOf(request, QUERY.PLAN);
+  const taskId = yield* idOf(request, QUERY.TASK);
   const userId = yield* resolvedUserId(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const start = readEither(planCommentStartRequestSchema)(body);
@@ -189,7 +189,7 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
   if (incoming.method !== HTTP_METHOD.POST)
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* idOf(request, QUERY.PLAN);
+  const taskId = yield* idOf(request, QUERY.TASK);
   const threadId = yield* idOf(request, QUERY.THREAD);
   const userId = yield* resolvedUserId(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_ACTION_BODY_BYTES);

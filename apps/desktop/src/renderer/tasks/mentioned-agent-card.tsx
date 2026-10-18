@@ -282,7 +282,7 @@ function TaskAgentCard({
   fallback: ReactNode;
 }): ReactNode {
   const read = useAtomValue(taskAgentsAtom(taskId));
-  const task = useKnownNames().plans.get(taskId);
+  const task = useKnownNames().tasks.get(taskId);
   const foot = task === undefined ? TASK_WORDS.UNKNOWN : `On ${task}`;
   return <ReadAgentCard read={read} agentId={agentId} foot={foot} fallback={fallback} />;
 }

@@ -630,7 +630,7 @@ export function PlanDocumentEditor({
     placement: editing.placement,
     focus: true,
     label: "Plan",
-    className: "markdown plan-unit",
+    className: "markdown luke-prose plan-unit",
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,
@@ -644,7 +644,7 @@ export function PlanDocumentEditor({
             retarget: (target, change) =>
               retargetedMention(task.id, mentions.place, target, change),
             pasted: (words) =>
-              pastedMentionNode(words, mentions.place, { known, planId: task.id, text }),
+              pastedMentionNode(words, mentions.place, { known, taskId: task.id, text }),
             namesMention: (target) =>
               decodeMention(target, mentions.place.repository) !== undefined,
           },

@@ -173,21 +173,38 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   return { page: container, opened, redraw, rerender };
 }
 
+/**
+ * Whether a row waits on the developer, as it reads: ` (waits)` where its
+ * name stands in the unread weight and the attention mark before its time
+ * says "Needs you", none where neither, and ` (?)` where only one stands
+ * or it wears the blue dot that now means unread, so a half-drawn mark fails
+ * every listing.
+ */
+function waitsOf(row: Element): string {
+  const weight = row.closest("li")?.getAttribute("data-unread") === "true";
+  const mark =
+    row.querySelector(".home-row-meta .attention-mark") !== null &&
+    row.querySelector(".home-row-meta .visually-hidden")?.textContent === "Needs you";
+  if (row.querySelector(".inbox-row-unread, .inbox-row-dot") !== null) return " (?)";
+  if (weight && mark) return " (waits)";
+  return weight || mark ? " (?)" : "";
+}
+
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
   assert.ok(region, `${step} stands`);
-  return [...region.querySelectorAll(".sidebar-task")].map((row) => {
-    const words = row.querySelector(".sidebar-task-name")?.textContent;
+  return [...region.querySelectorAll("li > button")].map((row) => {
+    const words = row.querySelector(".luke-list-row-title")?.firstChild?.textContent;
     const context = row.querySelector(".home-row-context")?.textContent;
-    const waits = row.getAttribute("data-unread") === "true" ? " (waits)" : "";
+    const waits = waitsOf(row);
     return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
   });
 }
 
 function row(page: HTMLElement, words: string): HTMLButtonElement {
-  const found = [...page.querySelectorAll<HTMLButtonElement>(".sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === words,
+  const found = [...page.querySelectorAll<HTMLButtonElement>("li > button")].find(
+    (each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === words,
   );
   assert.ok(found, `${words} stands`);
   return found;
@@ -213,6 +230,10 @@ test("each plan stands in its station, and what waits on the developer leads the
     page.querySelector(".factory-summary")?.textContent,
     "2 need you·1 agent working·0 shipped today",
   );
+  assert.ok(
+    page.querySelector(".factory-needs .attention-mark"),
+    "what needs you is counted beside the attention mark",
+  );
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);
   assert.equal(
@@ -226,7 +247,10 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.deepEqual(rows(page, "ship"), ["#2505 ready to merge · Workspace invites (waits)"]);
   // What waits stands in a list of its own, ahead of the work.
   const build = page.querySelector('section[data-step="build"]');
-  assert.equal(build?.querySelector("[data-needs] .sidebar-task-name")?.textContent, QUESTION);
+  assert.equal(
+    build?.querySelector("[data-needs] .luke-list-row-title")?.firstChild?.textContent,
+    QUESTION,
+  );
   // The working agent wears the working mark; the stalled one its own mark at rest.
   const working = '.state-glyph[data-state="working"]';
   assert.ok(row(page, "Plan index").querySelector(working));
@@ -278,9 +302,40 @@ test("the task on the call stands in Talk however old, and with nothing standing
   );
 });
 
-test("until the plan list is read nothing stands, not even the empty state", () => {
-  const { page } = mount([], { listRead: false });
-  assert.equal(page.querySelector(".factory-board")?.childElementCount, 0);
+test("until the plan list is read the line stands in placeholder blocks, each station named and holding rows to come, saying to a reader that the tasks are being read, with nothing to press and no empty state; once the list lands, the rows stand in their place", () => {
+  const { page, redraw } = mount([DRAFT, SEARCH, INVITES], {
+    callTaskId: DRAFT.id,
+    listRead: false,
+  });
+  const board = page.querySelector<HTMLElement>(".factory-board");
+  assert.ok(board, "the board is drawn");
+  const wait = board.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.ok(wait, "the board says it is being read");
+  assert.equal(wait.querySelector(":scope > .luke-visually-hidden")?.textContent, "Reading tasks…");
+  const stations = [...wait.querySelectorAll<HTMLElement>(".factory-step")];
+  assert.deepEqual(
+    stations.map((each) => each.textContent),
+    ["Talk", "Build", "Ship"],
+  );
+  for (const station of stations) {
+    assert.ok(
+      station.querySelectorAll("li .luke-skeleton").length > 0,
+      "placeholder rows stand in each station",
+    );
+  }
+  assert.equal(page.querySelector("section[data-step]"), null, "no real station stands yet");
+  assert.equal(page.querySelector(".luke-empty-state"), null);
+  assert.deepEqual(
+    [...page.querySelectorAll("button")].filter(
+      (each) => each.closest(".desktop-toolbar") === null,
+    ),
+    [],
+  );
+
+  redraw({ listRead: true });
+  assert.equal(page.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(rows(page, "talk"), ["Usage alerts · On a call with Luke"]);
+  assert.deepEqual(rows(page, "build"), ["Plan index · Search across plans"]);
 });
 
 test("a plan list that could not be read says so, and Retry reads it again", () => {
@@ -425,7 +480,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
   );
 
   const face = (words: string) =>
-    row(page, words).querySelector(".sidebar-task-time .actor-mark")?.textContent ?? null;
+    row(page, words).querySelector(".home-row-meta .actor-mark")?.textContent ?? null;
   assert.equal(face(DRAFT.name), "C");
   assert.equal(face("Plan index"), null);
   assert.equal(face("Plan UI"), "C");
@@ -441,7 +496,7 @@ test("a refresh that fails over a list read before keeps the line standing, and 
     },
   });
   // The agent at work on the task read before still stands in Build.
-  assert.ok(page.querySelector('section[data-step="build"] .sidebar-task'));
+  assert.ok(page.querySelector('section[data-step="build"] li > button'));
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
@@ -670,7 +725,7 @@ test("↓ from the window reaches the first row and moves on through the station
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   const focused = () =>
-    document.activeElement?.querySelector(".sidebar-task-name")?.textContent ?? null;
+    document.activeElement?.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? null;
   press("ArrowDown");
   assert.equal(focused(), "Usage alerts");
   press("ArrowDown");
@@ -690,7 +745,8 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
   act(() => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   });
-  const name = () => document.activeElement?.querySelector(".sidebar-task-name")?.textContent;
+  const name = () =>
+    document.activeElement?.querySelector(".luke-list-row-title")?.firstChild?.textContent;
   assert.equal(name(), "Plan index");
   const working = SEARCH.agents;
   assert.ok(working);

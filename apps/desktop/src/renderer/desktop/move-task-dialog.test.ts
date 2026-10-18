@@ -243,11 +243,9 @@ test("a row calls the account's own first workspace personal while no one else i
   const fresh: Workspace = { ...NORTHWIND, id: "ws-fresh", name: "Platform", memberCount: 1 };
   openMenu(openTab({ ...TASK, repository: null }, [personal, STUDIO, fresh]));
 
-  const rows = [...chooseMove().querySelectorAll('[role="radio"] .workspace-ref-line')].map(
-    (line) => line.textContent,
-  );
+  const rows = [...chooseMove().querySelectorAll('[role="radio"]')].map((row) => row.textContent);
 
-  assert.deepEqual(rows, ["Personal workspace", "1 member"]);
+  assert.deepEqual(rows, ["DDanaPersonal workspace", "PPlatform1 member"]);
 });
 
 test("a refused move keeps the dialog up, saying so under the list", async () => {
@@ -280,9 +278,16 @@ function openTask(tasks: TasksControl): HTMLElement {
   return container;
 }
 
-/** The task-wide banner over a stranded task, where one stands. */
+/** The task-wide banner over a stranded task, where one stands: the region its words name. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
-  return within.querySelector<HTMLElement>(".task-banner");
+  const regions = [...within.querySelectorAll<HTMLElement>("section[aria-labelledby]")];
+  return (
+    regions.find((region) =>
+      document
+        .getElementById(region.getAttribute("aria-labelledby") ?? "")
+        ?.textContent?.startsWith("This task's repository belongs to"),
+    ) ?? null
+  );
 }
 
 /** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */

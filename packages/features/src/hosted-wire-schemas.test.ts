@@ -136,6 +136,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
     codingAgentOverviewPullRequestAnswerSchema:
       codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentReviewOptionsAnswerSchema: codingAgentWire.codingAgentReviewOptionsAnswerSchema,
     codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
     codingAgentOverviewConversationAnswerSchema:
       codingAgentWire.codingAgentOverviewConversationAnswerSchema,
@@ -216,6 +217,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
     codingAgentOverviewPullRequestAnswerViewSchema:
       codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentReviewOptionsAnswerViewSchema:
+      codingAgentView.codingAgentReviewOptionsAnswerViewSchema,
     codingAgentOverviewChecksAnswerViewSchema:
       codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
     codingAgentOverviewConversationAnswerViewSchema:
@@ -233,6 +236,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
     codingAgentInboxMessageParamsSchema: codingAgentView.codingAgentInboxMessageParamsSchema,
     codingAgentInboxMessagedViewSchema: codingAgentView.codingAgentInboxMessagedViewSchema,
+    codingAgentInboxReadStateParamsSchema: codingAgentView.codingAgentInboxReadStateParamsSchema,
     codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
     codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
     codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
@@ -432,6 +436,7 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "pull-request-write-wire": {
+    mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
     pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,

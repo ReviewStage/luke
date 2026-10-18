@@ -18,7 +18,7 @@ import {
 } from "../file-tree/contract";
 
 /**
- * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none, and the lines a review thread is on as a patch of their own.
+ * changes-model.ts -- an agent's changes as its Files changed view draws them: each file's patch headed as a whole unified diff, or why it has none, which files a filter keeps and which start collapsed, and the lines a review thread is on as a patch of their own.
  *
  * A file's patch is the hunks of a unified diff from the first `@@` header
  * on, as GitHub sends it. It is drawn whole (`filePatch`), headed as git
@@ -26,6 +26,19 @@ import {
  * same way, so `git apply` takes it as it is. A file with no patch is never
  * drawn as unchanged: it says it is binary, too large to show, or, with an
  * empty patch, that its contents did not change.
+ *
+ * The view draws every file in one list, under a header of its own
+ * (`listPatch` is the file's patch, or its header alone where it has no
+ * hunks to draw), in the order the tree beside it lists them, folders
+ * before files at each level, as Pierre's tree sorts them (`treeOrder`), so
+ * a key stepping to the next file steps to the next row of the tree. A
+ * filter keeps the files whose path holds what is typed,
+ * whatever its case (`filterFiles`), as the tree's search narrows its rows.
+ * A file starts collapsed, its header alone drawn, where reading it is
+ * rarely the point, as GitHub keeps such a diff folded until asked
+ * (`startsCollapsed`): one deleted, one changing more than
+ * `LARGE_FILE_LINES` lines, and a package manager's lockfile, which GitHub
+ * would mark generated.
  *
  * The view draws its files in a File tab's tree and breadcrumbs, which list
  * a folder at a time: the folders here are listed from the changed paths
@@ -91,6 +104,7 @@ export const CHANGES_WORDS = {
   NO_HUNKS: "No changes to show in this file.",
   UNREADABLE: "This file's diff could not be read.",
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
+  UNPLACED_THREADS: "Comments on lines this diff does not show",
 } as const;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -119,6 +133,28 @@ export const STATUS_WORDS = {
 
 /** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
 const NO_SIDE = "/dev/null";
+
+/** The most lines a file may add and remove together before it starts collapsed. */
+const LARGE_FILE_LINES = 1000;
+
+/** The names of the lockfiles package managers write, which start collapsed wherever they stand. */
+const LOCKFILE_NAMES = new Set([
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "Gemfile.lock",
+  "composer.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Pipfile.lock",
+  "go.sum",
+  "Package.resolved",
+  "flake.lock",
+]);
 
 /** How many rows a review thread's preview shows above the first line it is on. */
 const THREAD_CONTEXT_ROWS = 3;
@@ -295,6 +331,74 @@ export function threadPreview(
   return { patch, selected };
 }
 
+/** A review thread drawn on its line in Files changed: the thread, its key, and the line it stands under on the side it counts on. */
+interface PlacedThread {
+  readonly thread: ReviewThread;
+  readonly key: string;
+  readonly side: DiffSelection["side"];
+  readonly line: number;
+}
+
+/** A file's review threads: those drawn on their lines, and those drawn above its diff, which it has no row for. */
+export interface FileThreads {
+  readonly placed: readonly PlacedThread[];
+  readonly above: readonly PlacedThread[];
+}
+
+/** The side of a diff each of GitHub's sides is counted on: the old side's lines on the left, the new side's on the right. */
+const SELECTION_SIDE = {
+  [DIFF_SIDE.LEFT]: DIFF_SELECTION_SIDE.DELETIONS,
+  [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
+} as const satisfies Record<DiffSide, DiffSelection["side"]>;
+
+/** The lines a file's diff draws a row for, on each of GitHub's sides. */
+interface DrawnLines {
+  readonly [DIFF_SIDE.LEFT]: ReadonlySet<number>;
+  readonly [DIFF_SIDE.RIGHT]: ReadonlySet<number>;
+}
+
+/** The lines a file's diff draws a row for, on each of GitHub's sides; none where it draws no hunks. */
+function drawnLines(file: CodingAgentChangedFile): DrawnLines {
+  const patch = fileNotice(file) === undefined ? file.patch : null;
+  const rows = patch === null ? [] : (patchHunks(patch) ?? []).flatMap((hunk) => hunk.rows);
+  return {
+    [DIFF_SIDE.LEFT]: new Set(
+      rows.flatMap((row) => (row.oldLine === undefined ? [] : [row.oldLine])),
+    ),
+    [DIFF_SIDE.RIGHT]: new Set(
+      rows.flatMap((row) => (row.newLine === undefined ? [] : [row.newLine])),
+    ),
+  };
+}
+
+/**
+ * A file's review threads as Files changed draws them, as GitHub's own
+ * diff does: each on the line it stands on now, under that line on the
+ * side it counts on, where the file's diff draws a row for that line; and,
+ * at the top of the diff, in the order the pull request holds them, those
+ * it draws none for: a thread whose line a later push took away, outdated;
+ * one on a line no hunk shows; and every one on a file whose diff is not
+ * drawn, binary, too large, or empty. Each is keyed by its first comment's
+ * page, which no other thread shares; one with no comment is drawn nowhere.
+ */
+export function threadsOn(
+  threads: readonly ReviewThread[],
+  file: CodingAgentChangedFile,
+): FileThreads {
+  const lines = drawnLines(file);
+  const placed: PlacedThread[] = [];
+  const above: PlacedThread[] = [];
+  for (const thread of threads) {
+    const key = thread.comments[0]?.url;
+    if (thread.path !== file.path || key === undefined) continue;
+    const side = SELECTION_SIDE[thread.side];
+    const line = thread.line;
+    if (line !== null && lines[thread.side].has(line)) placed.push({ thread, key, side, line });
+    else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
+  }
+  return { placed, above };
+}
+
 /**
  * What a file's pane says in its patch's place, or nothing where it draws
  * its hunks: why it carries no patch, that a file only moved kept its
@@ -360,4 +464,71 @@ export function filePatch(file: CodingAgentChangedFile): string | undefined {
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
+}
+
+/** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */
+export function headerPatch(file: CodingAgentChangedFile): string {
+  const from = file.previousPath ?? file.path;
+  return [`diff --git a/${from} b/${file.path}`, `--- a/${from}`, `+++ b/${file.path}`, ""].join(
+    "\n",
+  );
+}
+
+/**
+ * What a file's place in the list draws: its patch as a whole unified diff,
+ * or, where it has no hunks to draw, its header alone (`headerPatch`), so
+ * the file still stands in the list under its header, with why it has none
+ * said there (`fileNotice`).
+ */
+export function listPatch(file: CodingAgentChangedFile): string {
+  return filePatch(file) ?? headerPatch(file);
+}
+
+/** The files whose path holds `query`, whatever its case, as the tree's search narrows its rows; every file for a query of nothing but spaces. */
+
+export function filterFiles(
+  files: readonly CodingAgentChangedFile[],
+  query: string,
+): readonly CodingAgentChangedFile[] {
+  const asked = query.trim().toLowerCase();
+  if (asked === "") return files;
+  return files.filter((file) => file.path.toLowerCase().includes(asked));
+}
+
+/** One step of a path as the tree sorts its rows: folders before files, a dotted name before the rest, then by name whatever its case. */
+function compareStep(a: string, aFolder: boolean, b: string, bFolder: boolean): number {
+  if (aFolder !== bFolder) return aFolder ? -1 : 1;
+  const aDot = a.startsWith(".");
+  if (aDot !== b.startsWith(".")) return aDot ? -1 : 1;
+  return a.toLowerCase().localeCompare(b.toLowerCase());
+}
+
+/** Two paths in the tree's order: at the first folder or name they part at, as `compareStep` sorts them. */
+function compareTreePaths(a: string, b: string): number {
+  const aSteps = a.split("/");
+  const bSteps = b.split("/");
+  for (let at = 0; at < Math.min(aSteps.length, bSteps.length); at += 1) {
+    const aStep = aSteps[at] ?? "";
+    const bStep = bSteps[at] ?? "";
+    if (aStep === bStep) continue;
+    return compareStep(aStep, at < aSteps.length - 1, bStep, at < bSteps.length - 1);
+  }
+  return aSteps.length - bSteps.length;
+}
+
+/** The files in the order the tree lists them, as Pierre's tree sorts its rows. */
+export function treeOrder(
+  files: readonly CodingAgentChangedFile[],
+): readonly CodingAgentChangedFile[] {
+  return files.toSorted((a, b) => compareTreePaths(a.path, b.path));
+}
+
+/** Whether a file starts collapsed: deleted, changing more than `LARGE_FILE_LINES` lines, or a lockfile. Note that a file with no hunks never does, because what stands under its header is why. */
+export function startsCollapsed(file: CodingAgentChangedFile): boolean {
+  if (fileNotice(file) !== undefined) return false;
+  return (
+    file.status === CHANGED_FILE_STATUS.DELETED ||
+    file.additions + file.deletions > LARGE_FILE_LINES ||
+    LOCKFILE_NAMES.has(file.path.split("/").at(-1) ?? "")
+  );
 }

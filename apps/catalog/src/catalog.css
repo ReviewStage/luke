@@ -22,6 +22,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A field holding the caret wears no ring, as in the apps (desktop base.css). */
+:is(
+  textarea,
+  [contenteditable],
+  input:not([type="checkbox"], [type="radio"], [type="range"])
+):focus-visible {
+  outline: none; /* no ring: the caret marks the field */
+}
+
 /* A brand whose one-colour mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-luke-theme="dark"]
@@ -253,6 +262,12 @@ body {
   margin: 0;
   padding: var(--luke-space-12) 0 0;
   list-style: none;
+}
+
+/* The pointer's room over a line held to one line, as wide as the column. */
+.catalog-one-line {
+  display: block;
+  min-width: 0;
 }
 
 /* A column narrower than a phone, where long words have to wrap. */
@@ -505,11 +520,6 @@ body {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.catalog-inline-edit-well:focus-within {
-  outline: 2px solid var(--luke-color-focus-ring);
-  outline-offset: -1px;
-}
-
 .catalog-inline-edit-well > .luke-inline-edit {
   width: 24ch;
 }
@@ -664,6 +674,12 @@ body {
   font-size: var(--luke-type-caption-size);
 }
 
+/* A recording's stand-in in the landing's example, at the demo's own shape. */
+.catalog-public-media {
+  aspect-ratio: 1240 / 864;
+  background: var(--luke-color-fill-hover);
+}
+
 /* A release in the wide page's example: its version and date on a rail
    beside its notes, as the changelog lays them. */
 .catalog-public-release {
@@ -683,11 +699,4 @@ body {
 .catalog-auth-mark svg {
   width: 100%;
   height: 100%;
-}
-
-/* A provider's mark at a control's glyph size. */
-.catalog-auth-provider {
-  display: block;
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }

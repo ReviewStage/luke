@@ -1,10 +1,13 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SIZE,
   DocumentIcon,
   EmptyState,
   IconButton,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
   ListRow,
@@ -23,8 +26,11 @@ import {
 } from "@luke/ui/actor-model";
 import {
   ArrowDownNarrowWideIcon,
+  CheckCheckIcon,
   FactoryIcon,
   InboxIcon,
+  MailIcon,
+  MailOpenIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -66,12 +72,14 @@ import {
   type InboxPersonGroup,
   type InboxStarter,
   inboxPreview,
+  isUnread,
   NEEDS_YOU,
   needsReader,
   readersItem,
 } from "./inbox-model";
 import { ReadAgentModel } from "./mentioned-agent-card";
 import { RelativeTime } from "./relative-time";
+import { markReadItem } from "./task-menu-items";
 import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 
@@ -98,7 +106,11 @@ import { cardTitle } from "./tool-call-model";
  * (`attention-mark.tsx`), in either grouping and filtered or not; a
  * teammate's open item waits on the teammate, whose face stands in that
  * place, and any member may still answer it; an answered one wears
- * neither. A folded task
+ * neither. Apart from whether it waits, an item is unread where it changed
+ * since the developer last read it, or they marked it so: the blue dot in
+ * a gutter before its tile, its title in the unread weight; opening it
+ * reads it, and its row, its menu, U, and Mark all as read in the view's
+ * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -107,7 +119,8 @@ import { cardTitle } from "./tool-call-model";
  * needs the developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan, by person, or newest first, the
- * choice checked; both are kept across launches. Grouped by person, each
+ * choice checked, and under them Mark all as read, which clears the dots
+ * alone; both choices are kept across launches. Grouped by person, each
  * person's items stand under their face, the reader's own first as You, and
  * a row names its plan where it wears no face, since the header says whose
  * it is. Where Needs you leaves out every
@@ -124,6 +137,15 @@ import { cardTitle } from "./tool-call-model";
 
 /** What an item's row's right-click menu is called. */
 const ITEM_ACTIONS = "Inbox item actions";
+
+/** What an unread row says to a reader, its dot being drawn for the eye alone. */
+const UNREAD = "Unread";
+
+/** What a row's swipe button says it does: marks the item read, or unread. */
+const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
+
+/** What the view's menu offers to clear every dot with. */
+const MARK_ALL_READ = "Mark all as read";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -142,6 +164,9 @@ const SKELETON_ROWS = [
 
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
+
+/** How wide a placeholder row's context stands, as wide as a short plan's name in a row's caption type. */
+const SKELETON_CONTEXT = "7em";
 
 /** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
 const SKELETON_MARK = "16px";
@@ -255,7 +280,17 @@ export function ItemMark({
  * the attention mark before its time, and a teammate's item their face
  * there where `face` allows it, the mark of their open item being theirs to
  * wear. The title hangs in the window's pill, since a narrow list cuts it
- * short. The home page's Inbox
+ * short. An unread item, changed since the developer last read it or marked
+ * unread, wears the blue dot in a gutter before its tile, its title in the
+ * unread weight and its preview in the body's ink; the gutter stands on
+ * every row, so the tiles line up whether a row wears a dot or not. Where
+ * the list hands down `onMark`, the row offers to mark it read or unread:
+ * a press over its time while the pointer rests on it or it holds the
+ * keyboard, the time and its marks stepping aside, and the first item of
+ * its right-click menu, which names the key that does the same to the
+ * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
+ * short one leaving the row open on a Read or Unread button, a long one
+ * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). The home page's Inbox
  * names the item's plan at the row's end, in `context`, since its rows stand
  * under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
@@ -271,6 +306,7 @@ export function InboxItemRow({
   face = true,
   ref,
   onChoose,
+  onMark,
 }: {
   listed: InboxListed;
   chosen: boolean;
@@ -284,8 +320,11 @@ export function InboxItemRow({
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   onChoose: (listed: InboxListed) => void;
+  /** Marks the item read or unread; none where the row offers no mark. */
+  onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
+  const unread = isUnread(item);
   const title = cardTitle(item.title);
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
@@ -302,6 +341,17 @@ export function InboxItemRow({
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
       : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
   );
+  const read =
+    onMark === undefined
+      ? undefined
+      : {
+          ...markReadItem({ unread, onMark: (next) => onMark(listed, next) }),
+          command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+        };
+  const groups = [
+    read === undefined ? [] : [read],
+    copyLink === undefined ? [] : [copyLink],
+  ].filter((group) => group.length > 0);
   const press = useRef<HTMLElement | null>(null);
   const hold = useCallback(
     (element: HTMLElement | null) => {
@@ -315,14 +365,26 @@ export function InboxItemRow({
       <ListRow
         ref={hold}
         leading={
-          <span className="inbox-row-mark">
-            <ItemMark holder={holder} agentId={item.agentId} models={models} readerId={readerId} />
-          </span>
+          <>
+            {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
+            <span className="inbox-row-gutter">
+              {unread ? <span className="inbox-row-unread" /> : null}
+            </span>
+            <span className="inbox-row-mark">
+              <ItemMark
+                holder={holder}
+                agentId={item.agentId}
+                models={models}
+                readerId={readerId}
+              />
+            </span>
+          </>
         }
         title={title}
         description={preview}
         meta={
           <span className="home-row-meta">
+            {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
             {starter === undefined || !face ? null : (
               <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
@@ -340,18 +402,36 @@ export function InboxItemRow({
           </span>
         }
         metaAt={LIST_ROW_META.TITLE}
+        actions={
+          read === undefined ? undefined : (
+            <Tooltip label={read.label} command={read.command}>
+              <IconButton
+                icon={unread ? <MailOpenIcon /> : <MailIcon />}
+                label={read.label}
+                size={BUTTON_SIZE.COMPACT}
+                onClick={read.onSelect}
+              />
+            </Tooltip>
+          )
+        }
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        swipe={
+          onMark === undefined
+            ? undefined
+            : {
+                label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
+                icon: unread ? <MailOpenIcon /> : <MailIcon />,
+                onAct: () => onMark(listed, !unread),
+              }
+        }
         current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={unread}
         hint={{ Hint: Tooltip, label: title }}
         onPress={() => onChoose(listed)}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+        onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
       />
-      {menu.drawn === undefined || copyLink === undefined ? null : (
-        <ActionMenu
-          label={ITEM_ACTIONS}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
+      {menu.drawn === undefined || groups.length === 0 ? null : (
+        <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
     </>
   );
@@ -451,10 +531,12 @@ function ViewOptions({
   shown,
   grouping,
   onGrouping,
+  readAll,
 }: {
   shown: boolean;
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
+  readAll: InboxReadAll | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const choices: MenuAction[] = [
@@ -486,7 +568,21 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={[choices]}
+          groups={
+            readAll === undefined
+              ? [choices]
+              : [
+                  choices,
+                  [
+                    {
+                      label: MARK_ALL_READ,
+                      icon: <CheckCheckIcon />,
+                      disabled: !readAll.unread,
+                      onSelect: readAll.onMarkAll,
+                    },
+                  ],
+                ]
+          }
           onClose={menu.close}
         />
       )}
@@ -552,19 +648,39 @@ export function NeedsYouEmpty({
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
  * items land where the blocks stood rather than a lone ring in the list's
- * corner. The rows open nothing and the region says what is being read.
+ * corner. The rows open nothing and the region says what is being read. A
+ * list whose rows name what each item is about, as Home's do, asks for a
+ * block before each time where that name will stand, and a short list asks
+ * for fewer rows than the five a whole Inbox stands.
  */
-export function InboxListSkeleton(): React.JSX.Element {
+export function InboxListSkeleton({
+  rows = SKELETON_ROWS.length,
+  context = false,
+}: {
+  /** How many placeholder rows stand, at most five. */
+  rows?: number;
+  /** Whether each row holds a block for its context before its time, as an item row given a `context` draws it. */
+  context?: boolean;
+}): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_ITEMS}>
       <ul className="sidebar-tasks">
-        {SKELETON_ROWS.map(({ title, preview }) => (
+        {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
             leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
-            meta={<Skeleton width={SKELETON_TIME} />}
+            meta={
+              context ? (
+                <span className="home-row-meta">
+                  <Skeleton width={SKELETON_CONTEXT} />
+                  <Skeleton width={SKELETON_TIME} />
+                </span>
+              ) : (
+                <Skeleton width={SKELETON_TIME} />
+              )
+            }
             metaAt={LIST_ROW_META.TITLE}
           />
         ))}
@@ -599,6 +715,7 @@ function ListHead({ head }: { head: InboxListHead }): React.JSX.Element {
             shown={shown}
             grouping={view.choices.grouping}
             onGrouping={view.choices.onGrouping}
+            readAll={head.readAll}
           />
         )}
       </div>
@@ -615,6 +732,14 @@ export interface InboxListHead {
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Whether any item needs the developer, filtered out or not, for Needs you's dot. */
   readonly waiting: boolean;
+  /** Mark all as read, in the view's menu, where the list marks its items. */
+  readonly readAll?: InboxReadAll | undefined;
+}
+
+/** Mark all as read as the view's menu offers it: whether any item is unread, filtered out or not, and the mark. */
+interface InboxReadAll {
+  readonly unread: boolean;
+  readonly onMarkAll: () => void;
 }
 
 /** What the list wears to keep the keyboard: its element, and its handlers for focus arriving and leaving. */
@@ -665,6 +790,7 @@ export function InboxList({
   columns,
   rows,
   onChoose,
+  onMark,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
@@ -681,6 +807,8 @@ export function InboxList({
   /** Where each row's press is kept, by the item it opens. */
   rows: InboxRowPresses;
   onChoose: (listed: InboxListed) => void;
+  /** Marks an item read or unread from its row; none where the rows offer no mark. */
+  onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
@@ -705,6 +833,7 @@ export function InboxList({
       ref={rows.hold(listed.item.id)}
       {...(byPerson ? { context: holderName(listed.holder) } : undefined)}
       onChoose={onChoose}
+      onMark={onMark}
     />
   );
   const needingYou = (items: readonly InboxItem[]) =>

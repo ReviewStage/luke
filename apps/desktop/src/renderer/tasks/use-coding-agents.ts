@@ -8,6 +8,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
@@ -281,6 +282,8 @@ export interface CodingAgentsControl {
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
   readOverviewPullRequest: (agentId: string) => Promise<CodingAgentOverviewPullRequestAnswerView>;
+  /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
+  readReviewOptions: (agentId: string) => Promise<CodingAgentReviewOptionsAnswerView>;
   /** One read of the checks on an agent's pull request's head, as its overview draws them. */
   readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
@@ -403,7 +406,7 @@ function listRead(
   agentId: string | undefined,
 ): Promise<PageList> {
   if (taskId !== undefined) {
-    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId: taskId, includeArchived: true });
+    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
   return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
@@ -483,7 +486,7 @@ export function useCodingAgents(input: {
   const keptDraft = useNewAgentDraft(taskId, heldDraft?.id);
   const writer = useDraftWriter();
   const draft = taskId === undefined ? undefined : taskDraft(heldDraft, keptDraft);
-  const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
+  const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
@@ -584,7 +587,7 @@ export function useCodingAgents(input: {
       .then((answer) => {
         if ("failure" in answer && taskId !== undefined)
           setNote({
-            planId: taskId,
+            taskId,
             note: { reason: FAILURE_REASON.OTHER, text: MODEL_CHANGE_FAILED },
           });
         return answer;
@@ -641,7 +644,7 @@ export function useCodingAgents(input: {
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-        setNote({ planId: taskId, note: startFailureNote(answer, taskId) });
+        setNote({ taskId, note: startFailureNote(answer, taskId) });
         // The note waits beside the task's Start; a developer who left the
         // task while it was out hears of it now.
         if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
@@ -1100,6 +1103,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readReviewOptions = useCallback<CodingAgentsControl["readReviewOptions"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, { agentId }),
+    [act],
+  );
+
   const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, { agentId }),
     [act],
@@ -1181,7 +1189,7 @@ export function useCodingAgents(input: {
       available: taskId !== undefined && repository !== null && !archived,
       reason: startReason(taskId, repository, archived),
       busy: starting,
-      note: note !== undefined && note.planId === taskId ? note.note : undefined,
+      note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
     onStop,
@@ -1202,6 +1210,7 @@ export function useCodingAgents(input: {
     readChanges,
     changesPeople,
     readOverviewPullRequest,
+    readReviewOptions,
     readOverviewChecks,
     readOverviewConversation,
     keywords: input.keywords ?? NO_KEYWORDS,

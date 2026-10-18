@@ -17,7 +17,7 @@ import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { SPINNER_SIZE, Spinner } from "../spinner";
+import { SpinnerRegion } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
@@ -326,7 +326,7 @@ export function DesktopAgentPage({
             {NOT_READ}
           </ErrorState>
         ) : (
-          <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
+          <SpinnerRegion label="Loading agent" />
         )}
       </section>
     );
@@ -382,10 +382,11 @@ export function DesktopAgentPage({
                         panel={drawing.panel}
                         unread={NO_UNREAD}
                         holder={SIDE_PANEL_HOLDER.AGENT}
-                        planId={agentId}
+                        taskId={agentId}
                         repository={agentRepository ?? null}
                         board={undefined}
                         shownCode={undefined}
+                        codeFailed={undefined}
                         pages={undefined}
                         transcript={NO_CALLS}
                         work={work}

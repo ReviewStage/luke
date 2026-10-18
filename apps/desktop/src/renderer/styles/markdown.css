@@ -8,6 +8,7 @@
 .markdown {
   --markdown-tint: color-mix(in srgb, currentColor 13%, transparent);
   --markdown-edge: color-mix(in srgb, currentColor 28%, transparent);
+  --luke-prose-tint: var(--markdown-tint);
 }
 
 .markdown > * + *,
@@ -44,13 +45,9 @@
   font-size: 1.05em;
 }
 
+/* A code span is `@luke/ui`'s prose one (`.luke-prose code`), on this
+   Markdown's own tint, a step heavier because the thread's words are small. */
 .markdown code {
-  padding: 0.08em 0.36em;
-  border-radius: 0.36em;
-  background: var(--markdown-tint);
-  font-family: var(--luke-font-mono);
-  /* Mono runs wider than the text around it at equal size. */
-  font-size: 0.92em;
   font-weight: var(--luke-weight-medium);
   letter-spacing: 0;
 }
@@ -80,10 +77,10 @@
   white-space: pre;
 }
 
+/* A list's gutter and markers are the prose's (`.luke-prose`). */
 .markdown ul,
 .markdown ol {
   margin: 0;
-  padding-left: 1.5em;
   text-align: left;
 }
 
@@ -213,24 +210,6 @@ blockquote.markdown-quote > * + * {
   margin: 0.3em 0;
   border: 0;
   border-top: 1px solid var(--markdown-edge);
-}
-
-/* A button that reads as a link (`replay-card.tsx`'s way to the full
-   transcript) wears an underlined TextLink's line: the words' own ink over a
-   thin underline in a faint wash of it, full strength under the pointer or
-   the keyboard. */
-.text-link {
-  border-radius: 2px;
-  color: inherit;
-  text-decoration-line: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.24em;
-  transition: text-decoration-color var(--duration-hover) ease;
-}
-
-.text-link:is(:hover, :focus-visible) {
-  text-decoration-color: currentColor;
 }
 
 /* An address the window opens nothing for, a file's say: the same line,

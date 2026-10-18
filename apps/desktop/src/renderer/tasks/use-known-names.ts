@@ -51,7 +51,7 @@ export function useKnownNames(automationId?: string): KnownNames {
         (item) => [item.id, item.title],
       ),
     );
-    return { plans: tasks, agents, agentModels, pages, inboxItems, automations };
+    return { tasks, agents, agentModels, pages, inboxItems, automations };
   }, [planning, inbox]);
   const people = useMemo(
     () => new Map([...(former ?? []), ...(members ?? [])].map((each) => [each.userId, each.name])),

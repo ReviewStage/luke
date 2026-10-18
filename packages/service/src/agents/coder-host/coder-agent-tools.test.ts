@@ -71,6 +71,7 @@ import {
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { DEPLOYMENT_PRESENCE } from "../brain-host/auth.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
@@ -83,6 +84,7 @@ import {
 } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
+import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
@@ -1845,6 +1847,93 @@ test("a message refused as ended for good leaves an agent whose turn had already
     undefined,
     CODING_AGENT_STATUS.COMPLETED,
     undefined,
+  ]);
+});
+
+/** The coder channel's handlers of a session's end, each handing the session to the host given as eve's channel adapter would. */
+function sessionEndsOf(host: CoderHost) {
+  const { events } = coderChannelInput(
+    async () => undefined,
+    { reachesSession: async () => false, reachesConversation: async () => false },
+    { secret: undefined, admits: CODER_DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.ACCOUNT },
+    (sessionId) => database.run(host.sessionEnded(sessionId)),
+  );
+  const failed = events?.["session.failed"];
+  const completed = events?.["session.completed"];
+  assert.ok(failed !== undefined && completed !== undefined);
+  return {
+    failed: (sessionId: string) =>
+      failed({ code: "WORKFLOW_EXECUTION_FAILED", message: "The run threw.", sessionId }, {}),
+    completed: (agent: StartedAgent) =>
+      completed(
+        undefined,
+        {},
+        {
+          session: { id: agent.sessionId, auth: seat(agent), turn: { id: "turn_0", sequence: 0 } },
+          getSandbox: () => Promise.reject(new Error("no sandbox stands")),
+        },
+      ),
+  };
+}
+
+test("an agent whose session eve says failed reads as failed for its session's end at once, a repeated end changes nothing, and an unknown session, an idle agent, and an agent whose conversation recorded a newer session are left as they stood", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const call = await peerCaller(host, agents.caller, eve.services);
+  const ends = sessionEndsOf(host);
+  const running = [CODING_AGENT_STATUS.RUNNING, undefined, CODING_AGENT_STATUS.RUNNING, undefined];
+  const failed = [
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+  ];
+  const bob = agents.teammates.userId;
+  await turnOn(agents.teammates, false);
+  const idle = await agentOn(bob, tasks.billing);
+  await turnOn(idle, true);
+  // A newer session recorded on the conversation since, whose turn is that session's own.
+  const rotated = await agentOn(bob, tasks.billing);
+  assert.equal(await database.run(claimRuntimeSession(rotated, sessionId(), new Date(NOW))), true);
+  await turnOn(rotated, false);
+
+  await ends.failed(sessionId());
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), running);
+
+  await ends.failed(agents.teammates.sessionId);
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
+  await ends.failed(agents.teammates.sessionId);
+  assert.deepEqual(
+    await standingAsRead(call, agents.teammates.id),
+    failed,
+    "a repeated end changes nothing",
+  );
+
+  await ends.failed(idle.sessionId);
+  assert.deepEqual(await standingAsRead(call, idle.id), [
+    CODING_AGENT_STATUS.COMPLETED,
+    undefined,
+    CODING_AGENT_STATUS.COMPLETED,
+    undefined,
+  ]);
+  await ends.failed(rotated.sessionId);
+  assert.deepEqual(await standingAsRead(call, rotated.id), running);
+});
+
+test("an agent whose session eve says completed while its turn still reads running reads as failed for its session's end", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const call = await peerCaller(host, agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+
+  await sessionEndsOf(host).completed(agents.teammates);
+  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
+    CODING_AGENT_STATUS.FAILED,
+    CODING_AGENT_FAILURE.SESSION_ENDED,
   ]);
 });
 

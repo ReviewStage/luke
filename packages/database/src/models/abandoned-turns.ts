@@ -1,7 +1,7 @@
 import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@luke/features/brain";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, eq, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -23,8 +23,9 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
  * emit later finds the row terminal and is repeated, not written. A coding
  * agent's turn whose session eve says it no longer runs is settled on the
  * same write at once, failed for its session's end rather than abandoned
- * (`settleEndedSessionTurn`), since eve's word is final where the sweep's
- * bound is only a guess. A turn a Stop was asked of is settled sooner, and
+ * (`settleEndedSessionTurn`), whether eve said so refusing a message or
+ * announcing the session's end (`settleEndedSession`), since eve's word is
+ * final where the sweep's bound is only a guess. A turn a Stop was asked of is settled sooner, and
  * as cancelled: eve confirms a cancel within seconds by ending the turn, so
  * a Stop still unconfirmed past its bound is one whose session is gone, as
  * a session that died in a deploy is, and the turn ends as the Stop asked
@@ -117,6 +118,40 @@ const abandonedTurns = SqlSchema.findAll({
 
 /** A turn whose end is not coming: its id, and the conversation and account it stands in. */
 export type LostTurn = typeof LostTurnSchema.Type;
+
+/**
+ * The turns still queued or running of the standing coding agent's
+ * conversation that records the runtime session, oldest first, each with
+ * when a Stop was asked of it. A
+ * conversation that has since recorded a newer session no longer names this
+ * one, so its turns, which are the newer session's, are never read here.
+ */
+const endedSessionTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ runtimeSessionId: Schema.String, limit: Schema.Int }),
+  Result: AbandonedTurnRowSchema,
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: turns.id,
+          userId: turns.userId,
+          conversationId: turns.conversationId,
+          cancelRequestedAt: turns.cancelRequestedAt,
+        })
+        .from(turns)
+        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .where(
+          and(
+            eq(conversations.runtimeSessionId, request.runtimeSessionId),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            isNull(conversations.deletedAt),
+            inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+          ),
+        )
+        .orderBy(asc(turns.queuedAt), asc(turns.id))
+        .limit(request.limit),
+    ),
+});
 
 /** How a lost turn ends: cancelled where its Stop went unconfirmed, failed for the reason given otherwise. */
 type LostTurnEnd =
@@ -218,3 +253,52 @@ export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEnded
     );
   },
 );
+
+export interface EndedSessionOptions {
+  readonly now: number;
+  /** The most turns one read takes; `TURN_ABANDON.LIMIT` otherwise. Reads go on until none is left. */
+  readonly limit?: number | undefined;
+}
+
+/**
+ * Settles every turn still queued or running of the coding agent's
+ * conversation that records the runtime session eve said ended; answers how
+ * many this call settled. A turn a Stop was asked of is settled cancelled,
+ * as the developer asked and as the sweep would settle it, and every other
+ * one failed for its session's end. A session no standing coding agent's
+ * conversation records, such as an unknown one or one its conversation
+ * rotated away from, settles nothing. Each turn is settled through the
+ * relay's own end, so a turn that ended between the read and the write
+ * keeps its own end and a repeat of the same end settles nothing again.
+ * The turns are read a bounded batch at a time until a batch comes back
+ * short: a turn that ended meanwhile, by this call or another writer, drops
+ * out of the next read. A batch holding only turns already read, which a
+ * write the writer refused leaves open, ends the reads too, so they never
+ * go round for ever.
+ */
+export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSession")(function* (
+  writer: Pick<StoreWriter, "consume">,
+  runtimeSessionId: string,
+  options: EndedSessionOptions,
+): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
+  const limit = options.limit ?? TURN_ABANDON.LIMIT;
+  let settled = 0;
+  const read = new Set<string>();
+  for (;;) {
+    const lost = yield* endedSessionTurns({ runtimeSessionId, limit });
+    if (lost.every((turn) => read.has(turn.id))) return settled;
+    for (const { cancelRequestedAt, ...turn } of lost) {
+      read.add(turn.id);
+      const written = yield* settledLost(
+        writer,
+        turn,
+        cancelRequestedAt === null
+          ? { status: BRAIN_REQUEST_STATUS.FAILED, failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED }
+          : { status: BRAIN_REQUEST_STATUS.CANCELLED },
+        options.now,
+      );
+      if (written) settled += 1;
+    }
+    if (lost.length < limit) return settled;
+  }
+});

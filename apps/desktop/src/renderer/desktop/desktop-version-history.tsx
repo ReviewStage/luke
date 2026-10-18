@@ -14,10 +14,15 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  LIST_ROW_ACTIONS,
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
   NavItem,
   RetryRowLabel,
   Skeleton,
   SkeletonRegion,
+  TextButton,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -195,7 +200,7 @@ function RevisionRow({
   author: Actor;
   selected: boolean;
   now: number;
-  rowRef: (row: HTMLButtonElement | null) => void;
+  rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
   /** Opens the sections the revision changed; none for a revision that opens none. */
   onOpenSections: (() => void) | undefined;
@@ -232,45 +237,41 @@ function RevisionRow({
   // it is the menu's own door from the keyboard.
   const showMenu = menu.contextMenu(ellipsis);
   return (
-    <li className="version-item" data-menu-open={String(menu.open !== undefined)}>
-      <button
+    <>
+      <ListRow
         ref={rowRef}
-        type="button"
-        className="version-row"
-        aria-current={selected ? "true" : undefined}
-        onClick={onSelect}
-        onContextMenu={offered ? showMenu : undefined}
-      >
-        <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
-        <span className="version-row-text">
-          <span className="version-row-head">
-            <span className="version-row-author" data-author={author.kind}>
-              {actorName(author)}
-              <LeftWords actor={author} />
-            </span>
-            <RelativeTime className="version-row-time" at={lastEdit.at} now={now} />
+        leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
+        title={
+          <span className="version-row-author" data-author={author.kind}>
+            {actorName(author)}
+            <LeftWords actor={author} />
           </span>
-          <span className="version-row-summary">{summary}</span>
-        </span>
-      </button>
-      {offered ? (
-        <span className="version-row-actions">
-          <Tooltip label={ACTIONS_LABEL}>
-            <IconButton
-              ref={ellipsis}
-              icon={<EllipsisIcon />}
-              label={ACTIONS_LABEL}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-              onContextMenu={showMenu}
-            />
-          </Tooltip>
-        </span>
-      ) : null}
+        }
+        description={<span className="version-row-summary">{summary}</span>}
+        meta={<RelativeTime at={lastEdit.at} now={now} />}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={onSelect}
+        onContextMenu={offered ? showMenu : undefined}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        menuOpen={menu.open !== undefined}
+        actions={
+          offered ? (
+            <Tooltip label={ACTIONS_LABEL}>
+              <IconButton
+                ref={ellipsis}
+                icon={<EllipsisIcon />}
+                label={ACTIONS_LABEL}
+                size={BUTTON_SIZE.COMPACT}
+                {...menu.trigger()}
+              />
+            </Tooltip>
+          ) : null
+        }
+      />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
-    </li>
+    </>
   );
 }
 
@@ -288,33 +289,27 @@ function SectionsHead({
   source: SourceDoor | undefined;
   onBack: () => void;
 }): React.JSX.Element {
-  const who = (
-    <>
-      <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
-      <span className="version-row-author" data-author={author.kind}>
-        {actorName(author)}
-        <LeftWords actor={author} />
-      </span>
-    </>
+  const name = (
+    <span className="version-row-author" data-author={author.kind}>
+      {actorName(author)}
+      <LeftWords actor={author} />
+    </span>
   );
   return (
     <>
       <NavItem icon={<BackIcon />} onClick={onBack}>
         All versions
       </NavItem>
-      {source === undefined ? (
-        <p className="version-sections-head">{who}</p>
-      ) : (
-        <Tooltip label={source.label}>
-          <button
-            type="button"
-            className="version-sections-head version-sections-source"
-            onClick={source.onOpen}
-          >
-            {who}
-          </button>
-        </Tooltip>
-      )}
+      <p className="version-sections-head">
+        <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
+        {source === undefined ? (
+          name
+        ) : (
+          <Tooltip label={source.label}>
+            <TextButton onClick={source.onOpen}>{name}</TextButton>
+          </Tooltip>
+        )}
+      </p>
     </>
   );
 }
@@ -329,7 +324,7 @@ function SectionRow({
 }: {
   section: ChangedSection;
   selected: boolean;
-  rowRef: (row: HTMLButtonElement | null) => void;
+  rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
   /** The way to the place that wrote its revision, which its right-click offers. */
   source: SourceDoor | undefined;
@@ -337,18 +332,15 @@ function SectionRow({
   const word = SECTION_CHANGE_WORDS[section.change];
   const menu = useMenu(true);
   return (
-    <li>
-      <button
+    <>
+      <ListRow
         ref={rowRef}
-        type="button"
-        className="version-section-row"
-        aria-current={selected ? "true" : undefined}
-        onClick={onSelect}
+        title={sectionName(section.heading)}
+        meta={word}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={onSelect}
         onContextMenu={source === undefined ? undefined : menu.contextMenu()}
-      >
-        <span className="version-section-name">{sectionName(section.heading)}</span>
-        {word === undefined ? null : <span className="version-section-change">{word}</span>}
-      </button>
+      />
       {menu.drawn === undefined || source === undefined ? null : (
         <ActionMenu
           label="Section actions"
@@ -357,7 +349,7 @@ function SectionRow({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }
 
@@ -479,7 +471,7 @@ function stepThrough<K>(
   at: K | undefined,
   step: 1 | -1,
   choose: (key: K) => void,
-  rows: Map<K, HTMLButtonElement>,
+  rows: Map<K, HTMLElement>,
 ): boolean {
   const index = at === undefined ? -1 : keys.indexOf(at);
   const next = keys[index + step];
@@ -496,7 +488,7 @@ function stepThrough<K>(
  */
 function useOpenedRowShown(
   selected: number | undefined,
-  rows: Map<number, HTMLButtonElement>,
+  rows: Map<number, HTMLElement>,
   log: React.RefObject<HTMLDivElement | null>,
 ): void {
   const shown = useRef(false);
@@ -646,8 +638,8 @@ export function DesktopVersionHistory({
   const { versions, agents, restorable } = subject;
   const { list } = versions;
   const revisions = list.kind === HISTORY_READ.READY ? list.revisions : [];
-  const rows = useRef(new Map<number, HTMLButtonElement>()).current;
-  const sectionRows = useRef(new Map<number, HTMLButtonElement>()).current;
+  const rows = useRef(new Map<number, HTMLElement>()).current;
+  const sectionRows = useRef(new Map<number, HTMLElement>()).current;
   const log = useRef<HTMLDivElement>(null);
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
@@ -734,7 +726,7 @@ export function DesktopVersionHistory({
             <h1 className="version-log-title">Version history</h1>
             <div ref={log} className="sidebar-section scroll-fade">
               {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-              <ol className="version-list">
+              <List label="Version list">
                 {revisions.map((line) => {
                   const author = revisionAuthorOf(line, reader, agents, subject.own);
                   return (
@@ -774,7 +766,7 @@ export function DesktopVersionHistory({
                     />
                   );
                 })}
-              </ol>
+              </List>
               {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
                 <EarlierRow onRead={versions.onLoadEarlier} />
               ) : null}
@@ -793,7 +785,7 @@ export function DesktopVersionHistory({
                   onBack={closeSections}
                 />
                 {sections === undefined ? <LogSkeleton /> : null}
-                <ol className="version-list">
+                <List label="Sections changed">
                   {sections?.map((section) => (
                     <SectionRow
                       key={section.unit}
@@ -807,7 +799,7 @@ export function DesktopVersionHistory({
                       source={openedSource}
                     />
                   ))}
-                </ol>
+                </List>
               </>
             )}
           </section>

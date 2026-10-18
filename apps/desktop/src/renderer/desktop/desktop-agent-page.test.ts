@@ -129,6 +129,10 @@ let openedOnGitHub: string[] = [];
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
+/** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
+let holdPage = false;
+/** Answers the read of the agent's page held open last. */
+let answerHeld: () => void = () => undefined;
 /** Every archive or Unarchive asked, as the act carried it. */
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
@@ -157,6 +161,8 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
+  holdPage = false;
+  answerHeld = () => undefined;
   archives = [];
   archiveRefused = false;
   members = undefined;
@@ -238,6 +244,11 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         read.push(request.payload.agentId);
         const value = pages.length > 1 ? pages.shift() : pages[0];
+        if (holdPage) {
+          return new Promise((resolve) => {
+            answerHeld = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+          });
+        }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
@@ -600,10 +611,69 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLButtonElement>("aside.side-panel .pull-request-earlier");
+  const more = container.querySelector<HTMLButtonElement>(
+    "aside.side-panel .pull-request-earlier button",
+  );
   assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
   assert.deepEqual(openedOnGitHub, [other, url]);
+});
+
+test("the agent's pull request is a row pinned over its box while it still works, never in its transcript nor a chip in the box's foot, and a press opens its Pull request tab beside the page", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/flaky-sweep",
+    pullRequest: {
+      number: 2911,
+      title: "Await the payment mock",
+      url: "https://github.com/acme/relay/pull/2911",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 3,
+      deletions: 1,
+      changedFiles: 1,
+    },
+  };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "Opened the pull request." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.RUNNING,
+    title: null,
+  };
+  const container = await mountPanelPage();
+  await settle();
+
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
+  assert.ok(
+    row.compareDocumentPosition(
+      container.querySelector(".agent-composer") ?? assert.fail("the box stands"),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the row stands above the box",
+  );
+  assert.equal(container.querySelector("[role='log'] [aria-label='Pull request']"), null);
+  assert.ok(
+    !(container.querySelector(".agent-composer")?.textContent ?? "").includes("#2911"),
+    "the box's foot names no pull request",
+  );
+
+  act(() => row.click());
+  await settle();
+  assert.ok(
+    container.querySelector('aside.side-panel [aria-label="Conversation"]'),
+    "the Pull request tab stands in the panel, on its conversation",
+  );
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });
 
 test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {
@@ -634,6 +704,21 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
     told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
     [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
   );
+});
+
+test("until the agent is read, its wait stands centred in the page's room rather than as a ring in its corner, and gives way to the agent once read", async () => {
+  holdPage = true;
+  const page = mount();
+  await settle();
+
+  const wait = page.querySelector('.agent-page [role="status"]');
+  assert.ok(wait, "the page says it is waiting");
+  assert.ok(wait.closest(".luke-spinner-region"), "the wait stands in a region filling the page");
+  assert.equal(page.querySelector("h1"), null);
+  answerHeld();
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
 test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {
@@ -832,7 +917,7 @@ function words(line: Element | null | undefined): string {
   const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
   let said = "";
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    if (node.parentElement?.closest(".actor-face") == null) said += node.textContent ?? "";
+    if (node.parentElement?.closest(".actor-mark") == null) said += node.textContent ?? "";
   }
   return said;
 }

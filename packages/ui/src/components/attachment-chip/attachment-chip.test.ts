@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { AttachmentChip } from "./attachment-chip.js";
+import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
 
 /**
  * attachment-chip.test.ts -- a chip with an open opens its file on a press
  * or a key, one without presses nothing, its way off takes the file off by
- * pointer or keyboard and refuses while unavailable, and a reader hears each
- * control by the file's name.
+ * pointer or keyboard and refuses while unavailable, a reader hears each
+ * control by the file's name, and a file still read or failed opens nothing.
  */
 
 const PICTURE = "data:image/png;base64,iVBORw0KGgo=";
@@ -120,4 +120,30 @@ test("an unavailable way off refuses its press", () => {
   assert.equal(remove.disabled, true);
   act(() => remove.click());
   assert.equal(removed, 0);
+});
+
+test("a file still read says so to a reader and opens nothing", () => {
+  const list = drawn({
+    name: "shot.png",
+    state: ATTACHMENT_CHIP_STATE.LOADING,
+    onOpen: () => assert.fail("a chip still read opens nothing"),
+  });
+  assert.deepEqual(buttonNames(list), []);
+  assert.equal(list.querySelector('[role="status"]')?.textContent, "Reading shot.png");
+  assert.equal(list.querySelector("img"), null);
+});
+
+test("a file that failed to come says why and its size, and opens nothing", () => {
+  const list = drawn({
+    name: "shot.png",
+    image: PICTURE,
+    state: ATTACHMENT_CHIP_STATE.FAILED,
+    failure: "Not kept",
+    detail: "2.4 MB",
+    onOpen: () => assert.fail("a failed chip opens nothing"),
+  });
+  assert.deepEqual(buttonNames(list), []);
+  assert.equal(list.textContent, "Not kept2.4 MB");
+  assert.equal(list.querySelector("img"), null, "no picture stands for a file that failed");
+  assert.equal(list.querySelector("li")?.getAttribute("title"), "shot.png");
 });
