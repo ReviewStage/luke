@@ -2619,22 +2619,12 @@
 
 /* The comment box at the foot of the Conversation
    (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
-   refusal under them, and Comment at the row's end. */
+   refusal under them, drawn as every refusal is (`ErrorState`), and
+   Comment at the row's end. */
 .pull-request-comment-box {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
-}
-
-.pull-request-comment-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-comment-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .pull-request-comment-foot {

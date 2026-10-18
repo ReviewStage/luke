@@ -2868,7 +2868,7 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
   await settle();
 
   assert.equal(
-    tab.querySelector(".pull-request-comment-note .failure-note-words")?.textContent,
+    tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
     "GitHub said: Conversation is locked to collaborators",
   );
   assert.equal(
