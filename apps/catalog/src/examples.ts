@@ -40,6 +40,7 @@ import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
@@ -90,6 +91,7 @@ export const EXAMPLES: readonly Example[] = [
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   PAGINATION_EXAMPLE,
