@@ -359,7 +359,7 @@ export function taskMessagesPath(
   return query.size === 0 ? path : `${path}?${query}`;
 }
 
-/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `planMessagesPath`'s read. */
+/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `taskMessagesPath`'s read. */
 export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
   const query = new URLSearchParams({ after });
   return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
@@ -422,7 +422,7 @@ function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
   });
 }
 
-/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `planTreePath`'s folder is. */
+/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `taskTreePath`'s folder is. */
 export function repositoryTreePath(
   place: RepositoryPlace,
   folder: { readonly path: string; readonly recursive?: boolean },
@@ -517,7 +517,7 @@ export function taskInboxPath(taskId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `planInboxPath`'s read. */
+/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `taskInboxPath`'s read. */
 export function agentInboxPath(agentId: string, after: string): string {
   const query = new URLSearchParams({ after });
   return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;

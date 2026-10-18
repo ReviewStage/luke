@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   listPublishedCodingAgentsById,
-  planNamesOf,
+  taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
 import type { PageLine } from "@luke/features/page-wire";
@@ -63,7 +63,7 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
     if (ids.length === 0) return found;
     const read = yield* listPublishedCodingAgentsById(userId, ids);
     const standing = read.filter(({ agent }) => agent.organizationId === workspaceId);
-    const tasks = yield* planNamesOf(
+    const tasks = yield* taskNamesOf(
       userId,
       standing.flatMap(({ agent }) => agent.taskId ?? []),
     );

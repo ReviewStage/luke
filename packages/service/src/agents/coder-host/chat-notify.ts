@@ -117,9 +117,9 @@ export interface ChatNotice {
   readonly from: ChatMemberRow;
 }
 
-/** How a planner and a person are told, each a door its own chain fills. */
+/** How Luke and a person are told, each a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly planner: (
+  readonly luke: (
     member: ChatMemberRow,
     notice: ChatNotice,
   ) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
@@ -133,7 +133,7 @@ export interface ChatNoticeDoors {
 const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
 
 /** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
-export const HELD_DOORS: ChatNoticeDoors = { planner: hold, human: hold };
+export const HELD_DOORS: ChatNoticeDoors = { luke: hold, human: hold };
 
 /**
  * How a person is told: their member stamped with the message's place, one
@@ -159,8 +159,8 @@ function tellPerson(
   );
 }
 
-/** The doors a post is told through until Luke's report turn fills the planner's: a person told through their window, Luke held for his next read. */
-export const CHAT_DOORS: ChatNoticeDoors = { planner: hold, human: tellPerson };
+/** The doors a post is told through until Luke's report turn fills Luke's: a person told through their window, Luke held for his next read. */
+export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
@@ -207,7 +207,7 @@ function senderOf(userId: string, from: ChatMemberRow) {
     if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
       return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
     }
-    if (from.kind === MEMBER_KIND.PLANNER) {
+    if (from.kind === MEMBER_KIND.LUKE) {
       return { kind: MESSAGE_SENDER.LUKE } satisfies LineSender;
     }
     const agent =
@@ -226,7 +226,7 @@ function senderOf(userId: string, from: ChatMemberRow) {
 /** The message author each kind of member speaks as, on the notice's row. */
 const AUTHOR_OF_KIND = {
   [MEMBER_KIND.AGENT]: MESSAGE_AUTHOR.AGENT,
-  [MEMBER_KIND.PLANNER]: MESSAGE_AUTHOR.PLANNER,
+  [MEMBER_KIND.LUKE]: MESSAGE_AUTHOR.LUKE,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
@@ -395,8 +395,8 @@ export function tellMessage(
       switch (member.kind) {
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.PLANNER:
-          return Effect.map(telling.doors.planner(member, notice), (outcome) => ({
+        case MEMBER_KIND.LUKE:
+          return Effect.map(telling.doors.luke(member, notice), (outcome) => ({
             member,
             outcome,
           }));

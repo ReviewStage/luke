@@ -142,7 +142,6 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
-  planningPullRequestAnswerSchema,
   TASK_CALL_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
@@ -218,6 +217,7 @@ import {
   tasksPagesAnswerSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
+  tasksPullRequestAnswerSchema,
   tasksRepositoriesAnswerSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionsAnswerSchema,
@@ -1115,7 +1115,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer): TasksPullRequestAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                readEither(tasksPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )

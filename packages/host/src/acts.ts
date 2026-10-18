@@ -142,9 +142,6 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
-  type PlanningPullRequest,
-  planningPullRequestParamsSchema,
-  planningPullRequestSchema,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
@@ -153,6 +150,7 @@ import {
   type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
+  type TasksPullRequest,
   type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
@@ -183,6 +181,8 @@ import {
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
+  tasksPullRequestParamsSchema,
+  tasksPullRequestSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesAnswerSchema,
   tasksRepositoriesParamsSchema,
@@ -373,9 +373,9 @@ export const ACT_KIND = {
   /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
-  TASKS_SKILLS: "planning.skills",
+  TASKS_SKILLS: "tasks.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
@@ -387,13 +387,13 @@ export const ACT_KIND = {
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
-  TASKS_PAGE_SOURCE: "planning.pageSource",
+  TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
-  TASKS_PAGES: "planning.pages",
+  TASKS_PAGES: "tasks.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
-  TASKS_PICTURE_READ: "planning.pictureRead",
+  TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
-  TASKS_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -568,7 +568,7 @@ export const ACT_KIND = {
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own task. */
-  CALL_SHOW_TASK: "call.showPlan",
+  CALL_SHOW_TASK: "call.showTask",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
   /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
@@ -1112,8 +1112,8 @@ export const ACT = {
     refusal: "Could not read this repository's skills on this system.",
   },
   [ACT_KIND.TASKS_PULL_REQUEST]: {
-    payload: actSchema(planningPullRequestParamsSchema),
-    result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
+    payload: actSchema(tasksPullRequestParamsSchema),
+    result: wireResult<TasksPullRequest>(isReadable(tasksPullRequestSchema)),
     refusal: "Could not read that pull request on this system.",
   },
   [ACT_KIND.TASKS_ISSUE]: {

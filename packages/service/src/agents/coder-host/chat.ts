@@ -17,7 +17,7 @@ import {
   chatPast,
   ensureGeneral,
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   findOrMakeDm,
   history,
   memberNamed,
@@ -384,7 +384,7 @@ function atHandle(handle: string): string {
  */
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
-    if (agent.planId !== null) return yield* ensurePlanChannel(agent.userId, agent.planId);
+    if (agent.planId !== null) return yield* ensureTaskChannel(agent.userId, agent.planId);
     // Only a coding agent is planless; a plan's Luke always stands on its plan.
     if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
     const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
@@ -409,10 +409,10 @@ function seatOf(
     if (Option.isNone(home)) return Option.none();
     const { organizationId } = home.value;
     const members = new Set((yield* roster(userId, organizationId)).map((row) => row.agentId));
-    const onPlan = planId === null ? [] : yield* listCodingAgents(userId, planId);
+    const onTask = planId === null ? [] : yield* listCodingAgents(userId, planId);
     // An agent whose starter has not turned Chat on is seated only once that starter does.
     const unminted = yield* Effect.filter(
-      onPlan.filter((each) => !members.has(each.id)),
+      onTask.filter((each) => !members.has(each.id)),
       (each) => chatEnabledFor(each.userId),
     );
     yield* Effect.forEach(unminted, (each) =>

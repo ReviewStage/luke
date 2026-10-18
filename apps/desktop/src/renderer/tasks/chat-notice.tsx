@@ -1,5 +1,5 @@
 import { CHANNEL_KIND, CHAT_BLOCK, type ChatAnswer, knownBlock } from "@luke/features/chat-wire";
-import { ChevronRightIcon } from "@luke/ui";
+import { Button } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatNames,
@@ -100,14 +100,9 @@ export function ChatNoticeCard({
           )}
         </span>
         {channel === undefined || doors === undefined ? null : (
-          <button
-            type="button"
-            className="chat-notice-open"
-            onClick={() => doors.onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}
-          >
+          <Button onClick={() => doors.onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}>
             {OPEN_IN_CHAT}
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
+          </Button>
         )}
       </header>
       {shownWords === "" ? null : (

@@ -28,7 +28,7 @@ import { taskSectionEntry } from "../schemas/task-section.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
-import { followPlanArchive, movePlanChat } from "./chat-store.js";
+import { followTaskArchive, moveTaskChat } from "./chat-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
@@ -891,7 +891,7 @@ const followingAutomations = SqlSchema.void({
 
 /**
  * The task's agents and inbox moved along with it to another workspace, its
- * chat after them (`chat-store.ts`'s `movePlanChat`), so
+ * chat after them (`chat-store.ts`'s `moveTaskChat`), so
  * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it.
  */
@@ -980,10 +980,10 @@ export function updateTask<E = never, R = never>(
         }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId);
-          yield* movePlanChat(taskId, row.organizationId);
+          yield* moveTaskChat(taskId, row.organizationId);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
-        if (changes.archived !== undefined) yield* followPlanArchive(taskId, row.archivedAt);
+        if (changes.archived !== undefined) yield* followTaskArchive(taskId, row.archivedAt);
         return Option.some(yield* taskOf(userId, row));
       }),
     ),
@@ -998,7 +998,7 @@ export function updateTask<E = never, R = never>(
  * the agent rows that name them.
  *
  * A caller that stopped the task's agents first names the ones it stopped,
- * and the delete fails with `PlanAgentUnstopped` where any other stands. The
+ * and the delete fails with `TaskAgentUnstopped` where any other stands. The
  * task's row is locked before the agents are read, so a Start racing the
  * delete either landed its agent before the read, which then refuses, or
  * waits on the lock and finds no task to start on. What the caller hands
