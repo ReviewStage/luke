@@ -134,11 +134,33 @@ export function seededRandom(seed: number): () => number {
   };
 }
 
-/** `text` hashed into [0, 1): FNV-1a. */
-export function unitHash(text: string): number {
+/** What one item's separate draws are hashed under, so each is independent of the others. */
+export const HASH_SALT = {
+  X: 1,
+  Z: 2,
+  WIDTH: 3,
+  SIDE: 4,
+  HEIGHT: 5,
+  RISE: 6,
+  BOARD: 7,
+  SPEED: 8,
+  TRIP: 9,
+  BLINK: 10,
+} as const;
+
+/**
+ * `parts` hashed into [0, 1): FNV-1a over each part's length and then its
+ * characters, so two lists of parts never hash alike merely because they
+ * read alike end to end.
+ */
+export function unitHash(...parts: readonly (string | number)[]): number {
   let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  for (const part of parts) {
+    const text = String(part);
+    hash = Math.imul(hash ^ text.length, 16777619);
+    for (let index = 0; index < text.length; index += 1) {
+      hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+    }
   }
   return (hash >>> 0) / 4294967296;
 }

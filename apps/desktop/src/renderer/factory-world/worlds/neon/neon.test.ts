@@ -24,6 +24,7 @@ import {
 import {
   type InstancedMesh,
   Matrix4,
+  Mesh,
   type Object3D,
   PerspectiveCamera,
   Scene,
@@ -118,7 +119,20 @@ function standInHost() {
       }).flat();
     });
   };
-  return { host, homes, pickable };
+  return { host, scene, homes, pickable };
+}
+
+/** Every point of the highways drawn: the merged tube geometry whose vertices name their highway. */
+function highwayPoints(scene: Scene): Vector3[] {
+  const points: Vector3[] = [];
+  scene.traverse((object) => {
+    if (!(object instanceof Mesh) || object.geometry.getAttribute("aEdge") === undefined) return;
+    const position = object.geometry.getAttribute("position");
+    for (let index = 0; index < position.count; index += 1) {
+      points.push(new Vector3(position.getX(index), position.getY(index), position.getZ(index)));
+    }
+  });
+  return points;
 }
 
 /** A small monorepo: a shared core, two services over it, an app over those, and its tooling. */
@@ -343,4 +357,27 @@ test("a city past the bounds stays within them: every zone still picked, and at 
   const items = pickable();
   assert.equal(idsOf(items, PICK_KIND.ZONE).size, 200);
   assert.equal(idsOf(items, PICK_KIND.AGENT).size, 100);
+});
+
+test("a dependency that moves while every zone stays put moves its highway", () => {
+  const zones = (dependsOn: string) => [
+    factoryZoneOf("tools/a", [], { bytes: 4_000 }),
+    factoryZoneOf("tools/b", [], { bytes: 4_000 }),
+    factoryZoneOf("tools/c", [dependsOn], { bytes: 4_000 }),
+  ];
+  const { host, scene, pickable } = standInHost();
+  const instance = world.create(host);
+  instance.update(stateOf(factoryWorldOf({ zones: zones("tools/a") })));
+  instance.update(stateOf(factoryWorldOf({ zones: zones("tools/b") })));
+  const anchors = pickable().filter(({ target }) => target.kind === PICK_KIND.ZONE);
+  const centre = (path: string) => anchors.find(({ target }) => target.id === path)?.at;
+  const highway = highwayPoints(scene);
+  const reach = (path: string) => {
+    const at = centre(path);
+    assert.ok(at !== undefined);
+    return Math.min(...highway.map((point) => Math.hypot(point.x - at.x, point.z - at.z)));
+  };
+  assert.ok(highway.length > 0, "a highway is drawn");
+  assert.ok(reach("tools/b") < 1, `it lands on the new dependency (${reach("tools/b")})`);
+  assert.ok(reach("tools/a") > 1, `and no longer on the old one (${reach("tools/a")})`);
 });

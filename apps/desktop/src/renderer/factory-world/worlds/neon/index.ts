@@ -18,6 +18,7 @@ import {
   type CityLayout,
   cityLayoutOf,
   type District,
+  HASH_SALT,
   samePlan,
   siteOf,
   unitHash,
@@ -75,6 +76,15 @@ function chosen(state: WorldState, kind: PickKind, id: string): boolean {
   );
 }
 
+/** Whether two edge lists join the same zones, in the same order. */
+function sameEdges(left: FactoryWorldView["edges"], right: FactoryWorldView["edges"]): boolean {
+  return (
+    left === right ||
+    (left.length === right.length &&
+      left.every((edge, index) => edge.from === right[index]?.from && edge.to === right[index]?.to))
+  );
+}
+
 /** The first of `paths` the city has a district for. */
 function districtOn(layout: CityLayout, paths: readonly string[]): District | undefined {
   for (const path of paths) {
@@ -126,8 +136,8 @@ function beamsOf(state: WorldState, layout: CityLayout): ShippedBeam[] {
         };
       }
       return {
-        x: site.x + (unitHash(`x${merged.url}`) - 0.5) * site.w * 0.5,
-        z: site.z + (unitHash(`z${merged.url}`) - 0.5) * site.d * 0.5,
+        x: site.x + (unitHash(HASH_SALT.X, merged.url) - 0.5) * site.w * 0.5,
+        z: site.z + (unitHash(HASH_SALT.Z, merged.url) - 0.5) * site.d * 0.5,
         top: site.h + 0.2,
         width,
         intensity,
@@ -145,7 +155,7 @@ function ghostsOf(state: WorldState, layout: CityLayout): GhostTower[] {
     const district = districtOn(layout, issue.zonePaths);
     const seed = unitHash(issue.identifier);
     const isChosen = chosen(state, PICK_KIND.PLANNED, issue.identifier);
-    const w = 4.2 + 2.8 * unitHash(`w${issue.identifier}`);
+    const w = 4.2 + 2.8 * unitHash(HASH_SALT.WIDTH, issue.identifier);
     if (district === undefined) {
       const { x, z } = rimSpot(layout, index, issues.length, 0.3);
       return { x, z, h: 22 * (0.95 + 0.5 * seed), w, seed, chosen: isChosen };
@@ -256,7 +266,10 @@ function workersOf(state: WorldState, layout: CityLayout) {
     const trips = agent.touched.slice(1, 4).flatMap((touched) => {
       const other = layout.districtByPath.get(touched.path);
       if (other === undefined || other === district) return [];
-      const site = siteOf(other, Math.floor(unitHash(`${agent.id}${touched.path}`) * 1000));
+      const site = siteOf(
+        other,
+        Math.floor(unitHash(HASH_SALT.TRIP, agent.id, touched.path) * 1000),
+      );
       return site === undefined ? [] : [workSiteOf(site)];
     });
     return {
@@ -352,6 +365,7 @@ export const world: WorldModule = {
 
     let layout: CityLayout | undefined;
     let planFor: FactoryWorldView["zones"] = [];
+    let edgesFor: FactoryWorldView["edges"] = [];
     let towerTargets: PickTarget[] = [];
     let plotTargets: PickTarget[] = [];
     let agentTargets: PickTarget[] = [];
@@ -474,11 +488,11 @@ export const world: WorldModule = {
       uniforms.uFogDensity.value = state.dark ? 0.0016 : 0.0009;
       uniforms.uHaze.value = state.dark ? 0.55 : 0.22;
       scene.background = uniforms.uFogColor.value;
-      if (layout === undefined || !samePlan(planFor, view.zones)) {
+      const replanned = layout === undefined || !samePlan(planFor, view.zones);
+      if (layout === undefined || replanned) {
         layout = cityLayoutOf(view.zones);
         planFor = view.zones;
         city.plan(layout);
-        highways.plan(layout, view.edges);
         const pathOfSlot = view.zones.map((zone) => zone.path);
         towerTargets = layout.buildings.map((building) => ({
           kind: PICK_KIND.ZONE,
@@ -496,6 +510,11 @@ export const world: WorldModule = {
         city.plots.instanceMatrix.needsUpdate = true;
       }
       const plan = layout;
+      // Note that a dependency can change while every zone stays where it stood, so the highways are kept apart from the plan.
+      if (replanned || !sameEdges(edgesFor, view.edges)) {
+        highways.plan(plan, view.edges);
+        edgesFor = view.edges;
+      }
       if (blast !== blastShown) {
         blastShown = blast;
         blastFrom = elapsed;

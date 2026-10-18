@@ -50,6 +50,7 @@ import {
   type Building,
   CITY,
   type CityLayout,
+  HASH_SALT,
   seededRandom,
   unitHash,
 } from "./layout";
@@ -460,7 +461,7 @@ function warningLightsOf(uniforms: SharedUniforms) {
     const seed = geometry.getAttribute("aSeed");
     tall.forEach((building, index) => {
       position.setXYZ(index, building.x, building.h + 0.6, building.z);
-      seed.setX(index, unitHash(`${building.x}:${building.z}`));
+      seed.setX(index, unitHash(HASH_SALT.BLINK, building.x, building.z));
     });
     position.needsUpdate = true;
     seed.needsUpdate = true;
@@ -540,12 +541,12 @@ function billboardsOf(
         const building = tall[(k * 3) % tall.length];
         if (building === undefined) continue;
         const path = district.zone.path;
-        const side = Math.floor(unitHash(`${path}${k}`) * 4);
+        const side = Math.floor(unitHash(HASH_SALT.SIDE, path, k) * 4);
         const nx = [1, -1, 0, 0][side] ?? 0;
         const nz = [0, 0, 1, -1][side] ?? 0;
         const w = Math.min(building.w, building.d) * 0.7;
-        const h = Math.min(building.h * 0.45, w * (1.4 + unitHash(`${path}h${k}`)));
-        const y = building.h * (0.45 + 0.35 * unitHash(`${path}y${k}`));
+        const h = Math.min(building.h * 0.45, w * (1.4 + unitHash(HASH_SALT.HEIGHT, path, k)));
+        const y = building.h * (0.45 + 0.35 * unitHash(HASH_SALT.RISE, path, k));
         placing.position.set(
           building.x + nx * (building.w / 2 + 0.12),
           y,
@@ -555,7 +556,7 @@ function billboardsOf(
         placing.scale.set(w, h, 1);
         placing.updateMatrix();
         mesh.setMatrixAt(count, placing.matrix);
-        seed.setX(count, unitHash(`${path}b${k}`));
+        seed.setX(count, unitHash(HASH_SALT.BOARD, path, k));
         zone.setX(count, district.slot);
         count += 1;
       }
@@ -659,7 +660,7 @@ function searchlightsOf(uniforms: SharedUniforms) {
       if (crown === undefined) return;
       light.mesh.position.set(crown.x, crown.height * 1.02, crown.z);
       light.phase = unitHash(crown.zone.path) * 6.28;
-      light.speed = 0.12 + unitHash(`${crown.zone.path}s`) * 0.1;
+      light.speed = 0.12 + unitHash(HASH_SALT.SPEED, crown.zone.path) * 0.1;
     });
   };
   const frame = (t: number) => {
