@@ -140,6 +140,7 @@ import {
   cardTitle,
   delegationView,
   loadedSkill,
+  sentWords,
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
@@ -621,6 +622,7 @@ function OpeningCallView({
       state={part.state}
       hint={hint}
       card={card}
+      sent={sentWords(part.tool, part.input)}
       onOpen={onOpen}
     />
   );

@@ -3,7 +3,7 @@ import { CALL_KIND, callLine } from "@luke/features/turn-rows";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool.js";
-import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model.js";
+import { cardTitle, sentWords, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model.js";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -642,6 +642,28 @@ test("the section calls read as theirs, a made section by the title asked and a 
     [CALL_KIND.MOVE_TASK, "Bill by seat", undefined],
   ]);
   assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
+});
+
+test("what a start or a message sent another agent is read whole: a message's words, a start's prompt or its earlier task and its note, and nothing for a start on the plan or another call", () => {
+  const long = "Add the refund export.\n\nKeep the CSV columns as they are.";
+  assert.deepEqual(sentWords("message_agent", { agentId: "a", text: long }), {
+    words: long,
+    note: undefined,
+  });
+  assert.deepEqual(sentWords("start_agent", { prompt: "Fix it.", note: "Rebase first." }), {
+    words: "Fix it.",
+    note: "Rebase first.",
+  });
+  assert.deepEqual(sentWords("start_agent", { task: "Fix it." }), {
+    words: "Fix it.",
+    note: undefined,
+  });
+  assert.deepEqual(sentWords("start_agent", { from: { agentId: "a" }, note: "Go on." }), {
+    words: undefined,
+    note: "Go on.",
+  });
+  assert.equal(sentWords("start_agent", {}), undefined);
+  assert.equal(sentWords("stop_agent", { agentId: "a", text: "x" }), undefined);
 });
 
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
