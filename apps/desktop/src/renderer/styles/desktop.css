@@ -4179,8 +4179,7 @@ button.integration-tool-head:hover,
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-pick > span,
-.inbox-offered > summary > span {
+.inbox-pick > span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -4190,44 +4189,6 @@ button.integration-tool-head:hover,
   width: 12px;
   height: 12px;
   flex: none;
-}
-
-/* What a settled item offered, folded to one line as the transcript folds a
-   finished step (`inbox-pane.tsx`'s `Offered`): its chevron turns down once
-   it is opened, on transform alone. */
-.inbox-offered > summary {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text-muted);
-  cursor: default;
-  list-style: none;
-}
-
-.inbox-offered > summary::-webkit-details-marker {
-  display: none;
-}
-
-.inbox-offered > summary:hover {
-  color: var(--luke-color-text);
-}
-
-.inbox-offered > summary svg {
-  margin-top: calc((1lh - 14px) / 2); /* off-scale: centres the glyph on the first line */
-  width: 14px;
-  height: 14px;
-  flex: none;
-  transition: transform var(--duration-hover) ease;
-}
-
-.inbox-offered[open] > summary {
-  margin-bottom: var(--luke-space-6);
-}
-
-.inbox-offered[open] > summary svg {
-  transform: rotate(90deg);
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -7517,40 +7478,7 @@ button.integration-tool-head:hover,
 
 /* Dialog parts ---------------------------------------------------------------- */
 
-/* The title, body, and answers of the window's dialogs not yet on
-   `@luke/ui`'s `ConfirmDialog` (New task, Move to workspace, New issue),
-   in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a list of
-   choices, a note being written) is the part that gives way and
-   scrolls, so its title and its answers stay on screen however short the
-   window is. */
-.confirm-dialog-title {
-  margin: 0;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.confirm-dialog-body {
-  min-height: 0;
-  margin: 0;
-  overflow-y: auto;
-  color: var(--luke-color-text-muted);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-  margin-top: var(--luke-space-12);
-}
-
-/* A dialog's answers hold a common width, so a short verb is not a smaller
-   target than Cancel beside it. */
-.confirm-dialog-actions > button {
-  min-width: 80px;
-}
-
+/* The command palette's dimmed window fades in on this. */
 @keyframes confirm-dialog-dim {
   from {
     opacity: 0;
@@ -7811,35 +7739,11 @@ button.integration-tool-head:hover,
   white-space: nowrap;
 }
 
-/* The foot: the screenshot button at its start, the answers at its end, a
-   common width so a short verb is not a smaller target than Cancel. */
-.feedback-dialog-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-dialog-action-gap);
-  margin-top: var(--luke-space-12);
-}
-
-.feedback-dialog-answers {
-  display: flex;
-  gap: var(--luke-dialog-action-gap);
-}
-
-.feedback-dialog-answers > * {
-  min-width: var(--luke-dialog-action-width);
-}
-
-/* Send's chord a glyph's gap after its word, muted against its own fill
-   rather than the card's. */
-.feedback-dialog-answers .shortcut {
+/* A dialog's answer's chord (Send's, Create issue's) a glyph's gap after
+   its word, muted against its own fill rather than the card's. */
+.luke-dialog-actions .luke-button .shortcut {
   --shortcut-ink: var(--luke-color-on-accent-muted);
   margin-inline-start: var(--luke-icon-gap);
-}
-
-/* Create issue's chord, muted against its own fill rather than the card's. */
-.new-issue .primary-button .shortcut {
-  --shortcut-ink: var(--luke-color-on-accent-muted);
 }
 
 /* The home page's New task's chord, a glyph's gap after its word, muted
@@ -8207,14 +8111,6 @@ button.integration-tool-head:hover,
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* New issue's head: its title. */
-.new-plan-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-12);
-}
-
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
    card: the other workspaces as rows, a tile and two lines each, the chosen
    one ringed and one that cannot take the task dimmed, then what the move
@@ -8282,17 +8178,6 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text-body);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-.move-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--luke-dialog-action-gap);
-  margin-top: var(--luke-space-12);
-}
-
-.move-dialog-actions > * {
-  min-width: var(--luke-dialog-action-width);
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
