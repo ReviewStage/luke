@@ -45,6 +45,7 @@
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
 @import "./components/switch/switch.css";
+@import "./components/tabs/tabs.css";
 @import "./components/segmented/segmented.css";
 @import "./components/settings-page/settings-page.css";
 @import "./components/settings-section/settings-section.css";
