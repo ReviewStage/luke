@@ -725,7 +725,7 @@ function comeIntoView(): void {
 }
 
 /** The images the service was asked for, by address, each answered with a picture of its own. */
-function answerImages(): string[] {
+function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
   fakeAppBridge({
     act: (request: Act) => {
@@ -733,6 +733,9 @@ function answerImages(): string[] {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       }
       asked.push(request.payload.src);
+      if (refusing.has(request.payload.src)) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+      }
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
         value: { contentType: "image/png", base64: btoa(request.payload.src) },
@@ -840,5 +843,59 @@ test("an image of a service that names no commits is a binary file, as before", 
     lastDrawn().renderAnnotation("logo.png", "lead").querySelector(".diff-list-notice")
       ?.textContent,
     "Binary file not shown.",
+  );
+});
+
+test("an image side whose read did not land is asked for again when the changes are read again", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const after = `https://raw.githubusercontent.com/acme/relay/${"6".repeat(40)}/logo.png`;
+  const refusing = new Set([after]);
+  const asked = answerImages(refusing);
+  commits = { headSha: "6".repeat(40) };
+  files = [
+    changed("logo.png", {
+      status: CHANGED_FILE_STATUS.ADDED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  await drawTab();
+  let slot = await standNearView("logo.png");
+  assert.match(slot.textContent ?? "", /could not be shown/u);
+
+  refusing.clear();
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  slot = await standNearView("logo.png");
+
+  assert.deepEqual(asked, [after, after]);
+  assert.equal(slot.querySelector("img")?.alt, "Added");
+});
+
+test("an SVG moved with its contents unchanged offers no source, having no lines to show", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "7".repeat(40), baseSha: "8".repeat(40) };
+  files = [
+    changed("logo.svg", {
+      previousPath: "icon.svg",
+      status: CHANGED_FILE_STATUS.RENAMED,
+      additions: 0,
+      deletions: 0,
+      patch: "",
+    }),
+  ];
+  await drawTab();
+
+  assert.equal(lastDrawn().files[0]?.lead, true, "it is drawn as its pictures");
+  assert.equal(
+    header("logo.svg").querySelector('button[aria-label="Show source"]') === null,
+    true,
+    "no Show source is offered",
   );
 });

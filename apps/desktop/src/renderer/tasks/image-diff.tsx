@@ -19,7 +19,8 @@ import { Segmented } from "../segmented";
  * answer, an image past its bound or no image at all, says so. A side is
  * read only once its file is open and Pierre has drawn it near the view,
  * and kept for the window's life (`@luke/ui/picture-cache`), so a list of a
- * hundred images reads only the ones looked at. An image added has no
+ * hundred images reads only the ones looked at; a side whose read did not
+ * land is asked for again when the changes are read again. An image added has no
  * before and one deleted no after; a before whose merge base the service
  * could not read is not drawn at all rather than drawn wrong, and the after
  * stands alone, saying so.
@@ -63,6 +64,8 @@ export interface ImageSides {
   readonly repository: string;
   readonly headSha: string | undefined;
   readonly baseSha: string | undefined;
+  /** How many times the changes were read, so a read again asks again for a side whose last read did not land. */
+  readonly read: number;
 }
 
 /** The raw file of the repository at a commit, the address the service reads a repository's picture by. */

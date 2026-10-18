@@ -1597,15 +1597,20 @@
   gap: var(--luke-space-8);
 }
 
-/* The two sides stand in one cell of a grid, the after over the before. */
+/* The two sides stand in one cell of a grid, as large as the larger, the
+   after over the before: each fills the cell, scaled to fit, on a
+   checkerboard of its own, so the after at full strength or swiped all the
+   way hides the before however their sizes differ. */
 .image-diff-stack {
   display: grid;
 }
 
 .image-diff-stack > .image-diff-picture {
+  width: 100%;
+  height: 100%;
   grid-area: 1 / 1;
   border: 0;
-  background: none;
+  background-color: var(--code-ground);
 }
 
 .image-diff-slider {

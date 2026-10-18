@@ -322,8 +322,8 @@ function entryOf(
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
-  // An SVG is text as well as a picture: its lines are drawn while its source is asked for.
-  const source = file.patch !== null && list.asSource(path);
+  // An SVG with lines to draw is text as well as a picture: its lines are drawn while its source is asked for.
+  const source = fileNotice(file) === undefined && list.asSource(path);
   const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
   // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
@@ -338,7 +338,8 @@ function entryOf(
   const notice = fileNotice(file);
   const lead =
     pictured !== undefined ? (
-      <ImageDiff file={file} sides={pictured} />
+      // Note that the image is drawn anew for each read of the changes, so a side whose read did not land is asked for again.
+      <ImageDiff key={pictured.read} file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
       <p className="diff-list-notice">{notice}</p>
     );
@@ -375,7 +376,7 @@ function entryOf(
       <FileHead
         file={file}
         controls={
-          image === undefined || file.patch === null ? null : (
+          image === undefined || fileNotice(file) !== undefined ? null : (
             <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
           )
         }
@@ -420,6 +421,7 @@ function SourceToggle({
 function imagesOf(
   agentId: string,
   pullRequest: { readonly url: string; readonly headSha?: string; readonly baseSha?: string },
+  read: number,
 ): ImageSides | undefined {
   const [owner, name] = URL.canParse(pullRequest.url)
     ? new URL(pullRequest.url).pathname.split("/").filter((segment) => segment !== "")
@@ -430,6 +432,7 @@ function imagesOf(
     repository: `${owner}/${name}`,
     headSha: pullRequest.headSha,
     baseSha: pullRequest.baseSha,
+    read,
   };
 }
 
@@ -591,6 +594,12 @@ export function AgentChangesTab({
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
+  // How many answers have landed, which a changed image is drawn anew on.
+  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
+    of: undefined,
+    count: 0,
+  });
+  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
   const room = usePaneRoom(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
@@ -692,7 +701,7 @@ export function AgentChangesTab({
         <FilesList
           list={list}
           threads={threads}
-          images={imagesOf(agentId, pullRequest)}
+          images={imagesOf(agentId, pullRequest, reads.current.count)}
           filterShown={room.drawn}
           roomy={roomy}
           boxRef={setDiffBox}
