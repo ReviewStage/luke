@@ -3,6 +3,7 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { createPortal } from "react-dom";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { encodeImage } from "../feedback-images";
+import { FoldingButton } from "../folding-button";
 import { PictureBlock } from "../picture-block";
 import type {
   PictureNode,
@@ -20,7 +22,6 @@ import type {
 } from "../plan-editor/contract";
 import { RetryButton } from "../retry-button";
 import { Spinner } from "../spinner";
-import { Tooltip } from "../tooltip";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -152,9 +153,7 @@ function UploadingPicture({
             {upload?.kind === UPLOAD.FAILED ? upload.reason : UPLOAD_WORDS.FAILED}
           </span>
           {upload?.kind === UPLOAD.FAILED ? <RetryButton onRetry={onRetry} /> : null}
-          <button type="button" className="toolbar-button quiet-button" onClick={onRemove}>
-            {UPLOAD_WORDS.REMOVE}
-          </button>
+          <Button onClick={onRemove}>{UPLOAD_WORDS.REMOVE}</Button>
         </span>
       )}
     </span>
@@ -257,21 +256,16 @@ function PictureTools({
       data-above={String(above)}
     >
       {tools.map(({ label, icon, run, danger = false }) => (
-        <Tooltip key={label} label={worded ? undefined : label}>
-          <button
-            type="button"
-            className="picture-tool"
-            aria-label={label}
-            data-tone={danger ? "danger" : undefined}
-            onClick={(event) => {
-              event.stopPropagation();
-              run();
-            }}
-          >
-            {icon}
-            {worded ? label : null}
-          </button>
-        </Tooltip>
+        <FoldingButton
+          key={label}
+          label={label}
+          icon={icon}
+          variant={danger ? BUTTON_VARIANT.DANGER : BUTTON_VARIANT.QUIET}
+          onClick={(event) => {
+            event.stopPropagation();
+            run();
+          }}
+        />
       ))}
     </span>
   );

@@ -1193,7 +1193,7 @@ export function memberAgentInboxStamps(
   return scopeStamps({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** Where each of the task's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
+/** Where each of the task's items stands, the same items `taskInboxItems` reads and none of their words: what a held read compares between looks. */
 export function taskInboxStamps(
   userId: string,
   taskId: string,
@@ -1616,7 +1616,7 @@ export function accountInboxTasks(userId: string): InboxStoreEffect<readonly Acc
   );
 }
 
-/** Every automation whose runs' agents with no task hold an item, waiting or settled, listed as `accountInboxPlans` lists the tasks. */
+/** Every automation whose runs' agents with no task hold an item, waiting or settled, listed as `accountInboxTasks` lists the tasks. */
 export function accountInboxAutomations(
   userId: string,
 ): InboxStoreEffect<readonly AccountInboxAutomation[]> {

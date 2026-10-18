@@ -116,7 +116,7 @@
 
   /* The app's reset draws the ring; it stands inside the target, close round the disc. */
   .luke-attachment-chip-remove:focus-visible {
-    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
   }
 
   .luke-attachment-chip-remove svg {

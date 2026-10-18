@@ -1,4 +1,4 @@
-import { BUTTON_SIZE, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
@@ -125,21 +125,19 @@ export function ReplyToSelection({
       data-below={picked.below ? "" : undefined}
       style={{ left: picked.left, top: picked.top }}
     >
-      <button
-        type="button"
-        className="toolbar-button"
+      <Button
+        icon={<ReplyIcon aria-hidden="true" />}
         // Note that the press keeps the selection and the focus where they stand until it lands.
+        keepFocus
         onPointerDown={(event) => event.preventDefault()}
-        onMouseDown={(event) => event.preventDefault()}
         onClick={() => {
           setPicked(undefined);
           window.getSelection()?.removeAllRanges();
           onReply(picked.reply);
         }}
       >
-        <ReplyIcon aria-hidden="true" />
         {REPLY_WORDS.REPLY}
-      </button>
+      </Button>
     </div>,
     document.body,
   );

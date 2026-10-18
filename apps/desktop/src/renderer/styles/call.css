@@ -82,7 +82,7 @@ html.call-window #root {
    rises past the top of the window. */
 .call-card[data-surface="floating"] {
   position: fixed;
-  z-index: var(--z-toast);
+  z-index: var(--luke-z-toast);
   bottom: var(--luke-space-16);
   left: var(--luke-space-16);
   width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
@@ -213,7 +213,7 @@ html.call-window[data-pointer-stale="true"]
    The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
-  width: min(100% - 2 * var(--luke-space-16), var(--reading-width), max(240px, 70vh));
+  width: min(100% - 2 * var(--luke-space-16), var(--luke-page-measure), max(240px, 70vh));
   margin: var(--luke-space-4) auto var(--luke-space-8);
 }
 

@@ -210,7 +210,7 @@ export const MEMBER_KIND = {
   /** A coding agent started on one of the workspace's plans. */
   AGENT: "agent",
   /** A plan's Luke, one per plan, always `@luke`. */
-  PLANNER: "planner",
+  LUKE: "planner",
 } as const;
 
 /** @public */
@@ -244,7 +244,7 @@ export const GENERAL_CHANNEL = "general";
  * The handle every plan's planner answers to, told apart by the plan.
  * @public
  */
-export const PLANNER_HANDLE = "luke";
+export const LUKE_HANDLE = "luke";
 
 /**
  * How a `to` names a channel, and how it names a member.

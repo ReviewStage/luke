@@ -5,6 +5,7 @@ import {
   DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
+  ErrorState,
   Skeleton,
   SkeletonRegion,
   useConfirmDialog,
@@ -161,9 +162,9 @@ function VersionContent({
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
-      <p className="version-note" role="alert">
-        The version could not be read.
-      </p>
+      <div className="version-note">
+        <ErrorState>The version could not be read.</ErrorState>
+      </div>
     );
   }
   const diff = versionDiff(read.previous, read.document);

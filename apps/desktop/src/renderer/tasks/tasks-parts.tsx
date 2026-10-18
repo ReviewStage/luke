@@ -68,6 +68,7 @@ function CallStatusLines({
         <span className="call-backend">
           <ThinkingDots />
           {brain === undefined ? null : (
+            // Note that this keeps the system's title, because the floating call window is too short for a pill.
             <span
               className="call-backend-part"
               data-part="planner"
