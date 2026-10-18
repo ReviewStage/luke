@@ -11,7 +11,7 @@
      on every page, so the column never slides when one page scrolls and the
      next does not. */
   .luke-settings-page {
-    --luke-settings-page-measure: 640px;
+    --luke-settings-page-measure: var(--luke-settings-measure);
     container: luke-settings-page / inline-size;
     box-sizing: border-box;
     block-size: 100%;

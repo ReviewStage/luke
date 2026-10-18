@@ -133,7 +133,7 @@ export const ROLE_WORDS = {
 /** Luke, who is always the same actor. */
 export const LUKE_ACTOR: Actor = { kind: ACTOR_KIND.LUKE };
 
-/** How many hues an identity's letter is drawn on: `--workspace-hue-1` through `--workspace-hue-6`. */
+/** How many hues an identity's letter is drawn on: `--luke-color-identity-1` through `--luke-color-identity-6`. */
 const IDENTITY_HUES = 6;
 
 /** Splits a name into the characters a reader sees, an emoji's parts as one. */

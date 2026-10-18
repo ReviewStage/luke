@@ -27,7 +27,7 @@
     border-radius: var(--luke-control-radius);
     /* Note that a row draws the keyboard's ring inside itself, because the
        list scrolls in a dialog whose edge would cut a ring drawn outside. */
-    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
