@@ -504,7 +504,7 @@ export const BRIDGE = {
         isRecord(value) &&
         isWireString(value.messageId) &&
         isWireString(value.workspaceId) &&
-        (value.planId === null || isWireString(value.planId)) &&
+        (value.taskId === null || isWireString(value.taskId)) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),
