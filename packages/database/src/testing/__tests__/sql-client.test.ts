@@ -46,19 +46,41 @@ test(
   MIGRATING_TIMEOUT_MS,
 );
 
-test(
-  "a first opening whose dump fails leaves a later opening free to migrate afresh",
-  async (t) => {
-    // Note that we load a module of the test's own, so no earlier opening has dumped already.
-    vi.resetModules();
-    const fresh = await import("../sql-client.js");
-    vi.spyOn(PGlite.prototype, "dumpDataDir").mockRejectedValueOnce(new Error("dump refused"));
+/**
+ * A fresh copy of the module, so no earlier opening has dumped already, whose
+ * first call of `method` on a PGlite that is ready rejects; `failed` names
+ * that PGlite. Note that we pass over the calls PGlite makes of its own while
+ * it starts, because it dumps its own data directory then.
+ */
+async function failingOnce(method: "dumpDataDir" | "query") {
+  vi.resetModules();
+  const fresh = await import("../sql-client.js");
+  const seen: { failed?: PGlite } = {};
+  const original = PGlite.prototype[method] as (...args: unknown[]) => Promise<unknown>;
+  vi.spyOn(PGlite.prototype, method).mockImplementation(function (
+    this: PGlite,
+    ...args: unknown[]
+  ) {
+    if (seen.failed !== undefined || !this.ready) return original.apply(this, args);
+    seen.failed = this;
+    return Promise.reject(new Error(`${method} refused`));
+  } as never);
+  return { fresh, seen };
+}
 
-    await assert.rejects(fresh.openMigratedPglite(), /dump refused/);
+for (const method of ["query", "dumpDataDir"] as const) {
+  test(
+    `a first opening whose ${method} fails is closed, and a later opening migrates afresh`,
+    async (t) => {
+      const { fresh, seen } = await failingOnce(method);
 
-    const client = await fresh.openMigratedPglite();
-    t.onTestFinished(() => client.close());
-    assert.ok((await tables(client)).length > 0);
-  },
-  MIGRATING_TIMEOUT_MS,
-);
+      await assert.rejects(fresh.openMigratedPglite());
+      assert.equal(seen.failed?.closed, true);
+
+      const client = await fresh.openMigratedPglite();
+      t.onTestFinished(() => client.close());
+      assert.ok((await tables(client)).length > 0);
+    },
+    MIGRATING_TIMEOUT_MS,
+  );
+}
