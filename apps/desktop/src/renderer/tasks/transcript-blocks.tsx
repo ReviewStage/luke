@@ -21,7 +21,15 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn, Disclosure, DisclosureBody, DisclosureSummary, ProviderMark } from "@luke/ui";
+import {
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  ProviderMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -1108,6 +1116,10 @@ export function TranscriptRows<B>({
 }
 
 /** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
-export function TranscriptNote({ className, ...props }: ComponentProps<"p">): ReactNode {
-  return <p className={cn("m-0 text-[11.5px] text-muted-foreground", className)} {...props} />;
+export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      {children}
+    </Text>
+  );
 }

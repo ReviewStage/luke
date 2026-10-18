@@ -3,7 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -28,7 +28,6 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { usePerson } from "../member-directory";
-import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";

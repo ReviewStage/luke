@@ -14,7 +14,7 @@
     display: flex;
     align-items: center;
     gap: var(--luke-icon-gap);
-    min-height: var(--luke-disclosure-row-height);
+    min-height: var(--luke-control-height);
     padding: 0 var(--luke-space-4);
     border-radius: var(--luke-control-radius);
     color: var(--luke-color-text-muted);

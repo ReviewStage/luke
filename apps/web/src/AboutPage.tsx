@@ -1,4 +1,4 @@
-import { PublicPage, PublicSection } from "@luke/ui";
+import { PublicPage, PublicSection, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 type Founder = {
@@ -82,7 +82,11 @@ function FounderCard({ founder }: { readonly founder: Founder }): React.JSX.Elem
       />
       <div className="min-w-0">
         <h3 className="m-0 text-base font-semibold tracking-[-0.01em]">{founder.name}</h3>
-        <p className="mt-0.5 mb-0 font-mono text-xs text-muted-foreground">{founder.role}</p>
+        <div className="mt-0.5">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} font={TEXT_FONT.MONO}>
+            {founder.role}
+          </Text>
+        </div>
         <p className="mt-2 mb-0 text-sm text-pretty text-muted-foreground">{founder.bio}</p>
         <FounderSocials name={founder.name} socials={founder.socials} />
       </div>

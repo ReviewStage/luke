@@ -60,6 +60,15 @@
 
   --luke-text-area-grow-max: 320px;
 
+  /* A card frames a group of content on a page: a dialog's corner, and an
+     inset a step wider than a field's gap, so what it holds stands clear of
+     its edge; the compact and snug insets are the block axis of a figure's
+     card and a one-line band's. */
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
+
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
   --luke-dialog-media-min-width: 360px;
@@ -68,9 +77,6 @@
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
-
-  /* A fold's summary row, a line of a transcript a little under a control. */
-  --luke-disclosure-row-height: 28px;
 
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-6);
@@ -123,6 +129,11 @@
 
   --luke-text-area-grow-max: 320px;
 
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
+
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
   --luke-dialog-media-min-width: 360px;
@@ -131,9 +142,6 @@
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
-
-  /* A web fold's summary is a finger's target, its controls' height. */
-  --luke-disclosure-row-height: var(--luke-control-height);
 
   /* A web menu's rows are its controls' height, a finger's target. */
   --luke-menu-row-height: 44px;

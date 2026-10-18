@@ -11,6 +11,10 @@ import {
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -322,7 +326,7 @@ function ReplaySteps({
     setShown(steps.length - page.from + page.next);
   };
   return (
-    <div ref={list} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-replay-steps="">
+    <div ref={list} tabIndex={-1} className="replay-steps" data-replay-steps="">
       {page.from === 0 ? null : (
         <Inline>
           <Button
@@ -361,9 +365,9 @@ function ReplayFoot({
       ? undefined
       : `#${pullRequest.number} ${pullRequest.title}`;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-0 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
+    <div className="replay-foot">
       {branch === undefined ? null : (
-        <span className="min-w-0">
+        <span>
           Builds on <code>{branch}</code>
         </span>
       )}
@@ -463,23 +467,32 @@ export function ReplayCard({
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
-            <span className="text-muted-foreground">{replayVerb(replay)} </span>
+          <span className="replay-card-title">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {replayVerb(replay)}{" "}
+            </Text>
             {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the chip's own press from also folding the card; the chip is the control. */}
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chip inside is a button, which takes the keys itself. */}
             <span className="agent-origin-chip" onClick={(event) => event.stopPropagation()}>
               <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
             </span>
-            <span className="text-muted-foreground"> · {replayCount(replay)}</span>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {" "}
+              · {replayCount(replay)}
+            </Text>
           </span>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>
-          <p className="m-0 text-[12px] text-muted-foreground">{replayLede(name)}</p>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {replayLede(name)}
+          </Text>
           {summary === undefined || replay.summary === undefined ? null : (
             <SummaryRow line={summary} text={replay.summary.text} />
           )}
           {left === undefined ? null : (
-            <p className="m-0 text-[12px] italic text-muted-foreground">{left}</p>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              <em>{left}</em>
+            </Text>
           )}
           <ReplaySteps steps={replay.steps} readerId={place.readerId} />
           <ReplayFoot agentId={agentId} place={place} onOpenTranscript={onOpenTranscript} />
