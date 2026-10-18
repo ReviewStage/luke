@@ -1,17 +1,21 @@
 import {
   BUTTON_VARIANT,
   ButtonLink,
+  MARK_PROVIDER,
   Pagination,
   Prose,
+  ProviderMark,
   PUBLIC_PAGE_WIDTH,
   PUBLIC_SECTIONS,
   PublicPage,
   PublicSection,
   TEXT_ELEMENT,
   TEXT_FONT,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextLink,
 } from "@luke/ui";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
@@ -23,13 +27,7 @@ import {
   parseReleases,
   type Release,
 } from "./changelog-releases";
-import {
-  GitHubMark,
-  REPOSITORY_URL,
-  SITE_PAGE,
-  SiteFooterLinks,
-  SiteNavigation,
-} from "./SiteChrome";
+import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
@@ -61,7 +59,11 @@ function GitHubDoor({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={href} icon={<GitHubMark />}>
+    <ButtonLink
+      variant={BUTTON_VARIANT.OUTLINE}
+      href={href}
+      icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+    >
       {children}
     </ButtonLink>
   );
@@ -74,12 +76,14 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
           release and leaves sticky nowhere to travel. On one column the rail
           becomes the entry's own dated heading line. */}
       <div className="sticky top-24 flex flex-col gap-1 self-start max-[640px]:static max-[640px]:flex-row max-[640px]:items-baseline max-[640px]:gap-3">
-        <a
-          className="font-mono text-sm font-semibold text-foreground no-underline transition-colors duration-150 hover:text-accent-ink motion-reduce:transition-none"
+        <TextLink
           href={changelogReleasePath(release.version)}
+          look={TEXT_LINK_LOOK.HEADING}
+          variant={TEXT_VARIANT.LABEL}
+          font={TEXT_FONT.MONO}
         >
           v{release.version}
-        </a>
+        </TextLink>
         <time dateTime={release.date}>
           <Text
             as={TEXT_ELEMENT.SPAN}

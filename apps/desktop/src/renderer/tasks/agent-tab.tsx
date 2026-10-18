@@ -22,8 +22,10 @@ import {
   ErrorState,
   HoverCard,
   HoverCardHead,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -816,16 +818,18 @@ function OriginSubject({
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <a
-      className="text-link agent-origin-subject"
-      href={url}
-      onClick={(event) => {
-        event.preventDefault();
-        openGitHub(url);
-      }}
-    >
-      {words}
-    </a>
+    <span className="agent-origin-subject">
+      <TextLink
+        href={url}
+        look={TEXT_LINK_LOOK.UNDERLINED}
+        onClick={(event) => {
+          event.preventDefault();
+          openGitHub(url);
+        }}
+      >
+        {words}
+      </TextLink>
+    </span>
   );
 }
 

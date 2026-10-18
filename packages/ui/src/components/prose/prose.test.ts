@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Prose } from "../../index.js";
 
@@ -21,18 +21,22 @@ const DOCUMENT = [
   "<ol><li>Open a plan.</li><li>Press <kbd>⌘</kbd><kbd>K</kbd> on <code>budget.ts</code>.</li></ol>",
 ].join("");
 
-const containers: HTMLElement[] = [];
+const mounted: { root: Root; container: HTMLElement }[] = [];
 
 afterEach(() => {
-  for (const container of containers.splice(0)) container.remove();
+  for (const { root, container } of mounted.splice(0)) {
+    act(() => root.unmount());
+    container.remove();
+  }
 });
 
 async function render(html: string): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
-  containers.push(container);
+  const root = createRoot(container);
+  mounted.push({ root, container });
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  await act(async () => createRoot(container).render(createElement(Prose, { html })));
+  await act(async () => root.render(createElement(Prose, { html })));
   return container;
 }
 

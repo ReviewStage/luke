@@ -82,64 +82,10 @@
     margin-top: var(--luke-space-40);
   }
 
-  /* The way back to the page this one stands beneath, quiet until it is
-     pointed at, a step above the title. */
+  /* The way back to the page this one stands beneath, a quiet link a
+     step above the title. */
   .luke-public-page-back {
-    display: inline-block;
     margin-bottom: var(--luke-space-16);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-semibold);
-    text-decoration: none;
-    transition: color var(--duration-hover) ease;
-  }
-
-  .luke-public-page-back:hover {
-    color: var(--luke-color-text);
-  }
-
-  .luke-public-page-title {
-    margin: 0;
-    font-size: var(--luke-type-title-size);
-    line-height: var(--luke-type-title-leading);
-    font-weight: var(--luke-weight-bold);
-    text-wrap: pretty;
-  }
-
-  /* The landing's one line, in the site's display style. Note that the
-     window has no display type, so on the desktop profile it falls back to
-     the page title. */
-  .luke-public-page-title[data-style="hero"] {
-    font-size: var(--luke-display-hero-size, var(--luke-type-title-size));
-    line-height: var(--luke-display-hero-leading, var(--luke-type-title-leading));
-    font-weight: var(--luke-display-hero-weight, var(--luke-weight-bold));
-    letter-spacing: var(--luke-display-hero-tracking, normal);
-  }
-
-  /* At 2.25rem the hero needs about 490px, so it steps down before the
-     column can squeeze it. */
-  @container (max-width: 575px) {
-    .luke-public-page-title[data-style="hero"] {
-      font-size: var(--luke-display-hero-size-narrow, var(--luke-type-title-size));
-    }
-  }
-
-  .luke-public-page-lead {
-    max-width: 34rem;
-    margin: 0;
-    color: var(--luke-color-text-muted);
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-    text-wrap: pretty;
-  }
-
-  .luke-public-page-title + .luke-public-page-lead {
-    margin-top: var(--luke-space-24);
-  }
-
-  .luke-public-section + .luke-public-section {
-    margin-top: var(--luke-public-page-rhythm);
   }
 
   /* Ruled sections each open under a rule across the column and keep their

@@ -1,4 +1,6 @@
 import { type ReactNode, useId } from "react";
+import { TEXT_VARIANT } from "../text/text.js";
+import { TextLink } from "../text-link/text-link.js";
 
 /**
  * public-page.tsx -- the page the public site is drawn on: the site's banner, the page's title and lead, its sections, and the site's footer, all on one column.
@@ -152,10 +154,12 @@ export function PublicPage({
         {back !== undefined || said(title) || said(lead) ? (
           <div className="luke-public-page-intro">
             {back !== undefined ? (
-              <a className="luke-public-page-back" href={back.href}>
-                <span aria-hidden="true">← </span>
-                {back.label}
-              </a>
+              <div className="luke-public-page-back">
+                <TextLink href={back.href} variant={TEXT_VARIANT.LABEL}>
+                  <span aria-hidden="true">← </span>
+                  {back.label}
+                </TextLink>
+              </div>
             ) : null}
             {said(title) ? (
               <h1 className="luke-public-page-title" data-style={titleStyle}>
