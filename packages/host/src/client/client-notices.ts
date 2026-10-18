@@ -119,7 +119,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
           (defect) =>
             Effect.sync(() =>
               report(
-                `the agents with no plan could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+                `the agents with no task could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
             ),
         ),
