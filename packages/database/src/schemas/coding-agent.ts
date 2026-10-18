@@ -155,6 +155,8 @@ export interface StoredStartedFrom {
  * Who archived an agent, and why: a member from the window, or Luke or
  * another coding agent acting for one, the member always, the agent by its
  * id and its title as it stood, and the reason where one was given.
+ * `withTask` marks an agent archived along with its task, by the member who
+ * archived the task, which the task's unarchive brings back with it.
  */
 export interface StoredArchive {
   readonly by: CodingAgentArchiver;
@@ -162,6 +164,7 @@ export interface StoredArchive {
   readonly agentId?: string;
   readonly agentName?: string;
   readonly reason?: string;
+  readonly withTask?: boolean;
 }
 
 /**
