@@ -72,7 +72,11 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { ACCOUNT_CHAT_REASON, accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import {
+  ACCOUNT_CHAT_REASON,
+  ACCOUNT_INBOX_ARCHIVED,
+  accountInboxAnswerSchema,
+} from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -4435,6 +4439,51 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(
           yield* ask(request(ACCOUNT_INBOX, undefined)),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "an archived plan's items are put away with it: its open item waits nowhere, the plan is listed among those holding items only where archived=include asks, an answer to the item is refused as archived, and unarchiving brings the item back as it stood",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, post, answer, waiting } = yield* openInbox();
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const archivedToo = () =>
+          Effect.map(
+            ask(request(ACCOUNT_INBOX, owner, { archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE })),
+            (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        assert.deepEqual(
+          (yield* archivedToo()).plans.map((plan) => plan.planId),
+          [task.id],
+        );
+
+        yield* updateTask(owner, task.id, { archived: true });
+        const standing = yield* waiting();
+        assert.deepEqual(standing.items, []);
+        assert.deepEqual(standing.plans, []);
+        const included = yield* archivedToo();
+        assert.deepEqual(included.items, [], "an archived plan's open item still waits on nobody");
+        assert.deepEqual(
+          included.plans.map((plan) => [plan.planId, plan.items]),
+          [[task.id, 1]],
+        );
+        assert.deepEqual(
+          yield* answer(posted.success.id, {
+            revision: posted.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.ANSWERED,
+            note: "Keep it short.",
+          }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
+
+        yield* updateTask(owner, task.id, { archived: false });
+        assert.deepEqual(
+          (yield* waiting()).items.map((item) => [item.id, item.revision]),
+          [[posted.success.id, posted.success.revision]],
         );
       }),
   );

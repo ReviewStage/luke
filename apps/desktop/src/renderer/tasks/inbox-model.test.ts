@@ -652,6 +652,26 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
+test("an archived task's open item needs nobody, as a plan's own Inbox lists it: Needs you neither lists nor counts it, nor is it chosen first, while All open still lists it", () => {
+  const archived = [
+    {
+      holder: taskHolder({ ...BILLING, archivedAt: 9 }),
+      items: [item({ id: "put-away", updatedAt: 20 }), item({ id: "also", updatedAt: 10 })],
+    },
+  ];
+  const counts = inboxCounts(archived, undefined);
+  assert.equal(counts[INBOX_SHOW.NEEDS_YOU], 0);
+  assert.equal(counts[INBOX_SHOW.OPEN], 2);
+  const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
+  assert.deepEqual(drawn(inboxList(archived, { ...view, show: INBOX_SHOW.NEEDS_YOU })), []);
+  const open = inboxList(archived, { ...view, show: INBOX_SHOW.OPEN });
+  assert.deepEqual(drawn(open), ["put-away", "also"]);
+  assert.equal(
+    nextNeedingYou(open, "put-away", () => false),
+    undefined,
+  );
+});
+
 test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,
