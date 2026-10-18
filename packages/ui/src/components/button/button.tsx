@@ -44,6 +44,11 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * be followed is not drawn. An IconButtonLink is an IconButton's look on a
  * link, named by its `label`, which may open in a `newTab`.
  *
+ * A labelled button is named by its words, unless it is given a `label`
+ * that says more of what it does than they have room for ("Start a coding
+ * agent" over "Start"). The label holds the words it is drawn with, so a
+ * reader who says what they see still reaches it (WCAG's label in name).
+ *
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
  * the button itself, so a reader is told the shortcut by the control.
@@ -174,15 +179,18 @@ function stateProps(props: ButtonBase, name: string | undefined) {
 /** A labelled button: its words, after its glyph where it has one. */
 export function Button({
   icon,
+  label,
   children,
   ...props
 }: ButtonBase & {
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
+  label?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <button className="luke-button" {...stateProps(props, undefined)}>
+    <button className="luke-button" {...stateProps(props, label)}>
       <span className="luke-button-face">
         {icon}
         <span className="luke-button-words">{children}</span>

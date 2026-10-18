@@ -526,7 +526,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), []);
         const off = (yield* host.standingContext(standing)).text;
-        assert.equal(off.includes("[chat since the last planning call]"), false, off);
+        assert.equal(off.includes("[chat since the last task call]"), false, off);
 
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         assert.deepEqual(offered(yield* host.toolDeclarationsFor(standing)), [
@@ -535,7 +535,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           CHAT_TOOL.RESOLVE,
         ]);
         const on = (yield* host.standingContext(standing)).text;
-        assert.ok(on.includes("[chat since the last planning call]"), on);
+        assert.ok(on.includes("[chat since the last task call]"), on);
       }),
   );
 
@@ -576,7 +576,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           clientKey: randomUUID(),
         });
         assert.ok(Result.isSuccess(answered));
-        const line = `[chat since the last planning call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
+        const line = `[chat since the last task call]\n- m ${answered.success.message.seq} in #teammate-invitations, @${person.handle}: ${JSON.stringify(CHAT.ANSWERED)}`;
         // A turn that fails took nothing in, so the turn after it is handed the same line.
         const failed = yield* failedTurn(host, session, "turn_1", CORRECTION);
         assert.ok(failed.includes(line), failed);
@@ -585,7 +585,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
         // A turn that completes took it in, so the turn after is handed nothing of it.
         yield* brainTurn(host, session, "turn_3", CORRECTION);
         const after = (yield* host.standingContext(yield* admitted(host, session))).text;
-        assert.equal(after.includes("[chat since the last planning call]"), false, after);
+        assert.equal(after.includes("[chat since the last task call]"), false, after);
       }),
   );
 
@@ -657,7 +657,7 @@ it.layer(getTestDB())("the planning model where the account's preferences cannot
           false,
         );
         const opened = (yield* host.standingContext(standing)).text;
-        assert.equal(opened.includes("[chat since the last planning call]"), false, opened);
+        assert.equal(opened.includes("[chat since the last task call]"), false, opened);
         // A repository read runs and answers in its own words, here that the plan names no repository.
         const read = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
         assert.ok(read.startsWith(SCRIPTED_NOT_READ_REPLY), read);

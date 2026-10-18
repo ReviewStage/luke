@@ -23,6 +23,8 @@ import {
   HoverCard,
   HoverCardHead,
   TEXT_LINK_LOOK,
+  TEXT_TONE,
+  Text,
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
@@ -45,7 +47,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
-import { Message, MessageContent } from "../ai-elements/message";
+import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/task";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
@@ -994,14 +996,6 @@ export interface ArrivedLine {
 const NO_ARRIVED: readonly ArrivedLine[] = [];
 
 /**
- * A sent message's actions, set in the line under its bubble rather than
- * floated on a card over its corner: they still show only while the
- * pointer or the keyboard is on the message, but take their place in the
- * line, so the sender beside them never moves.
- */
-const SENT_ACTIONS_CLASS = "static border-0 bg-transparent p-0 shadow-none";
-
-/**
  * The line a finished turn ends on: how long it worked and when it ended,
  * then its Copy and Copy link beside it, set as a sent message's are under
  * its bubble rather than floated over the turn's corner. A turn still
@@ -1108,7 +1102,7 @@ export function AgentMessage({
               <CopyMessageAction
                 words={words}
                 messageId={message.id}
-                className={SENT_ACTIONS_CLASS}
+                placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
               />
             )}
             {named}
@@ -1186,7 +1180,7 @@ export function AgentMessage({
                   messageId={message.id}
                   forkable={forks}
                   forkCut={forkCut}
-                  className={SENT_ACTIONS_CLASS}
+                  placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
                 />
               ) : null
             }
@@ -1432,7 +1426,7 @@ function AgentTranscriptView({
       ) : (
         <>
           {ended === undefined ? (
-            <p className="m-0">{lead.startingLine}</p>
+            <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
           ) : (
             <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
           )}

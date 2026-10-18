@@ -678,19 +678,6 @@
   font-weight: var(--luke-weight-semibold);
 }
 
-.plan-diagram-toggle {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-weight: var(--luke-weight-medium);
-}
-
-.plan-diagram-toggle:hover {
-  color: var(--luke-color-text);
-}
-
 .plan-diagram-picture {
   display: block;
   max-width: 100%;
@@ -796,6 +783,302 @@
       0 6px 16px var(--luke-color-shadow-soft);
     translate: -50% 0;
   }
+}
+
+/* A transcript's messages (../ai-elements/message.tsx) and the quiet lines
+   between them (working-time.tsx, call-card.tsx, inbox-pane.tsx). They sit in
+   the components layer, as the frame above does, so a surface's own rule for
+   a message (`.agent-origin`, `.agent-turn-foot > [data-worked]`) still says
+   the last word, as it did over the utilities these replaced. */
+@layer components {
+  .transcript-message {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .transcript-message.is-user {
+    max-width: 95%;
+    margin-left: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  /* A reply is reading text, so it keeps a reading leading rather than the
+     body role's. It clips past the keyboard's ring rather than at its edge,
+     so a fold, a tool line, or a chip it holds keeps its ring. */
+  .message-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: clip;
+    overflow-clip-margin: var(--focus-ring-room);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    line-height: 1.625;
+  }
+
+  /* Note that the rhythm between a message's blocks weighs nothing, so a
+     block's own margin, a quiet line's or a note's, still wins. */
+  :where(.message-content > :not(:last-child)) {
+    margin-block: 0 var(--luke-space-8);
+  }
+
+  .transcript-message.is-user .message-content {
+    width: fit-content;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) var(--spring);
+  }
+
+  .message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+    padding: var(--luke-space-2);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  }
+
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A working line and the line a finished turn or a call ends on: the
+     caption type, muted, its words selectable. */
+  .status-line {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    user-select: text;
+  }
+
+  .status-line:is([data-worked], [data-call-ended]) {
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-line[data-worked] {
+    margin-block: var(--luke-space-8) 0;
+  }
+
+  /* Only its top margin is cleared, because the conversation's gap below it
+     is a bottom margin. */
+  .status-line[data-working] {
+    margin-top: 0;
+  }
+
+  .status-line[data-working]:last-child {
+    margin-bottom: 0;
+  }
+
+  .working-time {
+    color: var(--luke-color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .working-time-after {
+    margin-left: var(--luke-space-6);
+  }
+
+  /* How long ago a thread's line says something happened. */
+  .thread-time {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The Inbox's thread, scrolling inside the room its pane leaves it. */
+  .inbox-board {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    overflow-y: auto;
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
+     muted gray with the highlight in the text's own ink. Its duration is a
+     literal as DESIGN.md allows a loop with no end of its own, because it
+     answers `--loop-motion` with its play state. */
+  .shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+/* A fold among a transcript's rows, a turn's calls or a replay's summary
+   (transcript-blocks.tsx, replay-card.tsx), in the caption type, and the one
+   quiet line that opens it, or that draws a replay's earlier steps, its
+   glyphs the control icon. */
+.transcript-fold {
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.transcript-fold-line {
+  display: flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  margin: 0;
+  padding: 0 var(--luke-space-4);
+  border: 0;
+  border-radius: var(--luke-radius-6);
+  background: transparent;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.transcript-fold-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.transcript-fold-line > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+/* A turn's calls, opened, in from the line's chevron. */
+.turn-fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin-left: var(--luke-space-24);
+  padding-top: var(--luke-space-4);
+}
+
+/* A replay card's head: what it is, the source's chip, and how many steps,
+   on one line that gives way at its end. */
+.replay-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-space-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-summary-body {
+  padding: var(--luke-space-4);
+}
+
+.replay-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  outline: none;
+}
+
+/* A replay card's foot: the branch, the pull request, and the way to the
+   whole transcript, over a dashed rule. */
+.replay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px dashed var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.replay-foot > * {
+  min-width: 0;
+}
+
+/* A message's actions, their glyphs the control icon whichever way each is
+   drawn, a copy's glyph inside its own swap. */
+.message-actions svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* An Inbox item's words and what was filled in, which a reader may select
+   and copy; what was filled in keeps the lines it was typed on. */
+.inbox-words {
+  margin: 0;
+  user-select: text;
+}
+
+.inbox-lines {
+  white-space: pre-line;
+}
+
+/* A link the window does not open: its address beside its label, to copy. */
+.inbox-link-address {
+  color: var(--luke-color-text-muted);
+  user-select: text;
+}
+
+/* A typed field of an Inbox form: its name over its box. */
+.inbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+/* A code card's failure stands at its foot, so it draws no rule under it. */
+.code-card > .file-tab-notice {
+  border-bottom: 0;
 }
 
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
@@ -1466,47 +1749,11 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The Files changed bar's diff settings (diff-settings.tsx): the button,
-   and under it a popover in the context popover's look, its rows the
-   settings page's own, scrolling within the room the panel leaves. */
+   and under it `@luke/ui`'s popover panel, its rows the settings page's
+   own, set apart in groups by a rule. */
 .diff-settings {
   position: relative;
   display: flex;
-}
-
-.diff-settings-popover {
-  display: flex;
-  max-height: min(560px, 70vh);
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 12px 32px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.diff-settings-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.diff-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.diff-settings-title {
-  margin: 0;
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .diff-settings-group {
@@ -1982,45 +2229,6 @@ button.file-ref:hover .file-ref-path {
   display: flex;
 }
 
-/* Never taller than the room its side of the press leaves (`@luke/ui`'s
-   `AnchoredPopover` sets it as `--luke-popover-room`), scrolling within it,
-   so a short window keeps Submit in reach. */
-.pull-request-review-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  max-height: var(--luke-popover-room, none);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.pull-request-review-panel:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.pull-request-review-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.pull-request-review-title {
-  margin: 0;
-  font-size: var(--luke-type-section-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
 .pull-request-review-lead {
   margin: calc(-1 * var(--luke-space-8)) 0 0;
   color: var(--luke-color-text-muted);
@@ -2031,10 +2239,6 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
-}
-
-.pull-request-review-panel > * {
-  flex-shrink: 0;
 }
 
 .pull-request-review-field,
@@ -3511,6 +3715,9 @@ ol.transcript-list {
 }
 
 .agent-continued > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
   align-self: center;
 }
 
@@ -3547,6 +3754,12 @@ ol.transcript-list {
   margin: 0;
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
+}
+
+.agent-undelivered > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
@@ -3588,6 +3801,12 @@ ol.transcript-list {
   margin: var(--luke-space-2) 0 0;
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
+}
+
+.agent-forked-to > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .agent-forked-to-item {
@@ -4172,6 +4391,10 @@ button.skill-chip:hover,
   display: flex;
   flex: 1 1 0;
   min-width: 0;
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .inbox-answer-actions {
@@ -4190,10 +4413,11 @@ button.skill-chip:hover,
 }
 
 .inbox-presses {
+  display: flex;
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
-  row-gap: var(--luke-space-8);
+  gap: var(--luke-space-8) var(--luke-control-gap);
 }
 
 /* A box answered in words alone holds its round Send at the field's end
@@ -4940,18 +5164,8 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell-field {
-  min-width: 0;
+.terminal-shell > .luke-inline-edit {
   flex: 1;
-  padding: 1px var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-input);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
 }
 
 .terminal-shell-mark {
@@ -4980,7 +5194,7 @@ button.attached-file-face:hover img {
   visibility: visible;
 }
 
-.terminal-shell:has(.terminal-shell-field) .terminal-shell-kill {
+.terminal-shell:has(> .luke-inline-edit) .terminal-shell-kill {
   visibility: hidden;
 }
 
@@ -5154,6 +5368,12 @@ button.agent-ref:hover .agent-ref-name {
   max-height: clamp(160px, 100vh - 320px, 400px);
 }
 
+/* The searchable menu's class rides a box drawn as its contents
+   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
+.luke-popover-panel > .agent-servers-menu {
+  display: contents;
+}
+
 .agent-servers-row[data-opens="true"] {
   cursor: default;
 }
@@ -5311,39 +5531,6 @@ button.agent-ref:hover .agent-ref-name {
 /* The popover hangs above the ring as the model menu does above its chip,
    at its width, on the menu's own surface; each part of the context wears
    one colour on the bar and on its legend row's square. */
-.agent-context-popover {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.agent-context-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.agent-context-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.agent-context-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: var(--luke-weight-semibold);
-}
-
 .agent-context-summary {
   display: flex;
   justify-content: space-between;
@@ -5421,19 +5608,19 @@ button.agent-ref:hover .agent-ref-name {
   font-size: var(--luke-type-caption-size);
 }
 
-.agent-context-popover [data-part="system-prompt"] {
+.agent-context [data-part="system-prompt"] {
   --context-part: var(--luke-color-merged);
 }
 
-.agent-context-popover [data-part="tool-definitions"] {
+.agent-context [data-part="tool-definitions"] {
   --context-part: var(--luke-color-working);
 }
 
-.agent-context-popover [data-part="brief"] {
+.agent-context [data-part="brief"] {
   --context-part: var(--luke-color-complete);
 }
 
-.agent-context-popover [data-part="conversation"] {
+.agent-context [data-part="conversation"] {
   --context-part: var(--luke-color-text-muted);
 }
 

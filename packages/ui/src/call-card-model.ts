@@ -20,7 +20,7 @@ import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
 /** The task's name where the document has none to give, which a task just started can briefly be. */
-const CALL_CARD_UNNAMED = "Planning call";
+const CALL_CARD_UNNAMED = "Task call";
 
 export interface CallCardModel {
   readonly taskName: string;
