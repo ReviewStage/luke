@@ -29,10 +29,10 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--duration-hover) ease,
-      color var(--duration-hover) ease,
-      filter var(--duration-hover) ease,
-      opacity var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease,
+      filter var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) ease;
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -270,9 +270,9 @@
     border-top-color: currentColor;
     border-radius: var(--luke-radius-full);
     /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --loop-motion with every other. */
+       it holds still on --luke-loop-motion with every other. */
     animation: luke-button-turn 0.8s linear infinite;
-    animation-play-state: var(--loop-motion, running);
+    animation-play-state: var(--luke-loop-motion);
     content: "";
   }
 

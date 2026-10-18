@@ -3088,6 +3088,9 @@ body:has(.app-stage[data-capture="true"])
   --duration-quick: 0s;
   --duration-fast: 0s;
   --duration-exit: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-exit: 0s;
 }
 
 .task-compose-menu-name {
@@ -7572,6 +7575,10 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   --duration-fast: 0s;
   --duration-exit: 0s;
   --duration-hover: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-exit: 0s;
+  --luke-duration-hover: 0s;
 }
 
 /* Its glyph, its words' first line, and its action share a first row as

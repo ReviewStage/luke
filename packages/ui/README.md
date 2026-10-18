@@ -63,8 +63,12 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `danger*`, `focus-ring`, …), set by both profiles in both themes.
 - **Display** (`display.css`): the site's marketing styles, `--luke-display-*`,
   set under the web profile only; the window has no display type.
-- **Motion** (`motion.css`): `--loop-motion`, the play state an endless loop
-  holds, paused under reduced motion.
+- **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
+  `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
+  `--luke-spring-fast`, `--luke-motion-exit|pane`, `--luke-hint-delay`, and
+  `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
+  zeroes the durations but hover's and pauses the loop. A component reads
+  only `--luke-*` custom properties (`scripts/repository-checks.sh`).
 
 ## Using a component
 
