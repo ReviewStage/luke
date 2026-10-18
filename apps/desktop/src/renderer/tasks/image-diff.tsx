@@ -134,17 +134,28 @@ function OneSide({
   );
 }
 
+/** How an image's two sides are set against each other, and how far the after is swiped or faded in, in percent. */
+interface Comparison {
+  readonly compare: ImageCompare;
+  readonly amount: number;
+}
+
+const FIRST_COMPARISON: Comparison = { compare: IMAGE_COMPARE.SIDE_BY_SIDE, amount: HALFWAY };
+
 /** The after over the before, swiped or faded at `amount` percent, with the slider that moves it. */
 function Stacked({
   before,
   after,
   compare,
+  amount,
+  onAmount,
 }: {
   before: string;
   after: string;
   compare: typeof IMAGE_COMPARE.SWIPE | typeof IMAGE_COMPARE.ONION_SKIN;
+  amount: number;
+  onAmount: (amount: number) => void;
 }): React.JSX.Element {
-  const [amount, setAmount] = useState(HALFWAY);
   const swipe = compare === IMAGE_COMPARE.SWIPE;
   // Note that the after is cut or faded through the CSSOM (`style`), which the panel's policy admits where it refuses a style written as markup.
   const style = swipe ? { clipPath: `inset(0 0 0 ${amount}%)` } : { opacity: amount / 100 };
@@ -161,7 +172,7 @@ function Stacked({
         max={100}
         value={amount}
         aria-label={swipe ? IMAGE_WORDS.SWIPE : IMAGE_WORDS.FADE}
-        onChange={(event) => setAmount(Number(event.target.value))}
+        onChange={(event) => onAmount(Number(event.target.value))}
       />
     </div>
   );
@@ -172,15 +183,19 @@ function BothSides({
   agentId,
   before,
   after,
+  comparison,
+  onComparison,
 }: {
   agentId: string;
   before: string;
   after: string;
+  comparison: Comparison;
+  onComparison: (comparison: Comparison) => void;
 }): React.JSX.Element {
   const read = useImageRead();
   const beforeState = usePicture(agentId, before, read);
   const afterState = usePicture(agentId, after, read);
-  const [compare, setCompare] = useState<ImageCompare>(IMAGE_COMPARE.SIDE_BY_SIDE);
+  const { compare, amount } = comparison;
   const ready =
     beforeState.kind === PICTURE_STATE.READY && afterState.kind === PICTURE_STATE.READY
       ? { before: beforeState.url, after: afterState.url }
@@ -193,7 +208,7 @@ function BothSides({
           options={COMPARE_OPTIONS}
           value={compare}
           disabled={ready === undefined}
-          onChange={setCompare}
+          onChange={(next) => onComparison({ compare: next, amount })}
         />
       </div>
       {ready === undefined || compare === IMAGE_COMPARE.SIDE_BY_SIDE ? (
@@ -208,7 +223,13 @@ function BothSides({
           </figure>
         </div>
       ) : (
-        <Stacked before={ready.before} after={ready.after} compare={compare} />
+        <Stacked
+          before={ready.before}
+          after={ready.after}
+          compare={compare}
+          amount={amount}
+          onAmount={(next) => onComparison({ compare, amount: next })}
+        />
       )}
     </>
   );
@@ -234,7 +255,13 @@ export function imageDrawable(file: CodingAgentChangedFile, sides: ImageSides): 
   return file.status === CHANGED_FILE_STATUS.DELETED ? before !== undefined : after !== undefined;
 }
 
-/** A changed image, read and drawn once it comes near the view: both sides for one changed, the one it has for one added or deleted. */
+/**
+ * A changed image, read and drawn once it comes near the view: both sides
+ * for one changed, the one it has for one added or deleted. Note that the
+ * sides are drawn anew for each read of the changes, so a side whose read
+ * did not land is asked for again, while the comparison chosen and how far
+ * it is swiped stand here, above them, and outlast the read.
+ */
 export function ImageDiff({
   file,
   sides,
@@ -244,16 +271,27 @@ export function ImageDiff({
 }): React.JSX.Element {
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const near = useNearView(box);
+  const [comparison, setComparison] = useState(FIRST_COMPARISON);
   const { before, after } = sidesOf(file, sides);
-  const { agentId } = sides;
+  const { agentId, read } = sides;
   const drawn = (() => {
     if (before !== undefined && after !== undefined) {
-      return <BothSides agentId={agentId} before={before} after={after} />;
+      return (
+        <BothSides
+          key={read}
+          agentId={agentId}
+          before={before}
+          after={after}
+          comparison={comparison}
+          onComparison={setComparison}
+        />
+      );
     }
     if (after !== undefined) {
       const added = file.status === CHANGED_FILE_STATUS.ADDED;
       return (
         <OneSide
+          key={read}
           agentId={agentId}
           address={after}
           label={added ? IMAGE_WORDS.ADDED : IMAGE_WORDS.AFTER}
@@ -262,7 +300,7 @@ export function ImageDiff({
       );
     }
     return before === undefined ? null : (
-      <OneSide agentId={agentId} address={before} label={IMAGE_WORDS.DELETED} />
+      <OneSide key={read} agentId={agentId} address={before} label={IMAGE_WORDS.DELETED} />
     );
   })();
   return (

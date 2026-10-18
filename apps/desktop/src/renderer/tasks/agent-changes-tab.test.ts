@@ -899,3 +899,35 @@ test("an SVG moved with its contents unchanged offers no source, having no lines
     "no Show source is offered",
   );
 });
+
+test("the comparison chosen for an image, and how far it is faded, outlast Refresh changes", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "9".repeat(40), baseSha: "a".repeat(40) };
+  files = [changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+  let slot = await standNearView("logo.png");
+  const onion = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === "Onion skin",
+  );
+  act(() => onion?.click());
+  const fade = () =>
+    slot.querySelector<HTMLInputElement>('input[aria-label="Fade the after over the before"]') ??
+    assert.fail("the fade's slider stands");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(fade(), "80");
+    fade().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  slot = lastDrawn().renderAnnotation("logo.png", "lead");
+
+  assert.equal(fade().value, "80");
+});

@@ -338,8 +338,7 @@ function entryOf(
   const notice = fileNotice(file);
   const lead =
     pictured !== undefined ? (
-      // Note that the image is drawn anew for each read of the changes, so a side whose read did not land is asked for again.
-      <ImageDiff key={pictured.read} file={file} sides={pictured} />
+      <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
       <p className="diff-list-notice">{notice}</p>
     );
