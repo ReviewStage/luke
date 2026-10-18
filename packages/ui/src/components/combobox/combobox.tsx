@@ -88,12 +88,14 @@ export type ComboboxOptionEngineProps = Omit<
  * where a list engine of the app's (cmdk) owns the item, handed through the
  * engine's `asChild`: the engine's role, names, handlers, and ref pass
  * through, and no class or style does, so the row is drawn only as here.
+ * One that cannot be chosen now passes no press on to the engine.
  */
 export function ComboboxOptionItem({
   option,
   ...engine
 }: { option: ComboboxOption } & ComboboxOptionEngineProps): React.JSX.Element {
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the field or the engine reads the keys and names this option active.
     <div
       role="option"
       // Note that an option is focusable by a press alone, which the list keeps from taking focus.
@@ -101,6 +103,8 @@ export function ComboboxOptionItem({
       aria-disabled={option.disabled === true ? "true" : undefined}
       aria-current={option.current === true ? "true" : undefined}
       {...engine}
+      // Note that an option that cannot be chosen now takes no press, whatever the engine handed it.
+      onClick={option.disabled === true ? undefined : engine.onClick}
       className="luke-combobox-option"
       style={undefined}
     >

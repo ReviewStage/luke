@@ -4950,6 +4950,16 @@ ol.transcript-list {
   display: contents;
 }
 
+/* A server's words, one line beside its mark: its name, its count, and
+   why it lists no tools, each giving way so the reason stays in sight. */
+.agent-servers-words {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
 .agent-servers-name {
   min-width: 0;
   flex: 0 1 auto;
@@ -4975,10 +4985,10 @@ ol.transcript-list {
 }
 
 /* Why a connected server lists no tools, after its name in the attention
-   tint at the count's size, cut where the row's button begins while the
-   name keeps its width; the whole line is the row's title. */
+   tint at the count's size, cut where the row's buttons begin; a long name
+   gives way first past most of the line, so the reason stays in sight. */
 .agent-servers-name:has(~ .agent-servers-problem) {
-  flex: none;
+  max-width: 60%;
 }
 
 .agent-servers-problem {

@@ -418,3 +418,24 @@ test("an option a list engine owns is lit by the engine's aria-selected, and a p
   assert.equal(held, option);
   assert.deepEqual(pressed, ["relay"]);
 });
+
+test("an option a list engine owns that cannot be chosen now passes no press on to the engine", async () => {
+  const { ComboboxOptionItem } = await import("../../index.js");
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "sonnet", label: "Sonnet", disabled: true },
+        onClick: () => pressed.push("sonnet"),
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-disabled"), "true");
+  assert.deepEqual(pressed, []);
+});

@@ -190,7 +190,9 @@ function ServerSwitch({
  */
 export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
-    <>
+    // Note that the words stand in a line of their own, because a list row's
+    // title would otherwise clip the reason behind a long name.
+    <span className="agent-servers-words">
       <span className="agent-servers-name">{row.name}</span>
       {row.tools !== undefined ? (
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
@@ -214,7 +216,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
           </span>
         </Tooltip>
       ) : null}
-    </>
+    </span>
   );
 }
 
