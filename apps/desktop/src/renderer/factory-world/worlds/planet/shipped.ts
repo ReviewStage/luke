@@ -71,6 +71,9 @@ const ROCKETS = 14;
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** A fresh tower's stone, warmer than the city's. */
+const FRESH_TONE = new Color(0xfff1d6);
+
 /** How long a rocket takes to climb to the ring, in seconds. */
 const CLIMB_SECONDS = 3.6;
 
@@ -284,7 +287,7 @@ export function createShipped(
       if (merge.site === undefined) continue;
       fresh.setColorAt(
         tower,
-        tint.set(chosen(merge.entry.url) ? shared.uChosen.value : new Color(0xfff1d6)),
+        tint.set(chosen(merge.entry.url) ? shared.uChosen.value : FRESH_TONE),
       );
       tower += 1;
     }

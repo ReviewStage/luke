@@ -328,8 +328,11 @@ export const world: WorldModule = {
         pose(state, elapsed, delta);
         particles.step(delta);
       },
+      // Note that the zone-state texture lives in shader uniforms and the crust's shadow material on no object in the scene, so neither is reached by the host's sweep.
       dispose: () => {
         scene.onBeforeRender = aimBefore;
+        zones.texture.dispose();
+        terrain.mesh.customDepthMaterial?.dispose();
       },
     };
   },
