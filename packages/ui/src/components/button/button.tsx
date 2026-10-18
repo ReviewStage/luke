@@ -42,7 +42,8 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
- * be followed is not drawn.
+ * be followed is not drawn. An IconButtonLink is an IconButton's look on a
+ * link, named by its `label`, which may open in a `newTab`.
  *
  * A labelled button is named by its words, unless it is given a `label`
  * that says more of what it does than they have room for ("Start a coding
@@ -259,6 +260,37 @@ export function ButtonLink({
         {icon}
         <span className="luke-button-words">{children}</span>
       </span>
+    </a>
+  );
+}
+
+/** A link drawn as an IconButton: a glyph alone, named by `label`, going to `href` when pressed. */
+export function IconButtonLink({
+  href,
+  icon,
+  label,
+  variant,
+  newTab = false,
+}: {
+  href: string;
+  icon: ReactNode;
+  /** Its accessible name, which a sighted reader has from the glyph. */
+  label: string;
+  variant?: ButtonVariant;
+  /** Whether it opens in a new tab, leaving the page it is on where it was. */
+  newTab?: boolean;
+}): React.JSX.Element {
+  return (
+    <a
+      className="luke-button"
+      data-icon-only="true"
+      data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      href={href}
+      aria-label={label}
+      target={newTab ? "_blank" : undefined}
+      rel={newTab ? "noreferrer" : undefined}
+    >
+      <span className="luke-button-face">{icon}</span>
     </a>
   );
 }

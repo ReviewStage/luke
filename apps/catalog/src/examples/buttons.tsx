@@ -9,6 +9,7 @@ import {
   EllipsisIcon,
   GAP,
   IconButton,
+  IconButtonLink,
   Inline,
   MicrophoneIcon,
   MicrophoneOffIcon,
@@ -29,10 +30,10 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * ButtonLink's looks; the round shape a call's controls take, a danger
- * toggle off and on; the compact marks a row reveals at its end; a
- * message's submit in each of its states, and unavailable; and a long label
- * in a narrow column.
+ * ButtonLink's looks and an IconButtonLink; the round shape a call's
+ * controls take, a danger toggle off and on; the compact marks a row reveals
+ * at its end; a message's submit in each of its states, and unavailable; and
+ * a long label in a narrow column.
  */
 
 const STATES = [
@@ -89,6 +90,7 @@ function Buttons(): React.JSX.Element {
               {variant}
             </ButtonLink>
           ))}
+          <IconButtonLink href="#buttons-link" icon={<PlusIcon />} label="New plan" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-round" title="Round, as a call's controls">

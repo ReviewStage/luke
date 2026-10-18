@@ -122,7 +122,7 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".text-link")].map((link) => link.textContent),
+    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
     ["the docs"],
   );
   assert.deepEqual(
@@ -162,7 +162,7 @@ test("Luke's note on a File tab's lines draws its links as a transcript does", (
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".text-link")].map((link) => link.textContent),
+    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
     ["the docs"],
   );
 });
@@ -181,7 +181,10 @@ test("a link whose label a version changed in part is drawn as words with the ch
   );
 
   assert.equal(container.querySelector(".mention-chip"), null);
-  assert.equal(container.querySelector(".text-link ins.markdown-inserted")?.textContent, "new ");
+  assert.equal(
+    container.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
+    "new ",
+  );
 });
 
 test("the plan's version history, off the plan's page, reads a version's mentions against the plan it is of", () => {

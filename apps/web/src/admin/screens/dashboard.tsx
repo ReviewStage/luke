@@ -9,8 +9,10 @@ import {
   LAYOUT_ELEMENT,
   Stack,
   TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
@@ -252,14 +254,14 @@ export function DashboardScreen({
               counts above. Per-request error rates and client-side failures are recorded as
               product-analytics events, which live with{" "}
               {metrics.reliability.analyticsConsoleUrl ? (
-                <a
+                <TextLink
                   href={metrics.reliability.analyticsConsoleUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 transition-colors duration-150 hover:text-foreground"
+                  look={TEXT_LINK_LOOK.UNDERLINED}
+                  external
+                  newTab
                 >
                   the analytics processor
-                </a>
+                </TextLink>
               ) : (
                 "the analytics processor"
               )}{" "}

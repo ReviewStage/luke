@@ -3,14 +3,27 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  DISCLOSURE_BODY,
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  Inline,
+  TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextLink,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
@@ -278,16 +291,15 @@ function StepRow({
  */
 function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.Element {
   return (
-    <Fold className="transcript-fold" data-replay-summary="">
-      <FoldSummary className="transcript-fold-line">
-        <FoldChevron />
+    <Disclosure data-replay-summary="">
+      <DisclosureSummary>
         <TextQuoteIcon aria-hidden="true" />
         {line}
-      </FoldSummary>
-      <FoldBody className="replay-summary-body">
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
         <TranscriptWords text={text} />
-      </FoldBody>
-    </Fold>
+      </DisclosureBody>
+    </Disclosure>
   );
 }
 
@@ -318,15 +330,15 @@ function ReplaySteps({
   return (
     <div ref={list} tabIndex={-1} className="replay-steps" data-replay-steps="">
       {page.from === 0 ? null : (
-        <button
-          type="button"
-          className="transcript-fold-line"
-          data-replay-earlier=""
-          onClick={drawMore}
-        >
-          <ChevronsUpIcon aria-hidden="true" />
-          {earlierStepsLine(page)}
-        </button>
+        <Inline>
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<ChevronsUpIcon aria-hidden="true" />}
+            onClick={drawMore}
+          >
+            {earlierStepsLine(page)}
+          </Button>
+        </Inline>
       )}
       {steps.slice(page.from).map((step, index) => (
         // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
@@ -364,16 +376,16 @@ function ReplayFoot({
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
         <span className="agent-origin-chip">
           {linkChip(pullRequest.url, words, doors) ?? (
-            <a
-              className="text-link"
+            <TextLink
               href={pullRequest.url}
+              look={TEXT_LINK_LOOK.UNDERLINED}
               onClick={(event) => {
                 event.preventDefault();
                 place.openGitHub(pullRequest.url);
               }}
             >
               {words}
-            </a>
+            </TextLink>
           )}
         </span>
       )}

@@ -11,6 +11,7 @@ import {
   Button,
   ButtonLink,
   IconButton,
+  IconButtonLink,
   SUBMIT_STATE,
 } from "./button.js";
 
@@ -21,9 +22,10 @@ import {
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
  * on the field that held it when a pointer presses it. A labelled button
- * given a label is named by it, which holds its words. A compact row mark
- * is a button named by its label like any other, its right-click heard so
- * it can offer its row's menu, and an unavailable one is pressed to no
+ * given a label is named by it, which holds its words. An IconButtonLink is
+ * a link named by its label, and one in a new tab opens there. A compact row
+ * mark is a button named by its label like any other, its right-click heard
+ * so it can offer its row's menu, and an unavailable one is pressed to no
  * effect. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
  * sending the form.
@@ -209,6 +211,39 @@ test("a labelled button given a label is named by it, its words within it, and b
     ["Starting", "Start"],
   ]);
   expect(said[0]?.[0]).toContain(said[0]?.[1]);
+});
+
+test("an IconButtonLink is a link named by its label, and one in a new tab opens there", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(IconButtonLink, {
+        href: "https://github.com/example/luke",
+        icon: createElement("svg", { "aria-hidden": true }),
+        label: "Luke on GitHub",
+      }),
+      createElement(IconButtonLink, {
+        href: "https://x.com/example",
+        icon: createElement("svg", { "aria-hidden": true }),
+        label: "Example on X",
+        newTab: true,
+      }),
+    ),
+  );
+
+  const links = Array.from(container.querySelectorAll("a"));
+  expect(
+    links.map((link) => [
+      link.getAttribute("aria-label"),
+      link.getAttribute("href"),
+      link.getAttribute("target"),
+    ]),
+  ).toEqual([
+    ["Luke on GitHub", "https://github.com/example/luke", null],
+    ["Example on X", "https://x.com/example", "_blank"],
+  ]);
+  expect(container.querySelector("button")).toBeNull();
 });
 
 test("a compact row mark is found by its label, pressed, and right-clicked, and refuses its press while unavailable", () => {
