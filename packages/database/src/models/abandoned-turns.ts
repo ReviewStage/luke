@@ -41,11 +41,11 @@ export const TURN_ABANDON = {
   AFTER_MS: 60 * 60 * 1000,
   /**
    * How long a coding agent's turn may stand running before the sweep
-   * settles it. A coding agent's one turn is its whole run, and its sandbox
-   * lives up to the platform's day (`coder-host/bounds.ts`'s
-   * `SANDBOX_TIMEOUT_MS`), so an hour would fail an agent still at work and
-   * leave its Stop with nothing to stop; the day and an hour's grace past
-   * it is a run whose end is not coming.
+   * settles it. A coding agent's one turn is its whole run, which outlives
+   * any one sandbox session because eve resumes a stopped sandbox from its
+   * snapshot, so an hour would fail an agent still at work and leave its
+   * Stop with nothing to stop; a day and an hour's grace past it is a run
+   * whose end is not coming.
    */
   CODING_AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
   /**

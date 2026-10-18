@@ -6,6 +6,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  Button,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -15,7 +16,8 @@ import {
 } from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act";
@@ -84,7 +86,6 @@ import { useStrandedTaskBanner } from "./stranded-task-banner";
 import { useTabViews } from "./strip-tabs";
 import { TaskActions } from "./task-actions";
 import { taskCardOf } from "./task-card";
-import { useTaskRename } from "./task-name-field";
 import {
   SummaryButton,
   type SummaryPin,
@@ -395,7 +396,7 @@ function PlanDocument({
   useEffect(() => {
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
-  const rename = useTaskRename(planId, tasks.onRenameTask);
+  const rename = useInlineRename(planId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
@@ -479,9 +480,7 @@ function PlanDocument({
               <p role="alert">{line}</p>
             )}
             {region.kind === DOCUMENT_REGION.FAILED ? (
-              <button type="button" className="toolbar-button" onClick={close.onClick}>
-                {close.label}
-              </button>
+              <Button onClick={close.onClick}>{close.label}</Button>
             ) : null}
           </section>
         )}
@@ -686,9 +685,9 @@ function PlanDocument({
                       />
                     }
                   >
-                    {rename.note !== undefined ? (
+                    {rename.refused ? (
                       <p className="error-message" role="alert">
-                        {rename.note}
+                        {RENAME_FAILED_NOTE}
                       </p>
                     ) : null}
                     {repositoryNote !== undefined ? (

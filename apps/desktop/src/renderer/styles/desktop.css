@@ -1975,10 +1975,6 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
-.section-emoji-field {
-  font-size: var(--luke-type-body-size);
-}
-
 /* A pinned repository says so after its name, quietly, since the pin is
    what holds it above groups updated more lately. */
 .sidebar-repository-pinned {
@@ -2323,9 +2319,13 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .luke-split-button > .luke-button:last-child,
-  .main-tabs .retry-word {
+  .start-agent .luke-split-button > .luke-button:last-child {
     display: none;
+  }
+
+  /* The agents' Retry folds to its glyph (`FoldingButton`). */
+  .main-tabs {
+    --luke-fold: folded;
   }
 
   .start-agent .luke-split-button > .luke-button:first-child {
@@ -6941,7 +6941,7 @@ button.integration-tool-head:hover,
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
-  --button-ground: var(--luke-color-ground);
+  --luke-button-ground: var(--luke-color-ground);
   position: sticky;
   z-index: 1;
   /* Held off the scroller's edge by the keyboard ring's reach, so its ring
@@ -6950,7 +6950,14 @@ button.integration-tool-head:hover,
   flex: none;
   align-self: flex-end;
   margin-bottom: calc(-1 * (var(--luke-control-height) + var(--luke-section-gap)));
-  background-color: var(--button-ground);
+  border-radius: var(--luke-control-radius);
+  background-color: var(--luke-button-ground);
+}
+
+/* Each chevron's box is its button alone, which carries its look. */
+.task-summary-chevron,
+.task-summary-collapse {
+  display: flex;
 }
 
 .task-summary-collapse {
@@ -6975,7 +6982,7 @@ button.integration-tool-head:hover,
 
 .task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .task-summary-chevron,
 .task-summary-card:hover .task-summary-collapse,
-.task-summary-collapse:focus-visible {
+.task-summary-collapse:has(:focus-visible) {
   opacity: 1;
 }
 
