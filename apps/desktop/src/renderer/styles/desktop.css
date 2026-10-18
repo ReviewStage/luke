@@ -1357,10 +1357,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-.section-icon-search {
-  font-size: var(--luke-type-body-size);
-}
-
 .section-icon-colors,
 .section-icon-choices {
   min-width: 0;
@@ -7372,23 +7368,6 @@ body:has(.app-stage[data-capture="true"])
 :is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-.dialog-name-field {
-  width: 100%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.dialog-name-field::placeholder {
-  color: var(--luke-color-text-subtle);
 }
 
 /* New task's foot: the repository chip at its start, the answers at its
