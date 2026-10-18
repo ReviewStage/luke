@@ -159,6 +159,7 @@
     "./maintenance/maintenance-app": "./src/maintenance/maintenance-app.js",
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
     "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
+    "./maintenance/preview-database": "./src/maintenance/preview-database.js",
     "./maintenance/terminal-lease-sweep": "./src/maintenance/terminal-lease-sweep.js",
     "./observability/sentry": "./src/observability/sentry.js",
     "./tasks/board-layout": "./src/tasks/board-layout.js",

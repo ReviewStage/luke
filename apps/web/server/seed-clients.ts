@@ -7,9 +7,13 @@ import {
   type OAuthClient,
   oauthClientRecord,
 } from "@luke/service/auth/oauth-clients";
+import {
+  type PreviewDatabaseRefused,
+  preparePreviewDatabase,
+} from "@luke/service/maintenance/preview-database";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
-import { Effect, Redacted } from "effect";
+import { Effect, Redacted, type Schema } from "effect";
 import { disposeWebRuntime, runWeb } from "./runtime.js";
 
 /**
@@ -92,16 +96,22 @@ export function dropUnreadableJwks(
   });
 }
 
-/** What every deployment build seeds: the desktop client, and then a key set this deployment can sign with. */
+/**
+ * What every deployment build seeds, after its migrations: on a Preview, the
+ * branch of production's database made the Preview's own the first time
+ * (`@luke/service/maintenance/preview-database`, which leaves every other
+ * build's database as it stands); then the desktop client, and a key set
+ * this deployment can sign with.
+ */
 function seedDeployment(
   variables: Record<string, string | undefined>,
-): Effect.Effect<void, QueryError, DatabaseServices> {
+): Effect.Effect<void, QueryError | Schema.SchemaError | PreviewDatabaseRefused, DatabaseServices> {
   const { sessionSecret } = authSecrets(variables);
   // Note that a build without a session secret drops nothing, because the
   // deployment it builds signs nothing, and `auth.ts` says so as it loads.
-  return Effect.andThen(
-    seedOAuthClient(DESKTOP_OAUTH_CLIENT),
-    sessionSecret === undefined ? Effect.void : dropUnreadableJwks(sessionSecret),
+  return preparePreviewDatabase(variables).pipe(
+    Effect.andThen(seedOAuthClient(DESKTOP_OAUTH_CLIENT)),
+    Effect.andThen(sessionSecret === undefined ? Effect.void : dropUnreadableJwks(sessionSecret)),
   );
 }
 
