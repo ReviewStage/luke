@@ -178,10 +178,10 @@
 }
 
 /* The one green thing on the line, in the same palette a finished session
-   uses, so connected reads the same way complete does. A menu item draws
-   its own check (`menu.css`), which this unlayered rule would otherwise win
-   over. */
-.credential-check:where(:not(.luke-menu-item-end > *)) {
+   uses, so connected reads the same way complete does. A menu item and a
+   picker's option draw their own check (`menu.css`, `combobox.css`), which
+   this unlayered rule would otherwise win over. */
+.credential-check:where(:not(.luke-menu-item-end > *, .luke-combobox-option-end > *)) {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;

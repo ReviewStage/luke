@@ -2217,14 +2217,6 @@ ul.actor-stack {
   flex: 0 0 auto;
 }
 
-/* A picker's check, in a combobox option's end slot, is the text's colour
-   at the slot's size, as a menu's is, not Settings' green connected mark. */
-.luke-combobox-option-end .credential-check {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  color: var(--luke-color-text);
-}
-
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
    wrapping between its words and names rather than cutting a name short.
    It clips past the ring an actor's hover fill bleeds by, so the ring is
