@@ -249,10 +249,10 @@ export function HoverLabel({
       role="status"
     >
       <span className="factory-world-signal" style={signalStyle(naming.color)} aria-hidden="true" />
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} truncate>
         {naming.title}
       </Text>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
         {naming.detail}
       </Text>
     </div>
@@ -463,7 +463,7 @@ export function WorldCard({
     >
       <div className="factory-world-card-head">
         <span className="factory-world-tag">{face.tag}</span>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
           {face.naming.detail}
         </Text>
         <IconButton icon={<XIcon />} label="Close" onClick={onClose} />
