@@ -954,55 +954,6 @@
   }
 }
 
-/* A fold among a transcript's rows, a turn's calls or a replay's summary
-   (transcript-blocks.tsx, replay-card.tsx), in the caption type, and the one
-   quiet line that opens it, or that draws a replay's earlier steps, its
-   glyphs the control icon. */
-.transcript-fold {
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.transcript-fold-line {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  margin: 0;
-  padding: 0 var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: transparent;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.transcript-fold-line:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.transcript-fold-line > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-/* A turn's calls, opened, in from the line's chevron. */
-.turn-fold-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin-left: var(--luke-space-24);
-  padding-top: var(--luke-space-4);
-}
-
 /* A replay card's head: what it is, the source's chip, and how many steps,
    on one line that gives way at its end. */
 .replay-card-title {
@@ -1014,10 +965,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.replay-summary-body {
-  padding: var(--luke-space-4);
 }
 
 .replay-steps {
@@ -3952,9 +3899,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
   animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
@@ -3966,9 +3913,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
   animation:
-    disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 

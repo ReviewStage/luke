@@ -4470,8 +4470,7 @@ button.integration-tool-head:hover,
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-pick > span,
-.inbox-offered > summary > span {
+.inbox-pick > span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -4481,44 +4480,6 @@ button.integration-tool-head:hover,
   width: 12px;
   height: 12px;
   flex: none;
-}
-
-/* What a settled item offered, folded to one line as the transcript folds a
-   finished step (`inbox-pane.tsx`'s `Offered`): its chevron turns down once
-   it is opened, on transform alone. */
-.inbox-offered > summary {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text-muted);
-  cursor: default;
-  list-style: none;
-}
-
-.inbox-offered > summary::-webkit-details-marker {
-  display: none;
-}
-
-.inbox-offered > summary:hover {
-  color: var(--luke-color-text);
-}
-
-.inbox-offered > summary svg {
-  margin-top: calc((1lh - 14px) / 2); /* off-scale: centres the glyph on the first line */
-  width: 14px;
-  height: 14px;
-  flex: none;
-  transition: transform var(--duration-hover) ease;
-}
-
-.inbox-offered[open] > summary {
-  margin-bottom: var(--luke-space-6);
-}
-
-.inbox-offered[open] > summary svg {
-  transform: rotate(90deg);
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
