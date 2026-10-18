@@ -37,6 +37,7 @@ import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
+import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SELECT_EXAMPLE } from "./examples/select";
@@ -115,6 +116,7 @@ export const EXAMPLES: readonly Example[] = [
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
+  SCROLL_AREA_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SELECT_EXAMPLE,

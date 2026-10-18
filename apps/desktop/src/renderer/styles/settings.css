@@ -1,12 +1,17 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
-/* Sized to the heading it labels rather than to a grid: the glyph is a letter
-   in the line, not an element beside it. */
-.settings-icon {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  opacity: 0.85;
+/* A glyph's own size wherever the window draws it bare, in the `base`
+   layer under the shared components, so a control, a menu, or a row that
+   holds one sizes it as its own contract says and the window's own markup
+   is all these reach. Sized to the heading it labels rather than to a grid:
+   the glyph is a letter in the line, not an element beside it. */
+@layer base {
+  .settings-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    opacity: 0.85;
+  }
 }
 
 /* Every row stands at the height a label-and-subtext pair needs, whether or
@@ -52,16 +57,15 @@
   }
 }
 
-/* A chip, a menu item, and a picker's option draw their own chevron
-   (`chip.css`, `menu.css`, `combobox.css`), which this unlayered rule would
-   otherwise win over. */
-.settings-chevron:where(
-  :not(.luke-chip *, .luke-menu-item-end > *, .luke-combobox-option-end > *)
-) {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
+/* A chevron the window draws bare; a chip, a menu item, and a picker's
+   option draw their own over this (`chip.css`, `menu.css`, `combobox.css`). */
+@layer base {
+  .settings-chevron {
+    width: 11px;
+    height: 11px;
+    flex: 0 0 auto;
+    color: var(--luke-color-text-subtle);
+  }
 }
 
 .settings-copy {
@@ -182,14 +186,16 @@
 
 /* The one green thing on the line, in the same palette a finished session
    uses, so connected reads the same way complete does. A menu item and a
-   picker's option draw their own check (`menu.css`, `combobox.css`), which
-   this unlayered rule would otherwise win over. */
-.credential-check:where(:not(.luke-menu-item-end > *, .luke-combobox-option-end > *)) {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 auto;
-  color: var(--luke-color-complete);
-  opacity: 1;
+   picker's option draw their own check over this (`menu.css`,
+   `combobox.css`). */
+@layer base {
+  .credential-check {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    color: var(--luke-color-complete);
+    opacity: 1;
+  }
 }
 
 /* A name and what is true of it, on one line: the same gap the credential rows
@@ -209,16 +215,6 @@
   align-items: center;
   gap: var(--luke-space-4);
   white-space: nowrap;
-}
-
-/* The small glyph that rides a link's words. Note that a shared button's glyph
-   is left to the button, because this unlayered rule would otherwise shrink
-   the button's icon below the control contract's size. */
-.link-icon:where(:not(.luke-button-face > *)) {
-  width: 9px;
-  height: 9px;
-  margin-left: var(--luke-space-4);
-  vertical-align: -1px;
 }
 
 .settings-input {
@@ -487,13 +483,14 @@
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
 }
 
+/* The tools' rows, inside the `ScrollArea` that scrolls them; the page
+   beside them draws the rule between the two. */
 .integration-tools-list {
-  min-height: 0;
   padding: var(--luke-space-4);
-  overflow-x: hidden;
-  overflow-y: auto;
-  border-right: 1px solid var(--luke-color-border);
-  overscroll-behavior: contain;
+}
+
+.integration-tools-split > .integration-tool-detail {
+  border-left: 1px solid var(--luke-color-border);
 }
 
 /* The column is too narrow for a title and a name both, so it says the
@@ -517,9 +514,9 @@
     grid-template-rows: 180px minmax(0, 1fr);
   }
 
-  .integration-tools-list {
-    border-right: 0;
-    border-bottom: 1px solid var(--luke-color-border);
+  .integration-tools-split > .integration-tool-detail {
+    border-top: 1px solid var(--luke-color-border);
+    border-left: 0;
   }
 
   /* The page under the column has the column's whole width and no room

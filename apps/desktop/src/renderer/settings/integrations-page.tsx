@@ -46,6 +46,7 @@ import {
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
+  ScrollArea,
   SearchField,
   SettingsLine,
   SettingsSection,
@@ -369,20 +370,22 @@ function RowToolsPanel({
   return (
     <div id={id} className="integration-tools-panel">
       <div className="integration-tools-split">
-        <div ref={list} className="integration-tools-list">
-          <IntegrationToolList
-            server={name}
-            tools={shown}
-            tokens={tools.tokens}
-            current={current?.name}
-            onOpen={hold}
-            onKeyDown={onRowKey}
-            rowRef={(tool, button) => {
-              if (button === null) rows.current.delete(tool.name);
-              else rows.current.set(tool.name, button);
-            }}
-          />
-        </div>
+        <ScrollArea ref={list}>
+          <div className="integration-tools-list">
+            <IntegrationToolList
+              server={name}
+              tools={shown}
+              tokens={tools.tokens}
+              current={current?.name}
+              onOpen={hold}
+              onKeyDown={onRowKey}
+              rowRef={(tool, button) => {
+                if (button === null) rows.current.delete(tool.name);
+                else rows.current.set(tool.name, button);
+              }}
+            />
+          </div>
+        </ScrollArea>
         {current !== undefined ? (
           <IntegrationToolDetail
             // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.

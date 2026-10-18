@@ -15,10 +15,6 @@
    the preflight and under the utilities. */
 @import "@luke/ui/styles.css";
 
-/* The admin dashboard's chart is `@luke/ui`'s, written in the same utilities
-   and read in this theme's tokens; the import is what scans it. */
-@import "@luke/ui/theme.css";
-
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */
 @import "@fontsource-variable/geist/wght.css";

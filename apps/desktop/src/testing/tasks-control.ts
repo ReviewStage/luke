@@ -102,7 +102,6 @@ export function codingAgentsControl(
     models: undefined,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onUnarchive: undefined,
     continueAgent: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
@@ -316,6 +315,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       place: { kind: ISSUES_PAGE.LIST },
       onOpen: ignore,
       onClose: ignore,
+      peeked: undefined,
+      onPeek: ignore,
     },
     callTaskId: undefined,
     chatView: {

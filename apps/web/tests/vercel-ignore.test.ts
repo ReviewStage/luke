@@ -112,6 +112,7 @@ test("a push that changes anything a service installs or builds from is built", 
     "pnpm-lock.yaml",
     "CHANGELOG.md",
     "vercel.json",
+    "scripts/eve-source-maps.sh",
   ]) {
     const root = await repository(t);
     const deployed = commit(root, "README.md");

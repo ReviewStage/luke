@@ -18,7 +18,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
@@ -43,10 +43,7 @@ export function taskWorkspace(
   userId: string,
   taskId: string,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
-  return Effect.map(
-    readTask(userId, taskId),
-    Option.map((stored) => stored.task.workspaceId),
-  );
+  return readTaskWorkspace(userId, taskId);
 }
 
 /**

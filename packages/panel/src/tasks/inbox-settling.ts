@@ -33,6 +33,16 @@ import { appStateNow } from "../use-app-state.js";
  * read names no revision, so it is trusted again once it has been seen
  * without the item: until then it is behind the answer, and after it, an
  * item it lists is one the agent asked again.
+ *
+ * A read or unread mark is kept in the same book (`use-inbox-read-marks.ts`
+ * lays it, `withReadMark` lays it over a read) and laid over every read alike, because a mark wakes the
+ * reader's own held read but moves nothing main hears of, so a list's read
+ * of the item's plan, read before the mark, is never read again on its
+ * account and drew the old dot back the moment the window drew from it
+ * again. A mark is let go where the service refused it, once a read holds
+ * the item changed since, or once a held read that held the item as marked
+ * holds it otherwise, at the same change: a mark made since, another
+ * window's, whose word stands.
  */
 
 /** What the window sent on an item. */
@@ -54,6 +64,56 @@ interface Settling {
   readonly mainCaughtUp: boolean;
 }
 
+/**
+ * A read mark the window made that the reads may not hold yet: whether the
+ * item now reads as unread, and when it last changed as it was marked.
+ */
+export interface InboxReadMark {
+  readonly unread: boolean;
+  readonly updatedAt: number;
+}
+
+/** Whether an item is unread for the reader; an item from a service before read state reads as read. */
+function isUnread(item: InboxItem): boolean {
+  return item.unread === true;
+}
+
+/**
+ * The item with the window's own read mark laid over what a read holds, so
+ * a dot flips the moment it is marked rather than when the service's held
+ * read next answers; the very item where the mark says nothing new. A mark
+ * stands only over the item as it was marked: once the item changes again,
+ * a message landing on its thread say, the read's word on it stands, since
+ * that change may make it unread again.
+ */
+export function withReadMark(item: InboxItem, mark: InboxReadMark | undefined): InboxItem {
+  if (mark === undefined || mark.updatedAt !== item.updatedAt) return item;
+  return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
+}
+
+/** One read or unread mark: what it says of the item as it was marked, the press that made it, whether the service took it, and whether a held read has held the item so since. */
+interface Mark extends InboxReadMark {
+  readonly made: symbol;
+  readonly taken: boolean;
+  readonly held: boolean;
+}
+
+/** What the window holds: its sends and its marks, by item. */
+interface Book {
+  readonly entries: ReadonlyMap<string, Settling>;
+  readonly marks: ReadonlyMap<string, Mark>;
+}
+
+/** What a read saw of the marks as it was drawn. */
+interface MarksSeen {
+  /** The items it holds changed since their marks. */
+  readonly passed: ReadonlySet<string>;
+  /** The items a held read holds as marked. */
+  readonly held: ReadonlySet<string>;
+  /** The items a held read held as marked and holds otherwise now. */
+  readonly overturned: ReadonlySet<string>;
+}
+
 type Change =
   | { readonly lay: Omit<Settling, "mainCaughtUp"> }
   | { readonly take: { readonly sent: symbol; readonly item: InboxItem } }
@@ -61,9 +121,18 @@ type Change =
   /** Reads hold these items changed since their entries. */
   | { readonly passed: ReadonlySet<string> }
   /** Main's read was seen without these items. */
-  | { readonly mainWithout: ReadonlySet<string> };
+  | { readonly mainWithout: ReadonlySet<string> }
+  | {
+      readonly mark: {
+        readonly made: symbol;
+        readonly marks: ReadonlyMap<string, InboxReadMark>;
+      };
+    }
+  | { readonly unmark: symbol }
+  | { readonly marked: symbol }
+  | { readonly marksSeen: MarksSeen };
 
-const NOTHING_LAID: ReadonlyMap<string, Settling> = new Map();
+const NOTHING_LAID: Book = { entries: new Map(), marks: new Map() };
 
 /**
  * The most sends the window keeps, the oldest the service took let go
@@ -71,6 +140,9 @@ const NOTHING_LAID: ReadonlyMap<string, Settling> = new Map();
  * before a send lands within moments of it, long before this many more.
  */
 const KEPT_SENDS = 200;
+
+/** The most read marks the window keeps, the oldest let go first, as `KEPT_SENDS` bounds the sends. */
+const KEPT_MARKS = 1_000;
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
@@ -106,8 +178,59 @@ function bounded(entries: Map<string, Settling>): ReadonlyMap<string, Settling> 
   return entries;
 }
 
+/** What a change to the marks makes of them. */
+function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): ReadonlyMap<string, Mark> {
+  if ("mark" in change) {
+    const next = new Map(marks);
+    for (const [itemId, mark] of change.mark.marks) {
+      // Note that an item marked again moves to the newest place, so the oldest marks go first.
+      next.delete(itemId);
+      next.set(itemId, { ...mark, made: change.mark.made, taken: false, held: false });
+    }
+    return new Map([...next].slice(-KEPT_MARKS));
+  }
+  if ("unmark" in change) {
+    // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
+    const ours = [...marks].filter(([, mark]) => mark.made === change.unmark);
+    return ours.length === 0
+      ? marks
+      : new Map([...marks].filter(([, mark]) => mark.made !== change.unmark));
+  }
+  if ("marked" in change) {
+    const ours = [...marks].some(([, mark]) => mark.made === change.marked);
+    if (!ours) return marks;
+    return new Map(
+      [...marks].map(([itemId, mark]) => [
+        itemId,
+        mark.made === change.marked ? { ...mark, taken: true } : mark,
+      ]),
+    );
+  }
+  if (!("marksSeen" in change)) return marks;
+  const { passed, held, overturned } = change.marksSeen;
+  const gone = (itemId: string) => passed.has(itemId) || overturned.has(itemId);
+  const moved = [...marks].some(
+    ([itemId, mark]) => gone(itemId) || (held.has(itemId) && !mark.held),
+  );
+  if (!moved) return marks;
+  return new Map(
+    [...marks].flatMap(([itemId, mark]): [string, Mark][] => {
+      if (gone(itemId)) return [];
+      return [[itemId, held.has(itemId) ? { ...mark, held: true } : mark]];
+    }),
+  );
+}
+
+/** What the change makes of the book. */
+function changed(book: Book, change: Change): Book {
+  const marks = marksChanged(book.marks, change);
+  if (marks !== book.marks) return { ...book, marks };
+  const entries = entriesChanged(book.entries, change);
+  return entries === book.entries ? book : { ...book, entries };
+}
+
 /** What the change makes of the entries. */
-function changed(
+function entriesChanged(
   entries: ReadonlyMap<string, Settling>,
   change: Change,
 ): ReadonlyMap<string, Settling> {
@@ -128,6 +251,7 @@ function changed(
     return found === undefined ? entries : without(entries, [found[0]]);
   }
   if ("passed" in change) return without(entries, change.passed);
+  if (!("mainWithout" in change)) return entries;
   const caught = [...change.mainWithout].filter(
     (itemId) => entries.get(itemId)?.mainCaughtUp === false,
   );
@@ -175,11 +299,11 @@ function ownedBy(owner: Owner, identity: Identity | undefined): Owner {
 
 const ownerAtom = Atom.keepAlive(Atom.make<Owner>(NO_OWNER));
 
-/** Each account's sends, apart, so what one account sent never stands over another's reads. */
+/** Each account's sends and marks, apart, so what one account sent or marked never stands over another's reads. */
 const settlingOf = Atom.family((_key: string | null) => {
-  const self: Atom.Writable<ReadonlyMap<string, Settling>, Change> = Atom.keepAlive(
+  const self: Atom.Writable<Book, Change> = Atom.keepAlive(
     Atom.writable(
-      (): ReadonlyMap<string, Settling> => NOTHING_LAID,
+      (): Book => NOTHING_LAID,
       (ctx, change: Change) => ctx.setSelf(changed(ctx.get(self), change)),
     ),
   );
@@ -232,69 +356,119 @@ function overlaid(read: InboxItem, entry: Settling): InboxItem | "passed" | unde
   return holdsMessage(read, entry) ? undefined : entry.item;
 }
 
-/** The items as the window holds them, the entries laid over a read behind them, and the items the read has passed; the very list where none is laid. */
+/** What a read saw as it was drawn: the entries it has passed, and what it saw of the marks. */
+interface Seen {
+  readonly passed: Set<string>;
+  readonly marksPassed: Set<string>;
+  readonly marksHeld: Set<string>;
+  readonly marksOverturned: Set<string>;
+}
+
+/** Nothing seen yet. */
+function seeing(): Seen {
+  return {
+    passed: new Set(),
+    marksPassed: new Set(),
+    marksHeld: new Set(),
+    marksOverturned: new Set(),
+  };
+}
+
+/**
+ * A read's item with its mark laid over it, as `withReadMark` lays one;
+ * a held read, `live`, says where it holds the item as marked, or, having
+ * held it so, otherwise.
+ */
+function markedItem(
+  read: InboxItem,
+  item: InboxItem,
+  mark: Mark | undefined,
+  live: boolean,
+  seen: Seen,
+): InboxItem {
+  if (mark === undefined) return item;
+  if (read.updatedAt > mark.updatedAt) {
+    seen.marksPassed.add(read.id);
+    return item;
+  }
+  if (live && read.updatedAt === mark.updatedAt) {
+    const agrees = isUnread(read) === mark.unread;
+    // Note that a read is taken to hold the mark only once the service took it, since one from before the write, or from an earlier mark's write, may agree by chance.
+    if (agrees && mark.taken && !mark.held) seen.marksHeld.add(read.id);
+    if (!agrees && mark.held) {
+      seen.marksOverturned.add(read.id);
+      return item;
+    }
+  }
+  return withReadMark(item, mark);
+}
+
+/** The items as the window holds them, the entries and marks laid over a read behind them; the very list where none is laid. */
 function laidItems(
   items: readonly InboxItem[],
-  entries: ReadonlyMap<string, Settling>,
-  passed: Set<string>,
+  book: Book,
+  live: boolean,
+  seen: Seen,
 ): readonly InboxItem[] {
-  if (entries.size === 0) return items;
-  let moved = false;
+  if (book.entries.size === 0 && book.marks.size === 0) return items;
   const laid = items.map((read) => {
-    const entry = entries.get(read.id);
-    if (entry === undefined) return read;
-    const over = overlaid(read, entry);
-    if (over === "passed") passed.add(read.id);
-    if (over === undefined || over === "passed") return read;
-    moved = true;
-    return over;
+    const entry = book.entries.get(read.id);
+    const over = entry === undefined ? undefined : overlaid(read, entry);
+    if (over === "passed") seen.passed.add(read.id);
+    const item = over === undefined || over === "passed" ? read : over;
+    return markedItem(read, item, book.marks.get(read.id), live, seen);
   });
-  return moved ? laid : items;
+  return laid.every((item, at) => item === items[at]) ? items : laid;
 }
 
-/** Lets go, after a draw, of the entries a read has passed. */
-function usePassed(passed: ReadonlySet<string>): void {
+/** Says, after a draw, what a read saw: the entries and marks it has passed, and the marks a held read holds. */
+function useSeen(seen: Seen): void {
   const change = useAtomSet(settlingAtom);
   useEffect(() => {
+    const { passed, marksPassed, marksHeld, marksOverturned } = seen;
     if (passed.size > 0) change({ passed });
-  }, [change, passed]);
+    if (marksPassed.size + marksHeld.size + marksOverturned.size > 0) {
+      change({
+        marksSeen: { passed: marksPassed, held: marksHeld, overturned: marksOverturned },
+      });
+    }
+  }, [change, seen]);
 }
 
-/** The entries alone. */
-function useEntries(): ReadonlyMap<string, Settling> {
+/** The book alone. */
+function useBook(): Book {
   return useAtomValue(settlingAtom);
 }
 
-/** One read's items, the window's own answers and messages laid over them where the read is behind them. */
+/** A task's own held read's items, the window's own answers, messages, and marks laid over them where the read is behind them. */
 export function useSettledItems(items: readonly InboxItem[]): readonly InboxItem[] {
-  const entries = useEntries();
+  const book = useBook();
   const laid = useMemo(() => {
-    const passed = new Set<string>();
-    const value = laidItems(items, entries, passed);
-    return { value, passed: passed.size === 0 ? NO_IDS : passed };
-  }, [items, entries]);
-  usePassed(laid.passed);
+    const seen = seeing();
+    return { value: laidItems(items, book, true, seen), seen };
+  }, [items, book]);
+  useSeen(laid.seen);
   return laid.value;
 }
 
-/** Several reads' items, by task or by agent, each laid over as `useSettledItems` lays one. */
+/** Several list reads' items, by task or by agent, each laid over as `useSettledItems` lays one; a list's read is read once, and says nothing of a mark made since. */
 export function useSettledReads(
   reads: ReadonlyMap<string, readonly InboxItem[]>,
 ): ReadonlyMap<string, readonly InboxItem[]> {
-  const entries = useEntries();
+  const book = useBook();
   const laid = useMemo(() => {
-    const passed = new Set<string>();
+    const seen = seeing();
     let moved = false;
     const value = new Map(
       [...reads].map(([key, items]) => {
-        const over = laidItems(items, entries, passed);
+        const over = laidItems(items, book, false, seen);
         if (over !== items) moved = true;
         return [key, over] as const;
       }),
     );
-    return { value: moved ? value : reads, passed: passed.size === 0 ? NO_IDS : passed };
-  }, [reads, entries]);
-  usePassed(laid.passed);
+    return { value: moved ? value : reads, seen };
+  }, [reads, book]);
+  useSeen(laid.seen);
   return laid.value;
 }
 
@@ -313,7 +487,7 @@ export function useSettledWaiting(
   waiting: readonly AppInboxTask[],
   taskless: readonly AppInboxTasklessItem[],
 ): SettledWaiting {
-  const entries = useEntries();
+  const { entries } = useBook();
   const change = useAtomSet(settlingAtom);
   const laid = useMemo(() => {
     const listed = new Set(
@@ -378,6 +552,12 @@ export interface InboxSettler {
   readonly take: (sent: symbol, item: InboxItem) => void;
   /** The service did not take it, so the item stands as the reads hold it. */
   readonly refuse: (sent: symbol) => void;
+  /** Lays read or unread marks, by item, over every read at once; the press they stand for. */
+  readonly mark: (marks: ReadonlyMap<string, InboxReadMark>) => symbol;
+  /** The service did not take the press's marks, so the dots stand as the reads hold them. */
+  readonly unmark: (made: symbol) => void;
+  /** The service took the press's marks, so a held read holding them from now on holds them. */
+  readonly marked: (made: symbol) => void;
 }
 
 /** The presses that lay a send over the reads, the same for the window's life. */
@@ -401,6 +581,13 @@ export function useInboxSettler(): InboxSettler {
       },
       take: (sent, item) => change({ take: { sent, item } }),
       refuse: (sent) => change({ refuse: sent }),
+      mark: (marks) => {
+        const made = Symbol("inbox read mark");
+        change({ mark: { made, marks } });
+        return made;
+      },
+      unmark: (made) => change({ unmark: made }),
+      marked: (made) => change({ marked: made }),
     }),
     [change],
   );

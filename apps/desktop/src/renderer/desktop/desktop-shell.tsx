@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
-import { AutomationListSkeleton } from "@luke/panel/desktop/automations-skeleton";
+import { READING_AUTOMATIONS } from "@luke/panel/desktop/automation-words";
 import { useColumnDock } from "@luke/panel/desktop/column-dock";
 import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
@@ -15,8 +15,12 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  COLLECTION_STATE,
+  CollectionPage,
   ComposeIcon,
   IconButton,
+  PAGE_FRAME,
+  ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
   SidebarIcon,
@@ -35,7 +39,12 @@ import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-car
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
-import { AUTOMATIONS_PAGE, type AutomationsPlace, type TasksControl } from "../tasks/use-tasks-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  ISSUES_PAGE,
+  type TasksControl,
+} from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopChat } from "./desktop-chat";
@@ -100,17 +109,20 @@ function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
 function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
   return (
-    <section className="automations-view" aria-label="Automations">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Automations</h1>
-          <ExperimentTag />
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        <AutomationListSkeleton />
-      </div>
-    </section>
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automations"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Automations</h1>
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel={READING_AUTOMATIONS}
+    />
   );
 }
 
@@ -479,21 +491,23 @@ export function DesktopShell({
   };
   if (gated) {
     return (
-      <div className="desktop-onboarding">
-        <div className="desktop-drag-strip" />
-        <SignInGate
-          account={account}
-          {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
-          {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
-          {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
-          onBegin={gates.onBeginSignIn}
-          onCancel={gates.onCancelSignIn}
-        />
-        {/* Signing in needs the network, so the gate says when there is none. */}
-        <div className="title-bar-controls">
-          <OfflineMark />
+      <ScrollArea>
+        <div className="desktop-onboarding">
+          <div className="desktop-drag-strip" />
+          <SignInGate
+            account={account}
+            {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
+            {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
+            {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
+            onBegin={gates.onBeginSignIn}
+            onCancel={gates.onCancelSignIn}
+          />
+          {/* Signing in needs the network, so the gate says when there is none. */}
+          <div className="title-bar-controls">
+            <OfflineMark />
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     );
   }
   // Settings takes the whole window, its pages listed where the tasks were.
@@ -543,8 +557,8 @@ export function DesktopShell({
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. Factory,
   // the Automations page, and Chat stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
-  // the chosen item's task's.
+  // no panel to toggle; an agent's page draws the agent's own, the Inbox
+  // the chosen item's task's, and the Issues list the issue it peeked.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
@@ -553,8 +567,16 @@ export function DesktopShell({
   const chatOpen = tasks.chatView.open && chatOn;
   const issuesOpen = tasks.issuesView.open && issuesOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  // The Issues list draws the panel beside it once an issue has been peeked there, as the Inbox does once an item is chosen.
+  const issuePeeked =
+    issuesOpen &&
+    tasks.issuesView.place.kind === ISSUES_PAGE.LIST &&
+    tasks.issuesView.peeked !== undefined;
   const panelToggle =
-    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
+    planToggle ||
+    pageAgent !== undefined ||
+    (inboxOpen && tasks.inboxView.chosen !== undefined) ||
+    issuePeeked;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.

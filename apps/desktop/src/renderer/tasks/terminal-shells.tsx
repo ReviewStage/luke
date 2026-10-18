@@ -21,6 +21,7 @@ import {
   List,
   ListRow,
   PlusIcon,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -99,18 +100,20 @@ function ShellsSkeleton(): React.JSX.Element {
   return (
     <div className="terminal-shells-wait">
       <SkeletonRegion label={READING_SHELLS}>
-        <div className="terminal-shells-rows">
-          <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-            {SKELETON_ROWS.map(({ name, detail }) => (
-              <ListRow
-                key={name}
-                leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
-                title={<Skeleton width={name} />}
-                description={<Skeleton width={detail} />}
-              />
-            ))}
-          </List>
-        </div>
+        <ScrollArea>
+          <div className="terminal-shells-rows">
+            <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+              {SKELETON_ROWS.map(({ name, detail }) => (
+                <ListRow
+                  key={name}
+                  leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+                  title={<Skeleton width={name} />}
+                  description={<Skeleton width={detail} />}
+                />
+              ))}
+            </List>
+          </div>
+        </ScrollArea>
       </SkeletonRegion>
     </div>
   );
@@ -146,19 +149,21 @@ function ListedShells({
 }): React.JSX.Element {
   if (listed.terminals.length === 0) return <p className="terminal-shells-none">No shells.</p>;
   return (
-    <div className="terminal-shells-rows">
-      <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-        {listed.terminals.map((shell) => (
-          <ShellRow
-            key={shell.id}
-            shell={shell}
-            shown={shell.id === session.shell}
-            surfaceOpen={surfaceOpen}
-            session={session}
-          />
-        ))}
-      </List>
-    </div>
+    <ScrollArea>
+      <div className="terminal-shells-rows">
+        <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+          {listed.terminals.map((shell) => (
+            <ShellRow
+              key={shell.id}
+              shell={shell}
+              shown={shell.id === session.shell}
+              surfaceOpen={surfaceOpen}
+              session={session}
+            />
+          ))}
+        </List>
+      </div>
+    </ScrollArea>
   );
 }
 

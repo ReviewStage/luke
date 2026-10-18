@@ -17,8 +17,11 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
-import { automationNextText, automationOwnerName } from "@luke/panel/desktop/automation-words";
-import { AutomationListSkeleton } from "@luke/panel/desktop/automations-skeleton";
+import {
+  automationNextText,
+  automationOwnerName,
+  READING_AUTOMATIONS,
+} from "@luke/panel/desktop/automation-words";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { momentText, useMinute } from "@luke/panel/tasks/task-time";
@@ -28,12 +31,17 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  DetailPage,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   LIST_VARIANT,
   List,
   ListRow,
+  PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
@@ -343,6 +351,16 @@ function SuggestedAutomations({
   );
 }
 
+/** What the list's page shows: the workspaces or the list unread, the list still being read, or the list. */
+function listState(
+  workspacesUnread: boolean,
+  read: ReturnType<typeof useAutomations>["read"],
+): CollectionState {
+  if (workspacesUnread) return COLLECTION_STATE.ERROR;
+  if (read === undefined) return COLLECTION_STATE.LOADING;
+  return "failure" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
+}
+
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
   tasks,
@@ -370,57 +388,65 @@ function ListPage({
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
+  const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
   return (
-    <section className="automations-view" aria-label="Automations">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Automations</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            disabled={workspace === undefined}
-            onClick={openNew}
-          >
-            New automation
-          </Button>
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        {workspace === undefined && tasks.workspacesFailed ? (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automations"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Automations</h1>
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              disabled={workspace === undefined}
+              onClick={openNew}
+            >
+              New automation
+            </Button>
+          </div>
+        </header>
+      }
+      state={listState(workspacesUnread, read)}
+      loadingLabel={READING_AUTOMATIONS}
+      error={
+        workspacesUnread ? (
           <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {WORKSPACES_UNREAD_LINE}
           </ErrorState>
-        ) : read === undefined ? (
-          <AutomationListSkeleton />
-        ) : "failure" in read ? (
+        ) : (
           <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {UNREAD_LINE}
           </ErrorState>
-        ) : groups.length === 0 ? (
-          <div className="automations-empty">
-            <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
-            <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
-          </div>
-        ) : (
-          <>
-            <AutomationList
-              groups={groups}
-              workspace={workspace}
-              now={now}
-              onOpen={(automation) =>
-                view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
-              }
-              onToggle={onToggle}
-            />
-            <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
-          </>
-        )}
-      </div>
-    </section>
+        )
+      }
+    >
+      {/* Note that a list with none is ready rather than empty, because the suggestions under its empty state are content. */}
+      {groups.length === 0 ? (
+        <div className="automations-empty">
+          <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
+          <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
+        </div>
+      ) : (
+        <>
+          <AutomationList
+            groups={groups}
+            workspace={workspace}
+            now={now}
+            onOpen={(automation) =>
+              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
+            }
+            onToggle={onToggle}
+          />
+          <SuggestedAutomations disabled={workspace === undefined} onStart={openSuggested} />
+        </>
+      )}
+    </CollectionPage>
   );
 }
 
@@ -436,20 +462,23 @@ function UnreadPage({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <section className="automations-view" aria-label="Automation">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-            Automations
-          </Button>
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {line}
-        </ErrorState>
-      </div>
-    </section>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automation"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+              Automations
+            </Button>
+          </div>
+        </header>
+      }
+    >
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {line}
+      </ErrorState>
+    </DetailPage>
   );
 }
 
@@ -457,18 +486,21 @@ function UnreadPage({
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <section className="automations-view" aria-label="Automation">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-            Automations
-          </Button>
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
-      </div>
-    </section>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automation"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+              Automations
+            </Button>
+          </div>
+        </header>
+      }
+    >
+      <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
+    </DetailPage>
   );
 }
 
@@ -522,7 +554,7 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
   return (
-    <section className="automations-view" aria-label="Automation">
+    <div className="automations-view">
       <header className="desktop-toolbar">
         <div className="automation-toolbar">
           <div className="desktop-toolbar-heading automation-toolbar-reading">
@@ -541,9 +573,9 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
         </div>
       </header>
       <div className="automation-editor-layout">
-        <div className="automations-scroll scroll-fade-top">
+        <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
           <EditorSkeleton />
-        </div>
+        </DetailPage>
         <AutomationRunsPanel
           panel={runsPanel}
           mine
@@ -554,7 +586,7 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
           onOpenAgent={() => undefined}
         />
       </div>
-    </section>
+    </div>
   );
 }
 

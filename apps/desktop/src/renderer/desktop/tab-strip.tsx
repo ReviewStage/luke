@@ -455,7 +455,7 @@ export function Tab({
       ) : (
         <span className="tab-button" data-editing="true">
           {glyph}
-          {editor}
+          <span className="tab-rename">{editor}</span>
         </span>
       )}
       {onClose === undefined || editor !== undefined ? null : (

@@ -17,7 +17,6 @@ import {
   type InboxImageBlock,
   type InboxItem,
   type InboxMessage,
-  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
@@ -578,38 +577,45 @@ export function ChoiceOptions({
 /** What an approval's cards are named by, for a reader that does not see the question over them. */
 const DECISION_LEGEND = "Decision";
 
+/** What a to-do's card is named by, for a reader that does not see the question over it. */
+const TODO_LEGEND = "To-do";
+
 /** What each decision's mark fills with once picked: going ahead in green, holding back in red. */
 const DECISION_TONE = [CHOICE_TONE.COMPLETE, CHOICE_TONE.DANGER] as const;
 
 /**
- * An approval's two cards side by side, Approve and Decline, picked as a
- * choice of two is and numbered for the keys that pick them, the pick's
- * mark green for Approve and red for Decline. The pick waits for Send.
+ * A response's two decisions as cards, numbered for the keys that pick
+ * them, the pick's mark green for going ahead and red for holding back, and
+ * the pick waiting for Send: an approval's Approve and Decline side by side,
+ * and a to-do's step, the item's own title, over its "Couldn't do it".
  */
 function DecisionCards({
   response,
   draft,
   disabled,
+  todo,
   onDraft,
 }: {
   response: InboxDecided;
   draft: InboxDraft;
   disabled: boolean;
+  /** The to-do's title, which names its step, where the response is a to-do. */
+  todo?: string | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const decided = decidedOf(response, draft);
   return (
     <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
       <ChoiceList
-        legend={DECISION_LEGEND}
+        legend={todo === undefined ? DECISION_LEGEND : TODO_LEGEND}
         options={decisionsOf(response).map((decision, index) => ({
           value: decision.reply,
-          label: decision.label,
+          label: index === 0 && todo !== undefined ? todo : decision.label,
           tone: DECISION_TONE[index],
         }))}
         value={decided === undefined ? [] : [decided]}
         look={CHOICE_LOOK.MARKED}
-        flow={CHOICE_FLOW.ACROSS}
+        flow={todo === undefined ? CHOICE_FLOW.ACROSS : CHOICE_FLOW.DOWN}
         numbered
         clearable
         disabled={disabled}
@@ -618,104 +624,6 @@ function DecisionCards({
           onDraft(reply === undefined ? { ...draft, choices: [] } : withDecision(draft, reply));
         }}
       />
-    </div>
-  );
-}
-
-/** What a to-do's card is named by, for a reader that does not see the question over it. */
-const TODO_LEGEND = "To-do";
-
-/** The keys that step between a to-do's two picks, and which way. */
-const TODO_STEP_KEYS = new Map([
-  ["ArrowDown", 1],
-  ["ArrowRight", 1],
-  ["ArrowUp", -1],
-  ["ArrowLeft", -1],
-]);
-
-/**
- * A to-do as a task card: a checkbox beside its step, the item's own title,
- * which ticks it done, and a "Couldn't do it" pill under it, the two picked
- * as a choice of two is: a radio group whose Tab lands on the pick, or the
- * step while none is, the arrows moving between them and picking as they
- * go, Space or a press picking, a press on the pick taking it back, and
- * each numbered for its key. Note that the card is drawn here rather than
- * by `@luke/ui`'s ChoiceList, whose rows are all one shape, because a step
- * ticked off with a pill under it is the to-do's own look.
- */
-function TodoCard({
-  item,
-  response,
-  draft,
-  disabled,
-  onDraft,
-}: {
-  item: InboxItem;
-  response: InboxDecided;
-  draft: InboxDraft;
-  disabled: boolean;
-  onDraft: (draft: InboxDraft) => void;
-}): React.JSX.Element {
-  const decided = decidedOf(response, draft);
-  const decisions = decisionsOf(response);
-  const pick = (reply: InboxReplyKind) =>
-    onDraft(reply === decided ? { ...draft, choices: [] } : withDecision(draft, reply));
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = TODO_STEP_KEYS.get(event.key);
-    if (step === undefined || disabled) return;
-    event.preventDefault();
-    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-    const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
-    const from =
-      focused >= 0
-        ? focused
-        : Math.max(
-            0,
-            decisions.findIndex((each) => each.reply === decided),
-          );
-    const next = (from + step + decisions.length) % decisions.length;
-    const reply = decisions[next]?.reply;
-    if (reply !== undefined && reply !== decided) onDraft(withDecision(draft, reply));
-    radios[next]?.focus();
-  };
-  const checked = (index: number) => {
-    const reply = decisions[index]?.reply;
-    return reply !== undefined && reply === decided;
-  };
-  const radio = (index: number) => {
-    const reply = decisions[index]?.reply;
-    return {
-      type: "button",
-      "aria-keyshortcuts": String(index + 1),
-      tabIndex: checked(index) || (decided === undefined && index === 0) ? 0 : -1,
-      disabled,
-      onClick: () => {
-        if (reply !== undefined) pick(reply);
-      },
-    } as const;
-  };
-  return (
-    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
-      <div role="radiogroup" aria-label={TODO_LEGEND} className="inbox-todo" onKeyDown={onKeyDown}>
-        {/* biome-ignore lint/a11y/useSemanticElements: the step is drawn as a button holding a box, its words, and its key, which a native radio cannot be, and speaks as the radio it behaves as. */}
-        <button role="radio" aria-checked={checked(0)} className="inbox-todo-step" {...radio(0)}>
-          <span className="inbox-todo-box" aria-hidden="true" />
-          <span className="inbox-todo-words">{cardTitle(item.title)}</span>
-          <span className="inbox-todo-number" aria-hidden="true">
-            1
-          </span>
-        </button>
-        <div className="inbox-todo-acts">
-          {/* biome-ignore lint/a11y/useSemanticElements: the pill is drawn as a button holding a check and its words, which a native radio cannot be, and speaks as the radio it behaves as. */}
-          <button role="radio" aria-checked={checked(1)} className="inbox-todo-pill" {...radio(1)}>
-            <CheckIcon aria-hidden="true" />
-            {decisions[1]?.label}
-            <span className="inbox-todo-number" aria-hidden="true">
-              2
-            </span>
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -903,11 +811,11 @@ function ResponseControls({
       );
     case INBOX_RESPONSE.TODO:
       return (
-        <TodoCard
-          item={item}
+        <DecisionCards
           response={response}
           draft={draft}
           disabled={disabled}
+          todo={cardTitle(item.title)}
           onDraft={onDraft}
         />
       );

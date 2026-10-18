@@ -59,7 +59,12 @@ import {
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import {
+  foldedQuietly,
+  type RelayStanding,
+  type RelayStateStore,
+  StreamRelay,
+} from "../brain-host/relay.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -415,6 +420,8 @@ export interface CoderHost extends HostAdmission {
     never,
     DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
+  /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
+  relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed, then, as the developer's words are received or a turn completes, asks for the agent's title where none stands and waits for it (`title.ts`); a title that fails is logged and the relay still answers. */
   relay(
     event: MessageStreamEvent,
@@ -1034,6 +1041,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         ? runSearchWeb(call, input)
         : runReadWebPage(call, input);
     },
+
+    relaysQuietly: (event, state) =>
+      event.type !== "compaction.completed" && foldedQuietly(event, state),
 
     relay: (event, admitted, session, state, prompt) =>
       Effect.gen(function* () {

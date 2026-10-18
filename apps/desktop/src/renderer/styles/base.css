@@ -119,10 +119,8 @@
   /* How a scroller the app moves itself, a tab strip bringing a tab into
      view, gets there: a glide, held still where the durations are. */
   --scroll-glide: smooth;
-
-  /* The darkest fill, opaque, for what nothing behind may show through. */
-  --surface-fill: #000;
-  --scroll-fade: 26px;
+  /* The depth `@luke/ui`'s `ScrollArea` fades by, so the two fades agree. */
+  --scroll-fade: var(--luke-scroll-fade);
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
 }
@@ -174,8 +172,6 @@
     --file-icon-purple: #a631be;
     --file-icon-pink: #d32a61;
     --file-icon-mauve: #594c5b;
-
-    --surface-fill: #fff;
   }
 }
 
@@ -675,15 +671,18 @@ body,
    the working mark stands in the glyph's place, centred in the glyph's own
    footprint, so a tab or a row moves nothing as its work starts or ends.
    Failed, the glyph stands as at rest, and the failed mark at its row's end
-   says it (`.failed-mark`). */
-.state-glyph {
-  position: relative;
-  display: inline-flex;
-  width: var(--state-glyph-size, 16px);
-  height: var(--state-glyph-size, 16px);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
+   says it (`.failed-mark`). In the `base` layer, so a shared component's
+   glyph slot that holds one sizes it as it sizes any glyph of its own. */
+@layer base {
+  .state-glyph {
+    position: relative;
+    display: inline-flex;
+    width: var(--state-glyph-size, 16px);
+    height: var(--state-glyph-size, 16px);
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 .state-glyph > svg,

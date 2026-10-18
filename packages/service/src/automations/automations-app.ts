@@ -50,6 +50,7 @@ import {
   codingAgentStatusOf,
 } from "../agents/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "../agents/coder-host/stop.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -453,6 +454,9 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
+    trigger_kind: made.trigger.kind,
+  });
   const automation = yield* summaryOf(userId, created.value);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     automation,

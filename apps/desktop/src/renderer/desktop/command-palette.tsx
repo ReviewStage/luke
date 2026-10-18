@@ -80,6 +80,8 @@ import {
 import {
   CHIP_LOOK,
   Chip,
+  COMBOBOX_LIST_HEIGHT,
+  ComboboxListBox,
   ComboboxOptionItem,
   ErrorState,
   GearIcon,
@@ -1286,46 +1288,48 @@ export function CommandPalette({
         />
       </div>
       <FilterChips filter={filter} onFilter={changeFilter} />
-      <Command.List className="command-palette-list scroll-fade" label="Results">
-        {notice === undefined ? (
-          <Command.Empty className="command-palette-empty">
-            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              Nothing matches.
-            </Text>
-          </Command.Empty>
-        ) : (
-          <NoticeLine notice={notice} />
-        )}
-        {sections.map((section) => (
-          <Command.Group
-            key={section.kind}
-            heading={
-              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-                {FILTER_LABEL[section.kind]}
+      <Command.List asChild label="Results">
+        <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
+          {notice === undefined ? (
+            <Command.Empty className="command-palette-empty">
+              <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+                Nothing matches.
               </Text>
-            }
-          >
-            {section.rows.map((row) => {
-              place += 1;
-              return (
-                <PaletteItem
-                  key={place}
-                  row={row}
-                  value={String(place)}
-                  query={query}
-                  tokens={tokens}
-                />
-              );
-            })}
-          </Command.Group>
-        ))}
-        {cut ? (
-          <div className="command-palette-notice">
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {TRUNCATED_LINE}
-            </Text>
-          </div>
-        ) : null}
+            </Command.Empty>
+          ) : (
+            <NoticeLine notice={notice} />
+          )}
+          {sections.map((section) => (
+            <Command.Group
+              key={section.kind}
+              heading={
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                  {FILTER_LABEL[section.kind]}
+                </Text>
+              }
+            >
+              {section.rows.map((row) => {
+                place += 1;
+                return (
+                  <PaletteItem
+                    key={place}
+                    row={row}
+                    value={String(place)}
+                    query={query}
+                    tokens={tokens}
+                  />
+                );
+              })}
+            </Command.Group>
+          ))}
+          {cut ? (
+            <div className="command-palette-notice">
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                {TRUNCATED_LINE}
+              </Text>
+            </div>
+          ) : null}
+        </ComboboxListBox>
       </Command.List>
       <PaletteFooter typed={query !== ""} />
     </Command.Dialog>

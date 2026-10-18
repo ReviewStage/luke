@@ -30,7 +30,7 @@
   --color-secondary: var(--luke-color-fill-strong);
   --color-secondary-foreground: var(--luke-color-text);
   --color-primary: var(--luke-color-text);
-  --color-primary-foreground: var(--surface-fill);
+  --color-primary-foreground: var(--luke-color-ink-inverse);
   --color-border: var(--luke-color-border);
   --color-selected-edge: var(--luke-color-border-selected);
   --color-card: var(--luke-color-sidebar);

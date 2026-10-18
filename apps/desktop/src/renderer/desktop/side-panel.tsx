@@ -34,6 +34,8 @@ import {
   ErrorState,
   ExpandIcon,
   IconButton,
+  SCROLL_SIZE,
+  ScrollArea,
   SidePanelIcon,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -219,7 +221,7 @@ function documentReserve(area: HTMLElement): number {
 }
 
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
-const PANEL_LEAVING = {
+export const PANEL_LEAVING = {
   NONE: "none",
   CLOSE: "close",
   FULL_SCREEN: "full-screen",
@@ -913,18 +915,20 @@ function PanelTabs({
  */
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
-    <div className="side-panel-no-tabs">
-      <div className="side-panel-no-tabs-line">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          No tabs open
-        </Text>
+    <ScrollArea size={SCROLL_SIZE.CONTENT}>
+      <div className="side-panel-no-tabs">
+        <div className="side-panel-no-tabs-line">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            No tabs open
+          </Text>
+        </div>
+        <MenuRowList
+          label="Open a tab"
+          rows={entries.map((entry) => entry.row)}
+          onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
+        />
       </div>
-      <MenuRowList
-        label="Open a tab"
-        rows={entries.map((entry) => entry.row)}
-        onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
-      />
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -1769,8 +1773,6 @@ export function SidePanel({
   /** The task's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
   banner?: React.ReactNode;
 }): React.JSX.Element {
-  const aside = useRef<HTMLElement>(null);
-  const room = useRef<HTMLDivElement>(null);
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const { tab } = panel;
@@ -1873,11 +1875,136 @@ export function SidePanel({
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
 
+  return (
+    <PanelFrame
+      panel={panel}
+      leaving={leaving}
+      onLeft={onLeft}
+      edge={edge}
+      label="Panel"
+      banner={banner}
+      tabs={
+        <PanelTabs
+          panel={panel}
+          holder={holder}
+          taskId={taskId}
+          keys={keys && focused}
+          unread={unread}
+          agents={agents}
+          subagents={subagents}
+          files={files}
+          changes={changes}
+          pages={pageTabs}
+          terminals={terminals}
+          shown={shownCode ?? []}
+          repository={repository}
+          offers={offers}
+          held={drawnTranscripts}
+          readWorker={work.readWorker}
+          actionsSlot={actionsSlot}
+          onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+          shownAgent={shownAgent}
+        />
+      }
+      actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
+    >
+      {/* A panel with nothing to offer but kinds it has never closed stands
+            empty, the "+" above offering any; otherwise every tab closed, it
+            offers in place all that the "+" offers. */}
+      {tab === undefined ? (
+        <div className="side-panel-content">
+          {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
+        </div>
+      ) : (
+        // The Board is drawn on a canvas, which keeps a find of its own, and
+        // a page's words stand in a sandboxed frame no find of the window
+        // reaches, so a page's tab finds in its source alone, itself.
+        <FindScope
+          className="side-panel-content"
+          role="tabpanel"
+          aria-label={label}
+          active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
+          subject={{ task: taskId, tab }}
+        >
+          <TabContent
+            tab={tab}
+            taskId={taskId}
+            repository={repository}
+            board={board}
+            shownCode={shownCode}
+            codeFailed={codeFailed}
+            files={files}
+            pages={taskPages}
+            transcript={transcript}
+            work={work}
+            workRows={workRows}
+            agents={agents}
+            standings={standings}
+            shown={keys}
+            findActive={keys && focused}
+            onOpenSubagent={openSubagent}
+            onOpenTarget={onOpenTarget}
+            cards={cards.call}
+            onWorkerStatus={views.onWorkerStatus}
+            onWorkerHeld={views.onWorkerHeld}
+            onOpenFile={panel.onOpenFile}
+            fileTree={fileTree}
+            onBrowseFile={panel.onBrowseFile}
+            onFileHistory={panel.onFileHistory}
+            onFoldNote={panel.onFoldNote}
+            codeReveal={codeReveal}
+            onShowNote={showNote}
+            onRevealed={revealed}
+            onCloseTab={panel.onClose}
+            pullRequestViews={panel.pullRequestViews}
+            onPullRequestView={panel.onPullRequestView}
+            shellsList={shellsList}
+          />
+        </FindScope>
+      )}
+    </PanelFrame>
+  );
+}
+
+/**
+ * The frame every side panel stands in, the task's, an agent's page's, the
+ * Inbox's, and the Issues page's peek: the panel's pane at the window's
+ * right, its width the window's, over its top row of `tabs`, the chosen
+ * tab's `actions`, and its full-screen button, with what it shows under the
+ * row and its resize edge at its left. Full screen, it covers what it stood
+ * beside rather than taking its place, and an empty room holds the panel's
+ * own width beside it, so what is beneath keeps its layout and is there to
+ * be uncovered as the panel goes back. It plays its own exits (`playExit`);
+ * its arrival is played by the pane motion around it (`pane-motion.tsx`).
+ */
+export function PanelFrame({
+  panel,
+  leaving,
+  onLeft,
+  edge,
+  label,
+  tabs,
+  actions,
+  banner,
+  children,
+}: Omit<SidePanelDrawing, "panel"> & {
+  panel: Pick<SidePanelControl, "width" | "fullScreen" | "onToggleFullScreen">;
+  /** What the pane is called to a reader. */
+  label: string;
+  /** The row's tabs, which take what the row leaves beside the actions and the full-screen button. */
+  tabs: React.ReactNode;
+  /** The chosen tab's own actions, its ⋯, before the full-screen button. */
+  actions: React.ReactNode;
+  /** Drawn under the row while the panel fills the window and covers what draws it otherwise. */
+  banner?: React.ReactNode;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const aside = useRef<HTMLElement>(null);
+  const room = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
     return playExit(aside.current, room.current, leaving, onLeft);
   }, [leaving, onLeft]);
-
   return (
     <>
       {/* Shut, it gives the document its room back at once, to glide into. */}
@@ -1887,7 +2014,7 @@ export function SidePanel({
       <aside
         ref={aside}
         className="side-panel"
-        aria-label="Panel"
+        aria-label={label}
         inert={leaving !== PANEL_LEAVING.NONE}
         data-full-screen={String(panel.fullScreen)}
         data-leaving={leaving === PANEL_LEAVING.NONE ? undefined : leaving}
@@ -1897,28 +2024,8 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <PanelTabs
-            panel={panel}
-            holder={holder}
-            taskId={taskId}
-            keys={keys && focused}
-            unread={unread}
-            agents={agents}
-            subagents={subagents}
-            files={files}
-            changes={changes}
-            pages={pageTabs}
-            terminals={terminals}
-            shown={shownCode ?? []}
-            repository={repository}
-            offers={offers}
-            held={drawnTranscripts}
-            readWorker={work.readWorker}
-            actionsSlot={actionsSlot}
-            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
-            shownAgent={shownAgent}
-          />
-          <span ref={setActionsSlot} className="toolbar-tab-actions" />
+          {tabs}
+          {actions}
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}
@@ -1926,60 +2033,7 @@ export function SidePanel({
           />
         </div>
         {panel.fullScreen ? banner : null}
-        {/* A panel with nothing to offer but kinds it has never closed stands
-            empty, the "+" above offering any; otherwise every tab closed, it
-            offers in place all that the "+" offers. */}
-        {tab === undefined ? (
-          <div className="side-panel-content">
-            {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-          </div>
-        ) : (
-          // The Board is drawn on a canvas, which keeps a find of its own, and
-          // a page's words stand in a sandboxed frame no find of the window
-          // reaches, so a page's tab finds in its source alone, itself.
-          <FindScope
-            className="side-panel-content"
-            role="tabpanel"
-            aria-label={label}
-            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
-            subject={{ task: taskId, tab }}
-          >
-            <TabContent
-              tab={tab}
-              taskId={taskId}
-              repository={repository}
-              board={board}
-              shownCode={shownCode}
-              codeFailed={codeFailed}
-              files={files}
-              pages={taskPages}
-              transcript={transcript}
-              work={work}
-              workRows={workRows}
-              agents={agents}
-              standings={standings}
-              shown={keys}
-              findActive={keys && focused}
-              onOpenSubagent={openSubagent}
-              onOpenTarget={onOpenTarget}
-              cards={cards.call}
-              onWorkerStatus={views.onWorkerStatus}
-              onWorkerHeld={views.onWorkerHeld}
-              onOpenFile={panel.onOpenFile}
-              fileTree={fileTree}
-              onBrowseFile={panel.onBrowseFile}
-              onFileHistory={panel.onFileHistory}
-              onFoldNote={panel.onFoldNote}
-              codeReveal={codeReveal}
-              onShowNote={showNote}
-              onRevealed={revealed}
-              onCloseTab={panel.onClose}
-              pullRequestViews={panel.pullRequestViews}
-              onPullRequestView={panel.onPullRequestView}
-              shellsList={shellsList}
-            />
-          </FindScope>
-        )}
+        {children}
         {/* Last, so the drag region of the row above does not take the
             edge's top from it. Full screen has no edge to drag. */}
         {panel.fullScreen ? null : <ResizeEdge edge={edge} />}

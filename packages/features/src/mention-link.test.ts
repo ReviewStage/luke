@@ -9,6 +9,7 @@ import {
   isMentionLabel,
   linkLabels,
   linkMention,
+  linksIn,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
@@ -854,5 +855,25 @@ test("a bare address's end is read in one pass however long the punctuation afte
   assert.deepEqual(
     handedMentionsIn(words, null).map(({ target }) => target),
     [section],
+  );
+});
+
+test("the links written in words are every inline link whatever its label, an autolink, and a bare address, in order, none inside code, no picture, and no escaped bracket", () => {
+  const words = [
+    "See [the funnel](https://tryluke.dev/acme/plan/t1/page/p1), [@Dana](https://tryluke.dev/acme/person/u1),",
+    " <https://example.com/a>, then https://example.com/b.",
+    " ![chart](https://example.com/c.png) and `https://example.com/d`.",
+    " \\[not a link](https://example.com/e)",
+  ].join("");
+  assert.deepEqual(
+    linksIn(words).map(({ label, target }) => [label, target]),
+    [
+      ["the funnel", "https://tryluke.dev/acme/plan/t1/page/p1"],
+      ["@Dana", "https://tryluke.dev/acme/person/u1"],
+      ["https://example.com/a", "https://example.com/a"],
+      ["https://example.com/b", "https://example.com/b"],
+      // An escaped bracket opens no link, so its address stands bare, as GFM links it.
+      ["https://example.com/e", "https://example.com/e"],
+    ],
   );
 });

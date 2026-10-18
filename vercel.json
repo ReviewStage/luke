@@ -515,15 +515,15 @@
       "root": "apps/luke",
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
-      "buildCommand": "pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
+      "buildCommand": "pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh"
     },
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/coder...",
-      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
+      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh",
       "routes": [
         {
           "src": "^/eve/coder/v1/(.*)$",

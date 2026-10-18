@@ -12,6 +12,11 @@ import { Effect, type Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
+  recordServerEvent,
+  SERVER_EVENT,
+  SERVER_PULL_REQUEST_OPENER,
+} from "../../events/server-events.js";
+import {
   GITHUB_HTTP_STATUS,
   GitHubApp,
   githubPost,
@@ -402,6 +407,13 @@ export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(
   const read = readInput(input);
   if (result.status === ACTION_RESULT_STATUS.ACCEPTED && Result.isSuccess(read)) {
     yield* recordOpened(target, agent, read.success.head);
+    yield* recordServerEvent(SERVER_EVENT.PULL_REQUEST_CREATE, target.userId, {
+      opened_as:
+        result.openedAs === OPENED_AS.DEVELOPER
+          ? SERVER_PULL_REQUEST_OPENER.DEVELOPER
+          : SERVER_PULL_REQUEST_OPENER.APP,
+      is_draft: read.success.draft ?? false,
+    });
   }
   return result;
 });

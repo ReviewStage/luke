@@ -2,11 +2,14 @@
   "default.js": [
     "assert",
     "buffer",
+    "bufferutil",
     "child_process",
     "crypto",
     "dns",
     "events",
     "fs",
+    "http",
+    "https",
     "net",
     "node:async_hooks",
     "node:buffer",
@@ -39,9 +42,11 @@
     "string_decoder",
     "tls",
     "url",
+    "utf-8-validate",
     "util",
     "util/types",
-    "worker_threads"
+    "worker_threads",
+    "zlib"
   ],
   "maintenance-sweep.js": [
     "assert",

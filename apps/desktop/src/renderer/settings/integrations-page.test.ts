@@ -1059,8 +1059,10 @@ test("the arrows scroll an opened row's tool list, and only it, to keep the held
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
+  // Note that the list's scroller is the area its rows stand in.
   const list =
-    page.querySelector<HTMLElement>(".integration-tools-list") ?? assert.fail("the tool list");
+    page.querySelector<HTMLElement>(".integration-tools-list")?.parentElement ??
+    assert.fail("the tool list");
   // Note that jsdom lays nothing out, so the list shows one 30px row and each row stands 30px under the last, less what the list has scrolled.
   const ROW = 30;
   const rows = () => [...list.querySelectorAll<HTMLElement>('ul[aria-label$=" tools"] > li')];
@@ -1104,7 +1106,10 @@ test("Return hands the focus to the held tool's page, and Escape or Left hands i
 
     for (const back of ["Escape", "ArrowLeft"]) {
       keyAtFocus("Enter");
-      assert.equal(document.activeElement, page.querySelector(".integration-tool-detail-body"));
+      assert.equal(
+        document.activeElement,
+        page.querySelector(".integration-tool-detail-body")?.parentElement,
+      );
       assert.equal(keyAtFocus(back), true, back);
       assert.equal(toolName(document.activeElement), "get_deployment");
     }
@@ -1144,7 +1149,8 @@ test("a tool held opens its page at the top, wherever the last one was scrolled"
   const page = await mount();
   openRow(page, "Vercel");
   const body = () =>
-    page.querySelector<HTMLElement>(".integration-tool-detail-body") ?? assert.fail("no tool page");
+    page.querySelector<HTMLElement>(".integration-tool-detail-body")?.parentElement ??
+    assert.fail("no tool page");
   body().scrollTop = 120;
 
   act(() =>

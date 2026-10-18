@@ -76,6 +76,11 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
  *
+ * A row may carry attachments (`attachments`), what its thing holds drawn
+ * small on a line of their own under its description, as a mail app shows
+ * a thread's pictures under its preview; they are decoration, the row's
+ * words saying what it is.
+ *
  * A row's metadata stands at its middle, or, in a list read as a mail
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
  * description running the row's whole width under both and its leading
@@ -239,6 +244,7 @@ export function ListRow({
   title,
   description,
   lead,
+  attachments,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
@@ -268,6 +274,8 @@ export function ListRow({
   description?: ReactNode;
   /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
+  /** What the row's thing carries, its pictures or pages drawn small, on a line of their own under the description; decoration, since its words say what it is. */
+  attachments?: ReactNode;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
@@ -355,6 +363,11 @@ export function ListRow({
               </span>
             )}
             {description}
+          </span>
+        ) : null}
+        {said(attachments) ? (
+          <span className="luke-list-row-attachments" aria-hidden="true">
+            {attachments}
           </span>
         ) : null}
       </span>

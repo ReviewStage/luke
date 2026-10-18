@@ -392,6 +392,15 @@ body {
   max-width: 360px;
 }
 
+/* A palette's short card: its search row over a list engine's box that
+   fills the rest of the card's height. */
+.catalog-palette {
+  display: flex;
+  height: 200px;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
 /* A dialog's long words, which give way and scroll in a short window so the
    answers under them stay on the card. */
 .catalog-dialog-scroll {
@@ -596,6 +605,11 @@ body {
   width: 320px;
 }
 
+/* A side panel's width, narrower than a page's measure and its insets. */
+.catalog-screen-panel {
+  width: 440px;
+}
+
 /* A screen as tall as a window's content, so a collection page scrolls in it. */
 .catalog-screen-collection {
   display: flex;
@@ -704,4 +718,48 @@ body {
 .catalog-auth-mark svg {
   width: 100%;
   height: 100%;
+}
+
+/* A pane's room a scroll area fills under a pinned bar, short enough that
+   its rows run past it; the wide one holds a board that runs past its
+   side. */
+.catalog-scroll-room {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  height: 220px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-scroll-room-wide {
+  width: 100%;
+  max-width: 560px;
+}
+
+.catalog-scroll-bar {
+  flex: none;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* The caller's own element inside the area, holding its padding, so the
+   scroll bar stands at the area's edge. */
+.catalog-scroll-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.catalog-scroll-board {
+  display: flex;
+  gap: var(--luke-space-12);
+  width: max-content;
+  padding: var(--luke-space-12);
+}
+
+.catalog-scroll-column {
+  flex: none;
+  width: 200px;
+  padding: var(--luke-space-8);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
 }

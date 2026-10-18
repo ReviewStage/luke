@@ -64,7 +64,7 @@ import {
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { brainModelSelection } from "./model.js";
 import type { BrainHostSeams } from "./production.js";
-import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
+import { foldedQuietly, type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
 import { rotationSeedText } from "./seed.js";
 import { carryStop } from "./stop-carrier.js";
 
@@ -225,6 +225,12 @@ export interface BrainHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | HttpClient.HttpClient | GitHubApp
   >;
+  /**
+   * Folds an event the store need hear nothing of into the session's relay
+   * state and answers whether it did; the caller admits the session and
+   * relays only the rest (`foldedQuietly`).
+   */
+  relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
   /**
    * Relays one event of the session's stream into the store, under the state
    * the caller keeps for the session and the prompt it composed; a turn that
@@ -528,6 +534,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       }),
 
     model: (admitted) => modelFor(admitted),
+
+    relaysQuietly: foldedQuietly,
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {

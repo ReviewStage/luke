@@ -159,6 +159,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     const nextAccountKey = signedIn ? next.email : undefined;
     previousAccount = next;
     if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+    // A deletion stands recording down until the next sign-in, which starts it again.
+    if (signedIn && !wasSignedIn) sessionReplayEndedByDeletion = false;
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
     yield* settings.emitSettings();
     yield* emitSessionReplay;
@@ -240,7 +242,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 
   /**
    * Whether an account was deleted in this run, which stands recording down
-   * for the rest of it; the client relays the answer to its renderers.
+   * until the next sign-in or the next launch, as `PRIVACY.md` says; the
+   * client relays the answer to its renderers.
    */
   let sessionReplayEndedByDeletion = false;
 

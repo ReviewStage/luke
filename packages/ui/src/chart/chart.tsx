@@ -4,8 +4,11 @@
  * components.json for the CLI to install into, and the one shared utility the
  * registry file expects — `cn` from `@/lib/utils` — is this package's own
  * `cn`. Exported at `@luke/ui/chart` alone, so recharts rides into no bundle
- * behind the barrel. The utilities it spells read the tokens `../theme.css`
- * names, which every app that mounts it defines. Series colors
+ * behind the barrel. Its frame and tooltip are drawn by `chart.css` in the
+ * shared `--luke-*` tokens, not the stock utilities, so the chart reads
+ * alike whichever app mounts it; a caller's `className` on the container
+ * sizes it and nothing more. The tooltip's indicator is the swatch alone,
+ * stock's line and dashed variants having no caller. Series colors
  * arrive through `ChartConfig`, whose values this repository fixes at build
  * time, never from anything observed.
  */
@@ -74,10 +77,7 @@ function ChartContainer({
       <div
         data-slot="chart"
         data-chart={chartId}
-        className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
-          className,
-        )}
+        className={cn("luke-chart", className)}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
@@ -134,14 +134,35 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
-/** The tooltip's floating card, shared by the recharts tooltip and a chart that places its own. */
-const CHART_TOOLTIP_FRAME =
-  "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl";
+/** One series' line of a tooltip: its swatch, or the icon its config names, then its name and value. */
+function ChartTooltipRow({
+  indicator,
+  name,
+  value,
+}: {
+  indicator: React.ReactNode;
+  name: React.ReactNode;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="luke-chart-tooltip-row">
+      {indicator}
+      <div className="luke-chart-tooltip-entry">
+        <span className="luke-chart-tooltip-name">{name}</span>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ChartTooltipSwatch({ color }: { color: string | undefined }) {
+  return <div className="luke-chart-tooltip-swatch" style={{ backgroundColor: color }} />;
+}
 
 /**
  * A tooltip for a chart that is not recharts', one it places itself: the
  * same floating card as `ChartTooltipContent`, over `label`, with one row per
- * series under it, each its colour's dot, its name, and its value.
+ * series under it, each its colour's swatch, its name, and its value.
  */
 function ChartTooltipFrame({
   label,
@@ -156,19 +177,15 @@ function ChartTooltipFrame({
   }[];
 }) {
   return (
-    <div className={CHART_TOOLTIP_FRAME}>
-      <div className="font-medium">{label}</div>
+    <div className="luke-chart-tooltip">
+      <div className="luke-chart-tooltip-label">{label}</div>
       {rows.map((row) => (
-        <div key={row.key} className="flex w-full items-center gap-2">
-          <div
-            className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-            style={{ backgroundColor: row.color }}
-          />
-          <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-            <span className="text-muted-foreground">{row.name}</span>
-            <span className="font-mono font-medium text-foreground tabular-nums">{row.value}</span>
-          </div>
-        </div>
+        <ChartTooltipRow
+          key={row.key}
+          indicator={<ChartTooltipSwatch color={row.color} />}
+          name={row.name}
+          value={<span className="luke-chart-tooltip-value">{row.value}</span>}
+        />
       ))}
     </div>
   );
@@ -177,25 +194,21 @@ function ChartTooltipFrame({
 function ChartTooltipContent({
   active,
   payload,
-  className,
-  indicator = "dot",
   hideLabel = false,
   hideIndicator = false,
   label,
   labelFormatter,
-  labelClassName,
   formatter,
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<"div"> & {
-    hideLabel?: boolean;
-    hideIndicator?: boolean;
-    indicator?: "line" | "dot" | "dashed";
-    nameKey?: string;
-    labelKey?: string;
-  } & Omit<
+}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> & {
+  hideLabel?: boolean;
+  hideIndicator?: boolean;
+  color?: string;
+  nameKey?: string;
+  labelKey?: string;
+} & Omit<
     RechartsPrimitive.DefaultTooltipContentProps<TooltipValueType, TooltipNameType>,
     "accessibilityLayer"
   >) {
@@ -216,31 +229,24 @@ function ChartTooltipContent({
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
     if (labelFormatter) {
-      return (
-        <div className={cn("font-medium", labelClassName)}>{labelFormatter(value, payload)}</div>
-      );
+      return <div className="luke-chart-tooltip-label">{labelFormatter(value, payload)}</div>;
     }
 
     if (!value) {
       return null;
     }
 
-    return <div className={cn("font-medium", labelClassName)}>{value}</div>;
-  }, [label, labelFormatter, payload, hideLabel, labelClassName, config, labelKey]);
+    return <div className="luke-chart-tooltip-label">{value}</div>;
+  }, [label, labelFormatter, payload, hideLabel, config, labelKey]);
 
   if (!active || !payload?.length) {
     return null;
   }
 
-  const nestLabel = payload.length === 1 && indicator !== "dot";
-
   return (
-    // The tooltip floats above a chart that sits on a card, and the dark
-    // theme's card is lighter than its page, so the stock `bg-background`
-    // here would draw the one floating surface *below* the ground it covers.
-    <div className={cn(CHART_TOOLTIP_FRAME, className)}>
-      {!nestLabel ? tooltipLabel : null}
-      <div className="grid gap-1.5">
+    <div className="luke-chart-tooltip">
+      {tooltipLabel}
+      <div className="luke-chart-tooltip-rows">
         {payload
           .filter((item) => item.type !== "none")
           .map((item, index) => {
@@ -248,66 +254,34 @@ function ChartTooltipContent({
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
             const indicatorColor = color ?? item.payload?.fill ?? item.color;
 
+            if (formatter && item?.value !== undefined && item.name) {
+              return (
+                <div key={key} className="luke-chart-tooltip-row">
+                  {formatter(item.value, item.name, item, index, item.payload)}
+                </div>
+              );
+            }
             return (
-              <div
+              <ChartTooltipRow
                 key={key}
-                className={cn(
-                  "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
-                  indicator === "dot" && "items-center",
-                )}
-              >
-                {formatter && item?.value !== undefined && item.name ? (
-                  formatter(item.value, item.name, item, index, item.payload)
-                ) : (
-                  <>
-                    {itemConfig?.icon ? (
-                      <itemConfig.icon />
-                    ) : (
-                      !hideIndicator && (
-                        <div
-                          className={cn(
-                            "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
-                            indicator === "dot" && "h-2.5 w-2.5",
-                            indicator === "line" && "w-1",
-                            indicator === "dashed" &&
-                              "w-0 border-[1.5px] border-dashed bg-transparent",
-                            nestLabel && indicator === "dashed" && "my-0.5",
-                          )}
-                          style={
-                            // SAFETY: --color-bg and --color-border are custom
-                            // properties, which React.CSSProperties only admits
-                            // through an assertion.
-                            {
-                              "--color-bg": indicatorColor,
-                              "--color-border": indicatorColor,
-                            } as React.CSSProperties
-                          }
-                        />
-                      )
-                    )}
-                    <div
-                      className={cn(
-                        "flex flex-1 justify-between gap-4 leading-none",
-                        nestLabel ? "items-end" : "items-center",
-                      )}
-                    >
-                      <div className="grid gap-1.5">
-                        {nestLabel ? tooltipLabel : null}
-                        <span className="text-muted-foreground">
-                          {itemConfig?.label ?? item.name}
-                        </span>
-                      </div>
-                      {item.value != null && (
-                        <span className="font-mono font-medium text-foreground tabular-nums">
-                          {Number.isFinite(item.value)
-                            ? Number(item.value).toLocaleString()
-                            : String(item.value)}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+                indicator={
+                  itemConfig?.icon ? (
+                    <itemConfig.icon />
+                  ) : hideIndicator ? null : (
+                    <ChartTooltipSwatch color={indicatorColor} />
+                  )
+                }
+                name={itemConfig?.label ?? item.name}
+                value={
+                  item.value == null ? null : (
+                    <span className="luke-chart-tooltip-value">
+                      {Number.isFinite(item.value)
+                        ? Number(item.value).toLocaleString()
+                        : String(item.value)}
+                    </span>
+                  )
+                }
+              />
             );
           })}
       </div>

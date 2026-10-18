@@ -957,6 +957,13 @@ export function mentionMarkdown(mention: Mention, name: string, place: MentionPl
  * link: its `!` stands before it, unescaped, which is behind an even run of
  * backslashes, since each pair is one backslash written as itself.
  */
+/** Whether the character at `at` is escaped by an odd run of backslashes before it. */
+function escapedAt(text: string, at: number): boolean {
+  let backslashes = 0;
+  while (text[at - 1 - backslashes] === "\\") backslashes += 1;
+  return backslashes % 2 === 1;
+}
+
 function opensPicture(text: string, at: number): boolean {
   if (text[at - 1] !== "!") return false;
   let backslashes = 0;
@@ -1108,9 +1115,25 @@ function bareAddressOf(spelled: string): string {
  * that link's, and is no bare one.
  */
 function bareLinksIn(text: string): readonly MentionLink[] {
+  return writtenLinksIn(text, false);
+}
+
+/**
+ * Every link written into the words, in order, outside code, as markdown
+ * draws one: an inline link whatever its label, an `@` mention's among
+ * them, an autolink, and an address standing alone. A picture is no link.
+ */
+export function linksIn(text: string): readonly MentionLink[] {
+  return [...writtenLinksIn(text, true)].sort((first, second) => first.start - second.start);
+}
+
+/** The links of the words: every inline link where `labelled`, or only those whose label spells their target, then the autolinks and bare addresses. */
+function writtenLinksIn(text: string, labelled: boolean): readonly MentionLink[] {
   const found: MentionLink[] = [];
   const taken: TextStretch[] = [];
   for (let at = text.indexOf("["); at !== -1; at = text.indexOf("[", at + 1)) {
+    // Note that a bracket an odd run of backslashes escapes opens no link.
+    if (escapedAt(text, at)) continue;
     const close = labelEnd(text, at);
     if (close === undefined || text[close + 1] !== "(") continue;
     const link = destinationEnd(text, close + 2);
@@ -1118,7 +1141,12 @@ function bareLinksIn(text: string): readonly MentionLink[] {
     const picture = opensPicture(text, at);
     taken.push({ start: picture ? at - 1 : at, end: link.end + 1 });
     const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
-    if (picture || isMentionLabel(label) || !isBareLink(label, link.target)) continue;
+    if (picture) continue;
+    if (labelled) {
+      found.push({ start: at, end: link.end + 1, label, target: link.target });
+      continue;
+    }
+    if (isMentionLabel(label) || !isBareLink(label, link.target)) continue;
     found.push({ start: at, end: link.end + 1, label: link.target, target: link.target });
   }
   const isTaken = (start: number) =>

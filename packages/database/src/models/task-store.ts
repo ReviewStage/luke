@@ -116,6 +116,8 @@ export interface StoredTask {
   readonly sectionWriters: readonly PlanSectionWriter[];
   /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
   readonly linearIssue: TaskLinearIssue | undefined;
+  /** The developer's own words about the task as they started it; nothing for a task started with none. */
+  readonly brief: string | undefined;
   /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
   readonly issue: StoredTaskIssue | undefined;
 }
@@ -142,7 +144,8 @@ export interface StoredTaskIssue {
  * the caller confirms is an issue of the workspace it starts in. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
- * starts empty rather than as the template.
+ * starts empty rather than as the template. A brief is the developer's own
+ * words about the task, kept as written; a blank one is none.
  */
 export interface NewTask {
   readonly organizationId: string;
@@ -151,6 +154,7 @@ export interface NewTask {
   readonly linearIssue?: TaskLinearIssue;
   readonly issueId?: string;
   readonly planning?: boolean;
+  readonly brief?: string;
 }
 
 /**
@@ -195,6 +199,7 @@ const TASK_COLUMNS = {
   document: task.document,
   conversationId: task.conversationId,
   linearIssue: task.linearIssue,
+  brief: task.brief,
 };
 
 const TaskSummaryRowSchema = Schema.Struct({
@@ -233,6 +238,7 @@ const TaskRowSchema = Schema.Struct({
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
   linearIssue: Schema.NullOr(taskLinearIssueSchema),
+  brief: Schema.NullOr(Schema.String),
 });
 
 type TaskRow = typeof TaskRowSchema.Type;
@@ -414,6 +420,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
       linearIssue: row.linearIssue ?? undefined,
+      brief: row.brief ?? undefined,
       issue:
         row.issueId === null
           ? undefined
@@ -472,6 +479,7 @@ const insertTask = SqlSchema.findOne({
     document: Schema.String,
     linearIssue: Schema.NullOr(taskLinearIssueSchema),
     issueId: Schema.NullOr(Schema.String),
+    brief: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: TaskRowSchema,
@@ -487,6 +495,7 @@ const insertTask = SqlSchema.findOne({
           document: write.document,
           linearIssue: write.linearIssue,
           issueId: write.issueId,
+          brief: write.brief,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -550,6 +559,19 @@ const findTask = SqlSchema.findOneOption({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db.select(TASK_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
+    ),
+});
+
+const findTaskWorkspace = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .limit(1),
     ),
 });
 
@@ -763,6 +785,30 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /**
+ * The name written only where the task still stands untitled and not
+ * archived, so the check and the write are one statement and a name a
+ * member gave the task meanwhile is never written over.
+ */
+const nameUntitled = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, name: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ userId, taskId, name }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ name })
+        .where(
+          and(
+            reachableTask(userId, taskId),
+            eq(task.name, UNTITLED_TASK_NAME),
+            isNull(task.archivedAt),
+          ),
+        )
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
  * The text an account's plan started as at `createdAt`, epoch milliseconds:
  * a copy of the account's template as it stood then, as its history reads,
  * or the template it holds now where it has no history. A note reads it to
@@ -791,6 +837,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
     const now = yield* DateTime.nowAsDate;
     const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
+    const brief = started.brief?.trim() ?? "";
     const row = yield* insertTask({
       userId,
       organizationId: started.organizationId,
@@ -799,6 +846,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       linearIssue: started.linearIssue ?? null,
       issueId: started.issueId ?? null,
+      brief: brief.length > 0 ? brief : null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -843,6 +891,21 @@ export function readTask(
 ): TaskStoreEffect<Option.Option<StoredTask>> {
   return Effect.flatMap(findTask({ userId, taskId }), (found) =>
     Effect.transposeOption(Option.map(found, (row) => storedTaskOf(userId, row))),
+  );
+}
+
+/**
+ * The workspace of a task the account reaches, as `readTask` would name it,
+ * in one statement rather than the whole task: what a GitHub read of the
+ * task's repository needs, once per agent where a delivery reads several.
+ */
+export function readTaskWorkspace(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findTaskWorkspace({ userId, taskId }),
+    Option.map((row) => row.organizationId),
   );
 }
 
@@ -1055,6 +1118,23 @@ export function updateTask<E = never, R = never>(
       }),
     ),
   );
+}
+
+/**
+ * Names a task that still stands as `UNTITLED_TASK_NAME`, as its first
+ * coding agent's generated title does; false, and nothing written, where
+ * the task has a name of its own, is archived, or is no task the account
+ * reaches. A rename, like `updateTask`'s, is not a save, so the list's
+ * order and the document stand.
+ */
+export function nameUntitledTask(
+  userId: string,
+  taskId: string,
+  name: string,
+): TaskStoreEffect<boolean> {
+  const named = name.trim();
+  if (named.length === 0) return Effect.succeed(false);
+  return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
 }
 
 /**

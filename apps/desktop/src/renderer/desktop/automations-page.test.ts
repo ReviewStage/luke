@@ -600,9 +600,9 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
   const page = mount();
   await settle();
 
-  const wait = page.querySelector(".automations-scroll [role=status]");
+  const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent, "Reading your automations…");
-  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.ok((wait?.querySelectorAll(".luke-skeleton").length ?? 0) > 0);
   assert.ok(
     page.querySelector("h1")?.textContent === "Automations",
     "its toolbar stands over them",
@@ -614,7 +614,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
   const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));
   await settle();
   assert.equal(
-    page.querySelector(".automations-scroll [role=status]")?.textContent,
+    page.querySelector("[role=status][aria-busy=true]")?.textContent,
     "Reading your automations…",
   );
   assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
@@ -636,7 +636,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
   const linked = document.body;
   assert.equal(
     linked
-      .querySelector(".automations-scroll [role=status]")
+      .querySelector("[role=status][aria-busy=true]")
       ?.textContent?.startsWith("Reading the automation…"),
     true,
   );
@@ -1423,7 +1423,7 @@ test("an automation's page opened before the list is read stands its toolbar's w
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  const wait = page.querySelector(".automations-scroll [role=status]");
+  const wait = page.querySelector("[role=status][aria-busy=true]");
   assert.equal(wait?.textContent?.startsWith("Reading the automation…"), true);
   assert.ok((wait?.querySelectorAll(".luke-settings-row .luke-skeleton").length ?? 0) > 0);
   assert.match(crumbs(page), /^Automations/u);
@@ -1475,7 +1475,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
   const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
   await settle();
   assert.match(page.textContent ?? "", /The workspaces could not be read\./u);
-  assert.equal(page.querySelector(".automations-scroll [role=status]"), null);
+  assert.equal(page.querySelector("[role=status][aria-busy=true]"), null);
   act(() => button("Retry").click());
   assert.equal(retries, 1);
 

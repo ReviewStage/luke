@@ -31,7 +31,7 @@ import {
  * under it, a swipe left, and a press up or down never act. A row that keeps
  * focus leaves it on the field that held it; one out of the tab order still
  * takes the focus it is handed; one unavailable refuses its press; one a
- * field drives is found by its id; a chevron says nothing to a reader; acts
+ * field drives is found by its id; a chevron and attachments say nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
  * whether the title is cut short. Synthetic
  * members.
@@ -490,6 +490,24 @@ test("a row's chevron says nothing to a reader, so the row still reads as its wo
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
+test("a row's attachments stand under its description, hidden from a reader, so the row still reads as its words", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Inbox",
+      children: createElement(ListRow, {
+        title: "Alert at 80%?",
+        description: "Agent: here is the chart",
+        attachments: createElement("img", { alt: "The chart", src: "data:image/png;base64," }),
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(container, "Alert at 80%?Agent: here is the chart");
+  const attachments = row.querySelector("img")?.closest('[aria-hidden="true"]');
+  expect(attachments).not.toBeNull();
+  expect(attachments?.previousElementSibling?.textContent).toBe("Agent: here is the chart");
+});
+
 /**
  * Stands in for the browser's ResizeObserver, which jsdom lacks, since it
  * lays nothing out: the widths it would measure are stubbed by each test,
@@ -584,6 +602,37 @@ test("a row whose acts come in on hover fades its title only while it is cut sho
     createElement(List, { label: "Members", children: row(LIST_ROW_ACTIONS.ALWAYS) }),
   );
   expect(beside.querySelector(".luke-list-row-title")?.hasAttribute("data-end")).toBe(false);
+});
+
+test("a title renamed longer or shorter is measured again, though its box keeps its width", async () => {
+  const resized = standInResizeObserver();
+  // Note that the box stands 200px wide whatever its words, as a row whose width its list sets does.
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return (this.textContent ?? "").length * 8;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const shell = (title: string) =>
+    createElement(List, {
+      label: "Shells",
+      children: createElement(ListRow, {
+        title,
+        onPress: () => undefined,
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
+        actions: createElement(IconButton, { icon: glyph(), label: "End" }),
+      }),
+    });
+  const container = draw(shell("zsh"));
+  const root = roots.at(-1);
+  const overflow = () =>
+    container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
+  act(() => resized());
+  expect(overflow()).toBe("false");
+  await act(async () => root?.render(shell("Long-running build and test process")));
+  expect(overflow()).toBe("true");
+  await act(async () => root?.render(shell("zsh")));
+  expect(overflow()).toBe("false");
 });
 
 /** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */

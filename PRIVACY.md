@@ -857,6 +857,18 @@ if you sign in before Luke quits, and is dropped otherwise. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
+Our service also counts, under the same account, the work done through it:
+a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
+it runs on, and whether an automation started it), a pull request an agent
+opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
+answered, a Chat message you posted, an issue filed, an automation made (with
+what triggers it), and an integration connected or disconnected (with which
+provider). These counts are event names and values from a fixed list too, and
+carry no titles, names, repositories, branches, prompts, messages, or the
+words of any of them. They go from our service to PostHog, so PostHog never
+sees your network address for them, and deleting your account erases them
+with the rest of your usage data.
+
 **Screen recordings.** Luke records what his own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
@@ -907,22 +919,30 @@ Luke account, and does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
-Luke's agents send Sentry what its SDK collects by default, so that we can find
-and fix failures. That is: every error our service did not handle, with its
-message, stack trace, the lines of code around it, and the values of local
-variables; performance traces of each request our service answers, each
-database query, and each request it makes, with their headers, bodies, query
-parameters, and database query parameters, and the IP address a request came
-from; every line our service logs; counts and timings; and, each minute,
-whether the scheduled sweep ran. Luke's agents also send Sentry's agent
-traces of each turn: the instructions and messages sent to the model (which
-include the plan, the conversation, what was said on a call, and what Luke and
-his workers read, such as code, a command's output from your Mac, and an
-integration's answer), the model's replies, and each tool call with its
-arguments and result. Sentry replaces a value whose name looks like a
-credential (such as `auth`, `token`, `secret`, `password`, `key`, or `session`)
-before it leaves, but not a credential written in free text, such as a key
-pasted into a conversation. Terminal tabs' bytes are not sent. What reaches
+Luke's agents send Sentry reports so that we can find and fix failures. Our
+service's web functions send every error they did not handle, with its
+message, stack trace, and the lines of code around it; performance traces of a
+share of the requests they answer, each database query, and each request they
+make, with the method, address, and query parameters, the status, the
+browser's or app's user agent, and the query's text; every line they log;
+counts and timings; and, each minute, whether the scheduled sweep ran. They do
+not send a request's headers or body, the values of local variables, or the IP
+address a request came from. Luke's agents send what Sentry's SDK collects by
+default: every error they did not handle, with its message, stack trace, the
+lines of code around it, and the values of local variables; performance traces
+of each request they answer, each database query, and each request they make,
+with their headers, bodies, query parameters, and database query parameters,
+and the IP address a request came from; every line they log; and Sentry's
+agent traces of each turn: the instructions and messages sent to the model
+(which include the plan, the conversation, what was said on a call, and what
+Luke and his workers read, such as code, a command's output from your Mac, and
+an integration's answer), the model's replies, and each tool call with its
+arguments and result. In what the agents send, Sentry replaces a value whose
+name looks like a credential (such as `auth`, `token`, `secret`, `password`,
+`key`, or `session`) before it leaves, but not a credential written in free
+text, such as a key pasted into a conversation; the address and query
+parameters of a request the web functions trace are sent as the request
+carried them. Terminal tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
 
@@ -1028,7 +1048,8 @@ only when you press Send.
   Mac loads straight from Keyframe's public storage as the menu is drawn, so
   Keyframe sees your Mac's IP address then, as any site serving an image does;
   no referrer and nothing of yours is sent with it.
-- PostHog, for usage data and screen recordings from the Mac app. The counts
+- PostHog, for usage data and screen recordings from the Mac app, and the
+  counts our service makes of the work done through it. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the Mac app's crash and performance reports, and our service's
   and Luke's agents' error, performance, log, and agent reports, described
