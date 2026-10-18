@@ -135,6 +135,38 @@ test("a leading mark stands in the row but names nothing: the label alone names 
   expect(wordsOf(box, "aria-labelledby")).toBe("ada@example.com");
 });
 
+test("an adornment rides the label's line but names nothing: the label alone names the control", () => {
+  const container = mount(
+    createElement(SettingsRow, {
+      label: "Theme",
+      adornment: createElement("span", null, "Modified"),
+      children: (control) =>
+        createElement("input", { type: "checkbox", "aria-labelledby": control.labelId }),
+    }),
+  );
+  const box = container.querySelector('input[type="checkbox"]');
+  if (box === null) throw new Error("no checkbox");
+  expect(container.textContent).toContain("Modified");
+  expect(wordsOf(box, "aria-labelledby")).toBe("Theme");
+});
+
+test("what a row grows below its line is read after the row's words, and its error after that", () => {
+  const container = mount(
+    createElement(SettingsRow, {
+      label: "Anthropic",
+      error: "The key was refused.",
+      below: () => createElement("input", { "aria-label": "Anthropic API key" }),
+      children: () => createElement(Button, { children: "Add key" }),
+    }),
+  );
+  const words = container.textContent ?? "";
+  const field = container.querySelector('input[aria-label="Anthropic API key"]');
+  const error = container.querySelector('[aria-live="polite"]');
+  if (field === null || error === null) throw new Error("no field or error");
+  expect(words.indexOf("Add key")).toBeLessThan(words.indexOf("The key was refused."));
+  expect(field.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test("a control as wide as the row stands under its words, named by the label and described as one at its end is", () => {
   const container = mount(
     createElement(SettingsRow, {

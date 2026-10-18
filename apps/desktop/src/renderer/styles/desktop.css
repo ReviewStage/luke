@@ -6185,55 +6185,6 @@ button.integration-tool-head:hover,
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }
 
-/* A Settings page has no top bar: the page names itself at the head of its
-   column (`SettingsPage`), so the title-bar row above it is only the
-   window's drag strip, and the page fills the room under the strip and
-   scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
-   row scrolled up dissolves into the strip rather than being sliced off. */
-.settings-page > .luke-settings-page {
-  flex: 1 1 0;
-}
-
-/* The page's sections are the width its rows answer (`@container settings`
-   in `settings.css`) rather than the window's: the column beside the page
-   list is as narrow at a wide nav as a small window makes it. */
-.settings-page .luke-settings-page-sections {
-  container: settings / inline-size;
-}
-
-/* A page whose reads are out draws nothing under its name until every one
-   has answered, then the whole page at once, so nothing grows into place. */
-.settings-page:has(.settings-reading) .luke-settings-page-sections {
-  visibility: hidden;
-}
-
-/* A page that holds an empty state gives it the room under the page's
-   name, which the state stands in the middle of, at the page's measure. */
-.settings-page > .luke-settings-page:has(.luke-empty-state),
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-page .luke-settings-page:has(.luke-empty-state) .luke-settings-page-column {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
-  flex: 1 0 auto;
-}
-
-.settings-page .luke-settings-page-sections:has(> .luke-empty-state) {
-  flex: 1 0 auto;
-}
-
-/* A quiet act ends the line flush with the card's edge, its words rather than
-   its hover's pill standing in the column. Note that the actions take the
-   margin rather than the button, because a button wider than its container
-   by its own negative margin would be held to it and cut short. */
-.settings-page .luke-settings-page-actions {
-  margin-right: calc(-1 * var(--luke-control-inset));
-}
-
 /* Version history ------------------------------------------------------------ */
 
 /* The versions, newest first, one row each, the row whose version is drawn
