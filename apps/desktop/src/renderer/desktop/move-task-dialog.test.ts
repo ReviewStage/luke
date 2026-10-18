@@ -280,9 +280,16 @@ function openTask(tasks: TasksControl): HTMLElement {
   return container;
 }
 
-/** The task-wide banner over a stranded task, where one stands. */
+/** The task-wide banner over a stranded task, where one stands: the region its words name. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
-  return within.querySelector<HTMLElement>(".task-banner");
+  const regions = [...within.querySelectorAll<HTMLElement>("section[aria-labelledby]")];
+  return (
+    regions.find((region) =>
+      document
+        .getElementById(region.getAttribute("aria-labelledby") ?? "")
+        ?.textContent?.startsWith("This task's repository belongs to"),
+    ) ?? null
+  );
 }
 
 /** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */

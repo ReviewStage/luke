@@ -4373,7 +4373,7 @@ button.skill-chip:hover,
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
-   (`agent-pictures.tsx`), whose chips are drawn by the rules below. */
+   (`agent-pictures.tsx`), on the same chips. */
 .attached-files {
   display: flex;
   flex-wrap: wrap;
@@ -4389,86 +4389,6 @@ button.skill-chip:hover,
 
 .is-user > .attached-files {
   justify-content: flex-end;
-}
-
-/* A call's picture is its thumbnail, or why it is not there, on a chip as
-   tall as the thumbnail. The chip's face is the press that opens the
-   picture, washed under the pointer as a row is. */
-.attached-file {
-  position: relative;
-  display: flex;
-  max-width: min(220px, 100%);
-  height: 48px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: 8px;
-  background: var(--luke-color-surface);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.attached-file-face {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
-  border-radius: 7px;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: 12px;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.attached-file-face {
-  cursor: pointer;
-}
-
-button.attached-file-face:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-.attached-file:has(button.attached-file-face:hover) {
-  border-color: var(--luke-color-border-strong);
-}
-
-.attached-file:has(img) {
-  width: 64px;
-  overflow: visible;
-}
-
-.attached-file-face:has(img) {
-  padding: 0;
-}
-
-.attached-file img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 7px;
-  object-fit: cover;
-  transition: filter var(--duration-hover) ease;
-}
-
-button.attached-file-face:hover img {
-  filter: brightness(1.12);
-}
-
-.attached-file-face > svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-
-.attached-file-name {
-  overflow: hidden;
-  color: var(--luke-color-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attached-file-size {
-  flex: none;
 }
 
 /* A file's type icon in its type's colour, as the file tree draws it:
@@ -4742,23 +4662,16 @@ button.attached-file-face:hover img {
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
-   why on one quiet row (`banner.tsx`), with Unarchive as the press that
-   opens it again. */
-/* The note a continued agent's box gives way to (`continue-agent.tsx`),
-   framed as the box was, on its card, edge and corner, so it stands where
-   the box stood rather than across the column. */
-.continued-composer > .banner-row {
+   why on one quiet row (`archived-task.tsx`, `@luke/ui`'s Banner), with
+   Unarchive as the press that opens it again. The note a continued agent's
+   box gives way to (`continue-agent.tsx`) is framed as the box was, on its
+   card, edge and corner, so it stands where the box stood rather than across
+   the column. */
+.continued-composer {
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: 12px; /* off-scale: the composer card's corner */
   background: var(--desktop-sidebar);
-}
-
-.archived-composer .banner-row > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -6156,28 +6069,6 @@ button.picture-frame {
    set in under the row's words, a picture not kept saying so. */
 .call-pictures {
   margin: 2px 0 6px 28px;
-}
-
-.call-picture[data-state] .attached-file-face {
-  display: grid;
-  width: 64px;
-  height: 48px;
-  place-items: center;
-  color: var(--luke-color-text-muted);
-}
-
-.call-picture[data-state="too-large"] .attached-file-face,
-.call-picture[data-state="limit"] .attached-file-face,
-.call-picture[data-state="unsupported"] .attached-file-face {
-  display: flex;
-  width: auto;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-}
-
-.call-picture svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* A version's change to a picture: written in on the green edge, struck out

@@ -1,0 +1,20 @@
+/* progress.css -- a thin track in the strong fill, as long as a short line
+   of words, its done share filled in the working ink from its start. */
+
+@layer components {
+  .luke-progress {
+    display: block;
+    width: 100%;
+    max-width: 160px; /* off-scale: a meter's length beside a line of words */
+    height: 3px; /* off-scale: a hairline bar */
+    overflow: hidden;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--luke-color-working);
+  }
+}

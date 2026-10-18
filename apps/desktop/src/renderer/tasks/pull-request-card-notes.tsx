@@ -1,5 +1,5 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
-import { HoverCardNote } from "@luke/ui";
+import { Badge, HoverCardNote } from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref";
@@ -24,11 +24,11 @@ import {
  * [face] octo-dev · 3d ago" while it is open, and "Opened by [face]
  * octo-dev · merged 2h ago" once it settled, so the age is the one that
  * matters. Its branches stand as inline code does, and its comment and
- * commit counts each by its glyph. A label wears a dot of its own colour
- * beside its name, rather than its colour on its words, because GitHub lets
- * a label be any colour, a dark one among them, which the card's words could
- * not be read in; and a card names its first six labels and counts the
- * rest, so a pull request with many keeps a card short enough to stand in
+ * commit counts each by its glyph. A label is a badge wearing a dot of its
+ * own colour beside its name (`@luke/ui`'s `Badge` swatch), rather than its
+ * colour on its words, because GitHub lets a label be any colour, a dark one
+ * among them, which the card's words could not be read in; and a card names
+ * its first six labels and counts the rest, so a pull request with many keeps a card short enough to stand in
  * the window.
  */
 
@@ -44,9 +44,6 @@ const SEPARATOR = " · ";
 
 /** The most labels a card names, so one with many stays a card's height; the rest are counted in a last pill. */
 const MAX_LABELS = 6;
-
-/** GitHub's six hex digits for a label's colour, the one spelling a dot is painted in. */
-const LABEL_COLOUR = /^[0-9a-f]{6}$/iu;
 
 /** A count and the noun it counts, the noun in the plural unless the count is one. */
 function counted(count: number, one: string, many: string): string {
@@ -182,19 +179,14 @@ export function PullRequestCardNotes({
       {labels.length === 0 ? null : (
         <ul className="card-labels" aria-label="Labels">
           {labels.slice(0, MAX_LABELS).map((label) => (
-            <li key={label.name} className="card-label">
-              <span
-                className="card-label-dot"
-                aria-hidden="true"
-                style={
-                  LABEL_COLOUR.test(label.color) ? { background: `#${label.color}` } : undefined
-                }
-              />
-              {label.name}
+            <li key={label.name}>
+              <Badge swatch={label.color}>{label.name}</Badge>
             </li>
           ))}
           {labels.length > MAX_LABELS ? (
-            <li className="card-label">{`+${labels.length - MAX_LABELS}`}</li>
+            <li>
+              <Badge>{`+${labels.length - MAX_LABELS}`}</Badge>
+            </li>
           ) : null}
         </ul>
       )}

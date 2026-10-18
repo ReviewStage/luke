@@ -388,9 +388,9 @@ function cardLabels(chip: Element | undefined): (string | null)[] {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
-    (label) => label.textContent,
-  );
+  const labels = [
+    ...(card?.querySelectorAll<HTMLElement>('ul[aria-label="Labels"] > li') ?? []),
+  ].map((label) => label.textContent);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });

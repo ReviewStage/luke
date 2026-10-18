@@ -27,6 +27,7 @@ import {
   ChipName,
   ConfirmDialog,
   FormField,
+  OneLine,
   ProviderMark,
   SettingsRow,
   SettingsSection,
@@ -63,10 +64,10 @@ import { useOpenPerson } from "../person-door";
 import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { wholeWordsHint } from "../tooltip";
 import { useCapability } from "../use-app-state";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
-import { OneLine } from "./one-line";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
@@ -443,7 +444,7 @@ function MemberRow({
               {userId === readerId ? <YouBadge /> : null}
             </span>
           ),
-          description: <OneLine as="span" text={member.email} />,
+          description: <OneLine hint={wholeWordsHint(member.email)}>{member.email}</OneLine>,
           control: (
             <>
               <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
@@ -1008,7 +1009,7 @@ function Invitations({
           ]}
           row={{
             leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
-            label: <OneLine as="span" text={one.email} />,
+            label: <OneLine hint={wholeWordsHint(one.email)}>{one.email}</OneLine>,
             description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
             // Luke sends no mail: the accept link is copied and sent by hand.
             control: (

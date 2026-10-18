@@ -144,16 +144,6 @@
   overflow-wrap: break-word;
 }
 
-/* Words a row holds to one line, an address or a name with no room to
-   wrap well, ending in an ellipsis where they are cut short, the pointer
-   resting on them reading them whole (`one-line.tsx`). */
-.settings-one-line {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* A row's words take what the row leaves once its mark and controls stand,
    so its controls end at the row's edge however many stand beside them. */
 .settings-row > .settings-copy {
@@ -372,24 +362,6 @@
    muted ink every other detail wears. */
 .settings-copy .error-message {
   color: var(--luke-color-danger-text);
-}
-
-/* Settings › Updates: how far a download is, a thin bar under the row's
-   words, which say the same in numbers. */
-.update-progress {
-  display: block;
-  width: 160px;
-  height: 3px;
-  margin-top: var(--luke-space-4);
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--luke-color-fill-strong);
-}
-
-.update-progress > span {
-  display: block;
-  height: 100%;
-  background: var(--luke-color-working);
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
@@ -635,12 +607,6 @@
 .settings-state-line {
   display: flex;
   width: fit-content;
-}
-
-/* A sign-in waiting on the browser wears the window's ring, at the line's size. */
-.settings-state .luke-spinner {
-  width: 12px;
-  height: 12px;
 }
 
 /* Settings › Integrations: a connected row's tools opened in place under

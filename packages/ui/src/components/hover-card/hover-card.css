@@ -101,16 +101,10 @@
     font-size: 11px; /* off-scale: code a size under the note */
   }
 
-  :is(.luke-hover-card-name, .luke-hover-card-note)[data-one-line] {
+  /* A name or a note on one line (`one-line.css`) fades where it is cut
+     short, rather than clamping. */
+  :is(.luke-hover-card-name, .luke-hover-card-note).luke-one-line {
     display: block;
-    white-space: nowrap;
-  }
-
-  /* A line cut short fades out over its last few pixels rather than ending
-     in an ellipsis, as a browser's tab does; only one measured cut short
-     fades, so a short one ends on its last letter. */
-  :is(.luke-hover-card-name, .luke-hover-card-note)[data-one-line][data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   .luke-hover-card-rule {
@@ -120,5 +114,99 @@
     margin: 0;
     border: 0;
     background: var(--luke-color-border);
+  }
+
+  /* A card's rows, set as a menu's rows are: a menu row's height and
+     corner, the glyph on the head's glyph column, and the wash under the
+     pointer off the card's edge by a menu's inset, as a menu item's sits. A
+     row a press does nothing on keeps a row's place, so every word starts
+     on the rows' column. */
+  .luke-hover-card-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .luke-hover-card-row {
+    display: flex;
+    box-sizing: border-box;
+    width: calc(100% + 2 * var(--luke-space-8));
+    height: var(--luke-menu-row-height);
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    margin: 0 calc(-1 * var(--luke-space-8));
+    padding: 0 var(--luke-space-8);
+    border: 0;
+    border-radius: var(--luke-menu-row-radius);
+    background: none;
+    color: var(--luke-color-text);
+    font: inherit;
+    font-size: var(--luke-type-body-size);
+    text-align: left;
+    transition: background-color var(--duration-hover, 0s) ease;
+  }
+
+  .luke-hover-card-row[data-look="detail"] {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  button.luke-hover-card-row {
+    cursor: pointer;
+  }
+
+  button.luke-hover-card-row:is(:hover, :focus-visible) {
+    outline: none; /* no ring: the row's fill marks it, as a menu row's does */
+    background: var(--luke-color-fill-strong);
+  }
+
+  /* A glyph takes a menu glyph's footprint, a mark, a picture, and a face
+     alike, so every row's words start on one edge; a picture under a name
+     is the card's own glyph size. */
+  .luke-hover-card-row-glyph {
+    display: inline-flex;
+    width: 16px; /* off-scale: a menu row's glyph footprint */
+    flex: none;
+    justify-content: center;
+  }
+
+  .luke-hover-card-row-glyph > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .luke-hover-card-row[data-look="detail"] .luke-hover-card-row-glyph > img {
+    width: 14px; /* off-scale: the card's own glyph */
+    height: 14px;
+  }
+
+  .luke-hover-card-row-label {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-hover-card-row-end,
+  .luke-hover-card-more {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .luke-hover-card-row-end {
+    flex: none;
+  }
+
+  .luke-hover-card-more {
+    display: flex;
+    height: 22px; /* off-scale: a count's line under the rows */
+    align-items: center;
+    padding-left: calc(16px + var(--luke-icon-gap));
   }
 }

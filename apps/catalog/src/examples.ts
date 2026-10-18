@@ -4,6 +4,7 @@ import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
+import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -21,6 +22,8 @@ import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
+import { ONE_LINE_EXAMPLE } from "./examples/one-line";
+import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
@@ -58,6 +61,7 @@ export const EXAMPLES: readonly Example[] = [
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
+  BANNERS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
@@ -77,6 +81,8 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
+  ONE_LINE_EXAMPLE,
+  PROGRESS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEGMENTED_EXAMPLE,

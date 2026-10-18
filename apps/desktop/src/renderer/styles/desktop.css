@@ -2558,7 +2558,7 @@ ul.actor-stack {
   font-size: 12px;
 }
 
-.failure-note-remedy :is(svg, .luke-spinner-ring) {
+.failure-note-remedy svg {
   width: 13px;
   height: 13px;
 }
@@ -2906,138 +2906,24 @@ ul.actor-stack {
   height: 12px;
 }
 
-/* A notice about a plan (`banner.tsx`): a glyph, its words, and the presses
-   that answer it on one row, in any of its three looks. Each strip is a
-   container of its own, so it answers its own width rather than the
-   window's: the same strip stands in a 280px column beside a wide side panel
-   and across a whole window. */
-.banner {
-  --banner-gap: var(--luke-icon-gap);
-  container: banner / inline-size;
-}
-
-.banner-row {
-  display: flex;
-  align-items: center;
-  gap: var(--banner-gap);
-}
-
-.banner-words {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-}
-
-.banner-actions {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-/* Narrow, the presses leave the words' line for one of their own beneath
-   it, each as wide as the line allows, and the words wrap at their own
-   width rather than being squeezed past it or cut short. */
-@container banner (max-width: 479px) {
-  .banner-row {
-    flex-wrap: wrap;
-  }
-
-  .banner-actions {
-    flex: 1 0 100%;
-  }
-
-  .banner .banner-actions > * {
-    flex: 1 1 0%;
-  }
-
-  .banner .task-banner-words {
-    white-space: normal;
-  }
-}
-
-/* A notice about the whole plan (`task-banner.tsx`): one slim line across
-   the plan's column under its toolbar, or under the side panel's bar while
-   the panel fills the window, on a faint attention tint with a hairline of
-   it beneath. Its words are cut short rather than wrapped while the line is
-   wide enough to read them, so the line keeps its height, and its one press
-   stands at its end, an outlined button. */
-.task-banner {
-  flex: 0 0 auto;
-  padding: var(--luke-space-2) var(--column-inset) var(--luke-space-2) var(--content-inset);
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--luke-color-attention) 30%, var(--luke-color-border));
-  background: color-mix(in srgb, var(--luke-color-attention) 9%, var(--luke-color-ground));
-}
-
-.task-banner .banner-row {
-  min-height: var(--luke-control-height);
-}
-
-.task-banner-words {
-  margin: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-body);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* A notice about the whole plan (`task-banner.tsx`), `@luke/ui`'s strip:
+   the workspace it names reads at the line's own weight. */
 .task-banner-words .workspace-ref {
   max-width: none;
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-medium);
 }
 
-/* The press gives way too while it shares the line, its words cut short at
-   the end rather than the press pushed out of the column, and never takes
-   more than half the line, which its presses' box holds it to; the whole of
-   them stays its text, which a reader hears. */
-.task-banner .banner-actions {
-  max-width: 50%;
-}
-
-@container banner (max-width: 479px) {
-  .task-banner .banner-actions {
-    max-width: none;
-  }
-}
-
 /* The document ------------------------------------------------------------- */
 
-/* A banner over a document: a card on the document's own reading width, so
-   what it says is the first thing read. An archived plan's says so with the
-   one action the plan takes, the way Notion marks a page in the trash, and
-   the plan template's says what the template is for. */
+/* A banner over a document (`archived-task.tsx`), `@luke/ui`'s card, on the
+   document's own reading width, so what it says is the first thing read. An
+   archived plan's says so with the one action the plan takes, the way Notion
+   marks a page in the trash, and the plan template's says what the template
+   is for. */
 .document-banner {
-  --banner-gap: var(--luke-space-12);
-  box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--luke-page-inset)));
   margin: var(--luke-space-16) auto 0;
-  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
-  background: var(--desktop-well);
-}
-
-.document-banner-glyph {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: none;
-  place-items: center;
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
-.document-banner-glyph svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
 }
 
 /* The document's column answers its own width (`@container plan-document`
@@ -7915,11 +7801,9 @@ button.automation-run:hover {
   flex: none;
 }
 
-/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each its
-   name beside a dot of the colour GitHub gives it, a size under the notes,
-   wrapping where they run past the card's width. The dot carries the
-   colour rather than the words, since a label may be any colour, a dark one
-   the card's words could not be read in. */
+/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each
+   `@luke/ui`'s badge wearing the colour GitHub gives it as a dot, wrapping
+   where they run past the card's width. */
 .card-labels {
   display: flex;
   flex-wrap: wrap;
@@ -7927,28 +7811,6 @@ button.automation-run:hover {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.card-label {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 6px; /* off-scale */
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: 999px;
-  color: var(--luke-color-text-muted);
-  font-size: 11px;
-  line-height: 16px; /* off-scale */
-  overflow-wrap: anywhere;
-}
-
-.card-label-dot {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--luke-color-text-subtle);
 }
 
 /* A server's card lists its tools as the MCP popover's page does
@@ -9039,35 +8901,15 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   }
 }
 
-/* The rows a plan's card lists under its head, which a pinned tab's card
-   (`sidebar-pinned-tab.tsx`) and a skill chip's (`skill-chip.tsx`) list
-   too: its repository, its agents, and its pull requests, each list under a
-   rule. Each row is set as a menu's row is (`.menu-item`), a menu row's
-   height and corner, with its glyph on the card's column, under the head's,
-   and the wash under the pointer off the card's edge by a menu's inset, as a
-   menu item's sits. A line a press does nothing on keeps a row's place, so
-   every word starts on the rows' column. */
-.task-card-rows {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* A card's rows (`@luke/ui`'s HoverCardRow) draw an agent's mark at a menu
+   glyph's size, as its tab does. */
+.luke-hover-card-row-glyph {
+  --state-glyph-size: var(--menu-glyph);
 }
 
-.task-card-corner,
-.task-card-more {
-  color: var(--luke-color-text-subtle);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.task-card-corner {
-  flex: none;
-}
-
-.task-card-detail,
+/* A server's line at a card's head (`server-card.tsx`), set as a card's
+   row is, a menu row's height and corner, its mark on the card's glyph
+   column and the row's words beside it. */
 .task-card-line {
   display: flex;
   width: calc(100% + 2 * var(--row-inset));
@@ -9078,35 +8920,15 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   margin-inline: calc(-1 * var(--row-inset));
   padding: 0 var(--row-inset);
   border-radius: var(--luke-menu-row-radius);
-  background: none;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-:is(button.task-card-detail, button.task-card-line):is(:hover, :focus-visible) {
-  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
-  background: var(--luke-color-fill-strong);
-}
-
-.task-card-detail {
-  color: var(--luke-color-text-muted);
-  font-size: 12px;
-}
-
-.task-card-line {
   color: var(--luke-color-text);
   font-size: 13px;
 }
 
-/* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
-   wearing where it stands, and an owner's picture alike, so every row's
-   label starts on one edge. */
 .task-card-glyph {
   display: inline-flex;
   width: var(--menu-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: var(--menu-glyph);
 }
 
 .task-card-glyph > svg {
@@ -9114,29 +8936,9 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   height: var(--menu-glyph);
 }
 
-.task-card-detail .task-card-glyph > :is(.repository-picture, .provider-mark) {
-  width: 14px;
-  height: 14px;
-}
-
-.task-card-label {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .task-card-number {
   color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
-}
-
-.task-card-more {
-  display: flex;
-  height: 22px;
-  align-items: center;
-  padding-left: calc(var(--menu-glyph) + var(--luke-icon-gap));
 }
 
 /* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens

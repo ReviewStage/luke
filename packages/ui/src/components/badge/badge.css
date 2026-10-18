@@ -37,6 +37,16 @@
     overflow-wrap: break-word;
   }
 
+  /* A provider's colour, a GitHub label's, as a dot before the words, in the
+     subtle ink until the badge names one it can paint. */
+  .luke-badge-swatch {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-text-subtle);
+  }
+
   .luke-badge svg {
     flex: none;
     width: 12px;

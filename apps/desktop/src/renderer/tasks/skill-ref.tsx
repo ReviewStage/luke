@@ -1,4 +1,10 @@
-import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import {
+  HOVER_CARD_ROW_LOOK,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRow,
+} from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
 import { Tooltip } from "../tooltip";
@@ -35,12 +41,11 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
     <HoverCard data-skill-card="">
       <HoverCardHead glyph={<BookOpenIcon aria-hidden="true" />} name={skillWord(skill.name)} />
       {skill.description === "" ? null : <HoverCardNote>{skill.description}</HoverCardNote>}
-      <span className="task-card-detail">
-        <span className="task-card-glyph">
-          <FileTypeIcon name={skill.path} />
-        </span>
-        <span className="task-card-label">{skill.path}</span>
-      </span>
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={<FileTypeIcon name={skill.path} />}
+        label={skill.path}
+      />
     </HoverCard>
   );
 }

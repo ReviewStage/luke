@@ -246,11 +246,7 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
 function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
     <span className="settings-state" data-state={line.state}>
-      {line.state === LINE_STATE.WAITING ? (
-        <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
-          <SpinnerRing />
-        </span>
-      ) : null}
+      {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
       {line.text}
     </span>
   );

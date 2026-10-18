@@ -10,6 +10,7 @@ import {
   SpinnerRing,
   Stack,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
 } from "@luke/ui";
 import type { Example } from "../examples";
@@ -17,7 +18,7 @@ import { CatalogSection } from "../section";
 
 /**
  * spinners.tsx -- a wait beside words and alone in a region, the ring as a
- * mark, and a control's words giving way to it beside the same words at
+ * mark and at a caption's size beside the words that say the wait, and a control's words giving way to it beside the same words at
  * rest, so the two stand the same width.
  */
 
@@ -34,6 +35,12 @@ function Spinners(): React.JSX.Element {
           <span className="catalog-ring">
             <SpinnerRing />
           </span>
+          <Inline gap={GAP.ICON}>
+            <SpinnerRing size={SPINNER_SIZE.SMALL} />
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              Waiting for the browser
+            </Text>
+          </Inline>
         </Inline>
       </CatalogSection>
       <CatalogSection id="spinner-region" title="A region still being read">

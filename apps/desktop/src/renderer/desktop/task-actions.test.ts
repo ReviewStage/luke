@@ -408,10 +408,10 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
 
   assert.notEqual(mark(), null, "the row wears the attention mark");
   assert.match(heard(container), /\(repository belongs to Stage\)/u);
-  assert.deepEqual([...card.querySelectorAll(".task-card-detail")].map(heard), [
-    "acme-corp/relay",
-    "Repository belongs to Stage",
-  ]);
+  assert.deepEqual(
+    [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
+    ["acme-corp/relay", "Repository belongs to Stage"],
+  );
 
   act(() => roots[0]?.render(sidebarTask(tasks, { ...STRANDED, workspaceId: STAGE.id }, asked)));
   assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
@@ -492,8 +492,8 @@ test("a task's card says who created it where others share its workspace, the re
         children: taskCardOf(plans, { ...plan, workspaceId: workspace.id }, plan.updatedAt),
       }),
     );
-    const lines = [...card.querySelectorAll(".task-card-detail")].map((line) =>
-      heard(line).replace(/ · .*$/u, ""),
+    const lines = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (line) => heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return lines;
@@ -515,7 +515,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
   const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
   const drawn = (inWindow: boolean) => {
     const card = taskCardOf(plans, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
-    return mount(
+    const view = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
         readerId: DEAN.userId,
@@ -523,7 +523,10 @@ test("a task's card's creator line opens the creator's page in the window, and i
           ? createElement(OpenPersonProvider, { value: (id: string) => opened.push(id) }, card)
           : card,
       }),
-    ).querySelector<HTMLElement>(".task-card-creator");
+    );
+    return [...view.querySelectorAll<HTMLElement>('.luke-hover-card-row[data-look="detail"]')].find(
+      (each) => each.textContent?.includes("Created by"),
+    );
   };
 
   const line = drawn(true);
@@ -555,8 +558,8 @@ test("a task's card says you of the reader's own task outside a member directory
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const said = [...card.querySelectorAll(".task-card-detail")].map((line) =>
-      heard(line).replace(/ · .*$/u, ""),
+    const said = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (line) => heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return said;

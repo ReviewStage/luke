@@ -9,6 +9,8 @@ import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  BANNER_LOOK,
+  Banner,
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
@@ -28,7 +30,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
-import { BANNER_LOOK, Banner } from "../banner";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
@@ -303,19 +304,12 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
  */
 function TemplateNote(): React.JSX.Element {
   return (
-    <Banner
-      look={BANNER_LOOK.CARD}
-      className="template-note"
-      anchor={searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
-      glyph={
-        <span className="document-banner-glyph" aria-hidden="true">
-          <InfoIcon />
-        </span>
-      }
-    >
-      <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
-      <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
-    </Banner>
+    <div className="template-note" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
+      <Banner look={BANNER_LOOK.CARD} glyph={<InfoIcon />}>
+        <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
+        <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
+      </Banner>
+    </div>
   );
 }
 

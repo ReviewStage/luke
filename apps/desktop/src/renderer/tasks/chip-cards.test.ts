@@ -266,7 +266,9 @@ async function cardOf(chip: Element | undefined) {
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
     notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
-    details: [...card.querySelectorAll(".task-card-detail")].map((detail) => detail.textContent),
+    details: [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (detail) => detail.textContent,
+    ),
   };
   assert.equal(carriesWords(card, look.name ?? ""), false, "the card's words ride no attribute");
   act(() => {

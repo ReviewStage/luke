@@ -3,9 +3,12 @@ import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import {
   CopyIcon,
   DocumentIcon,
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   UnpinIcon,
   useMenu,
@@ -25,7 +28,7 @@ import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
-import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
+import { PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -217,19 +220,22 @@ function PinnedTabCard({
   return (
     <HoverCard data-pinned-tab-card="">
       <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
-      <div className="task-card-rows">
-        <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
-        {repository === null ? null : (
-          <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
-        )}
-      </div>
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={<DocumentIcon />}
+        label={task.name}
+        onPress={onOpenTask}
+      />
+      {repository === null ? null : (
+        <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
+      )}
       {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
       {pullRequest === undefined ? null : (
         <>
           <HoverCardRule />
-          <ul className="task-card-rows" aria-label="Pull request">
+          <HoverCardList label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
-          </ul>
+          </HoverCardList>
         </>
       )}
     </HoverCard>

@@ -16,6 +16,7 @@
 @import "./components/attachment-chip/attachment-chip.css";
 @import "./components/avatar/avatar.css";
 @import "./components/badge/badge.css";
+@import "./components/banner/banner.css";
 @import "./components/button/button.css";
 @import "./components/folding-button/folding-button.css";
 @import "./components/chip/chip.css";
@@ -30,7 +31,9 @@
 @import "./components/error-state/error-state.css";
 @import "./components/form-field/form-field.css";
 @import "./components/form-section/form-section.css";
+@import "./components/one-line/one-line.css";
 @import "./components/hover-card/hover-card.css";
+@import "./components/progress/progress.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";
