@@ -3598,6 +3598,13 @@ body:has(.app-stage[data-capture="true"])
   height: 10px;
 }
 
+/* An item whose box holds a draft wears its pencil at the attention mark's
+   size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
+.home-row-meta .draft-mark {
+  width: 12px;
+  height: 12px;
+}
+
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title at a document heading's size,
    then a muted line of its agent, when it asked, and where it stands, over a
