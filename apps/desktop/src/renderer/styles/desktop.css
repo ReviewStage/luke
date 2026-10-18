@@ -7105,6 +7105,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: 0;
 }
 
+/* The foot's short chips stand whole, so the repository's name is what
+   gives way, ellipsized, where the card is narrow. */
+:is(
+  .new-task-plan-toggle,
+  .new-task-composer .linear-issue-chip,
+  .new-task-composer .agent-model-chip
+) {
+  display: flex;
+  flex-shrink: 0;
+}
+
 /* The Linear issue picked, over the words inside the card: drawn as a
    forked draft's chip is (`.draft-fork-chip`), its key, its title cut short,
    its state, and the × at its end. */

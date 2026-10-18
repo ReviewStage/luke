@@ -17,6 +17,7 @@ import {
   CloseIcon,
   IconButton,
   PencilIcon,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -143,7 +144,7 @@ function IssueChip({
 }): React.JSX.Element {
   return (
     <div className="new-task-issue" data-issue-chip="">
-      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
       <span className="new-task-issue-key">{issue.identifier}</span>
       <span className="new-task-issue-title">{issue.title}</span>
       {issue.state === undefined ? null : (
@@ -380,19 +381,21 @@ export function NewTaskComposer({
         }
         actions={
           agentOnly ? undefined : (
-            <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-              <Chip
-                look={CHIP_LOOK.FILTER}
-                aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-                aria-pressed={planning}
-                aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-                disabled={starting}
-                onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-              >
-                <PencilIcon />
-                <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-              </Chip>
-            </Tooltip>
+            <span className="new-task-plan-toggle">
+              <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
+                <Chip
+                  look={CHIP_LOOK.FILTER}
+                  aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
+                  aria-pressed={planning}
+                  aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
+                  disabled={starting}
+                  onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
+                >
+                  <PencilIcon />
+                  <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
+                </Chip>
+              </Tooltip>
+            </span>
           )
         }
       />
