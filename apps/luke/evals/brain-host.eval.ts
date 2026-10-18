@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { ensurePlanChannel, history, roster } from "@luke/database/models/chat-store";
+import { ensureTaskChannel, history, roster } from "@luke/database/models/chat-store";
 import { toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
 import { openTaskConversation, readTask, savePlanText } from "@luke/database/models/task-store";
@@ -294,12 +294,12 @@ export default defineEval({
       const posting = await openSession(chatConversationId, `${SCRIPTED_POST}${PLAN_WORDS.POSTED}`);
       const postingSession = await t.target.attachSession(posting.sessionId);
       postingSession.succeeded();
-      const channel = await run(ensurePlanChannel(LOCAL_DEV_PRINCIPAL, chatPlan.id));
+      const channel = await run(ensureTaskChannel(LOCAL_DEV_PRINCIPAL, chatPlan.id));
       assert.ok(Option.isSome(channel));
       const { organizationId } = channel.value;
       const members = await run(roster(LOCAL_DEV_PRINCIPAL, organizationId));
       const luke = members.find(
-        (member) => member.kind === MEMBER_KIND.PLANNER && member.planId === chatPlan.id,
+        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatPlan.id,
       );
       assert.ok(luke);
       const said = await run(

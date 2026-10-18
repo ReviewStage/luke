@@ -7,10 +7,10 @@ import {
   continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
-  planNamesOf,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
+  taskNamesOf,
   unarchiveCodingAgentFrom,
 } from "@luke/database/models/coding-agent-store";
 import {
@@ -1111,7 +1111,7 @@ const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
     const reading = yield* startedReading(agent, yield* offeredModels, callerTask(caller));
     const taskId = newTask ? agent.taskId : null;
     const name =
-      taskId === null ? undefined : (yield* planNamesOf(userId, [taskId])).get(taskId)?.name;
+      taskId === null ? undefined : (yield* taskNamesOf(userId, [taskId])).get(taskId)?.name;
     const task =
       taskId === null || name === undefined
         ? undefined
@@ -1788,7 +1788,7 @@ export function runReadPage(
         return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
       }
       const { taskId, page, newestVersion } = found.value;
-      const names = yield* planNamesOf(userId, [taskId]);
+      const names = yield* taskNamesOf(userId, [taskId]);
       const step = yield* taskStepOf(userId, taskId);
       const cut = pageCut(page.html);
       return {

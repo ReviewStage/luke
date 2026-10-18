@@ -26,6 +26,7 @@
 @import "./components/collection-page/collection-page.css";
 @import "./components/combobox/combobox.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
+@import "./components/data-table/data-table.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/dialog/dialog.css";
 @import "./components/empty-state/empty-state.css";
@@ -34,6 +35,7 @@
 @import "./components/form-section/form-section.css";
 @import "./components/hover-card/hover-card.css";
 @import "./components/inline-edit/inline-edit.css";
+@import "./components/pagination/pagination.css";
 @import "./components/prose/prose.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";

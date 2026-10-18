@@ -17,6 +17,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   LIST_DENSITY,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
   ProviderMark,
@@ -32,6 +33,7 @@ import { useCopyLinkItem } from "../copy-link-item";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
 import { momentText, sinceText, useMinute } from "../tasks/task-time";
+import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import { usePaneSlide } from "./pane-motion";
@@ -125,14 +127,20 @@ function RunRow({
         }}
         leading={<StateGlyph glyph={<FiringGlyph kind={run.firing.kind} />} state={state} />}
         title={automationRunTitle(run)}
-        description={<span title={line}>{line}</span>}
+        description={
+          <Tooltip label={line}>
+            <span>{line}</span>
+          </Tooltip>
+        }
         meta={
           <span className="automation-row-meta">
-            <span title={momentText(run.firedAt)}>{sinceText(run.firedAt, now)}</span>
+            <Tooltip label={momentText(run.firedAt)}>
+              <span>{sinceText(run.firedAt, now)}</span>
+            </Tooltip>
             {stateEndMark(state, true)}
           </span>
         }
-        current={linked}
+        current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={agent === null ? undefined : () => onOpenAgent(agent.id)}
         onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
       />

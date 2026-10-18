@@ -63,13 +63,13 @@ export type PlanCommentWriterRef =
 /** What a write to a plan's comments came to: done, with what it answers, or no plan or thread the account reaches. */
 export const PLAN_COMMENT_OUTCOME = {
   DONE: "done",
-  NO_PLAN: "no-plan",
+  NO_TASK: "no-plan",
   NO_THREAD: "no-thread",
 } as const;
 
 export type PlanCommentOutcome =
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.DONE; readonly answer: PlanCommentThreadAnswer }
-  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_PLAN }
+  | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_TASK }
   | { readonly status: typeof PLAN_COMMENT_OUTCOME.NO_THREAD };
 
 /** Where one thread stands, without what it says: what a held read compares between looks. */
@@ -155,7 +155,7 @@ const lockOpenPlanText = SqlSchema.findOneOption({
 });
 
 /** The plan's id, where the account reaches it. */
-const findReachablePlan = SqlSchema.findOneOption({
+const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, taskId }) =>
@@ -395,7 +395,7 @@ export function readPlanCommentThreads(
   taskId: string,
 ): TaskStoreEffect<Option.Option<readonly PlanCommentThread[]>> {
   return Effect.gen(function* () {
-    const reached = yield* findReachablePlan({ userId, taskId });
+    const reached = yield* findReachableTask({ userId, taskId });
     if (Option.isNone(reached)) return Option.none();
     return Option.some(yield* threadsOf(taskId));
   });
@@ -426,7 +426,7 @@ export function startPlanCommentThread(
   return inTransaction(
     Effect.gen(function* () {
       const locked = yield* lockOpenPlanText({ userId: writer.userId, taskId });
-      if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_PLAN } as const;
+      if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_TASK } as const;
       const taken = yield* findKeyedThread({ taskId, clientKey: request.clientKey });
       if (Option.isSome(taken)) return yield* answered(taskId, taken.value.threadId);
       const { count } = yield* countThreads({ taskId }).pipe(
@@ -554,7 +554,7 @@ export function actOnPlanCommentThread(
   return inTransaction(
     Effect.gen(function* () {
       const locked = yield* lockOpenPlanText({ userId: writer.userId, taskId });
-      if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_PLAN } as const;
+      if (Option.isNone(locked)) return { status: PLAN_COMMENT_OUTCOME.NO_TASK } as const;
       const [row] = yield* findThreads({ taskId, ids: [threadId] });
       if (row === undefined) return { status: PLAN_COMMENT_OUTCOME.NO_THREAD } as const;
       const entries = yield* findEntries({ taskId, threadIds: [threadId] });
