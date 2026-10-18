@@ -1,7 +1,8 @@
 import {
   DataTexture,
+  DataUtils,
   EquirectangularReflectionMapping,
-  FloatType,
+  HalfFloatType,
   LinearFilter,
   LinearMipmapLinearFilter,
   LinearSRGBColorSpace,
@@ -312,7 +313,7 @@ function environmentAt(direction: Vector3): [number, number, number] {
 /** The environment the station's metal reflects, as an equirectangular HDR texture the renderer prefilters itself. */
 export function environmentTexture(): DataTexture {
   const { WIDTH, HEIGHT } = ENVIRONMENT_SIZE;
-  const data = new Float32Array(WIDTH * HEIGHT * 4);
+  const data = new Uint16Array(WIDTH * HEIGHT * 4);
   const direction = new Vector3();
   for (let row = 0; row < HEIGHT; row += 1) {
     // Note that row 0 is the bottom, as three's equirectangular lookup reads a texture not flipped.
@@ -325,10 +326,14 @@ export function environmentTexture(): DataTexture {
         Math.cos(latitude) * Math.sin(longitude),
       );
       const [r, g, b] = environmentAt(direction);
-      data.set([r, g, b, 1], (row * WIDTH + column) * 4);
+      data.set(
+        [r, g, b, 1].map((value) => DataUtils.toHalfFloat(value)),
+        (row * WIDTH + column) * 4,
+      );
     }
   }
-  const texture = new DataTexture(data, WIDTH, HEIGHT, RGBAFormat, FloatType);
+  // Note that half floats hold the sun's glare and, unlike full floats, every WebGL2 filters them linearly.
+  const texture = new DataTexture(data, WIDTH, HEIGHT, RGBAFormat, HalfFloatType);
   texture.mapping = EquirectangularReflectionMapping;
   texture.colorSpace = LinearSRGBColorSpace;
   texture.magFilter = LinearFilter;

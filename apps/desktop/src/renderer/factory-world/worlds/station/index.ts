@@ -120,8 +120,8 @@ function crewPlansOf(state: WorldState, station: Station): CrewPlan[] {
     .flatMap((agent) => {
       const primary =
         agent.primaryZone === null ? undefined : station.bodies.get(agent.primaryZone);
-      const body =
-        primary === undefined || primary.turning ? (primary ?? station.fallback) : primary;
+      // Note that a gimbal's work site is its crown, on the axis it turns about, so work there stands still.
+      const body = primary ?? station.fallback;
       return body === undefined ? [] : [{ agent, body }];
     });
   const sharing = new Map<ZoneBody, number>();
