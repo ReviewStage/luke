@@ -98,9 +98,11 @@ automations due. Each names a live thing in production that the Preview can
 neither finish nor reach, and no cron runs on a Preview to settle it. So the
 step keeps the workspaces `LUKE_PREVIEW_WORKSPACES` names by slug, their
 members, and those members' own first workspaces, and deletes every other
-workspace and account with their rows; deletes the copy's sessions, OAuth
-tokens, provider keys, and the provider tokens on `account` rows, which
-production's secrets sealed and the Preview's cannot open; settles every
+workspace and account with their rows, and every conversation stamped
+cleared, which only a purge the Preview never runs would remove; deletes the
+copy's sessions, OAuth tokens and consents, provider keys, password hashes,
+and the provider tokens on `account` rows, which production's secrets sealed
+and the Preview's cannot open; settles every
 queued or running turn as failed for its session's end; archives every
 coding agent, since its session and sandbox are production's; closes open
 calls; pauses automations and skips their queued runs; and empties the Mac
@@ -113,9 +115,11 @@ migrations to the whole copy of production before the copy is cut down.
 It runs only on a Preview's build that names both `LUKE_PREVIEW_WORKSPACES`
 and `LUKE_PRODUCTION_DATABASE_ENDPOINT` (production's Neon endpoint, its
 `ep-…` id), set for the Preview environment alone; without them a build
-leaves the copy as it stands. A Preview whose connection string reaches
-production's endpoint, or whose database holds none of the workspaces named,
-fails its build instead. Production's own `preview_fork` table stays empty,
+leaves the copy as it stands. A Preview whose connection string names
+production's endpoint, whose database says it is that endpoint (Neon's own
+`neon.endpoint_id`, read before anything is touched, whatever name the
+connection reached it by), or whose database holds no member of the
+workspaces named, fails its build instead. Production's own `preview_fork` table stays empty,
 so resetting a Preview's branch onto production in Neon has its next build
 cut it down again. Neon keeps the copy as it was in the branch's history for
 the project's history window, so this narrows what a Preview holds rather

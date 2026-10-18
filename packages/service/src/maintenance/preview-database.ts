@@ -12,13 +12,16 @@
  * - the deployment names the workspaces to keep, by slug
  *   (`LUKE_PREVIEW_WORKSPACES`, comma-separated), and production's Neon
  *   endpoint (`LUKE_PRODUCTION_DATABASE_ENDPOINT`, its `ep-…` id or host);
- * - neither connection string the build holds reaches that endpoint.
+ * - neither connection string the build holds names that endpoint, and the
+ *   database the run reaches does not say it is that endpoint
+ *   (`neon.endpoint_id`), which catches a connection string that reaches
+ *   production under another name.
  *
  * A build that is not a Preview's, or a Preview without both variables, leaves
  * the database as it stands, which is every deployment's behavior before
- * the variables are set. A Preview whose connection string reaches
- * production's endpoint fails the build, as does one whose database holds no
- * workspace the slugs name: both are a deployment configured wrong, and
+ * the variables are set. A Preview whose database is production's fails the
+ * build, as does one whose database holds no member of a workspace the slugs
+ * name: both are a deployment configured wrong, and
  * either run would leave the Preview a copy no one meant it to hold. Neither
  * refusal names a connection string, which carries the database's password.
  */
@@ -89,7 +92,11 @@ function slugsOf(value: string | undefined): readonly string[] {
 type Step =
   | { readonly kind: "leave"; readonly why: string }
   | { readonly kind: "refuse"; readonly why: string }
-  | { readonly kind: "prepare"; readonly keepWorkspaceSlugs: readonly string[] };
+  | {
+      readonly kind: "prepare";
+      readonly keepWorkspaceSlugs: readonly string[];
+      readonly productionEndpoint: string;
+    };
 
 function stepOf(variables: Record<string, string | undefined>): Step {
   const names = PREVIEW_DATABASE_ENVIRONMENT;
@@ -126,7 +133,7 @@ function stepOf(variables: Record<string, string | undefined>): Step {
       };
     }
   }
-  return { kind: "prepare", keepWorkspaceSlugs };
+  return { kind: "prepare", keepWorkspaceSlugs, productionEndpoint: production };
 }
 
 /** The counts a run wrote into the build's log, one phrase each. */
@@ -158,7 +165,11 @@ export const preparePreviewDatabase = /* @__PURE__ */ Effect.fn("web/preparePrev
     const now = yield* Clock.currentTimeMillis;
     const outcome = yield* preparePreviewFork(
       { writer },
-      { keepWorkspaceSlugs: step.keepWorkspaceSlugs, now },
+      {
+        keepWorkspaceSlugs: step.keepWorkspaceSlugs,
+        productionEndpoint: step.productionEndpoint,
+        now,
+      },
     );
     switch (outcome.kind) {
       case PREVIEW_FORK_OUTCOME.ALREADY_PREPARED:
@@ -166,7 +177,11 @@ export const preparePreviewDatabase = /* @__PURE__ */ Effect.fn("web/preparePrev
         return;
       case PREVIEW_FORK_OUTCOME.NO_WORKSPACE:
         return yield* new PreviewDatabaseRefused({
-          reason: `no workspace in this database has a slug ${PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES} names`,
+          reason: `no workspace in this database with a slug ${PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES} names has a member`,
+        });
+      case PREVIEW_FORK_OUTCOME.PRODUCTION:
+        return yield* new PreviewDatabaseRefused({
+          reason: `the database this build reached says it is production's endpoint (${PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT}), which a Preview's build never cuts down`,
         });
       case PREVIEW_FORK_OUTCOME.PREPARED:
         yield* Effect.logInfo(`Preview database made this Preview's own: ${countsLine(outcome)}`);

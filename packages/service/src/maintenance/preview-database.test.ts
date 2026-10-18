@@ -6,6 +6,7 @@ import { member, organization, user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Exit } from "effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import { PREVIEW_DATABASE_ENVIRONMENT, preparePreviewDatabase } from "./preview-database.js";
 
 /**
@@ -129,6 +130,26 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
           assert.ok(!JSON.stringify(exit).includes(PASSWORD), "a refusal names no connection");
           assert.ok(yield* stands(customer));
         }
+      }),
+  );
+
+  it.effect(
+    "refuses a Preview's build whose database says it is production's endpoint, whatever name its connection reached it by",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient;
+        const { teamSlug, customer } = yield* openTeamAndCustomer;
+        // Note that the setting is the transaction's own, as Neon's is the compute's, so the run reads it on the connection it holds.
+        const exit = yield* Effect.exit(
+          client.withTransaction(
+            Effect.gen(function* () {
+              yield* client`select set_config('neon.endpoint_id', ${PRODUCTION_ENDPOINT}, true)`;
+              yield* preparePreviewDatabase(previewBuild(teamSlug));
+            }),
+          ),
+        );
+        assert.ok(Exit.isFailure(exit));
+        assert.ok(yield* stands(customer));
       }),
   );
 

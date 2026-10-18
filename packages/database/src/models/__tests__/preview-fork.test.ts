@@ -58,6 +58,16 @@ const TEAM_SLUG = "team";
 
 const NOW = 1_800_000_000_000;
 
+/** Production's Neon endpoint, as the deployment names it. */
+const PRODUCTION_ENDPOINT = "ep-production-123456";
+
+/** A run keeping the workspaces under these slugs, at the instant given. */
+const prepare = (writer: StoreWriter, slugs: readonly string[], now = NOW) =>
+  preparePreviewFork(
+    { writer },
+    { keepWorkspaceSlugs: slugs, productionEndpoint: PRODUCTION_ENDPOINT, now },
+  );
+
 /** A new account with its own first workspace, as every account is made; answers both ids. */
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -167,6 +177,7 @@ const leaveInFlight = (target: ConversationTarget) =>
       userId,
       accessToken: "sealed-access",
       refreshToken: "sealed-refresh",
+      password: "scrypt-hash",
       updatedAt: at,
     });
     yield* db.insert(accountProviderKey).values({
@@ -281,11 +292,13 @@ it.layer(getTestDB())("a Preview's copy made its own", (it) => {
         yield* openRunningAgent(writer, customer.userId, customers);
         yield* leaveInFlight(leads.target);
         const nightly = yield* openDueAutomation(lead.userId, team);
+        const cleared = yield* openRunningAgent(writer, lead.userId, team);
+        yield* db
+          .update(conversations)
+          .set({ deletedAt: new Date(NOW) })
+          .where(eq(conversations.id, cleared.target.conversationId));
 
-        const outcome = yield* preparePreviewFork(
-          { writer },
-          { keepWorkspaceSlugs: [TEAM_SLUG], now: NOW + 1_000 },
-        );
+        const outcome = yield* prepare(writer, [TEAM_SLUG], NOW + 1_000);
 
         assert.deepEqual(outcome, {
           kind: PREVIEW_FORK_OUTCOME.PREPARED,
@@ -323,10 +336,19 @@ it.layer(getTestDB())("a Preview's copy made its own", (it) => {
           assert.equal(yield* countOf(table), 0, `no ${name} stand`);
         }
         const linked = yield* db
-          .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
+          .select({
+            accessToken: account.accessToken,
+            refreshToken: account.refreshToken,
+            password: account.password,
+          })
           .from(account)
           .where(eq(account.userId, lead.userId));
-        assert.deepEqual(linked, [{ accessToken: null, refreshToken: null }]);
+        assert.deepEqual(linked, [{ accessToken: null, refreshToken: null, password: null }]);
+        const standing = yield* db
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(eq(conversations.id, cleared.target.conversationId));
+        assert.deepEqual(standing, [], "a cleared conversation, its running turn with it, is gone");
 
         const [call] = yield* db.select({ closedAt: voiceSessions.closedAt }).from(voiceSessions);
         assert.notEqual(call?.closedAt ?? null, null, "the open call is closed");
@@ -351,39 +373,58 @@ it.layer(getTestDB())("a Preview's copy made its own", (it) => {
         // A turn begun on the Preview after it was made its own, and a newcomer: a later build leaves both.
         const onPreview = yield* openRunningAgent(writer, teammate.userId, team);
         const newcomer = yield* openAccount;
-        assert.deepEqual(
-          yield* preparePreviewFork(
-            { writer },
-            { keepWorkspaceSlugs: [TEAM_SLUG], now: NOW + 2_000 },
-          ),
-          { kind: PREVIEW_FORK_OUTCOME.ALREADY_PREPARED },
-        );
+        assert.deepEqual(yield* prepare(writer, [TEAM_SLUG], NOW + 2_000), {
+          kind: PREVIEW_FORK_OUTCOME.ALREADY_PREPARED,
+        });
         assert.deepEqual(yield* newestTurnOf(onPreview.target), [TURN_STATUS.RUNNING, null]);
         assert.ok((yield* idsOf).users.includes(newcomer.userId));
       }),
   );
 });
 
-it.layer(getTestDB())("a Preview whose named workspaces are not in the copy", (it) => {
-  it.effect("changes nothing until a run names a workspace the copy holds", () =>
+it.layer(getTestDB())("a Preview whose named workspaces keep no member", (it) => {
+  it.effect("changes nothing until a run names a workspace with a member", () =>
     Effect.gen(function* () {
       const writer = yield* storeWriter({ tools: {} });
       const customer = yield* openAccount;
+      yield* openWorkspace("empty");
       const before = yield* idsOf;
 
-      assert.deepEqual(
-        yield* preparePreviewFork({ writer }, { keepWorkspaceSlugs: ["missing"], now: NOW }),
-        { kind: PREVIEW_FORK_OUTCOME.NO_WORKSPACE },
-      );
-      assert.deepEqual(yield* idsOf, before);
+      for (const slugs of [["missing"], ["empty"]]) {
+        assert.deepEqual(yield* prepare(writer, slugs), {
+          kind: PREVIEW_FORK_OUTCOME.NO_WORKSPACE,
+        });
+        assert.deepEqual(yield* idsOf, before);
+      }
 
       const team = yield* openWorkspace(TEAM_SLUG, customer.userId);
-      const prepared = yield* preparePreviewFork(
-        { writer },
-        { keepWorkspaceSlugs: [TEAM_SLUG], now: NOW },
-      );
+      const prepared = yield* prepare(writer, [TEAM_SLUG]);
       assert.equal(prepared.kind, PREVIEW_FORK_OUTCOME.PREPARED);
       assert.deepEqual((yield* idsOf).workspaces, [team, customer.workspaceId].sort());
+    }),
+  );
+});
+
+it.layer(getTestDB())("a run connected to production's database", (it) => {
+  it.effect("touches nothing when the server says it is production's endpoint", () =>
+    Effect.gen(function* () {
+      const client = yield* SqlClient.SqlClient;
+      const writer = yield* storeWriter({ tools: {} });
+      const customer = yield* openAccount;
+      yield* openWorkspace(TEAM_SLUG, (yield* openAccount).userId);
+      const before = yield* idsOf;
+
+      // Note that the setting is the transaction's own, as Neon's is the compute's, so the run reads it on the connection it holds.
+      const outcome = yield* client.withTransaction(
+        Effect.gen(function* () {
+          yield* client`select set_config('neon.endpoint_id', ${PRODUCTION_ENDPOINT}, true)`;
+          return yield* prepare(writer, [TEAM_SLUG]);
+        }),
+      );
+
+      assert.deepEqual(outcome, { kind: PREVIEW_FORK_OUTCOME.PRODUCTION });
+      assert.deepEqual(yield* idsOf, before);
+      assert.ok(before.users.includes(customer.userId));
     }),
   );
 });

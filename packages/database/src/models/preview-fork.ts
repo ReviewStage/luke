@@ -25,15 +25,17 @@
  * Production's own table stays empty, so a branch reset onto production is
  * made the Preview's own again on its next build.
  *
- * Whether to run at all, and against which database, is the caller's
- * (`packages/service/src/maintenance/preview-database.ts`): nothing here
- * reads the environment, and run against production this would delete every
- * account outside the workspaces named.
+ * Whether to run at all is the caller's
+ * (`packages/service/src/maintenance/preview-database.ts`), since nothing here
+ * reads the environment. What this does check, before anything else, is the
+ * connected server's own word on which Neon endpoint it is: run against
+ * production this would delete every account outside the workspaces named,
+ * so a server that says it is production's endpoint is touched by nothing.
  */
 
 import { AUTOMATION_RUN_REASON, AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
+import { eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { Effect, type Schema } from "effect";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -42,6 +44,7 @@ import {
   account,
   member,
   oauthAccessToken,
+  oauthConsent,
   oauthRefreshToken,
   organization,
   session,
@@ -57,21 +60,32 @@ import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { previewFork } from "../schemas/preview-fork.js";
 import { sandboxTerminalLease } from "../schemas/sandbox-terminal-lease.js";
 import { sessionSandboxCleanup } from "../schemas/session-sandbox.js";
-import { turns } from "../schemas/storage.js";
+import { conversations, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON } from "../voice-vocabulary.js";
 import { settleEndedSessionTurn } from "./abandoned-turns.js";
 import { closeAvatarSessionsOfEndedCalls } from "./voice-avatar-sessions.js";
 import type { StoreWriter } from "./writer.js";
 
+/** The setting every Neon compute carries naming the endpoint it serves. */
+const NEON_ENDPOINT_SETTING = "neon.endpoint_id";
+
+/** A source of exactly one row, since the builder spells no select without a `from`. */
+const ONE_ROW = sql`(select 1) as one_row`;
+
 /** The key of `preview_fork`'s one row. */
 const PREVIEW_FORK_ROW = "prepared";
 
-/** What one run did: made the copy the Preview's own, found it already made so, or found none of the workspaces named. */
+/**
+ * What one run did: made the copy the Preview's own, found it already made
+ * so, found no member of any workspace named, or found itself connected to
+ * production's database and touched nothing.
+ */
 export const PREVIEW_FORK_OUTCOME = {
   PREPARED: "prepared",
   ALREADY_PREPARED: "already-prepared",
   NO_WORKSPACE: "no-workspace",
+  PRODUCTION: "production",
 } as const;
 
 /** How many of each kind a run kept, removed, or settled: counts alone, never a name or an id. */
@@ -87,7 +101,8 @@ export interface PreviewForkCounts {
 export type PreviewForkOutcome =
   | ({ readonly kind: typeof PREVIEW_FORK_OUTCOME.PREPARED } & PreviewForkCounts)
   | { readonly kind: typeof PREVIEW_FORK_OUTCOME.ALREADY_PREPARED }
-  | { readonly kind: typeof PREVIEW_FORK_OUTCOME.NO_WORKSPACE };
+  | { readonly kind: typeof PREVIEW_FORK_OUTCOME.NO_WORKSPACE }
+  | { readonly kind: typeof PREVIEW_FORK_OUTCOME.PRODUCTION };
 
 export interface PreviewForkStore {
   /** The writer whose turn end settles a turn, as the relay's own end and the sweep's do. */
@@ -97,6 +112,8 @@ export interface PreviewForkStore {
 export interface PreviewForkOptions {
   /** The slugs of the workspaces the Preview keeps, with their members. */
   readonly keepWorkspaceSlugs: readonly string[];
+  /** Production's Neon endpoint id (`ep-…`), which the connected database must not say it is. */
+  readonly productionEndpoint: string;
   readonly now: number;
 }
 
@@ -113,6 +130,25 @@ const emptied = (table: PgTable): PreviewForkEffect<void> =>
       // oxlint-disable-next-line anti-slop/enforce-delete-with-where -- Emptying the table is this run's point: every table handed here holds only production's credentials or its live things.
       db.delete(table),
     ),
+  );
+
+/**
+ * Whether the database this run is connected to says it is production's.
+ * Neon sets `neon.endpoint_id` on every compute to the endpoint it serves, so
+ * the answer is the server's own however the connection string reached it,
+ * through a pooler, an alias, or a host naming another endpoint; a database
+ * that is not Neon's sets none and is not production's.
+ */
+const connectedToProduction = (productionEndpoint: string): PreviewForkEffect<boolean> =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .select({
+          endpoint: sql<string | null>`current_setting(${NEON_ENDPOINT_SETTING}, true)`,
+        })
+        .from(ONE_ROW),
+    ),
+    (rows) => rows.some(({ endpoint }) => endpoint === productionEndpoint),
   );
 
 /** Whether this database already holds the row a finished run writes. */
@@ -139,13 +175,12 @@ const keptOf = (slugs: readonly string[]) =>
       .from(member)
       .where(inArray(member.organizationId, namedIds));
     const accountIds = members.map(({ userId }) => userId);
-    const personal =
-      accountIds.length === 0
-        ? []
-        : yield* db
-            .select({ organizationId: personalWorkspace.organizationId })
-            .from(personalWorkspace)
-            .where(inArray(personalWorkspace.userId, accountIds));
+    // Note that a workspace named with no member keeps no account, and cutting the copy down to none would leave the team nothing to sign in to.
+    if (accountIds.length === 0) return undefined;
+    const personal = yield* db
+      .select({ organizationId: personalWorkspace.organizationId })
+      .from(personalWorkspace)
+      .where(inArray(personalWorkspace.userId, accountIds));
     const workspaceIds = [
       ...new Set([...namedIds, ...personal.map(({ organizationId }) => organizationId)]),
     ];
@@ -157,7 +192,10 @@ const keptOf = (slugs: readonly string[]) =>
  * workspace's tasks, agents, chats, inbox, and installations go with it, and
  * each account's conversations, keys, and usage with the account, by the
  * foreign keys every table declares; `preview-fork.test.ts` holds that no
- * table outside them is left unreached.
+ * table outside them is left unreached. A kept account's conversations
+ * stamped cleared go too: nothing reads them, the purge that would remove
+ * them is a cron a Preview never runs, and a turn left running in one could
+ * never be settled, since the writer refuses a cleared conversation.
  */
 const removeOthers = (kept: { workspaceIds: string[]; accountIds: string[] }) =>
   Effect.gen(function* () {
@@ -168,15 +206,17 @@ const removeOthers = (kept: { workspaceIds: string[]; accountIds: string[] }) =>
       .returning({ id: organization.id });
     const accounts = yield* db
       .delete(user)
-      .where(kept.accountIds.length === 0 ? undefined : notInArray(user.id, kept.accountIds))
+      .where(notInArray(user.id, kept.accountIds))
       .returning({ id: user.id });
+    yield* db.delete(conversations).where(isNotNull(conversations.deletedAt));
     return { removedWorkspaces: workspaces.length, removedAccounts: accounts.length };
   });
 
 /**
  * Removes the credentials the copy carries. Sessions and OAuth tokens are
  * production's, and anyone reading the Preview's database could present
- * them to production, so they go; a Preview is signed in to afresh. The
+ * them to production, so they go, with the consents they were granted under
+ * and any password hash; a Preview is signed in to afresh. The
  * provider tokens on `account` rows and the accounts' own provider keys are
  * sealed under production's secrets, which a Preview never holds, so they
  * open nothing here; the token columns are cleared and the keys deleted,
@@ -188,6 +228,7 @@ const removeCredentials: PreviewForkEffect<void> = Effect.gen(function* () {
   const db = yield* Database;
   yield* emptied(oauthAccessToken);
   yield* emptied(oauthRefreshToken);
+  yield* emptied(oauthConsent);
   yield* emptied(session);
   yield* emptied(verification);
   yield* db
@@ -198,12 +239,14 @@ const removeCredentials: PreviewForkEffect<void> = Effect.gen(function* () {
       idToken: null,
       accessTokenExpiresAt: null,
       refreshTokenExpiresAt: null,
+      password: null,
     })
     .where(
       or(
         isNotNull(account.accessToken),
         isNotNull(account.refreshToken),
         isNotNull(account.idToken),
+        isNotNull(account.password),
       ),
     );
   yield* emptied(accountProviderKey);
@@ -281,14 +324,18 @@ const switchOffInFlight = (now: number) =>
  * workspaces named and their members, removes every other account and the
  * copy's credentials, and settles and switches off what was in flight, then
  * writes the row that marks it done. Answers what it did, with counts alone.
- * A database already holding the row is left as it stands, and one where no
- * workspace is named by a slug given is left untouched, since cutting it down
- * to nothing would leave the team no account to test with.
+ * A database that says it is production's endpoint is touched by nothing, a
+ * database already holding the row is left as it stands, and one where no
+ * workspace named by a slug given has a member is left untouched, since
+ * cutting it down to nothing would leave the team no account to test with.
  */
 export const preparePreviewFork = /* @__PURE__ */ Effect.fn("web/preparePreviewFork")(function* (
   store: PreviewForkStore,
   options: PreviewForkOptions,
 ): Effect.fn.Return<PreviewForkOutcome, QueryError | Schema.SchemaError, DatabaseServices> {
+  if (yield* connectedToProduction(options.productionEndpoint)) {
+    return { kind: PREVIEW_FORK_OUTCOME.PRODUCTION };
+  }
   if (yield* alreadyPrepared) return { kind: PREVIEW_FORK_OUTCOME.ALREADY_PREPARED };
   const kept = yield* keptOf(options.keepWorkspaceSlugs);
   if (kept === undefined) return { kind: PREVIEW_FORK_OUTCOME.NO_WORKSPACE };
