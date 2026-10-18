@@ -20,11 +20,12 @@ concurrency:
 #
 # The TypeScript checks and the tests run through Turborepo (`turbo.json`),
 # which replays a task whose inputs it has already seen pass. Its cache is
-# `.turbo/cache`, kept between runs of one branch by actions/cache, so a
-# re-run or a push that leaves a workspace alone replays that workspace's
-# tasks; given the TURBO_TOKEN and TURBO_TEAM secrets it is also Vercel's
-# Remote Cache, shared with every machine that runs the checks. Without them
-# turbo says "Remote caching disabled" and the local cache does the work.
+# Vercel's Remote Cache, given the TURBO_TOKEN and TURBO_TEAM secrets and
+# shared with every machine that runs the checks, so a re-run or a push that
+# leaves a workspace alone replays that workspace's tasks. Note that no
+# `.turbo/cache` is kept between runs: an actions/cache entry per commit only
+# repeated what the Remote Cache serves. A fork's pull request gets no
+# secrets, so turbo says "Remote caching disabled" and runs every task.
 # `scripts/turbo.mjs` hands the token to turbo on its command line, so no task
 # sees it in its environment and no cached log can carry it.
 jobs:
@@ -35,11 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ github.job }}-${{ github.sha }}
-          restore-keys: turbo-${{ github.job }}-
       - run: ./scripts/check.sh --without test
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -70,11 +66,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
-          restore-keys: turbo-${{ github.job }}-${{ matrix.shard }}-
       - run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

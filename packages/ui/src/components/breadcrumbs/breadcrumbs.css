@@ -59,7 +59,7 @@
     padding: var(--luke-space-2) var(--luke-space-4);
     overflow: hidden;
     border: 0;
-    border-radius: 4px; /* off-scale: a pill around caption words, under a control's radius */
+    border-radius: var(--luke-radius-6);
     background: none;
     color: var(--luke-color-text-muted);
     font: inherit;
