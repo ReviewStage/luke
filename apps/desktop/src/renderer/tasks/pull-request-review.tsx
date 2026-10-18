@@ -1,6 +1,5 @@
 import {
   PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
@@ -11,21 +10,19 @@ import {
   ChoiceList,
   type ChoiceOption,
   POPOVER_ALIGN,
-  TextArea,
 } from "@luke/ui";
 import { MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
-import { Segmented } from "../segmented";
+import { MarkdownField } from "./markdown-field";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the bar's Review press and the panel it opens, as stage-cli's review panel.
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
- * Markdown with a preview, and sends both as one change
+ * Markdown with a preview (`markdown-field.tsx`), and sends both as one change
  * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
  * GitHub as the member pressing it: their own pending review where they
  * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused
@@ -44,10 +41,6 @@ const REVIEW_WORDS = {
   LEAD: "Submitted on GitHub as you.",
   CLOSE: "Close",
   BODY: "Review comment",
-  MODE: "Review comment view",
-  WRITE: "Write",
-  PREVIEW: "Preview",
-  NOTHING: "Nothing to preview.",
   EVENTS: "What the review says",
   CANCEL: "Cancel",
   SUBMIT: "Submit review",
@@ -75,14 +68,6 @@ function placeholderOf(event: ReviewEvent): string {
     ? "Summarize the requested changes…"
     : "Leave a summary comment (optional)…";
 }
-
-/** Whether the field shows what is written or how it reads. */
-const BODY_MODE = {
-  WRITE: "write",
-  PREVIEW: "preview",
-} as const;
-
-type BodyMode = (typeof BODY_MODE)[keyof typeof BODY_MODE];
 
 /** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
 const PANEL_WIDTH = 480;
@@ -116,7 +101,6 @@ function ReviewPanel({
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
-  const [mode, setMode] = useState<BodyMode>(BODY_MODE.WRITE);
   const sending = writes.pending !== undefined;
 
   const onKey = (event: React.KeyboardEvent) => {
@@ -136,37 +120,14 @@ function ReviewPanel({
       onKeyDown={onKey}
     >
       <p className="pull-request-review-lead">{REVIEW_WORDS.LEAD}</p>
-      <div className="pull-request-review-body">
-        <Segmented
-          legend={REVIEW_WORDS.MODE}
-          options={[
-            { value: BODY_MODE.WRITE, label: REVIEW_WORDS.WRITE },
-            { value: BODY_MODE.PREVIEW, label: REVIEW_WORDS.PREVIEW },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
-        {mode === BODY_MODE.WRITE ? (
-          <TextArea
-            ref={field}
-            label={REVIEW_WORDS.BODY}
-            placeholder={placeholderOf(draft.event)}
-            value={draft.body}
-            maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-            rows={4}
-            busy={sending}
-            onChange={draft.setBody}
-          />
-        ) : (
-          <div className="pull-request-review-preview pull-request-words">
-            {draft.body.trim() === "" ? (
-              <p className="pull-request-quiet">{REVIEW_WORDS.NOTHING}</p>
-            ) : (
-              <TranscriptWords text={draft.body} />
-            )}
-          </div>
-        )}
-      </div>
+      <MarkdownField
+        label={REVIEW_WORDS.BODY}
+        placeholder={placeholderOf(draft.event)}
+        value={draft.body}
+        onChange={draft.setBody}
+        busy={sending}
+        fieldRef={field}
+      />
       <ChoiceList<ReviewEvent>
         legend={REVIEW_WORDS.EVENTS}
         options={EVENT_OPTIONS}

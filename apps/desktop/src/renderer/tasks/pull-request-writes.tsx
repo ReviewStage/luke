@@ -72,6 +72,7 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enable auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
+  [PULL_REQUEST_ACTION.COMMENT]: "Comment",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
