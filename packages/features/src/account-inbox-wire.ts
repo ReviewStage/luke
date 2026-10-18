@@ -66,6 +66,8 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   postedAt: countedNumber,
   /** When the item last changed. */
   updatedAt: countedNumber,
+  /** Whether the item is unread for the reader, as a task's read says it (`inbox-wire.ts`); absent from a service before it, which the desktop reads as read. */
+  unread: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
@@ -105,6 +107,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   revision: countedNumber,
   postedAt: countedNumber,
   updatedAt: countedNumber,
+  /** Whether the item is unread for the reader, as a task's item says it. */
+  unread: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;

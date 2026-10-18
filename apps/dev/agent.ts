@@ -24,10 +24,12 @@ export default defineAgent({
   build: { externalDependencies: [...AGENT_EXTERNAL_DEPENDENCIES] },
   compaction: { thresholdPercent: CODER.COMPACTION_THRESHOLD_SHARE },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
-  // Note that a finished run's history is deleted at once rather than kept under Vercel's
-  // retention, because Luke reads every transcript from its own store, written while the run is
-  // live; a session finishes only when it is retired (`packages/service/src/agents/retire-sessions.ts`).
-  experimental: { workflow: { retention: 0 } },
+  // Note that a finished or failed run's history is kept for the team plan's Workflow retention
+  // period (eve offers only `0` or that default), so a session that died mid-turn can still be
+  // read in the Workflow dashboard. This is for diagnosing those deaths and may go back to `0`,
+  // deleting the history at once, once their cause is known: Luke reads every transcript from
+  // its own store, written while the run is live, and never reads this history back.
+  experimental: { workflow: { retention: "default" } },
   model: defineDynamic({
     events: {
       "step.started": async (event, ctx) => {

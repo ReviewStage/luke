@@ -143,7 +143,7 @@ test("the accounts read busiest first, an admin marked in words and an email sho
 
   expect(rows(page)).toEqual([
     ["Account", "Calls"],
-    ["ALAda LovelaceAdminada@example.test", "1,204"],
+    ["AAda LovelaceAdminada@example.test", "1,204"],
     ["Ggrace@example.test", "37"],
   ]);
   expect(page.textContent).toContain(

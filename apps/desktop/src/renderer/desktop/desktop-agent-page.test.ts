@@ -832,7 +832,7 @@ function words(line: Element | null | undefined): string {
   const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
   let said = "";
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    if (node.parentElement?.closest(".actor-face") == null) said += node.textContent ?? "";
+    if (node.parentElement?.closest(".actor-mark") == null) said += node.textContent ?? "";
   }
   return said;
 }
