@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
@@ -91,12 +90,12 @@ export interface TranscriptReads {
 /** The subscriptions the windows' reads share, each held while read and a while after. */
 export type TranscriptFollows = RcMap.RcMap<TranscriptKey, Standing>;
 
-/** A digest of every part's rows, in no order of Realtime's, so only a change to a row moves it. */
+/** Every part's rows as one text, in no order of Realtime's, so only a change to a row moves it; held here alone, so it needs no hash, and the host loads where no `node:` module does. */
 function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
   const parts = Object.entries(rows).map(
     ([part, list]) => [part, list.map((row) => JSON.stringify(row)).toSorted()] as const,
   );
-  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+  return JSON.stringify(parts);
 }
 
 /** The map a composer holds for as long as it stands. */
