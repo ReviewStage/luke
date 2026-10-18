@@ -58,6 +58,7 @@
   flex: 1;
   min-height: 0;
   padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-user-select: text;
@@ -634,6 +635,7 @@
   .conversation-log {
     min-height: 0;
     flex: 1;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
   }
@@ -811,6 +813,7 @@
     flex: 1;
     flex-direction: column;
     gap: var(--luke-space-12);
+    overflow-x: hidden;
     overflow-y: auto;
     padding-top: var(--luke-section-gap);
   }
@@ -1016,6 +1019,7 @@
 .file-tab-lines {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1933,6 +1937,7 @@
   width: 100%;
   min-height: 96px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
@@ -2097,6 +2102,7 @@
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-12) var(--column-inset) var(--luke-space-24);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -2984,7 +2990,8 @@ ol.transcript-list {
   max-height: 256px; /* off-scale: a block's tallest before it scrolls */
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
@@ -3974,6 +3981,7 @@ ol.transcript-list {
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
   max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
   background: transparent;
@@ -4562,7 +4570,8 @@ ol.transcript-list {
 }
 
 .attachment-viewer-lines {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--code-ground);
   user-select: text;
 }
@@ -4731,6 +4740,7 @@ ol.transcript-list {
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
