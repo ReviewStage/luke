@@ -1,6 +1,7 @@
 import {
   CastleIcon,
   CloudSunIcon,
+  Building2Icon,
   FlaskConicalIcon,
   type LucideIcon,
   SatelliteIcon,
@@ -53,6 +54,12 @@ const FACTORY_WORLDS = [
     name: "Sky Archipelago",
     icon: CloudSunIcon,
     load: () => import("./worlds/archipelago/index"),
+  },
+  {
+    key: "neon",
+    name: "Neon Megacity",
+    icon: Building2Icon,
+    load: () => import("./worlds/neon/index"),
   },
   {
     key: "railway",

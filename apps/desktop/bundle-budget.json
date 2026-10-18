@@ -18,6 +18,7 @@
     "renderer/factory-world-station.js": 31732,
     "renderer/factory-world-citadel.js": 31274,
     "renderer/factory-world-railway.js": 41051,
-    "renderer/factory-world-archipelago.js": 35105
+    "renderer/factory-world-archipelago.js": 35105,
+    "renderer/factory-world-neon.js": 29958
   }
 }
