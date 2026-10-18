@@ -99,6 +99,9 @@ const SKELETON_ROWS = [
   { name: "54%", context: "80px" },
 ] as const;
 
+/** What the page is called where it cannot name the person yet. */
+const PROFILE = "Profile";
+
 /** What a page's head says under a name, by who the person is to the workspace. */
 function headLine(person: Actor): string | undefined {
   if (person.kind === ACTOR_KIND.PERSON) {
@@ -210,9 +213,6 @@ function AgentRow({
     </li>
   );
 }
-
-/** What the page is called where it cannot name the person yet. */
-const PROFILE = "Profile";
 
 /** What the page's ⋯ is called, on its button and its menu alike. */
 const MORE = "More";
