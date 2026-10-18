@@ -45,7 +45,25 @@ import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
  * every press from taking the caret out of the editor. With no field at all,
  * as a list too short to search, the list takes the keys itself (`steer`):
  * it holds the focus and names the active option as a field would.
+ *
+ * Where a list engine of the app's (cmdk) owns the list box as well as its
+ * rows, the box is drawn as `ComboboxListBox`, handed through the engine's
+ * `asChild` as each row is drawn as `ComboboxOptionItem`: the engine's
+ * role, names, keys, and ref pass through, its rows and headings stand
+ * inside, and the box scrolls up and down as every list here does. It
+ * stands at a list's capped height, or fills the column its caller gives
+ * it, as a palette's results fill the card under its field.
  */
+
+/** How tall a list engine's box stands: capped as every list is, or filling the column it stands in. */
+export const COMBOBOX_LIST_HEIGHT = {
+  /** At most `--luke-combobox-list-max`, as a list under a field stands. */
+  CAPPED: "capped",
+  /** Whatever room is left in the flex column it stands in, as a palette's results fill its card. */
+  FILL: "fill",
+} as const;
+
+export type ComboboxListHeight = (typeof COMBOBOX_LIST_HEIGHT)[keyof typeof COMBOBOX_LIST_HEIGHT];
 
 /** One option: what it is called, and what is drawn around its name. */
 export interface ComboboxOption {
@@ -157,6 +175,36 @@ function OptionRow({
 /** The id of the option at `index` in the list `listId`, which a field names as the active one. */
 export function comboboxOptionId(listId: string, index: number): string {
   return `${listId}-option-${index}`;
+}
+
+/**
+ * A list box as every list draws it, around rows a list engine of the
+ * app's (cmdk) owns, handed through the engine's `asChild`: the engine's
+ * role, names, keys, and ref pass through, no class or style does, and
+ * the rows the engine hands it stand inside. It scrolls up and down and
+ * never sideways, at the `height` its caller chose. Note that it calls no
+ * hook, because an engine may draw it by calling it as a function.
+ */
+export function ComboboxListBox({
+  height = COMBOBOX_LIST_HEIGHT.CAPPED,
+  children,
+  ...engine
+}: {
+  height?: ComboboxListHeight | undefined;
+  children?: ReactNode;
+} & ComboboxOptionEngineProps): React.JSX.Element {
+  return (
+    <div
+      role="listbox"
+      tabIndex={-1}
+      {...engine}
+      className="luke-combobox-list"
+      style={undefined}
+      data-height={height}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**

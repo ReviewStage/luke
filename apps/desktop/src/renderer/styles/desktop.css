@@ -6706,7 +6706,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
    way down as a command palette stands, holding the searchable menu's own
    search row and rows, the filters under the field and the keys' hints at
    its foot. The highlight is cmdk's `data-selected`, which the arrows and
-   the pointer both move, so a hover draws nothing of its own. */
+   the pointer both move, so a hover draws nothing of its own. The results
+   are `@luke/ui`'s `ComboboxListBox`, filling the card between the filters
+   and the foot and scrolling inside itself, so nothing here scrolls. */
 .command-palette-backdrop {
   position: fixed;
   z-index: var(--luke-z-dialog);
@@ -6794,19 +6796,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 0;
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.command-palette-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--luke-space-6);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.command-palette-list:focus-visible {
-  outline: none; /* no ring: the highlighted row marks it */
 }
 
 /* The keys' hints along the card's foot, each chord a step louder than the
