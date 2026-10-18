@@ -66,7 +66,7 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
 export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
 
 /** What the text says while the editor's bundle could not be loaded. */
-const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+export const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
@@ -96,7 +96,7 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
 }
 
 /** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox, or the section's byline. */
-function editsOnClick(target: EventTarget): boolean {
+export function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
@@ -439,7 +439,7 @@ function useDraftHandOver(
 }
 
 /** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-function MountedPlanEditor({
+export function MountedPlanEditor({
   module,
   props,
   handle,
@@ -701,7 +701,7 @@ interface EditorDrawings<A> {
  * What the editor asks the panel to draw, a mention or a diagram, each drawn
  * into its own element while it stands, as the composer draws its chips.
  */
-function useEditorDrawings<A>(): EditorDrawings<A> {
+export function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
   const counted = useRef(0);
   const draw = (element: HTMLElement, what: A) => {
