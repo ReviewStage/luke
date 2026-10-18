@@ -6,6 +6,7 @@ import {
   FlaskConicalIcon,
   type LucideIcon,
   SatelliteIcon,
+  ShellIcon,
   ShovelIcon,
   TrainFrontIcon,
 } from "lucide-react";
@@ -74,6 +75,12 @@ const FACTORY_WORLDS = [
     name: "Neon Megacity",
     icon: Building2Icon,
     load: () => import("./worlds/neon/index"),
+  },
+  {
+    key: "atlantis",
+    name: "Atlantis",
+    icon: ShellIcon,
+    load: () => import("./worlds/atlantis/index"),
   },
   {
     key: "railway",
