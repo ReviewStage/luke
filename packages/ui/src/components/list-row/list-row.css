@@ -65,8 +65,80 @@
     cursor: default;
   }
 
-  /* Beside its acts, the row's press gives its end inset to the acts; acts
-     laid over its end on hover take none of it. */
+  /* A card holds its rows edge to edge on its ground, a hairline between
+     each and the next, as a settings section's card does; its corner clips
+     the fill of its first and last rows. */
+  .luke-list[data-variant="card"] {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row {
+    border-radius: 0;
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row + .luke-list-row {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  /* A card's rows keep a settings row's side inset, so their words line up
+     with the card's other rows. */
+  .luke-list[data-variant="card"] .luke-list-row-main {
+    padding-inline: var(--luke-space-16);
+  }
+
+  .luke-list[data-variant="card"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-16);
+  }
+
+  /* A compact row keeps its words and gives up some of the room around them. */
+  .luke-list[data-density="compact"] .luke-list-row-main {
+    padding: var(--luke-space-4) var(--luke-space-8);
+  }
+
+  .luke-list[data-density="compact"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-8);
+  }
+
+  /* A dense row is one line a control's height: its title in the body's
+     type, its description after it on that line, giving way before it. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  > .luke-list-row-main {
+    min-height: var(--luke-control-height);
+    padding: 0 var(--luke-space-8);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-text {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--luke-space-8);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-title {
+    flex: 0 1 auto;
+    font-size: var(--luke-type-body-size);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description {
+    flex: 0 100 auto;
+    min-width: 0;
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    > .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-8);
+  }
+
+  /* Beside its acts, the row's press gives its end inset to the acts,
+     whatever its list's variant or density set it (so this rule stays below
+     theirs); acts laid over its end on hover take none of it. */
   .luke-list-row:not([data-actions="on-hover"]):has(> .luke-list-row-actions)
   > .luke-list-row-main {
     padding-inline-end: 0;

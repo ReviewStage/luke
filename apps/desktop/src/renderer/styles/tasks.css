@@ -147,25 +147,6 @@
   pointer-events: none;
 }
 
-/* A run a link named in an automation's runs (automation-runs-panel.tsx):
-   lit once, as a fresh edit of the plan is, and marked current. Note that it
-   names Luke's own ink, because no `--accent` is set above an automation. */
-[data-run-linked] {
-  position: relative;
-  isolation: isolate;
-}
-
-[data-run-linked]::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-radius: var(--luke-control-radius);
-  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
-  content: "";
-  pointer-events: none;
-}
-
 /* A message a link named, brought into view in its agent's transcript
    (message-links.tsx): lit once, as a fresh edit of the plan is. */
 [data-message-revealed] {

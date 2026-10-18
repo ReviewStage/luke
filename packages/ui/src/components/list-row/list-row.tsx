@@ -34,6 +34,17 @@ import { useClipped } from "../../use-clipped.js";
  * right-click anywhere on the row, its acts included, so the app can open
  * its own menu there.
  *
+ * A list stands plain, its rows apart on the ground, each lit on its own;
+ * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
+ * ground with a hairline between each and the next, as a settings section's
+ * card holds its rows. A dense column, a narrow panel's history, sets its
+ * rows compact (`LIST_DENSITY.COMPACT`), a few pixels shorter and closer to
+ * their edges, the words unchanged; a sidebar's column sets them dense
+ * (`LIST_DENSITY.DENSE`), each one line a control's height, its title in the
+ * body's type with its description after it on the same line, as a Mac's
+ * sidebar lists. A row standing in a list of the app's own, one whose rows
+ * the app drags, takes its density itself.
+ *
  * A row's acts stand beside it always, or only while the pointer is on the
  * row, it holds the keyboard, or its menu is open (`ACTIONS_SHOWN.ON_HOVER`),
  * laid over its metadata's place, which steps out for them, so a column of
@@ -45,11 +56,29 @@ import { useClipped } from "../../use-clipped.js";
  * it (`keepFocus`), as a Button does; one of a roving list, which the
  * keyboard enters at its current row and moves through by its own keys, is
  * out of the tab order and takes the focus it is handed (`tabbable`), and
- * one a field drives names its item by `id`, the field's active row. A row unavailable (`disabled`) refuses
- * its press and leaves the tab order, as a deleting row's does. Where an
- * app hints a row's whole title only when it is cut short, the row says
- * whether it is (`onTitleClipped`), measured whenever its box resizes.
+ * one a field drives names its item by `id`, the field's active row. A row
+ * unavailable (`disabled`) refuses its press and leaves the tab order, as a
+ * deleting row's does. Where an app hints a row's whole title only when it
+ * is cut short, the row says whether it is (`onTitleClipped`), measured
+ * whenever its box resizes.
  */
+
+/** How a list stands: its rows apart on the ground, or edge to edge in a card. */
+export const LIST_VARIANT = {
+  PLAIN: "plain",
+  CARD: "card",
+} as const;
+
+export type ListVariant = (typeof LIST_VARIANT)[keyof typeof LIST_VARIANT];
+
+/** How much room a list's rows keep around their words. */
+export const LIST_DENSITY = {
+  REGULAR: "regular",
+  COMPACT: "compact",
+  DENSE: "dense",
+} as const;
+
+export type ListDensity = (typeof LIST_DENSITY)[keyof typeof LIST_DENSITY];
 
 /** Whether a row's acts stand beside it always, or only while it is reached for, in its metadata's place. */
 export const ACTIONS_SHOWN = {
@@ -69,7 +98,9 @@ function useTitleClipped(
   onTitleClipped: ((clipped: boolean) => void) | undefined,
 ): RefCallback<HTMLElement> | undefined {
   const [measured, clipped] = useClipped();
-  useEffect(() => onTitleClipped?.(clipped), [onTitleClipped, clipped]);
+  useEffect(() => {
+    onTitleClipped?.(clipped);
+  }, [onTitleClipped, clipped]);
   return onTitleClipped === undefined ? undefined : measured;
 }
 
@@ -81,13 +112,17 @@ function said(words: ReactNode): boolean {
 /** A list of `ListRow`s, named by `label` for a reader moving between lists. */
 export function List({
   label,
+  variant = LIST_VARIANT.PLAIN,
+  density = LIST_DENSITY.REGULAR,
   children,
 }: {
   label: string;
+  variant?: ListVariant;
+  density?: ListDensity;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" aria-label={label}>
+    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
       {children}
     </ul>
   );
@@ -102,6 +137,7 @@ export function ListRow({
   actions,
   onPress,
   current,
+  density,
   actionsShown = ACTIONS_SHOWN.ALWAYS,
   menuOpen = false,
   chevron = false,
@@ -127,6 +163,8 @@ export function ListRow({
   onPress?: (() => void) | undefined;
   /** Whether the row is the one open now, drawn and announced as current. */
   current?: boolean | undefined;
+  /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
+  density?: ListDensity | undefined;
   /** Whether its acts stand always, or only while the row is reached for, over its metadata. */
   actionsShown?: ActionsShown | undefined;
   /** Whether the row's own menu is open, which keeps it lit and its acts shown. */
@@ -180,6 +218,7 @@ export function ListRow({
       ref={onPress ? undefined : ref}
       className="luke-list-row"
       data-current={current === true ? "true" : undefined}
+      data-density={density}
       data-actions={actionsShown}
       data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}
