@@ -12,7 +12,7 @@
  * In a list that reorders, the placeholder slides to where the row would
  * land and the rows it passes slide aside, past a row once the copy's
  * leading edge crosses that row's middle. Letting go puts it there and
- * plays the row from where the copy was let go into its place; Escape, or
+ * lands the copy on it, from wherever it was let go; Escape, or
  * the system taking the pointer away, puts every row back and changes
  * nothing. A row changed under the drag puts it back as well, since the
  * places it measured have moved. Held at the top or the foot of the column
@@ -373,15 +373,40 @@ function lower(press: RowPress, list: HTMLElement, settle: boolean): void {
   for (const row of press.rows) row.style.transition = "";
 }
 
-/** Plays the dropped row from where its copy was let go, `top`, into the place the new order gave it. */
-function settleDropped(row: HTMLElement, top: number): void {
-  const shift = top - row.getBoundingClientRect().top;
-  if (shift === 0) return;
-  row.style.transition = "none";
-  row.style.transform = `translateY(${shift}px)`;
-  row.getBoundingClientRect();
-  row.style.transition = "";
-  row.style.transform = "";
+/** A motion token's length, in milliseconds: none for a token unset or held still. */
+function lengthOf(token: string): number {
+  const value = Number.parseFloat(token);
+  if (!Number.isFinite(value)) return 0;
+  return token.trim().endsWith("ms") ? value : value * 1000;
+}
+
+/**
+ * Lands the copy: plays it from where it was let go, on both axes, into the
+ * place the row now stands, on the rows' own timing, then takes it down,
+ * the row standing faded beneath it until it does, so the two never show
+ * at once. The timing is read at the list, so reduced motion and a capture
+ * run, which hold the tokens there, land it at once.
+ */
+function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
+  const look = getComputedStyle(list);
+  const duration = lengthOf(look.getPropertyValue("--duration-fast"));
+  if (duration <= 0) {
+    copy.remove();
+    return;
+  }
+  const home = row.getBoundingClientRect();
+  const across = home.left - Number.parseFloat(copy.style.left);
+  const down = home.top - Number.parseFloat(copy.style.top);
+  row.setAttribute(DRAGGING_ATTRIBUTE, "true");
+  const easing = look.getPropertyValue("--spring-fast").trim() || "ease-out";
+  const landed = copy.animate(
+    [{ transform: copy.style.transform }, { transform: `translate(${across}px, ${down}px)` }],
+    { duration, easing, fill: "forwards" },
+  );
+  landed.onfinish = () => {
+    copy.remove();
+    row.removeAttribute(DRAGGING_ATTRIBUTE);
+  };
 }
 
 /**
@@ -477,13 +502,15 @@ export function useRowDrag(
         lower(press, list, false);
         return;
       }
-      const top = (press.carried ?? row).getBoundingClientRect().top;
-      // The list is drawn in its new order before the rows come down, so they come down where that drew them.
+      // The list is drawn in its new order before the rows come down, so they
+      // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
         if (press.to !== press.at) latest.current?.(press.at, press.to);
       });
+      const copy = press.carried;
+      press.carried = undefined;
       lower(press, list, false);
-      settleDropped(row, top);
+      if (copy !== undefined) land(copy, row, list);
     };
     const cancel = (event: PointerEvent) => {
       if (event.pointerId === press.pointerId) putBack();

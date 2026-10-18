@@ -93,6 +93,58 @@ test("in a list that reorders, the placeholder slides to where the row would lan
   assert.deepEqual(shifts, ["translateY(60px)", "translateY(-30px)", "translateY(-30px)", ""]);
 });
 
+test("a row let go off to the side lands its copy on the row's place on both axes, the row faded beneath it until it does", () => {
+  const plays: Keyframe[][] = [];
+  let finish: (() => void) | undefined;
+  // jsdom plays no animation; the copy's landing is taken as the window would start it.
+  Object.defineProperty(HTMLElement.prototype, "animate", {
+    configurable: true,
+    value(keyframes: Keyframe[]) {
+      plays.push(keyframes);
+      const played = { onfinish: () => undefined };
+      finish = () => played.onfinish();
+      return played;
+    },
+  });
+  const moves: [number, number][] = [];
+  const list = drawn(4, (from, to) => moves.push([from, to]));
+  list.style.setProperty("--duration-fast", "180ms");
+  let faded: string | null = null;
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        button: 0,
+        clientX: 100,
+        clientY: 72,
+        pointerId: 1,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        bubbles: true,
+        button: 0,
+        clientX: 100,
+        clientY: 72,
+        pointerId: 1,
+      }),
+    );
+    faded = list.querySelector("li")?.getAttribute("data-dragging") ?? null;
+  });
+  Reflect.deleteProperty(HTMLElement.prototype, "animate");
+  assert.deepEqual(moves, [[0, 2]]);
+  // The list here keeps its rows where they stood, so the row's place is still the first.
+  assert.deepEqual(plays, [
+    [{ transform: "translate(100px, 62px)" }, { transform: "translate(0px, 0px)" }],
+  ]);
+  assert.equal(faded, "true");
+  assert.notEqual(document.querySelector("[data-carried]"), null, "the copy stands until it lands");
+  act(() => finish?.());
+  assert.equal(document.querySelector("[data-carried]"), null);
+  assert.equal(list.querySelector("li")?.getAttribute("data-dragging"), null);
+});
+
 test("a row dragged up past the top of the list lands first", () => {
   const moves: [number, number][] = [];
   const list = drawn(4, (from, to) => moves.push([from, to]));
