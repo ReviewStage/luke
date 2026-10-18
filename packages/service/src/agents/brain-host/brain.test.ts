@@ -5,7 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   history,
   postMessage,
   roster,
@@ -505,12 +505,12 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
         const session = yield* startSession(host, userId, conversationId);
-        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
         const person = Option.getOrThrow(
           yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
         );
         // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
-        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.PLANNER, planId });
+        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.LUKE, planId });
         yield* postMessage(userId, channel.organizationId, {
           authorMemberId: person.id,
           to: { channelId: channel.id },
@@ -549,7 +549,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
 
         const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);
 
-        const channel = Option.getOrThrow(yield* ensurePlanChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
         const { organizationId } = channel;
         const person = Option.getOrThrow(
           yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
@@ -558,7 +558,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           yield* history(userId, organizationId, person.id, { channelId: channel.id }),
         );
         const luke = (yield* roster(userId, organizationId)).find(
-          (member) => member.kind === MEMBER_KIND.PLANNER && member.planId === planId,
+          (member) => member.kind === MEMBER_KIND.LUKE && member.planId === planId,
         );
         assert.ok(luke);
         assert.equal(luke.handle, "luke");

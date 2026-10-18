@@ -81,11 +81,11 @@ import {
   runInRepository,
 } from "../repository-shell.js";
 import {
+  type BrainChatCall,
   type ChatSince,
-  type PlannerChatCall,
-  runPlannerPost,
-  runPlannerRead,
-  runPlannerResolve,
+  runBrainPost,
+  runBrainRead,
+  runBrainResolve,
 } from "./chat.js";
 
 /**
@@ -476,7 +476,7 @@ export interface BrainCall {
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
-  readonly chat: PlannerChatCall | undefined;
+  readonly chat: BrainChatCall | undefined;
 }
 
 /** One tool a brain turn is offered: its declaration, and the call it carries under the task the conversation belongs to. */
@@ -517,7 +517,7 @@ type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | 
  * hangs up once the developer is done, carried as `queue_question` is by its
  * journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image
- * (`planningModelOutput`).
+ * (`tasksModelOutput`).
  */
 const BRAIN_TOOLS: readonly BrainTool[] = [
   {
@@ -613,15 +613,15 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   },
   {
     ...CHAT_TOOLS.POST,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerPost(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainPost(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.READ,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerRead(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainRead(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.RESOLVE,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerResolve(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainResolve(call.chat, input)),
   },
   {
     ...END_CALL_TOOL,
