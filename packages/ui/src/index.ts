@@ -27,6 +27,7 @@ export * from "./components/list-row/list-row.js";
 export * from "./components/menu/menu.js";
 export * from "./components/page-frame/page-frame.js";
 export * from "./components/pagination/pagination.js";
+export * from "./components/popover-panel/popover-panel.js";
 export * from "./components/public-page/public-page.js";
 export * from "./components/search-field/search-field.js";
 export * from "./components/segmented/segmented.js";

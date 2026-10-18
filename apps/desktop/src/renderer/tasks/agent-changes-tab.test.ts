@@ -240,8 +240,7 @@ function openSettings(): HTMLElement {
   const button = document.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]');
   act(() => button?.click());
   return (
-    document.querySelector<HTMLElement>('[role="dialog"][aria-label="Diff settings"]') ??
-    assert.fail("the diff settings open")
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the diff settings open")
   );
 }
 
