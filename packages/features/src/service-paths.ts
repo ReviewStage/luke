@@ -624,6 +624,11 @@ export function agentPullRequestActionPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
 }
 
+/** Which of an agent's pull request's files the asking member marked viewed on GitHub (GET), read on their own sign-in; `pull-request-write-wire.ts` declares the answer. */
+export function agentPullRequestViewedPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
+}
+
 /** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */
 export function agentReviewOptionsPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/review-options`;

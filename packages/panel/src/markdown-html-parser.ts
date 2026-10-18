@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import type * as RehypeRaw from "rehype-raw";
-import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
+import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /**
  * markdown-html-parser.ts -- the HTML parser a reply's markdown is drawn through (`rehype-raw`), kept out of the bundle every window parses and loaded once per window as the panel first paints.

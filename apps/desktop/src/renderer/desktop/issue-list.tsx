@@ -1,14 +1,18 @@
-import { ISSUE_STATUS_WORDS, issueGroups, issueIdentifier } from "@luke/features/issue-list-model";
+import {
+  type IssueGrouping,
+  issueIdentifier,
+  issueListGroups,
+} from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { List, ListRow, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { IssueActions } from "./issue-actions";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
-import type { IssueChange } from "./use-issues";
 
 /**
- * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
+ * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, or for each priority, each row its status, its identifier, its title, how much it matters, and when it last changed.
  *
  * The sections are Home's own (`desktop-home.tsx`): a heading with its
  * count over a `List` of `ListRow`s, each a press, so the page's ↑ and ↓
@@ -91,9 +95,10 @@ function IssueRow({
   );
 }
 
-/** The issues under a heading for each status they stand in, the work under way first. */
+/** The issues under a heading for each status they stand in, the work under way first, or for each priority, the most pressing first. */
 export function IssueList({
   issues,
+  grouping,
   workspaceName,
   now,
   focused,
@@ -102,6 +107,7 @@ export function IssueList({
   onChange,
 }: {
   issues: readonly Issue[];
+  grouping: IssueGrouping;
   workspaceName: string;
   now: number;
   /** The issue whose row takes the keyboard as the list is drawn: the one the page came back from. */
@@ -114,22 +120,18 @@ export function IssueList({
 }): React.JSX.Element {
   return (
     <>
-      {issueGroups(issues).map((group) => (
-        <section
-          key={group.status}
-          className="home-section"
-          aria-label={ISSUE_STATUS_WORDS[group.status]}
-        >
+      {issueListGroups(issues, grouping).map((group) => (
+        <section key={group.key} className="home-section" aria-label={group.words}>
           {/* Note that the count stands inside the heading, so a reader moving by headings hears it. */}
           <h2 className="issue-group-head">
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
-              {ISSUE_STATUS_WORDS[group.status]}
+              {group.words}
             </Text>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
               {group.issues.length}
             </Text>
           </h2>
-          <List label={ISSUE_STATUS_WORDS[group.status]}>
+          <List label={group.words}>
             {group.issues.map((issue) => (
               <IssueRow
                 key={issue.id}

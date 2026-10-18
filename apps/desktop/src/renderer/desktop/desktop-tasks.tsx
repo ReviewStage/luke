@@ -4,11 +4,14 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   OpenHereProvider,
   openPullRequestsHere,
   useOpenLink,
 } from "@luke/panel/tasks/use-open-link";
+import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -35,7 +38,6 @@ import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
-import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -61,7 +63,6 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
 import { taskLinkPlace } from "../tasks/task-menu-items";
-import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
@@ -72,7 +73,6 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { useCapability, useExperiment } from "../use-app-state";
 import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";

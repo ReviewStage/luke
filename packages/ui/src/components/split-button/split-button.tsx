@@ -24,7 +24,9 @@ import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../butto
  * stands under its ring as a busy Button does while the chevron still
  * opens the options. A toolbar short of room folds the main part's words
  * away with `--luke-fold: folded`, as it folds a FoldingButton's, leaving
- * its glyph and its name.
+ * its glyph and its name; shorter still, `--luke-fold: bare` leaves that
+ * glyph alone, the chevron not drawn, so the options are reached some
+ * other way the app offers.
  *
  * The hint over the main part is the app's (`hint`): it is handed
  * `hintLabel` and wraps the main part, which takes what the hint hands it.

@@ -8,6 +8,8 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
+import { automationNextText, automationOwnerName } from "@luke/panel/desktop/automation-words";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -36,13 +38,11 @@ import {
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { InlineRef } from "./inline-ref";
 import { useActorDoor } from "./person-door";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { RelativeTime } from "./tasks/relative-time";
 import { AgentMark } from "./tasks/tab-look";
-import { useMinute } from "./tasks/task-time";
 import { Tooltip } from "./tooltip";
 
 /**

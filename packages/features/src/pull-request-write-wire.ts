@@ -12,7 +12,11 @@ import { Schema as EffectSchema } from "effect";
  * change itself, in GitHub's own words: a branch protection, a conflict, or
  * a permission the member's account does not hold. A merge, and turning
  * auto-merge on, name the head commit the member saw, so GitHub refuses one
- * made against a head pushed since. A refusal of Luke's own,
+ * made against a head pushed since. Which of the pull request's files the
+ * member marked viewed on GitHub is read the same way, on their own sign-in,
+ * since GitHub keeps the mark per account
+ * (`GET /api/agents/{id}/pull-request/viewed`), and set by two of the
+ * changes. A refusal of Luke's own,
  * an agent out of reach or a service that could not answer, travels as the
  * hosted vocabulary's refusal as every other call's does.
  */
@@ -32,6 +36,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_NODE_ID_CHARS: 256,
   /** The longest path a line comment names; GitHub's own paths stop well short of it. */
   MAX_PATH_CHARS: 4_096,
+  /** The most files whose viewed marks one read carries, as many as a read of the changes lists. */
+  MAX_VIEWED_FILES: 300,
 } as const;
 
 /** How a pull request is merged, as GitHub offers each where the repository allows it. */
@@ -115,6 +121,10 @@ export const PULL_REQUEST_ACTION = {
   ADD_REVIEW_COMMENT: "add-review-comment",
   /** The member's own pending review thrown away, the comments it held with it. */
   DISCARD_REVIEW: "discard-review",
+  /** One of the pull request's files marked viewed by the member, as GitHub's own Viewed box does. */
+  MARK_FILE_VIEWED: "mark-file-viewed",
+  /** One of the pull request's files the member marked viewed unmarked. */
+  UNMARK_FILE_VIEWED: "unmark-file-viewed",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -187,6 +197,11 @@ const threadIdSchema = EffectSchema.NonEmptyString.check(
  */
 const subjectIdSchema = EffectSchema.NonEmptyString.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** A file of the pull request, by its path from the repository's root; GitHub's own paths stop well short of the bound. */
+const filePathSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_PATH_CHARS),
 );
 
 /** A reply's or a comment's words, Markdown, never blank; GitHub's bound. */
@@ -282,6 +297,14 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
     headSha: headShaSchema,
   }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISCARD_REVIEW) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.MARK_FILE_VIEWED),
+    path: filePathSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED),
+    path: filePathSchema,
+  }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;
@@ -312,3 +335,44 @@ export const pullRequestWriteAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PullRequestWriteAnswer = typeof pullRequestWriteAnswerSchema.Type;
+
+/**
+ * Where a file stands for the member on GitHub: marked viewed, not, or
+ * marked viewed and changed since, which GitHub unticks until marked again.
+ */
+export const FILE_VIEWED_STATE = {
+  VIEWED: "viewed",
+  UNVIEWED: "unviewed",
+  DISMISSED: "dismissed",
+} as const;
+
+export type FileViewedState = (typeof FILE_VIEWED_STATE)[keyof typeof FILE_VIEWED_STATE];
+
+/**
+ * Which of the pull request's files the member marked viewed, as the service
+ * answers it (GET): each file by its path and where it stands for them, none
+ * where the agent has opened no pull request; or why there is no answer, as
+ * a change's.
+ */
+export const pullRequestViewedAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.DONE),
+    files: EffectSchema.Array(
+      EffectSchema.Struct({
+        path: EffectSchema.String,
+        state: EffectSchema.Literals(Object.values(FILE_VIEWED_STATE)),
+      }),
+    ).check(EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES)),
+  }),
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED),
+  }),
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.REFUSED),
+    words: EffectSchema.String.check(
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_REFUSAL_CHARS),
+    ),
+  }),
+]);
+
+export type PullRequestViewedAnswer = typeof pullRequestViewedAnswerSchema.Type;

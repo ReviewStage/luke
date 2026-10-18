@@ -1,6 +1,8 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -54,11 +56,9 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items";
-import { useMinute } from "../tasks/task-time";
 import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
-import { useAppState, useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";

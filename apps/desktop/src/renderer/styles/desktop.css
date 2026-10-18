@@ -1008,13 +1008,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
 }
 
-/* A sidebar plan renamed in place keeps its row: the field takes the name's
-   own line and type, ringed. */
-.sidebar-task > .luke-inline-edit {
-  width: calc(100% + 10px);
-  margin: -2px -5px; /* off-scale */
-}
-
 /* A row's first line: the plan's name, cut short where it must, and how long
    ago it was updated at the end, muted and in even figures so the column of
    times lines up. */
@@ -1758,18 +1751,14 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .luke-split-button > .luke-button:last-child {
-    display: none;
+  /* Start's glyph alone, its model menu left to the composer (`SplitButton`). */
+  .start-agent {
+    --luke-fold: bare;
   }
 
   /* The agents' Retry folds to its glyph (`FoldingButton`). */
   .main-tabs {
     --luke-fold: folded;
-  }
-
-  .start-agent .luke-split-button > .luke-button:first-child {
-    border-inline-end-width: 1px;
-    border-radius: var(--luke-control-radius);
   }
 }
 
@@ -2046,10 +2035,9 @@ ul.actor-stack {
    looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
    from; its presses claimed back from the toolbar's drag strip it sits
-   over; and the marks it holds, restated at a menu's size, because their
-   own rules here would otherwise win over the shared layer: a check the
-   text's colour rather than the state palette's, a chevron, and a
-   repository's picture in the glyph slot. */
+   over; and a repository's picture in the glyph slot, at a menu glyph's
+   size, because its own rule here would otherwise win over the shared
+   layer. */
 .luke-menu {
   z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
@@ -2063,24 +2051,6 @@ ul.actor-stack {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
-}
-
-.luke-menu-item-end .credential-check {
-  color: var(--luke-color-text);
-}
-
-/* A picker's check, in a combobox option's end slot, is the text's colour
-   at the slot's size, as a menu's is, not Settings' green connected mark. */
-.luke-combobox-option-end .credential-check {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  color: var(--luke-color-text);
-}
-
-.luke-menu-item-end .settings-chevron {
-  width: 14px;
-  height: 14px;
-  color: var(--luke-color-text-subtle);
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -2438,7 +2408,9 @@ ul.actor-stack {
   line-height: var(--luke-type-reading-leading);
 }
 
-.desktop-document .plan-body > * + * {
+/* A document's blocks, and the sections of a text drawn inside one block (an
+   issue's description), stand a section's gap apart. */
+.desktop-document :is(.plan-body, .document-sections) > * + * {
   margin-top: 1.5em;
 }
 
@@ -2917,19 +2889,6 @@ ul.actor-stack {
      focus would start the scrollbar's own fade (above), so the exit is the
      one motion it has. */
   transition: none;
-}
-
-/* A capture run zeroes the motion tokens on its stage, which a menu or the
-   palette drawn at the body's end does not stand under, so they are held
-   still here too. */
-body:has(.app-stage[data-capture="true"])
-:is(.luke-menu, .menu-surface, .command-palette, .command-palette-backdrop) {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-  --luke-duration-quick: 0s;
-  --luke-duration-fast: 0s;
-  --luke-duration-exit: 0s;
 }
 
 .task-compose-menu-name {
@@ -4234,7 +4193,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The pipeline bar: planned → building → shipped, the defects' arrow
-   turning back, each count a filter chip pressed while its layer stands. */
+   turning back, each count a filter chip pressed while its layer is the one
+   drawn alone, and none pressed while every layer is. */
 .factory-world-pipeline {
   top: var(--luke-space-12);
   left: 50%;
@@ -4280,6 +4240,14 @@ body:has(.app-stage[data-capture="true"])
 .factory-world-stage-count {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* While one count is pressed, the others' layers stand undrawn: their glyphs
+   and counts go to the quiet ink, the words staying legible, rather than the
+   chip fading, which would fade the keyboard's ring with it. */
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-signal,
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-stage-count {
+  color: var(--luke-color-text-subtle);
 }
 
 .factory-world-stuck {
@@ -4533,7 +4501,6 @@ body:has(.app-stage[data-capture="true"])
 
 .automations-empty > .luke-empty-state {
   flex: none;
-  overflow: visible;
 }
 
 .automations-empty > .automation-suggestions {
@@ -5349,16 +5316,10 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Narrower still, the tally gives the field its room and is said rather
-   than drawn, as `.visually-hidden` says words; the matches stay marked in
-   the tab. */
+   than drawn (`SearchField`'s fold); the matches stay marked in the tab. */
 @container find-scope (max-width: 300px) {
-  .find-scope > .find-bar .luke-search-field-tally {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    clip-path: inset(50%);
+  .find-scope > .find-bar {
+    --luke-fold: folded;
   }
 }
 
@@ -6583,9 +6544,9 @@ body:has(.app-stage[data-capture="true"])
   --state-glyph-size: 12px;
 }
 
-/* A corner leading with a pull request's mark sets it inline, so the corner
-   keeps the head's baseline. */
-.luke-hover-card-corner .pull-request-mark {
+/* A card's corner leading with a pull request's mark sets it inline, so the
+   corner keeps the head's baseline. */
+.card-corner-mark {
   width: 12px;
   height: 12px;
   margin-right: var(--luke-space-4);
@@ -6594,7 +6555,7 @@ body:has(.app-stage[data-capture="true"])
 
 /* A pull request's branches on its card stand as inline code does in words
    (`.markdown code`): mono on a tint, rounded. */
-.luke-hover-card-note .card-code {
+.card-code {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: color-mix(in srgb, currentColor 13%, transparent);
@@ -6608,7 +6569,7 @@ body:has(.app-stage[data-capture="true"])
    cut for it, as an agent's origin line wraps. Only the line holding that
    time wraps, so every other card's line naming an actor, a one-line
    starter's among them, keeps to its one row. */
-.luke-hover-card-note .actor-words:has(> .card-when) {
+.actor-words:has(> .card-when) {
   flex-wrap: wrap;
   row-gap: var(--luke-space-2);
 }
@@ -6647,12 +6608,6 @@ body:has(.app-stage[data-capture="true"])
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* A server's card lists its tools as the MCP popover's page does
-   (`planning/server-card.tsx`), each row's words on the card's own column. */
-.luke-hover-card .integration-tool-list {
-  margin-inline: calc(-1 * var(--row-inset));
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
@@ -7036,16 +6991,10 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-/* A dialog's answer's chord (Send's, Create issue's) a glyph's gap after
-   its word, muted against its own fill rather than the card's. */
-.luke-dialog-actions .luke-button .shortcut {
-  --shortcut-ink: var(--luke-color-on-accent-muted);
-  margin-inline-start: var(--luke-icon-gap);
-}
-
-/* The home page's New task's chord, a glyph's gap after its word, muted
-   against its own fill rather than the page's. */
-.home .luke-button .shortcut {
+/* A filled button's chord (a dialog's Send and Create issue, the home
+   page's New task) a glyph's gap after its word, muted against the button's
+   own fill rather than the ground around it. */
+.button-chord {
   --shortcut-ink: var(--luke-color-on-accent-muted);
   margin-inline-start: var(--luke-icon-gap);
 }
@@ -7444,19 +7393,6 @@ body:has(.app-stage[data-capture="true"])
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* A capture run zeroes the motion tokens on its stage, which the stack drawn
-   at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .toast-stack {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-  --duration-hover: 0s;
-  --luke-duration-quick: 0s;
-  --luke-duration-fast: 0s;
-  --luke-duration-exit: 0s;
-  --luke-duration-hover: 0s;
 }
 
 /* Its glyph, its words' first line, and its action share a first row as

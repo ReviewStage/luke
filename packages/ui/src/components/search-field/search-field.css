@@ -3,7 +3,9 @@
    glyph size, the body's type, and at its end a tally, a chord, or a clear
    nested inside the well's edge. Every part has a fixed size, so typing,
    clearing, and focusing never move what stands beneath it. The well wears
-   the keyboard's ring while the caret is in its field, which wears none. */
+   the keyboard's ring while the caret is in its field, which wears none.
+   Under an element whose `--luke-fold` is `folded`, the tally gives the
+   field its room and is said rather than drawn. */
 
 @layer components {
   .luke-search-field {
@@ -54,6 +56,17 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-variant-numeric: tabular-nums;
+  }
+
+  @container style(--luke-fold: folded) {
+    .luke-search-field-tally {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      clip-path: inset(50%);
+    }
   }
 
   /* The chord stands in the empty field until the caret arrives. */

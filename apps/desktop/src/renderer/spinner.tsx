@@ -10,6 +10,7 @@
  */
 
 import { useAtomValue } from "@effect/atom-react";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import {
   BusyLabel as SharedBusyLabel,
   Spinner as SharedSpinner,
@@ -20,7 +21,6 @@ import {
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useState } from "react";
-import { rendererRuntime } from "./renderer-runtime";
 
 export { SPINNER_SIZE, SpinnerRing, type SpinnerSize } from "@luke/ui";
 

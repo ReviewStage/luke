@@ -37,6 +37,7 @@ export {
   AGENT_KIND,
   AGENT_STATE,
   AGENT_STUCK_AFTER_MS,
+  agentDrawnUnder,
   BUILD_FULL_LINES,
 } from "./agent-reading.js";
 /** @public */

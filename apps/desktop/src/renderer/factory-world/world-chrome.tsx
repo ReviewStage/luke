@@ -1,5 +1,6 @@
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -35,18 +36,12 @@ import {
   ListTodoIcon,
   XIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published";
-import { dayAndTimeText } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import type { SceneHover } from "./contract";
-import {
-  PICK_KIND,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldLayer,
-  type WorldLayers,
-} from "./world";
+import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "./world";
 
 /**
  * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, the time scrubber, and the way home.
@@ -107,18 +102,30 @@ function stageCount(layer: WorldLayer, counts: PipelineCounts): number {
 
 /**
  * The pipeline bar: planned, then building with those stuck beside it, then
- * shipped, and the defects that loop back to planned. Each count is a
- * toggle, pressed while its layer is drawn.
+ * shipped, and the defects that loop back to planned. Each count picks out
+ * its layer: the pointer resting on it, or the keyboard on it, draws that
+ * layer alone for as long as it stays, and a press keeps it alone, pressed,
+ * until it is pressed again or another count is. With none pressed, every
+ * layer is drawn.
  */
 export function PipelineBar({
   counts,
-  layers,
-  onToggle,
+  chosen,
+  onChoose,
+  onPreview,
 }: {
   counts: PipelineCounts;
-  layers: WorldLayers;
-  onToggle: (layer: WorldLayer) => void;
+  /** The layer pressed, drawn alone; none while every layer is drawn. */
+  chosen: WorldLayer | undefined;
+  /** A press on a count: its layer alone, or every layer again where it was the one pressed. */
+  onChoose: (layer: WorldLayer) => void;
+  /** The count the pointer rests on, else the one the keyboard is on, or neither. */
+  onPreview: (layer: WorldLayer | undefined) => void;
 }): React.JSX.Element {
+  // Note that the pointer and the keyboard are held apart, so one leaving a count never takes the other's preview with it.
+  const [pointed, setPointed] = useState<WorldLayer | undefined>(undefined);
+  const [focused, setFocused] = useState<WorldLayer | undefined>(undefined);
+  useEffect(() => onPreview(pointed ?? focused), [pointed, focused, onPreview]);
   return (
     <fieldset className="factory-world-pipeline" aria-label="Layers">
       {STAGES.map(({ layer, name, Icon, color }, index) => (
@@ -134,9 +141,28 @@ export function PipelineBar({
           )}
           <Chip
             look={CHIP_LOOK.FILTER}
-            aria-pressed={layers[layer]}
+            aria-pressed={chosen === layer}
             data-layer={layer}
-            onClick={() => onToggle(layer)}
+            data-faded={chosen !== undefined && chosen !== layer ? "" : undefined}
+            onClick={() => {
+              onChoose(layer);
+              // Note that a press settles the preview: what is drawn now is the press, until the pointer or keyboard moves to another count.
+              setPointed(undefined);
+              setFocused(undefined);
+            }}
+            onPointerOver={() => setPointed(layer)}
+            onPointerOut={(event) => {
+              // Note that leaving a count for its own words keeps the preview, and for an arrow, a gap, or out of the bar ends it.
+              if (
+                !(
+                  event.relatedTarget instanceof Node &&
+                  event.currentTarget.contains(event.relatedTarget)
+                )
+              )
+                setPointed(undefined);
+            }}
+            onFocus={() => setFocused(layer)}
+            onBlur={() => setFocused(undefined)}
           >
             <span className="factory-world-signal" style={signalStyle(color)}>
               <Icon aria-hidden="true" />

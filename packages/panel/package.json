@@ -8,26 +8,41 @@
     "./act": "./src/act.js",
     "./app-bridge": "./src/app-bridge.js",
     "./app-platform": "./src/app-platform.js",
+    "./desktop/automation-words": "./src/desktop/automation-words.js",
+    "./desktop/use-automation-runs": "./src/desktop/use-automation-runs.js",
+    "./desktop/use-automations": "./src/desktop/use-automations.js",
+    "./desktop/use-issues": "./src/desktop/use-issues.js",
     "./desktop/use-run-choices": "./src/desktop/use-run-choices.js",
+    "./factory-world/use-factory-world": "./src/factory-world/use-factory-world.js",
+    "./markdown-html-parser": "./src/markdown-html-parser.js",
+    "./renderer-runtime": "./src/renderer-runtime.js",
     "./settings/writes": "./src/settings/writes.js",
     "./sources.css": "./src/sources.css",
+    "./tasks/chat-gate": "./src/tasks/chat-gate.js",
+    "./tasks/file-view-settings": "./src/tasks/file-view-settings.js",
+    "./tasks/task-time": "./src/tasks/task-time.js",
     "./tasks/use-inbox-pages": "./src/tasks/use-inbox-pages.js",
+    "./tasks/use-link-standing": "./src/tasks/use-link-standing.js",
     "./tasks/use-open-link": "./src/tasks/use-open-link.js",
     "./tasks/use-taskless-inbox-items": "./src/tasks/use-taskless-inbox-items.js",
     "./tasks/use-workspace-members": "./src/tasks/use-workspace-members.js",
+    "./use-app-state": "./src/use-app-state.js",
     "./use-sign-in": "./src/use-sign-in.js"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/atom-react": "catalog:",
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/host": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/ui": "workspace:*",
     "@luke/wire": "workspace:*",
-    "react": "catalog:"
+    "effect": "catalog:",
+    "react": "catalog:",
+    "rehype-raw": "7.0.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

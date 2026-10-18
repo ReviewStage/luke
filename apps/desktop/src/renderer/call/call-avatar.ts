@@ -19,6 +19,7 @@ import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { tellAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
+import { rendererRegistry, rendererRuntime } from "@luke/panel/renderer-runtime";
 import {
   AVATAR_CLOSE_REASON,
   type AvatarCloseReason,
@@ -49,7 +50,6 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { avatarSessionAtom } from "../bundle-loader";
-import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
 
 /** How long a refused play of the avatar's voice waits to be asked again, as the voice window's own element does. */
 const AUDIO_RETRY_MS = 1_000;
