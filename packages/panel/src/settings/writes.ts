@@ -7,7 +7,7 @@ import type {
 } from "@luke/settings/wire";
 import type { ActionResult } from "@luke/wire";
 import { useMemo } from "react";
-import { useAct } from "../act";
+import { useAct } from "../act.js";
 
 export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;

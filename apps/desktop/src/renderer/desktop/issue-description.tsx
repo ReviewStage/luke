@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,7 +21,6 @@ import {
   useEditorDrawings,
   useTextRoom,
 } from "../tasks/plan-document-editor";
-import { useOpenLink } from "../tasks/use-open-link";
 
 /**
  * issue-description.tsx -- an issue's description, drawn as Markdown and edited in place in the plan's own editor.

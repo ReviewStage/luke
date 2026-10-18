@@ -10,6 +10,7 @@ import {
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { appBridge } from "@luke/panel/app-bridge";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -23,7 +24,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { appBridge } from "../app-bridge";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import type { SideBundles } from "../bundle-loader";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract";

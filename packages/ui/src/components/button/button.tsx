@@ -34,7 +34,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * why, and refuses its press instead. A busy button keeps its width, its
  * words standing hidden under a turning ring, refuses its press, and is
  * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
- * holds still on `--loop-motion`, as every endless loop does under reduced
+ * holds still on `--luke-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
  *

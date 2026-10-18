@@ -100,20 +100,16 @@
    thing, and a shortcut whose chord answers nothing until it is supplied. The
    attention tint on purpose: unlike the changed word this is an urgency, the
    same standing a session waiting on a person has. The words are the hover's
-   and the hidden text's; the glyph alone is the mark. */
+   and the hidden text's; the shared alert glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--luke-color-attention);
+}
+
+.settings-attention > svg {
   width: 16px;
   height: 16px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--luke-color-attention) 22%, transparent);
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-bold);
-  line-height: 1;
 }
 
 .settings-copy small {
@@ -208,11 +204,6 @@
   align-items: center;
   gap: var(--luke-space-4);
   white-space: nowrap;
-}
-
-.account-provider .provider-mark {
-  width: 12px;
-  height: 12px;
 }
 
 /* The small glyph that rides a link's words. Note that a shared button's glyph
@@ -505,6 +496,7 @@
 .integration-tools-list {
   min-height: 0;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--luke-color-border);
   overscroll-behavior: contain;
@@ -593,10 +585,10 @@
   bottom: 0;
   left: 0;
   padding: var(--luke-space-16) var(--luke-space-8) var(--luke-space-6);
-  background: linear-gradient(transparent, rgb(0 0 0 / 65%));
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  background: linear-gradient(transparent, var(--luke-color-veil));
+  color: var(--luke-color-on-veil);
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .picture-choice-faces {
@@ -658,14 +650,14 @@
 .picture-choice-name {
   overflow: hidden;
   max-width: 100%;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .picture-choice-face:has(> :checked) .picture-choice-name {
   color: var(--luke-color-text);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A narrow row stacks the stage over the faces rather than squeezing both;

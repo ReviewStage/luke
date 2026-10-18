@@ -3,8 +3,8 @@ import {
   type FactoryWorldView as FactoryWorldAnswer,
 } from "@luke/features/factory-world-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { useMinute } from "../tasks/task-time";
 
 /**

@@ -4,17 +4,12 @@
    weight. */
 
 :root {
-  /* The veil over a picture set's last tile that counts the pictures past
-     it (`.picture-set-more`), the same in either appearance, since it lies
-     over a picture rather than the window. */
-  --picture-veil: rgba(0, 0, 0, 0.52);
-  --picture-veil-ink: #fff;
   /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
      count, and, in a facepile alone, Luke's face in his own blue, an agent's
      harness, or an automation's clock, so the face a square overlaps never
-     shows through it. */
-  --actor-tile: #2a2a30;
-  --actor-tile-ink: rgba(255, 255, 255, 0.92);
+     shows through it: opaque, a step of ink over the ground. */
+  --actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
+  --actor-tile-ink: var(--luke-color-text);
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
@@ -85,12 +80,6 @@
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
-  /* A find's matches in a tab's text: each one tinted, the one it is at
-     filled, in the yellow and orange a browser's find draws them in, with
-     dark words on the fill so the match reads in either appearance. */
-  --find-match: rgba(255, 214, 10, 0.3);
-  --find-current: #ff9f0a;
-  --find-current-text: #000;
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
@@ -102,19 +91,6 @@
    sooner (`window-full-screen.ts`). */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
-}
-
-/* The light appearance, which the window answers whenever macOS (or Luke's
-   own setting, through it) asks: an off-white ground, the sidebar a step
-   darker, the side panel between them, and white for what floats. The window
-   main paints before the page loads is this ground too
-   (`DESKTOP_WINDOW.BACKGROUND`). */
-@media (prefers-color-scheme: light) {
-  :root {
-    --find-match: rgba(255, 204, 0, 0.42);
-    --actor-tile: #e8e8ec;
-    --actor-tile-ink: rgba(0, 0, 0, 0.82);
-  }
 }
 
 html,
@@ -387,7 +363,9 @@ body,
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
-   at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
+   at a row's glyph size. Note that its corner is a share of its edge, so it
+   reads as one shape at every size, squarer than a person's square face
+   (`@luke/ui`'s Avatar) and never mistaken for a person's circle. A loaded picture drops the hue (`data-hue`) and the
    letter, so the square has no fill of its own and a transparent photo shows
    the surface it sits on. */
 .workspace-tile {
@@ -396,9 +374,9 @@ body,
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 4px;
+  border-radius: 25%;
   color: var(--luke-color-on-identity);
-  font-size: 10px;
+  font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   line-height: 1;
 }
@@ -451,15 +429,13 @@ body,
 .workspace-tile[data-size="inline"] {
   width: 14px;
   height: 14px;
-  border-radius: 3.5px; /* off-scale */
-  font-size: 9px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .workspace-tile[data-size="head"] {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
 }
 
 /* A workspace named (`workspace-ref.tsx`): its tile and its name as one
@@ -572,6 +548,7 @@ body,
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -901,6 +878,7 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -1381,10 +1359,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-.section-icon-search {
-  font-size: var(--luke-type-body-size);
-}
-
 .section-icon-colors,
 .section-icon-choices {
   min-width: 0;
@@ -1427,6 +1401,7 @@ ul.actor-stack {
 
 .section-icon-scroll {
   height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1531,11 +1506,12 @@ ul.actor-stack {
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
-   slot sizes it, and its corners are rounded and edged so a logo drawn on
-   white does not bleed into the ground around it. */
+   slot sizes it, and its corners are rounded, a share of its edge as a
+   workspace's tile's are, and edged so a logo drawn on white does not bleed
+   into the ground around it. */
 .repository-picture {
   flex: 0 0 auto;
-  border-radius: 4px;
+  border-radius: 25%;
   outline: 1px solid var(--luke-color-border);
   outline-offset: -1px; /* off-scale */
   object-fit: cover;
@@ -1653,11 +1629,11 @@ ul.actor-stack {
   gap: var(--luke-space-4);
   height: 24px;
   padding: 0 var(--luke-space-8);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-attention-tint);
   color: var(--luke-color-attention);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
   -webkit-app-region: no-drag;
@@ -2616,7 +2592,7 @@ ul.actor-stack {
 .desktop-document .plan-body {
   color: var(--luke-color-text-body);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: var(--luke-type-reading-leading);
 }
 
 .desktop-document .plan-body > * + * {
@@ -2876,10 +2852,10 @@ ul.actor-stack {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A harness's or a provider's mark keeps its box in a row however tight the
-   row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
-   traced ones (`@luke/ui`'s `ProviderMark`) do. */
-:is(.harness-mark, .provider-mark) {
+/* A harness's mark keeps its box in a row however tight the row is, drawn
+   as an image (`harness-marks.tsx`) as the traced provider marks
+   (`@luke/ui`'s `ProviderMark`) keep theirs. */
+.harness-mark {
   flex: 0 0 auto;
 }
 
@@ -3115,6 +3091,9 @@ body:has(.app-stage[data-capture="true"])
   --duration-quick: 0s;
   --duration-fast: 0s;
   --duration-exit: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-exit: 0s;
 }
 
 .task-compose-menu-name {
@@ -3270,6 +3249,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -3544,6 +3524,7 @@ body:has(.app-stage[data-capture="true"])
 .inbox-tasks-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -3767,7 +3748,7 @@ body:has(.app-stage[data-capture="true"])
   overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
 }
 
 /* What the developer picked leads their comment as a chip, a check and the
@@ -3799,6 +3780,212 @@ body:has(.app-stage[data-capture="true"])
   width: 12px;
   height: 12px;
   flex: none;
+}
+
+/* A comment holding a form's composer field lets what stands over the
+   field, its @ and / lists, run past its top and foot, clipping only what
+   runs long across, as every comment does. */
+.inbox-comment-body:has(.inbox-field-composer) {
+  overflow-y: visible;
+}
+
+/* A form's fields stacked, each its name over its control at one left edge
+   (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
+   that may be left empty, a number in a short field, and a select's name
+   over its pills in the label's type, as a field's label stands. */
+.inbox-field-optional {
+  margin-left: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.inbox-field-name {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
+}
+
+.inbox-field-short {
+  max-width: calc(10 * var(--luke-space-16));
+}
+
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
+   drawn at a text field's size: a field's ground in a hairline, its line
+   at the field's insets, growing a line at a time to eight, and the
+   focused field's ground once the caret is in it, as a text field's is. */
+.inbox-field-composer {
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-field-composer:focus-within {
+  background: var(--luke-color-input-focus);
+}
+
+.inbox-field-composer .agent-composer-field {
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
+}
+
+.inbox-field-composer .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-control-inset);
+}
+
+/* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
+   ticked in the complete green, and under a hairline a pill saying it could
+   not be done, filled in the danger tint once picked. Each pick wears its
+   number at its right, as a choice's options do. */
+.inbox-todo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+.inbox-todo-step {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  font-weight: var(--luke-weight-medium);
+  text-align: left;
+}
+
+.inbox-todo-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-todo-number {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-todo-box {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  margin-top: calc(
+    (1lh - var(--luke-space-16)) /
+    2
+  ); /* off-scale: centres the box on the first line */
+  border: 1.5px solid var(--luke-color-text-subtle); /* off-scale: a checkbox's ring, as a choice's is */
+  border-radius: var(--luke-space-4);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box {
+  border-color: var(--luke-color-complete);
+  background: var(--luke-color-complete);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box::after {
+  width: var(--luke-space-8);
+  height: var(--luke-space-4);
+  margin-top: -2px; /* off-scale: lifts the tick to the box's centre */
+  border-bottom: 2px solid var(--luke-color-ground);
+  border-left: 2px solid var(--luke-color-ground);
+  transform: rotate(-45deg);
+  content: "";
+}
+
+.inbox-todo-acts {
+  display: flex;
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.inbox-todo-pill {
+  display: inline-flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+}
+
+.inbox-todo-pill svg {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+.inbox-todo-pill[aria-checked="true"] {
+  border-color: var(--luke-color-danger);
+  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  color: var(--luke-color-danger-text);
+}
+
+.inbox-todo-pill[aria-checked="true"] svg {
+  display: block;
+}
+
+.inbox-todo-step:disabled,
+.inbox-todo-pill:disabled {
+  opacity: 0.4;
+}
+
+/* A settled form's values, a field a line in the form's order: its name in
+   the muted ink, then what was put in it, a text field's words drawn as a
+   sent message's are, their mentions chips. */
+.inbox-values {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--luke-space-8);
+}
+
+/* A name too long for the line, one unbroken word, wraps anywhere rather
+   than pushing the value past the comment's clip. */
+.inbox-value-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
+}
+
+.inbox-value-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4467,6 +4654,7 @@ body:has(.app-stage[data-capture="true"])
 .automations-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
@@ -4756,11 +4944,6 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-space-4);
 }
 
-.automation-servers > .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
 /* A picker here grows from a Settings picker's width to name its whole
    value, an event's or a zone's, rather than cut it short (its chip's
    `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
@@ -4840,6 +5023,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
@@ -4875,6 +5059,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-rail-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -4959,6 +5144,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5414,12 +5600,12 @@ body:has(.app-stage[data-capture="true"])
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */
 ::highlight(find-match) {
-  background-color: var(--find-match);
+  background-color: var(--luke-color-find-match);
 }
 
 ::highlight(find-current) {
-  background-color: var(--find-current);
-  color: var(--find-current-text);
+  background-color: var(--luke-color-find-current);
+  color: var(--luke-color-on-find-current);
 }
 
 /* What a query found, in the list's place: each page's heading, then its
@@ -5650,6 +5836,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 8vh;
 }
@@ -5758,6 +5945,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: var(--column-inset);
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--luke-color-ground);
 }
@@ -5819,6 +6007,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
@@ -6196,6 +6385,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
@@ -6913,6 +7103,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--luke-space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -7105,6 +7296,7 @@ body:has(.app-stage[data-capture="true"])
 .home-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }
@@ -7242,7 +7434,6 @@ body:has(.app-stage[data-capture="true"])
 .home-row-picture .repository-picture {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
@@ -7398,23 +7589,6 @@ body:has(.app-stage[data-capture="true"])
   flex-shrink: 1;
 }
 
-.dialog-name-field {
-  width: 100%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.dialog-name-field::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
 /* New task's foot: the repository chip at its start, the answers at its
    end, a common width so a short verb is not a smaller target than Cancel. */
 .new-task-actions {
@@ -7510,6 +7684,10 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   --duration-fast: 0s;
   --duration-exit: 0s;
   --duration-hover: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-exit: 0s;
+  --luke-duration-hover: 0s;
 }
 
 /* Its glyph, its words' first line, and its action share a first row as

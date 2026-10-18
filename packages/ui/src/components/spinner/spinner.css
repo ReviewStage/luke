@@ -13,9 +13,9 @@
     border-top-color: currentColor;
     border-radius: 50%;
     /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --loop-motion with every other. */
+       it holds still on --luke-loop-motion with every other. */
     animation: luke-spinner-turn 900ms linear infinite;
-    animation-play-state: var(--loop-motion, running);
+    animation-play-state: var(--luke-loop-motion);
   }
 
   @keyframes luke-spinner-turn {

@@ -12,6 +12,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { appPlatform } from "@luke/panel/app-platform";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   CopyIcon,
@@ -36,7 +37,6 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import {
   DIFF_SELECTION_SIDE,

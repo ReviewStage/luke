@@ -14,8 +14,8 @@
  */
 
 import type { AppInboxTask } from "@luke/host/app-state";
+import { appBridge } from "@luke/panel/app-bridge";
 import { useEffect, useRef } from "react";
-import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 import { appStateNow } from "../use-app-state";
 

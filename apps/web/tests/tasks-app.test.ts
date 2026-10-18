@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
 import { createTask } from "@luke/database/models/task-store";
@@ -748,6 +749,40 @@ it.layer(getTestDB())("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { plans: [], planlessAgents: [] },
         });
+      }),
+  );
+
+  it.effect(
+    "a start from an issue of the workspace names it, and one from an issue of a workspace the account is not in, or of another workspace of its own, is refused and starts no plan",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const workspaceId = yield* openWorkspace(owner);
+        const elsewhere = yield* openWorkspace(owner);
+        const theirs = yield* openWorkspace(other);
+        const filed = (userId: string, organizationId: string) =>
+          Effect.map(createIssue(userId, { organizationId, title: "Invites expire" }), (made) =>
+            Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+          );
+        const mine = yield* filed(owner, workspaceId);
+        const another = yield* filed(owner, elsewhere);
+        const outside = yield* filed(other, theirs);
+        const start = (issueId: string) =>
+          ask(request(TASKS, owner, { method: "POST", body: { ...RELAY, workspaceId, issueId } }));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(yield* start(outside.id), notFound);
+        assert.deepEqual(yield* start(another.id), notFound);
+        assert.deepEqual(yield* ask(request(TASKS, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { plans: [], planlessAgents: [] },
+        });
+        const started = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* start(mine.id),
+        );
+        assert.equal(started.plan.issueId, mine.id);
       }),
   );
 

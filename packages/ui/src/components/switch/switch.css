@@ -16,7 +16,7 @@
     border-radius: var(--luke-radius-full);
     background: var(--luke-color-switch-track);
     cursor: pointer;
-    transition: background-color var(--duration-hover, 0s) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   [data-luke-profile="desktop"] .luke-switch {
@@ -38,7 +38,7 @@
     border-radius: 50%;
     background: var(--luke-color-switch-thumb);
     box-shadow: var(--luke-shadow-switch-thumb);
-    transition: transform var(--duration-fast, 0s) var(--spring-fast, ease);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   .luke-switch[data-checked="true"] .luke-switch-thumb {

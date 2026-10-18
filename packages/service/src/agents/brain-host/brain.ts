@@ -3,6 +3,8 @@ import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-s
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { issueIdentifier } from "@luke/features/issue-list-model";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import {
   NOTE_KIND,
@@ -350,6 +352,7 @@ const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const LINEAR_ISSUE_MARKER = "[linear issue the task was started from]";
+const ISSUE_MARKER = "[workspace issue the task was started from]";
 const CHAT_SINCE_MARKER = "[chat since the last call]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
@@ -422,8 +425,27 @@ function linearIssueText(stored: StoredTask): readonly string[] {
 }
 
 /**
+ * The workspace's own issue the plan was started from, as JSON, as it reads
+ * now: its identifier, title, Luke link, and description; nothing for a
+ * plan started from none, or once the issue is gone.
+ */
+function issueText(stored: StoredTask): readonly string[] {
+  const { issue } = stored;
+  if (issue === undefined) return [];
+  return [
+    ISSUE_MARKER,
+    JSON.stringify({
+      identifier: issueIdentifier(issue.workspaceName, issue.number),
+      title: issue.title,
+      url: linkOf({ kind: LINK_PLACE.ISSUE, issueId: issue.id }, issue.workspaceSlug),
+      description: issue.description,
+    }),
+  ];
+}
+
+/**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the Linear issue it was started from where it was, the saved
+ * plan's name, the Linear issue and the workspace's own issue it was started from where it was, the saved
  * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
@@ -445,6 +467,7 @@ export function brainStandingContext(
     heading,
     `Name: ${task.name}`,
     ...linearIssueText(stored),
+    ...issueText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(task.document),
     ...agentEditsText(stored.agentEdits),

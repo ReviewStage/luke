@@ -1,0 +1,7 @@
+/* sources.css -- what an app's stylesheet takes on when it mounts the panel.
+
+   Tailwind generates only the utilities it finds in the sources it reads, and
+   an app's own sources stop at its own directory. This line is resolved
+   against this file, so an app that imports it reads the panel's sources as
+   well as its own, and a utility a panel module spells is not dropped. */
+@source "./";

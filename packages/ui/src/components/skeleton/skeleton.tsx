@@ -12,7 +12,7 @@ import { cssCustomProperties } from "../../css.js";
  * stand-in takes its size from the room the plot will stand in. Every block
  * breathes on one opacity loop, in step so a wait reads as one object, in
  * the strong fill, and holds still with every other endless loop on
- * `--loop-motion` under reduced motion and a capture run. The blocks are
+ * `--luke-loop-motion` under reduced motion and a capture run. The blocks are
  * decoration: the region around them says what is being read, to a
  * reader and to nobody else.
  */

@@ -22,7 +22,13 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * one pick or several reads before a word does. A `numbered` list wears each
  * of its first nine rows' number at the row's right, after the badge, and
  * says it to a reader as the row's key; the caller answers the keys, since
- * a number picks a row from wherever the caller lets it.
+ * a number picks a row from wherever the caller lets it. A row's `tone`
+ * fills its checked control with what picking it means, going ahead in the
+ * complete green or holding back in the danger red, and a list may stand
+ * its rows `across`, side by side, as a yes beside a no. A `pill` list
+ * draws its options as pills that wrap onto as many lines as they need,
+ * the picked one tinted in the accent with a check before its words, for
+ * short options with no detail, a form's select.
  *
  * A settled list is the record of a choice made: the same rows as a list a
  * reader cannot press, the picked ones in the checked look with a check and
@@ -44,13 +50,31 @@ export const CHOICE_SELECT = {
 
 export type ChoiceSelect = (typeof CHOICE_SELECT)[keyof typeof CHOICE_SELECT];
 
-/** How an open list's rows lead: with their words alone, or with the radio or checkbox each behaves as. */
+/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, or pills that wrap, a check in the picked one. */
 export const CHOICE_LOOK = {
   PLAIN: "plain",
   MARKED: "marked",
+  PILL: "pill",
 } as const;
 
 export type ChoiceLook = (typeof CHOICE_LOOK)[keyof typeof CHOICE_LOOK];
+
+/** How an open list's rows stand: one under another, or side by side, sharing the width, as a yes and a no do. */
+export const CHOICE_FLOW = {
+  DOWN: "down",
+  ACROSS: "across",
+} as const;
+
+export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
+
+/** What a marked row's control fills with once checked: the accent, or what picking it means, going ahead or holding back. */
+export const CHOICE_TONE = {
+  ACCENT: "accent",
+  COMPLETE: "complete",
+  DANGER: "danger",
+} as const;
+
+export type ChoiceTone = (typeof CHOICE_TONE)[keyof typeof CHOICE_TONE];
 
 /** How many of a numbered list's rows wear their number: the keys 1 to 9. */
 export const CHOICE_NUMBERED_ROWS = 9;
@@ -75,6 +99,8 @@ export interface ChoiceOption<Value extends string> {
   mark?: ReactNode;
   /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
+  /** What a marked row's control fills with once checked; the accent where none is given. */
+  tone?: ChoiceTone | undefined;
 }
 
 interface ChoiceListBase<Value extends string> {
@@ -96,6 +122,8 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   look?: ChoiceLook | undefined;
   /** Whether each of the first nine rows wears its number, the key the caller picks it by. */
   numbered?: boolean | undefined;
+  /** Whether the rows stand one under another or side by side. */
+  flow?: ChoiceFlow | undefined;
   /** Held by the row the keyboard lands on, so a dialog can focus it as it opens. */
   focusRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   onChange: (value: readonly Value[]) => void;
@@ -186,7 +214,7 @@ function ChoiceRow({
   checked,
   tabStop,
   disabled,
-  marked,
+  look,
   number,
   focusRef,
   onPress,
@@ -196,7 +224,7 @@ function ChoiceRow({
   checked: boolean;
   tabStop: boolean;
   disabled: boolean;
-  marked: boolean;
+  look: ChoiceLook;
   /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
   number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
@@ -207,13 +235,15 @@ function ChoiceRow({
     type: "button",
     tabIndex: tabStop ? 0 : -1,
     className: "luke-choice",
+    "data-tone": option.tone,
     disabled,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: onPress,
   } as const;
   const words = (
     <>
-      {marked ? (
+      {look === CHOICE_LOOK.PILL ? <PickedCheck /> : null}
+      {look === CHOICE_LOOK.MARKED ? (
         <span
           className="luke-choice-control"
           data-shape={radio ? "radio" : "box"}
@@ -249,6 +279,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     select = CHOICE_SELECT.ONE,
     look = CHOICE_LOOK.PLAIN,
     numbered = false,
+    flow = CHOICE_FLOW.DOWN,
   } = props;
   const one = select === CHOICE_SELECT.ONE;
   const open = options.filter((option) => option.disabled !== true);
@@ -294,7 +325,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       checked={value.includes(option.value)}
       tabStop={!one || option === landing}
       disabled={disabled || option.disabled === true}
-      marked={look === CHOICE_LOOK.MARKED}
+      look={look}
       number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
       onPress={() => press(option.value)}
@@ -302,13 +333,26 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   ));
   if (!one) {
     return (
-      <fieldset aria-label={legend} className="luke-choice-list" onKeyDown={onBoxKeyDown}>
+      <fieldset
+        aria-label={legend}
+        className="luke-choice-list"
+        data-flow={flow}
+        data-look={look}
+        onKeyDown={onBoxKeyDown}
+      >
         {rows}
       </fieldset>
     );
   }
   return (
-    <div role="radiogroup" aria-label={legend} className="luke-choice-list" onKeyDown={onKeyDown}>
+    <div
+      role="radiogroup"
+      aria-label={legend}
+      className="luke-choice-list"
+      data-flow={flow}
+      data-look={look}
+      onKeyDown={onKeyDown}
+    >
       {rows}
     </div>
   );

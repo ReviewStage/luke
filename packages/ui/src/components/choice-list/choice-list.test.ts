@@ -5,8 +5,10 @@ import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import {
+  CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
+  CHOICE_TONE,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
@@ -227,6 +229,44 @@ test("a marked list leads each row with the radio or the checkbox it behaves as,
     rows(plain).map((each) => each.getAttribute("aria-keyshortcuts")),
     [null, null, null],
   );
+});
+
+test("a list across stands its rows side by side, each toned row filling its checked control with what picking it means, and still picks one by the arrows", () => {
+  function Decide(): React.JSX.Element {
+    const [value, setValue] = useState<readonly string[]>([]);
+    return createElement(ChoiceList<string>, {
+      legend: "Decision",
+      options: [
+        { value: "yes", label: "Approve", tone: CHOICE_TONE.COMPLETE },
+        { value: "no", label: "Decline", tone: CHOICE_TONE.DANGER },
+      ],
+      value,
+      look: CHOICE_LOOK.MARKED,
+      flow: CHOICE_FLOW.ACROSS,
+      onChange: setValue,
+    });
+  }
+  const page = render(createElement(Decide));
+  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-flow"), "across");
+  assert.deepEqual(
+    rows(page).map((each) => each.dataset.tone),
+    ["complete", "danger"],
+  );
+  act(() => row(page, "Approve").focus());
+  key(row(page, "Approve"), "ArrowRight");
+  assert.equal(row(page, "Decline").getAttribute("aria-checked"), "true");
+});
+
+test("a pill list draws its options as pills, a check before the picked one's words, and picks as a radio group does", () => {
+  const page = render(createElement(Held, { look: CHOICE_LOOK.PILL, start: ["never"] }));
+  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-look"), "pill");
+  assert.deepEqual(
+    rows(page).map((each) => each.querySelector(".luke-choice-check") !== null),
+    [true, true, true],
+  );
+  act(() => row(page, "Never retry").focus());
+  key(row(page, "Never retry"), "ArrowDown");
+  assert.equal(heard(page), "three");
 });
 
 test("an unavailable list changes nothing, by press or by key", () => {

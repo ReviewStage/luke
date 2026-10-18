@@ -31,8 +31,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--duration-hover) ease,
-      color var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   [data-luke-profile="desktop"] .luke-chip {

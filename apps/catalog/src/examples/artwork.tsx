@@ -34,6 +34,7 @@ import {
   PlayIcon,
   PlugIcon,
   PlusIcon,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   RemoveIcon,
   ResetIcon,
@@ -140,7 +141,7 @@ function Artwork(): React.JSX.Element {
         <ul className="catalog-tiles">
           {Object.values(MARK_PROVIDER).map((provider) => (
             <li key={provider} className="catalog-tile">
-              <ProviderMark provider={provider} className="catalog-mark" />
+              <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.ROW} />
               <span className="catalog-tile-name">{provider}</span>
             </li>
           ))}

@@ -12,6 +12,7 @@ import {
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
+  NavItemLink,
   SearchIcon,
   useMenu,
 } from "@luke/ui";
@@ -22,7 +23,8 @@ import { CatalogSection } from "../section";
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
  * the one shown, one unavailable, one unread; fold heads open and folded;
- * an account's menu trigger; and long names in a narrow column.
+ * an account's menu trigger; links with addresses of their own; and long
+ * names in a narrow column.
  */
 
 /** A chord as an app draws one, hidden from a reader since the row names it. */
@@ -109,6 +111,31 @@ function Account(): React.JSX.Element {
   );
 }
 
+/** Places with addresses of their own: a plain press stays here, a modified one opens a tab. */
+function Links(): React.JSX.Element {
+  const [shown, setShown] = useState("dashboard");
+  const link = (id: string) => ({
+    href: `#${id}`,
+    current: shown === id ? NAV_CURRENT.PAGE : undefined,
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        return;
+      event.preventDefault();
+      setShown(id);
+    },
+  });
+  return (
+    <div className="catalog-narrow">
+      <NavItemLink icon={<FolderIcon />} {...link("dashboard")}>
+        Dashboard
+      </NavItemLink>
+      <NavItemLink icon={<GearIcon />} {...link("users")}>
+        Users
+      </NavItemLink>
+    </div>
+  );
+}
+
 function NavItems(): React.JSX.Element {
   return (
     <>
@@ -120,6 +147,9 @@ function NavItems(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="nav-item-identity" title="Who: a menu's trigger">
         <Account />
+      </CatalogSection>
+      <CatalogSection id="nav-item-links" title="Links to places of their own">
+        <Links />
       </CatalogSection>
       <CatalogSection id="nav-item-narrow" title="Long names in a narrow column">
         <div className="catalog-narrow">

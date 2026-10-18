@@ -8,7 +8,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * than on the frame the state changed. This is that hold, for anything whose
  * open state is someone else's: a fold, a menu, a card. While `open` it is
  * `mounted`; once `open` turns false it stays `mounted` and is `leaving`,
- * which the caller draws as its exit (a fade over `--duration-exit`, say)
+ * which the caller draws as its exit (a fade over `--luke-duration-exit`, say)
  * and makes `inert`, since it already reads as closed, and it is taken out once the motions the element handed `ref` runs have
  * finished. Opening again while it leaves keeps it, and the exit cut short
  * takes nothing away. Reduced motion and a capture run zero the tokens an

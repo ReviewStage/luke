@@ -1,8 +1,8 @@
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
 import { BUTTON_VARIANT, Button, ExternalIcon, SettingsRow, SettingsSection } from "@luke/ui";
 import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/voice/settings-controls";
 import { SchemaSettingRows } from "./schema-rows";
-import type { SettingsWrites } from "./writes";
 
 /** What the test row says of when Luke notifies at all. */
 const NOTIFICATIONS_WHEN_NOTE = "Luke notifies only when its window is in the background.";
