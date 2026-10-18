@@ -22,6 +22,7 @@
     "renderer/factory-world-neon.js": 29957,
     "renderer/factory-world-factory.js": 38318,
     "renderer/factory-world-colony.js": 31066,
-    "renderer/factory-world-atlantis.js": 37101
+    "renderer/factory-world-atlantis.js": 37101,
+    "renderer/factory-world-tree.js": 34653
   }
 }
