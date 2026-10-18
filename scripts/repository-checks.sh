@@ -627,6 +627,70 @@ fi
 # Oct 17 plan-to-task rename broke the 26 turns then running.
 pnpm --silent --filter @luke/database check:renames
 
+# A `var(--name)` with no fallback, where nothing declares `--name`, fails
+# nothing: the declaration it stands in is invalid at computed-value time, so a
+# border, a gap, or a colour silently drops. That is how CSS merged after
+# #3524 and #3569 retired the desktop's token aliases (`--hairline`,
+# `--space-*`, `--focus-ring-width`, …) went on reading names nobody set. So
+# every such read in a tracked sheet, page, or script under apps/ and packages/
+# must name a property one of them declares: a sheet's `--name:` or
+# `@property --name`, or a script's `"--name"` literal (`setProperty`, a style
+# object's key, a constant), where a `--name-${…}` template declares the whole
+# family. A name only a third-party stylesheet sets is listed here by hand.
+# Note that the declarations are pooled across every app, so a name one profile
+# sets and another reads unset still passes; the check catches a name gone
+# everywhere, which is what a retired token is.
+node --input-type=module -e '
+  import { execFileSync } from "node:child_process";
+  import { readFileSync } from "node:fs";
+  import path from "node:path";
+
+  const root = process.argv[1];
+  // Set by the stylesheet Excalidraw ships, which the board imports.
+  const THIRD_PARTY = ["--default-button-size"];
+  const SCRIPT = /\.tsx?$/;
+  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((file) => /\.(css|html|tsx?)$/.test(file) && !/\.test\.tsx?$/.test(file));
+  const declared = new Set(THIRD_PARTY);
+  const families = [];
+  const reads = [];
+  for (const file of files) {
+    const source = readFileSync(path.join(root, file), "utf8");
+    // Blank comments, keeping every newline, so a name a comment mentions
+    // declares nothing and a line number still points home.
+    const text = SCRIPT.test(file)
+      ? source.replace(/^\s*(\/\/|\/\*|\*).*$/gm, "")
+      : source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+    if (SCRIPT.test(file)) {
+      for (const [, name, end] of text.matchAll(/(?<=["\x27\x60]\s*)(--[\w-]+?)(\$\{|["\x27\x60])/g)) {
+        if (end === "${") families.push(name);
+        else declared.add(name);
+      }
+    } else {
+      for (const [, name, registered] of text.matchAll(/(--[\w-]+)\s*:|@property\s+(--[\w-]+)/g)) {
+        declared.add(name ?? registered);
+      }
+    }
+    for (const read of text.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
+      const line = text.slice(0, read.index).split("\n").length;
+      reads.push({ file, line, name: read[1] });
+    }
+  }
+  const unset = reads.filter(
+    ({ name }) => !declared.has(name) && !families.some((family) => name.startsWith(family)),
+  );
+  if (unset.length > 0) {
+    const lines = unset.map(({ file, line, name }) => `  ${file}:${line}: ${name}`).join("\n");
+    process.stderr.write(
+      `error: var() reads a custom property nothing declares and gives no fallback, so the declaration silently drops (a retired token reads its --luke-* role):\n${lines}\n`,
+    );
+    process.exit(1);
+  }
+' "$LUKE_REPO_ROOT"
+
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So

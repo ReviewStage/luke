@@ -1778,8 +1778,8 @@ ul.actor-stack {
 }
 
 .desktop-shell .title-bar-controls .offline-mark {
-  width: var(--control-height);
-  height: var(--control-height);
+  width: var(--luke-control-height);
+  height: var(--luke-control-height);
   justify-content: center;
   padding: 0;
 }
@@ -1792,8 +1792,8 @@ ul.actor-stack {
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     3 *
-    var(--control-height) +
-    var(--control-gap)
+    var(--luke-control-height) +
+    var(--luke-control-gap)
   );
 }
 
