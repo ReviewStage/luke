@@ -2530,7 +2530,8 @@
 /* The reactions under a description or a comment, as GitHub draws them:
    a row of pills, each its emoji and how many gave it, the reader's own lit.
    A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
-   may not is a count drawn here in the same look, lit as a pressed one is. */
+   may not is a count drawn here in the same look, lit in the accent as a
+   pressed one is. */
 .pull-request-reactions {
   display: flex;
   flex-wrap: wrap;
@@ -2582,8 +2583,8 @@
 }
 
 .pull-request-reaction[data-mine="true"] {
-  border-color: var(--luke-color-border-selected);
-  background: var(--luke-color-fill-selected);
+  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   color: var(--luke-color-text);
 }
 

@@ -275,14 +275,15 @@
     display: none;
   }
 
-  /* Compact, one of a row of small counts: a row mark's height in the
+  /* Compact, one of a row of small counts: a caption line's pill, in the
      caption's type, its mark nearer its words. A compact filter stands
      inside a hairline at rest, so the row reads as pills before one is
-     pressed. */
+     pressed, and pressed it is lit in the accent, as GitHub lights the
+     reader's own reaction. */
   .luke-chip[data-size="compact"] {
     gap: var(--luke-space-4);
-    height: auto;
-    padding: var(--luke-space-2) var(--luke-space-8);
+    height: var(--luke-space-20);
+    padding: 0 var(--luke-space-8);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-weight-regular);
@@ -290,6 +291,11 @@
 
   .luke-chip[data-look="filter"][data-size="compact"]:not([aria-pressed="true"]) {
     border-color: var(--luke-color-border);
+  }
+
+  .luke-chip[data-look="filter"][data-size="compact"][aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+    background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   }
 
   /* Busy, a change it made is out, and it pulses until answered. */

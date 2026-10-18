@@ -29,10 +29,10 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  * own: it names what stands, a filter applied, and ends in a × named for
  * what lifting it does.
  *
- * A chip comes at the control's size, or compact (`size`), a row mark's
- * height in the caption's type, where it is one of a row of small counts
- * (a pull request's reactions); a compact filter stands inside a hairline
- * at rest, so the row reads as pills before one is pressed. A busy chip
+ * A chip comes at the control's size, or compact (`size`), a caption
+ * line's pill, where it is one of a row of small counts (a pull request's
+ * reactions); a compact filter stands inside a hairline at rest, so the row
+ * reads as pills before one is pressed, and pressed is lit in the accent. A busy chip
  * (`busy`), whose change is out, pulses until it is answered.
  *
  * A chip that opens a menu of values ends in the menu's small, muted
@@ -53,7 +53,7 @@ export const CHIP_LOOK = {
 
 export type ChipLook = (typeof CHIP_LOOK)[keyof typeof CHIP_LOOK];
 
-/** How big a chip is: the control's own, or a row mark's height in the caption's type. */
+/** How big a chip is: the control's own, or a caption line's pill. */
 export const CHIP_SIZE = {
   CONTROL: "control",
   COMPACT: "compact",
