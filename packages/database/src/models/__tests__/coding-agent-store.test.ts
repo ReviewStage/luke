@@ -914,7 +914,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", 
   const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
 
   it.effect(
-    "a member reads every standing agent, and of the archived those whose pull request is still open or merged within the window, each with its pull request whole and its plan's Linear issue, while an account outside the workspace reads none",
+    "a member reads every standing agent first, then of the archived those whose pull request is still open or merged within the window, newest started first, each with its pull request whole and its plan's Linear issue, while an account outside the workspace reads none",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -968,9 +968,9 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", 
         assert.deepEqual(
           read.map(({ agent, published, linearIssue }) => [agent.id, published, linearIssue]),
           [
+            [standing.agentId, null, "ENG-7"],
             [recent.agentId, shipped, null],
             [open.agentId, keptPullRequest(1, PULL_REQUEST_STATE.OPEN), null],
-            [standing.agentId, null, "ENG-7"],
           ],
         );
         assert.deepEqual(

@@ -136,11 +136,19 @@ const RELAY_TREE: readonly TreeEntryFixture[] = [
 ];
 
 /** One issue still to do as Linear's GraphQL API lists it. */
+interface LinearNodeFixture {
+  readonly identifier: string;
+  readonly title: string;
+  readonly url: string;
+  readonly priority: number;
+  readonly state: { readonly name: string } | null;
+}
+
 const linearNode = (
   identifier: string,
   priority: number,
   state: { readonly name: string } | null,
-) => ({
+): LinearNodeFixture => ({
   identifier,
   title: `Issue ${identifier}`,
   url: `https://linear.app/acme/issue/${identifier}`,
@@ -174,10 +182,13 @@ function contentsOf(content: ManifestFixture) {
 function githubAndLinear(
   installation: InstallationFixture,
   trees: ReadonlyMap<string, readonly TreeEntryFixture[]>,
+  planned: readonly LinearNodeFixture[] = LINEAR_PLANNED,
 ): FakeGitHub {
   return githubReaching([installation], undefined, {}, (sent: SentToGitHub) => {
     if (sent.url === LINEAR_GRAPHQL_URL) {
-      return Response.json({ data: { issues: { nodes: LINEAR_PLANNED } } });
+      // SAFETY: the service sends one GraphQL request body per call, naming the page it wants.
+      const { variables } = JSON.parse(sent.body) as { variables: { first: number } };
+      return Response.json({ data: { issues: { nodes: planned.slice(0, variables.first) } } });
     }
     const { pathname } = new URL(sent.url);
     const tree = /^\/repos\/acme\/([^/]+)\/git\/trees\//u.exec(pathname);
@@ -537,6 +548,43 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
           github.sent.filter((sent) => sent.url === LINEAR_GRAPHQL_URL).length,
           0,
           "a workspace with no Linear asks Linear nothing",
+        );
+      }),
+  );
+
+  it.effect(
+    "the most pressing issues are drawn from Linear's widest page, an urgent one changed longest ago among them",
+    () =>
+      Effect.gen(function* () {
+        const acme = acmeInstallation(7304);
+        // Sixty low issues changed lately, and the one urgent issue changed before them all.
+        const planned = [
+          ...Array.from({ length: 60 }, (_, index) =>
+            linearNode(`ENG-${100 + index}`, 4, { name: "Todo" }),
+          ),
+          linearNode("ENG-1", 1, { name: "Todo" }),
+        ];
+        const github = githubAndLinear(
+          acme,
+          new Map([["other", [blob("README.md", 10)]]]),
+          planned,
+        );
+        const owner = yield* openAccount;
+        const workspaceId = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspaceId, acme);
+        yield* Database.use((db) =>
+          db.insert(workspaceIntegrationConnection).values({
+            organizationId: workspaceId,
+            provider: INTEGRATION_PROVIDER.LINEAR,
+            status: INTEGRATION_ROW_STATUS.CONNECTED,
+          }),
+        );
+
+        const world = worldOf(yield* ask(github, owner, { workspaceId }));
+
+        assert.deepEqual(
+          world?.planned.map((issue) => issue.identifier),
+          ["ENG-1", ...planned.slice(0, 49).map((issue) => issue.identifier)],
         );
       }),
   );

@@ -957,7 +957,12 @@ const findWorldAgents = SqlSchema.findAll({
             ),
           ),
         )
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .orderBy(
+          // Note that the standing come first, so the bound cuts the archived rather than an agent at work.
+          sql`${codingAgent.archivedAt} is null desc`,
+          desc(codingAgent.createdAt),
+          desc(codingAgent.id),
+        )
         .limit(limit),
     ),
 });
@@ -1445,8 +1450,9 @@ export interface WorldCodingAgent {
 }
 
 /**
- * The workspace's agents the Factory's world draws, by any member, newest
- * started first and at most `limit`: every one standing, and of the archived
+ * The workspace's agents the Factory's world draws, by any member, the
+ * standing first and newest started first within each, and at most `limit`:
+ * every one standing, and of the archived
  * those whose pull request is still open or a draft, or merged at or after
  * `mergedSince` (epoch milliseconds), each with its pull request whole and
  * its task's Linear issue; a workspace the account is not in has none.

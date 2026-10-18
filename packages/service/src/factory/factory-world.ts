@@ -9,9 +9,11 @@
  * no world.
  *
  * - Zones are the repository's default branch, listed in one recursive tree
- *   read: each file counted, with its bytes, in the directory a pull
- *   request's area would name (`areaPathOf`), so an area always names the
- *   zone it landed in. The largest zones by bytes are kept. A kept zone's
+ *   read, as far as GitHub lists it (it cuts one past a hundred thousand
+ *   entries or seven megabytes) and at most `MAX_TREE_ENTRIES` of it: each
+ *   file counted, with its bytes, in the directory a pull request's area
+ *   would name (`areaPathOf`), so an area always names the zone it landed
+ *   in. The largest zones by bytes are kept. A kept zone's
  *   own `package.json` names it and the zones it depends on among the
  *   repository's own packages; every zone also depends on the nearest kept
  *   zone it sits inside, which is the whole of its edges where there is no
@@ -23,8 +25,9 @@
  * - Shipped is those agents' pull requests, the archived ones' among them,
  *   merged within the lookback.
  * - Planned is the Linear issues the workspace's grant reaches that are still
- *   to do, each placed on the zones its plan's agents' pull requests touched;
- *   with no grant, or a Linear that did not answer, none.
+ *   to do, the most pressing of Linear's widest page, each placed on the
+ *   zones its plan's agents' pull requests touched; with no grant, or a
+ *   Linear that did not answer, none.
  * - Defects is a slot nothing fills yet.
  *
  * GitHub is asked for a repository token, the tree, and at most
@@ -89,6 +92,12 @@ const FACTORY_WORLD_READ = {
   MAX_MANIFESTS: 40,
   /** How many manifests are read at once. */
   MANIFEST_CONCURRENCY: 8,
+  /**
+   * The most Linear issues read to rank, Linear's largest page: Linear orders
+   * a page by when an issue changed, never by priority, so the most pressing
+   * are chosen from a page this wide rather than from the newest few alone.
+   */
+  MAX_LINEAR_ISSUES: 250,
 } as const;
 
 /** The file a zone's package is declared in. */
@@ -278,6 +287,8 @@ const readZones = Effect.fnUntraced(function* (
 ) {
   const tree = yield* readRepositoryFolder(token, repository, "", true);
   if (!tree.found) return [];
+  // Note that a tree GitHub cut short is drawn as far as it listed, as a tree past our own bound is.
+  if (tree.truncated) yield* Effect.logWarning("A world's tree was listed only in part");
   const files = tree.entries
     .slice(0, FACTORY_WORLD_READ.MAX_TREE_ENTRIES)
     .flatMap((entry) =>
@@ -425,7 +436,7 @@ const readPlanned = Effect.fnUntraced(function* (
   zones: readonly FactoryZone[],
 ) {
   const issues = yield* throughWorkspaceLinear(organizationId, (token) =>
-    plannedLinearIssues(token, FACTORY_WORLD_BOUNDS.MAX_PLANNED),
+    plannedLinearIssues(token, FACTORY_WORLD_READ.MAX_LINEAR_ISSUES),
   ).pipe(
     Effect.catch((failure) =>
       Effect.as(
