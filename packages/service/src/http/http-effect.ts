@@ -25,7 +25,7 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 const HOSTED_CACHE_CONTROL = "private, no-store";
 
 /** The status each refusal is answered with, which is a function of the refusal alone. */
-const HOSTED_REFUSAL_STATUS = {
+export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_HTTP_STATUS.UNAUTHORIZED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,

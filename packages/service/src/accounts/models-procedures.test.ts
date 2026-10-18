@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
@@ -12,16 +12,17 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Effect, Layer, Logger, Option } from "effect";
-import { HttpRouter } from "effect/http";
+import { type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { hostedFetch } from "../orpc/handler.js";
+import { hostedRouter } from "../orpc/router.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
-import { modelsApp } from "./models-app.js";
+import type { WebServices } from "../runtime.js";
 
 /**
- * The models route, answered by the group the way a function answers it,
- * over a real dialect: the signed-in desktop reads the offered models as
+ * The models route, answered by the hosted oRPC router the way the web
+ * route answers it, over a real dialect: the signed-in desktop reads the offered models as
  * the catalog holds them, but for Anthropic's fast versions where the key
  * its agents run on, its own or Luke's, belongs to an organization never
  * granted fast mode, and nobody else reads anything.
@@ -92,35 +93,59 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the catalog handed in and the test's database, answering one request, with every line it logs kept in `logged`. */
-const answer = (catalog: Layer.Layer<ModelCatalog>, request: Request, logged: string[] = []) =>
+/** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
+interface Bytes {
+  readonly status: number;
+  readonly contentType: string | null;
+  readonly cacheControl: string | null;
+  readonly text: string;
+}
+
+/** The hosted router over the catalog handed in and the test's database, with a resolver that reads the test's own bearers. */
+const fetchOver = (catalog: Layer.Layer<ModelCatalog>) =>
   Effect.gen(function* () {
-    const client = yield* SqlClient.SqlClient;
-    const capture = Logger.make((options) => {
-      logged.push(JSON.stringify(options.message), String(options.cause));
-    });
-    const services = Layer.mergeAll(
-      catalog,
-      Layer.succeed(SqlClient.SqlClient, client),
-      Layer.succeed(Database, yield* Database),
-      Logger.layer([capture]),
+    const services = yield* Effect.context<ModelCatalog | DatabaseServices>().pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          catalog,
+          Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+          Layer.succeed(Database, yield* Database),
+        ),
+      ),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      modelsApp({
+    const handle = hostedFetch(
+      hostedRouter({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(
               incoming.headers.get("authorization")?.match(/^Bearer (user-.+)$/u)?.[1],
             ),
           ),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
+      }),
     );
-    const response = yield* Effect.promise(() => handler(request));
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
-    const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
-    return { status: response.status, body } satisfies Answer;
+    // SAFETY: the models procedure yields the catalog and the database alone, which is all a test provides of the web runtime's services.
+    const webServices = services as Context.Context<WebServices>;
+    return (request: Request) => Effect.promise(() => handle(request, webServices));
+  });
+
+/** One request's bytes, as the route answers it. */
+const bytes = (catalog: Layer.Layer<ModelCatalog>, request: Request) =>
+  Effect.gen(function* () {
+    const response = yield* (yield* fetchOver(catalog))(request);
+    return {
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+      cacheControl: response.headers.get("cache-control"),
+      text: yield* Effect.promise(() => response.text()),
+    } satisfies Bytes;
+  });
+
+/** One request answered, its body read as JSON. */
+const answer = (catalog: Layer.Layer<ModelCatalog>, request: Request) =>
+  Effect.map(bytes(catalog, request), (answered): Answer => {
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(answered.text) as WireBoundaryInput;
+    return { status: answered.status, body };
   });
 
 function request(
@@ -157,6 +182,47 @@ it.layer(getTestDB())("the models route", (it) => {
         },
       );
     }),
+  );
+
+  it.effect(
+    "the answers are byte for byte the old group's: the read under private, no-store, and each refusal bare",
+    () =>
+      Effect.gen(function* () {
+        const catalog = modelCatalogOf([OPUS]);
+        const json = "application/json";
+        assert.deepEqual(yield* bytes(catalog, request(MODELS)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          contentType: json,
+          cacheControl: "private, no-store",
+          text: '{"models":[{"id":"anthropic/claude-opus-5.5","name":"Claude Opus 5.5","provider":"anthropic","efforts":["low","medium","high","xhigh","max"]}]}',
+        });
+        assert.deepEqual(yield* bytes(catalog, request(MODELS, { signedIn: false })), {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          contentType: json,
+          cacheControl: null,
+          text: '{"error":"invalid-token"}',
+        });
+        for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) {
+          assert.deepEqual(yield* bytes(catalog, request(MODELS, { method })), {
+            status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+            contentType: json,
+            cacheControl: null,
+            text: '{"error":"method-not-allowed"}',
+          });
+        }
+        assert.deepEqual(yield* bytes(catalog, request(MODELS, { method: "HEAD" })), {
+          status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+          contentType: json,
+          cacheControl: null,
+          text: "",
+        });
+        assert.deepEqual(yield* bytes(catalog, request(`${MODELS}/other`)), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          contentType: json,
+          cacheControl: null,
+          text: '{"error":"not-found"}',
+        });
+      }),
   );
 
   it.effect(

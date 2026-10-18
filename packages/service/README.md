@@ -377,7 +377,8 @@ answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
 
-`src/accounts/models-app.ts` answers `GET /api/models`: the models a coding agent
+`src/accounts/models-procedures.ts` answers `GET /api/models`, the first
+procedure of the hosted oRPC router (`src/orpc/`): the models a coding agent
 may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
 `src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
@@ -411,8 +412,8 @@ catalog id into the id the provider's own API takes — model calls go to
 Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
 catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
-through a scripted gateway and the test clock; `src/accounts/models-app.test.ts`
-answers the route over a fixed catalog.
+through a scripted gateway and the test clock; `src/accounts/models-procedures.test.ts`
+answers the route over a fixed catalog, byte for byte as the old group did.
 
 ## Accounts' own provider keys
 

@@ -1,0 +1,48 @@
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
+import { cookieOriginGuard } from "@luke/service/http/origin-guard";
+import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
+import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
+import type { Route } from "@luke/service/route";
+import type { WebServices } from "@luke/service/runtime";
+import { type Context, Effect } from "effect";
+import { runWeb } from "./runtime.js";
+
+/**
+ * The route every migrated hosted path answers through: the hosted oRPC
+ * router behind `OpenAPIHandler` (`packages/service/src/orpc/`), over the
+ * deployment's own resolvers. A migrated route file exports `orpcRoute`
+ * itself; the dispatcher has already restored the public path the router
+ * matches (`function-dispatch.ts`, and `function-rewrites.ts`'s oRPC rows for
+ * a path with segments).
+ *
+ * The services each procedure runs on are read from the one web runtime
+ * through `runWeb`, once per instance, and handed to every request as its
+ * `effect/context`, as `route-effect.ts` hands them to a route layer; a read
+ * that failed is not held, so the next invocation tries again. Every request
+ * meets the cookie origin guard first (`packages/service/src/http/origin-guard.ts`).
+ */
+export function routeFromHostedFetch(answer: HostedFetch): Route {
+  const refuseCrossSite = cookieOriginGuard(process.env);
+  let reading: Promise<Context.Context<WebServices>> | undefined;
+  return {
+    async fetch(request: Request): Promise<Response> {
+      const refusal = refuseCrossSite(request);
+      if (refusal !== undefined) return refusal;
+      reading ??= runWeb(Effect.context<WebServices>());
+      const attempt = reading;
+      let services: Context.Context<WebServices>;
+      try {
+        services = await attempt;
+      } catch (failure) {
+        if (reading === attempt) reading = undefined;
+        throw failure;
+      }
+      return answer(request, services);
+    },
+  };
+}
+
+const DEPLOYMENT_SEAMS: HostedRouterSeams = { resolveUserId: resolveHostedUserId };
+
+/** The deployment's hosted oRPC route. */
+export const orpcRoute: Route = routeFromHostedFetch(hostedFetch(hostedRouter(DEPLOYMENT_SEAMS)));
