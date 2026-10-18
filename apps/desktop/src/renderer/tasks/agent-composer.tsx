@@ -43,7 +43,7 @@ import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
-import { PublishedChip, type PublishedDoors } from "./agent-published";
+import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
@@ -63,8 +63,10 @@ import type { AgentModelControl } from "./use-agent-model";
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type. Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+" that attaches
- * files and, once the agent has pushed, the pull request's or the branch's
- * chip, which opens it on GitHub (`agent-published.tsx`); at the right,
+ * files and, once the agent has pushed a branch with no pull request yet,
+ * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
+ * pull request, once one stands, is the row pinned over the card rather
+ * than a chip here (`agent-tab.tsx`); at the right,
  * in this order, the model chip naming what the agent runs on, which opens
  * the menu that changes it for the next step (`agent-model-chip.tsx`),
  * the ring that shows, once a step has ended, how full the agent's model's
@@ -145,8 +147,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * The foot answers the card's own width, not the window's, so the box
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
- * card narrows, the chips naming what the agent published draw their marks
- * alone; then a ⋯ takes in, in this order, the MCP
+ * card narrows, the branch's chip draws its mark alone; then a ⋯ takes in, in this order, the MCP
  * servers, the context ring, and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too. The field
  * and the round Send or Stop always stand whole. The chips drawing their
@@ -175,8 +176,8 @@ const BUTTON = {
 } as const;
 
 /**
- * The card widths below which a chip draws its mark alone: the published
- * chips first, then the model chip. Note that they are steps of the same
+ * The card widths below which a chip draws its mark alone: the branch's
+ * chip first, then the model chip. Note that they are steps of the same
  * order as the stylesheet's (tasks.css's `composer` queries, at 400 and 240),
  * because the room each leaves is counted on the steps before it.
  */
@@ -655,7 +656,7 @@ export function AgentComposer({
                     attach(picked);
                   }}
                 />
-                <PublishedChip
+                <BranchChip
                   published={published}
                   doors={doors}
                   narrow={folds(FOLD_WIDTH.PUBLISHED)}

@@ -606,7 +606,7 @@ it.effect(
 
       const rows = [...tab.querySelectorAll(".pull-request-check")];
       assert.equal(
-        rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[0]?.querySelector("img")?.getAttribute("src"),
         "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
         "an App's logo is drawn from GitHub's avatar host at its size",
       );
@@ -615,15 +615,11 @@ it.effect(
         "a picture GitHub's avatar host serves is never asked of the service",
       );
       assert.equal(
-        rows[1]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[1]?.querySelector("img")?.getAttribute("src"),
         `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
         "any other is drawn as the service read it",
       );
-      assert.equal(
-        rows[2]?.querySelector(".pull-request-check-avatar"),
-        null,
-        "no avatar, none drawn",
-      );
+      assert.equal(rows[2]?.querySelector(".lucide-bot"), null, "no avatar, none drawn");
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
 
       yield* TestClock.adjust("1 second");
@@ -689,7 +685,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     ["Deployed", "Failed"],
   );
   assert.equal(
-    deployments.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+    deployments.querySelector("img")?.getAttribute("src"),
     "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
   );
   const buttons = deployments.querySelectorAll<HTMLButtonElement>("button.pull-request-check");
@@ -1095,6 +1091,74 @@ test("opened on its files, as a link to its changes opens it, the header stands 
   await choose(tab, "Conversation");
   assert.deepEqual(waiting(tab), [], "nothing is waited on again");
   assert.equal(shownPanel()[0]?.querySelectorAll(".pull-request-entry").length, 2);
+});
+
+test("an App's bot stands by the logo GitHub gives it at its App's address, in the header's Opened by and Reviewers and in the conversation, its robot only until the logo loads", async () => {
+  const devin = {
+    login: "devin-ai-integration[bot]",
+    bot: true,
+    avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+  };
+  const lukeBot = {
+    login: "luke-agent[bot]",
+    bot: true,
+    avatarUrl: "https://avatars.githubusercontent.com/in/4242?v=4",
+  };
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, author: lukeBot } }),
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            reviewers: [{ by: devin, state: REVIEW_STATE.COMMENTED }],
+            conversation: [
+              {
+                kind: CONVERSATION_ENTRY.REVIEW,
+                by: devin,
+                state: REVIEW_STATE.COMMENTED,
+                html: '<p dir="auto">Found 1 potential issue.</p>',
+                body: "",
+                at: 2_000,
+                url: `${PAGE}#pullrequestreview-1`,
+              },
+            ],
+            earlier: 0,
+          },
+        }),
+    }),
+  );
+  const header =
+    tab.querySelector<HTMLElement>(".pull-request-header") ?? assert.fail("the header stands");
+  const face =
+    header.querySelector('[aria-label="Reviewers"] .actor-mark[data-bot="true"]') ??
+    assert.fail("the bot reviewer stands on its square");
+  const picture = face.querySelector("img") ?? assert.fail("its logo is asked for");
+  assert.equal(
+    picture.getAttribute("src"),
+    "https://avatars.githubusercontent.com/in/811515?v=4&s=36",
+  );
+  assert.ok(face.querySelector(".lucide-bot"), "its robot stands while the logo loads");
+  act(() => {
+    picture.dispatchEvent(new Event("load"));
+  });
+  assert.equal(face.querySelector(".lucide-bot"), null, "the logo stands in the robot's place");
+
+  const opener =
+    header.querySelector(
+      '.pull-request-people [data-actor-ref] .actor-mark[data-bot="true"] img',
+    ) ?? assert.fail("who opened it is asked for by its logo");
+  assert.match(
+    opener.getAttribute("src") ?? "",
+    /^https:\/\/avatars\.githubusercontent\.com\/in\/4242\?/u,
+  );
+  assert.ok(
+    [...tab.querySelectorAll('.pull-request-entry .actor-mark[data-bot="true"] img')].some((each) =>
+      (each.getAttribute("src") ?? "").startsWith(
+        "https://avatars.githubusercontent.com/in/811515?",
+      ),
+    ),
+    "the bot's review in the conversation is drawn by its logo",
+  );
 });
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
@@ -1609,9 +1673,13 @@ function writeReview(panel: HTMLElement, words: string): void {
 /** Chooses what the review says by its label, and submits it. */
 async function submitReview(panel: HTMLElement, label: string): Promise<void> {
   const choice =
-    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    [
+      ...panel.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="What the review says"] [role="radio"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(label)) ??
     assert.fail(`the panel offers ${label}`);
-  act(() => choice.querySelector("input")?.click());
+  act(() => choice.click());
   const submit =
     [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
     assert.fail("the panel submits");
@@ -1630,10 +1698,10 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     }),
   );
   const panel = openReview(tab);
-  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
-    "Comment",
-    "Approve",
-    "Request changes",
+  assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
+    "CommentSubmit general feedback without approval.",
+    "ApproveApprove this pull request.",
+    "Request changesSubmit feedback that must be addressed.",
   ]);
 
   writeReview(panel, "Ship it once **CI** is green.");
@@ -1654,8 +1722,11 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const reopened = openReview(tab);
   assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
   assert.equal(
-    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
-    REVIEW_EVENT.COMMENT,
+    reopened
+      .querySelector('[aria-label="What the review says"] [aria-checked="true"]')
+      ?.textContent?.startsWith("Comment"),
+    true,
+    "a fresh review says Comment",
   );
 });
 

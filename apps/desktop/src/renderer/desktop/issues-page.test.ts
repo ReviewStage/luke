@@ -839,6 +839,21 @@ test("an issue's page opened on an issue the service does not hand the reader, a
   assert.match(page.textContent ?? "", /This issue is gone, or not in this workspace\./u);
 });
 
+test("an issue's page opened before its issue is read, as a link opens it, stands the issue's page in blocks, said as reading, until the issue lands in their place", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount({ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id });
+  const reading = page.querySelector('[role="status"]');
+  const readingWords = reading?.textContent;
+  const readingTitle = titleOf(page);
+  await settle();
+
+  assert.equal(readingWords, "Reading the issue");
+  assert.ok(reading?.closest(".desktop-document"), "the blocks stand in the issue's own document");
+  assert.equal(readingTitle, undefined);
+  assert.equal(page.querySelector('[role="status"]'), null);
+  assert.equal(titleOf(page), "Fix login");
+});
+
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
@@ -1365,7 +1380,7 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.equal(page.querySelector(".home-section"), null);
 });
 
-test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+test("while the issues are read the list stands rows of blocks and the board a column of blocks for every status, each said as reading", async () => {
   standing = [issue(1)];
   window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
   const list = mount();
@@ -1378,12 +1393,17 @@ test("while the issues are read the list stands rows of blocks, said as reading,
   window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
   const board = mount();
   const boardReading = board.querySelector('[role="status"]');
+  const readingColumns = boardReading?.querySelectorAll(".issue-column").length;
+  const readingCards = boardReading?.querySelectorAll("[data-issue-id]").length;
   await settle();
 
   assert.equal(reading, "Reading issues");
   assert.equal(read, null);
   assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
-  assert.equal(boardReading, null);
+  assert.equal(boardReading?.textContent, "Reading issues");
+  assert.equal(readingColumns, 5, "a column for every status stands while the board is read");
+  assert.equal(readingCards, 0, "no issue's card stands before the issues are read");
+  assert.equal(board.querySelector('[role="status"]'), null);
   assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 

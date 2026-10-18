@@ -39,8 +39,8 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
-import { IssueBoard, useBoardKeys } from "./issue-board";
-import { IssueCrumbs, IssueDetail } from "./issue-detail";
+import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
+import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
@@ -89,8 +89,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
 
-/** What the list's page is read as while its issues are. */
+/** What the list's page is read as while its issues are, and one issue's page while its issue is. */
 const READING_LINE = "Reading issues";
+const READING_ONE_LINE = "Reading the issue";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
@@ -142,8 +143,9 @@ function keyboardLeftWith(issueId: string): boolean {
 /**
  * What the list's page stands, by its read and its layout. Note that an
  * empty board still stands its columns, each saying it holds none, so only
- * the list says there are none yet; and that a board being read stands
- * nothing, since the page's loading rows are a list's shape, not a board's.
+ * the list says there are none yet; and that a board being read stands as
+ * ready, drawing its own columns of blocks (`IssueBoardSkeleton`), since
+ * the page's loading rows are a list's shape, not a board's.
  */
 function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
   if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
@@ -236,7 +238,10 @@ function ListPage({
         </ErrorState>
       }
     >
-      {listed === undefined ? null : onBoard ? (
+      {/* Note that the children stand only once ready, which a page still being read is only on the board. */}
+      {listed === undefined ? (
+        <IssueBoardSkeleton label={READING_LINE} />
+      ) : onBoard ? (
         <IssueBoard
           issues={listed}
           workspaceName={workspaceName}
@@ -306,7 +311,7 @@ function ViewOptions({
   );
 }
 
-/** One issue's page while its issue is not drawn: its empty frame while it is read, or why it could not be, with Retry. */
+/** One issue's page while its issue is not drawn: its page in blocks while it is read, or why it could not be, with Retry. */
 function DetailFrame({
   failure,
   onRetry,
@@ -325,13 +330,15 @@ function DetailFrame({
           <ExperimentTag />
         </div>
       </header>
-      <div className="automations-scroll scroll-fade-top">
-        {failure === undefined ? null : (
+      {failure === undefined ? (
+        <IssueDetailSkeleton label={READING_ONE_LINE} />
+      ) : (
+        <div className="automations-scroll scroll-fade-top">
           <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
           </ErrorState>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
