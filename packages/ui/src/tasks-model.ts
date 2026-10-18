@@ -1,9 +1,11 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINEAR_BOUNDS,
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -135,6 +137,41 @@ export function workspaceReaches(
 export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
   const title = issue.title.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
   return title === "" ? issue.identifier : title;
+}
+
+/**
+ * The name a task New task starts in Plan mode takes from the words in its
+ * box: their first line, its ends trimmed and cut to a task name's bound;
+ * nothing for a blank box, which starts the task as Untitled. Note that this
+ * stands only until Plan mode hands the words to Luke as the task's brief.
+ */
+export function taskNameOfWords(words: string): string {
+  const [first = ""] = words.trim().split("\n");
+  return first.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
+}
+
+/** Where an issue's mention is written; its target is the issue's own address, so neither part is read. */
+const ISSUE_MENTION_PLACE = { workspace: "", repository: null } as const;
+
+/**
+ * The prompt a coding agent New task starts is handed: a mention of the
+ * Linear issue picked, where one was, as the app writes a Linear issue's
+ * link (`[@ENG-1 Title](https://linear.app/…)`), then a blank line and the
+ * words, trimmed; the issue alone where no words were written, and the words
+ * alone where no issue was picked.
+ */
+export function agentPromptOf(
+  issue: Pick<LinearIssueSummary, "identifier" | "title" | "url"> | undefined,
+  words: string,
+): string {
+  const said = words.trim();
+  if (issue === undefined) return said;
+  const mention = mentionMarkdown(
+    { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: issue.url },
+    `${issue.identifier} ${issue.title.trim()}`.trim(),
+    ISSUE_MENTION_PLACE,
+  );
+  return said === "" ? mention : `${mention}\n\n${said}`;
 }
 
 /** How many of a workspace's Linear issues New task offers under its name field at once. */
@@ -368,6 +405,15 @@ export function archiveTasksFailedNote(refused: number): string {
   return refused === 1
     ? MARK_FAILED_NOTES[TASK_MARK.ARCHIVE]
     : "The tasks could not be archived. Try again.";
+}
+
+/**
+ * Whether archiving the tasks asks first: any of them has a coding agent
+ * not yet archived, which the archive stops and archives with it. A task
+ * whose agents the list has yet to read asks nothing, as one with none.
+ */
+export function archiveAsks(tasks: readonly Pick<TaskSummary, "agents">[]): boolean {
+  return tasks.some((task) => (task.agents?.total ?? 0) > 0);
 }
 
 /** A task's pin and archive as the list carries them, each only where it stands. */

@@ -50,6 +50,13 @@ import { useWorkingNow, WorkingLine } from "./working-time";
  * once it lands the tab gives way to the new agent's, and a Start that did
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
+ *
+ * A draft New task handed over (`sendsOnOpen`, `use-coding-agents.ts`'s
+ * `onHandDraft`) holds the words, files, and model New task's box held, and
+ * the tab sends it by itself as soon as the task can start an agent, once:
+ * the tab gives way to the agent's as it starts, and a Start the service
+ * refused leaves the developer on the draft with the words in the box, why
+ * under it, and Retry, as a send of their own would.
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
@@ -145,6 +152,16 @@ export function DraftAgentTab({
   };
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+  // A draft New task handed over sends itself once the task can start an
+  // agent; the mark is let go first, so a refusal waits on Retry.
+  const handed = draft.sendsOnOpen === true && control.start.available;
+  const sendHanded = useRef(send);
+  sendHanded.current = send;
+  useEffect(() => {
+    if (!handed) return;
+    latest.current.onDraftChange({ sendsOnOpen: undefined });
+    sendHanded.current();
+  }, [handed]);
   if (control.onUnarchive !== undefined) {
     return (
       <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>

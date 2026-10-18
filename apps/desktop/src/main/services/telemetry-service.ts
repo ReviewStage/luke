@@ -5,12 +5,13 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
-import { Effect } from "effect";
+import { Effect, type Layer } from "effect";
 import {
   eventWithoutAccessTokens,
   transactionWithoutAccessTokens,
@@ -55,6 +56,22 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     beforeSendTransaction: transactionWithoutAccessTokens,
   });
 }
+
+/**
+ * Main's Sentry, as a failed launch reports through it. What it captures
+ * passes the `beforeSend` above, so the token filters hold on it too.
+ */
+export const mainSentry: SentryCapture = {
+  captureException: Sentry.captureException,
+  flush: Sentry.flush,
+};
+
+/**
+ * Every Effect failure a boundary of main's runtime reports, captured
+ * through main's Sentry: the composition provides it beneath every service
+ * and the host, so their fibers and the acts' runs all report through it.
+ */
+export const mainErrorReporting: Layer.Layer<never> = sentryReporterLayer(mainSentry);
 
 export interface TelemetryService extends EffectDesktopService {
   /**
@@ -102,6 +119,10 @@ export function createTelemetryService(
     start: () => Effect.void,
     // A report queued when the quit began would otherwise go with the
     // process; the flush is bounded so it cannot be what holds one open.
-    stop: () => Effect.asVoid(Effect.promise(() => Sentry.close(CRASH_REPORT_FLUSH_MS))),
+    // Note that it flushes rather than closes, because a launch that fails
+    // after this service started runs this stop before the entry captures
+    // the failure, and a closed client would drop that report; so would it
+    // every defect a later stop of the same quit reports.
+    stop: () => Effect.asVoid(Effect.promise(() => Sentry.flush(CRASH_REPORT_FLUSH_MS))),
   };
 }

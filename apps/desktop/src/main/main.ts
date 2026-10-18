@@ -1,4 +1,5 @@
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
+import { launchFailureReported } from "@luke/features/sentry-reporting";
 import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
@@ -6,7 +7,7 @@ import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
-import { initializeCrashReporting } from "./services/telemetry-service";
+import { initializeCrashReporting, mainSentry } from "./services/telemetry-service";
 import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
 
 /**
@@ -145,10 +146,12 @@ async function main(): Promise<void> {
     // A start that cannot finish leaves nothing to draw, so this process
     // gives back what it did arm and goes, rather than sitting on the
     // single-instance lock with no window and no way for the next launch in.
-    // The quit below is what closes the runtime, in the one order.
-    config.report(
-      `the runtime could not stand up: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    // The quit below is what closes the runtime, in the one order. The
+    // failure is sent to Sentry first, and flushed, because the quit takes
+    // whatever is still queued with the process.
+    const failure = error instanceof Error ? error : new Error(String(error));
+    config.report(`the runtime could not stand up: ${failure.message}`);
+    await Effect.runPromise(launchFailureReported(mainSentry, failure));
     app.quit();
   }
 }

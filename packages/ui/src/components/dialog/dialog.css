@@ -46,6 +46,13 @@
     gap: var(--luke-space-12);
   }
 
+  /* A composer card with a row of chips at its foot, as New task's, wider
+     still so its chips stand whole beside the round button. */
+  .luke-dialog[data-size="composer"] {
+    width: min(var(--luke-dialog-composer-width), 100%);
+    gap: var(--luke-space-12);
+  }
+
   /* A file shown edge to edge: the card fits what it holds between its
      two measures, with no inset or gap of its own, and clips it at its
      corners. */

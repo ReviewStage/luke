@@ -904,7 +904,10 @@ yours.
 
 **Crash and performance reports from the Mac app.** In ordinary runs, Luke
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
-and renderer code, process-session status, and native minidumps when an
+and renderer code, and of the errors it caught but could not recover from: a
+launch that could not start, a window whose state could not be read, and an
+internal error in an action, a background task, or a part of Luke shutting
+down. It also sends process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
 traces for about one launch or page load in ten: how long Luke took to start,
 how each window's page loaded, and the requests each made. Luke uses Sentry's
@@ -921,16 +924,19 @@ Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
 Luke's agents send Sentry reports so that we can find and fix failures. Our
-service's web functions send every error they did not handle, with its
-message, stack trace, and the lines of code around it; performance traces of a
-share of the requests they answer, each database query, and each request they
+service's web functions send every error they did not handle or that ended
+work they run apart from a request (such as following a turn for a call, or
+standing the voice or terminal service), with its message, stack trace, and
+the lines of code around it; performance traces of a share of the requests
+they answer, each database query, and each request they
 make, with the method, address, and query parameters, the status, the
 browser's or app's user agent, and the query's text; every line they log;
 counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
-default: every error they did not handle, with its message, stack trace, the
-lines of code around it, and the values of local variables; performance traces
+default: every error they did not handle or that ended work they started
+apart from a turn, with its message, stack trace, the lines of code around it,
+and the values of local variables; performance traces
 of each request they answer, each database query, and each request they make,
 with their headers, bodies, query parameters, and database query parameters,
 and the IP address a request came from; every line they log; and Sentry's

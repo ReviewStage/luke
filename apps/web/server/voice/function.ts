@@ -3,6 +3,7 @@ import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
 import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
+import { standReported } from "@luke/service/observability/sentry";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import type { VoiceAccounts } from "@luke/service/voice/accounts";
 import { deploymentExchange } from "@luke/service/voice/deployment-exchange";
@@ -117,12 +118,13 @@ let standing: VoiceServer | undefined;
  * between invocations and discarded with no shutdown hook to end a service
  * with. An instance whose runtime cannot be built stands none, and its server
  * keeps answering every upgrade with the 503 a deployment missing the project
- * key answers with.
+ * key answers with; either way what ended the service is reported to Sentry.
  */
 function standService(voice: VoiceServer): void {
-  void runWeb(
+  void standReported(
+    runWeb,
     Effect.scoped(Effect.andThen(VoiceService.make(voiceFunctionOptions(voice)), Effect.never)),
-  ).catch(() => undefined);
+  );
 }
 
 /** The one server of this function instance, with its service stood on first use. */
