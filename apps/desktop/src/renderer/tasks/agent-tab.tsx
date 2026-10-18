@@ -1653,7 +1653,6 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
-  onOpenChanges,
   onOpenPullRequest,
   onOpenTarget,
   cards,
@@ -1673,8 +1672,6 @@ export function AgentTab({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang, as those tabs hang them. */
   cards?: TranscriptCards | undefined;
-  /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
-  onOpenChanges?: (() => void) | undefined;
   /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
   onOpenPullRequest?: (() => void) | undefined;
   /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
@@ -1789,7 +1786,6 @@ export function AgentTab({
         doors={{
           openGitHub,
           copy: copyWithToast,
-          openChanges: onOpenChanges,
           openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}
