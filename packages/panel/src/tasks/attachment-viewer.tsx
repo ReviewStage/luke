@@ -18,6 +18,7 @@ import {
 import { useId } from "react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
+import { CodeLinesView, type LinesLook } from "./code-lines.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { type ImageZoom, useImageZoom } from "./use-image-zoom.js";
 
@@ -63,6 +64,9 @@ const ZOOM_CHORD = {
   IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
 } as const satisfies Record<string, ShortcutChord>;
+
+/** A text file's lines always wrap and are numbered, whatever the File tabs' settings say. */
+const TEXT_LOOK: LinesLook = { lineNumbers: true, wrap: true };
 
 /** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
@@ -145,14 +149,13 @@ function AttachmentBody({
   }
   if (text !== undefined) {
     return (
-      <div className="attachment-viewer-body code-lines attachment-viewer-lines">
-        {linesOf(text).map((line, index) => (
-          // Note that a line's place is its identity: the lines never reorder.
-          <div key={index} className="code-line">
-            <span className="code-line-number">{index + 1}</span>
-            <code className="code-line-text">{line}</code>
-          </div>
-        ))}
+      <div className="attachment-viewer-body attachment-viewer-lines">
+        <CodeLinesView
+          look={TEXT_LOOK}
+          firstLine={1}
+          lines={linesOf(text).map((line) => [{ text: line }])}
+          pointed={{ path: file.name }}
+        />
       </div>
     );
   }

@@ -1,28 +1,27 @@
 import type { CodeRef } from "@luke/features/task-wire";
-import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
+import type { TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "@luke/panel/ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
-import { FIND_SKIP_ATTRIBUTE } from "@luke/panel/find-matches";
 import { MarkdownMessage } from "@luke/panel/markdown-message";
 import { CallCheckpoint, CallEnded } from "@luke/panel/tasks/call-card";
+import { CodeLineRows } from "@luke/panel/tasks/code-lines";
 import { FileRef } from "@luke/panel/tasks/file-ref";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
-import { cssCustomProperties, IconButton, SCROLL_FADE_INSET } from "@luke/ui";
+import { IconButton, SCROLL_FADE_INSET } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
   codeFeedCalls,
   copiedLines,
   fileRefText,
-  isPointed,
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
-import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import { useMentionLink } from "./task-mentions";
 
 /**
@@ -53,19 +52,6 @@ const COPY_LABEL = "Copy lines";
 const OPEN_FILE_LABEL = "Open file";
 
 /**
- * A run's colour in each appearance, as the properties `tasks.css` picks
- * between, so the code follows the appearance without being drawn again;
- * nothing for a run in the theme's own foreground.
- */
-export function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
-  if (color === undefined && lightColor === undefined) return undefined;
-  const colours: Record<string, string> = {};
-  if (color !== undefined) colours["--run-dark"] = color;
-  if (lightColor !== undefined) colours["--run-light"] = lightColor;
-  return cssCustomProperties(colours);
-}
-
-/**
  * Scrolls `lines` alone until `target` stands in its middle. Note that this
  * is not `scrollIntoView`, because that scrolls every box around the line as
  * well, and the panel often arrives sliding in from past the window's edge,
@@ -86,72 +72,6 @@ export function scrollerOf(element: HTMLElement): HTMLElement | undefined {
     }
   }
   return undefined;
-}
-
-/**
- * What a blank line's text holds, here and in a diff. Note that it is a
- * newline rather than nothing, because the gutter's number is left out of a
- * selection, so a line holding no text would leave nothing to copy and the
- * copy would close up the blank lines between the code; drawn in `pre-wrap`,
- * a lone newline takes no more room than the line.
- */
-const BLANK_LINE_TEXT = "\n";
-
-/**
- * A line's number in the gutter, a File tab's, a card's, or either side of
- * a diff's: left out of a selection and of the find, so neither a copy nor
- * a search ever holds it; none draws the gutter empty.
- */
-function CodeLineNumber({ line }: { line: number | undefined }): React.JSX.Element {
-  return (
-    <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-      {line}
-    </span>
-  );
-}
-
-/** Whether a line holds no text to copy. */
-function isBlank(tokens: TaskCode["lines"][number]): boolean {
-  return tokens.every((token) => token.text === "");
-}
-
-/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
-export function CodeLineRows({
-  firstLine,
-  lines,
-  pointed,
-  before,
-}: {
-  firstLine: number;
-  lines: TaskCode["lines"];
-  pointed: CodeRef;
-  /** What stands before a line, by its number; nothing where absent. */
-  before?: ((line: number) => ReactNode) | undefined;
-}): React.JSX.Element {
-  return (
-    <>
-      {lines.map((tokens, index) => {
-        const line = firstLine + index;
-        return (
-          // Note that a line's place in the file is its identity: the lines never reorder.
-          <Fragment key={line}>
-            {before?.(line)}
-            <div className="code-line" data-pointed={String(isPointed(pointed, line))}>
-              <CodeLineNumber line={line} />
-              <code className="code-line-text">
-                {isBlank(tokens) ? BLANK_LINE_TEXT : null}
-                {tokens.map((token, at) => (
-                  <span key={at} style={runColours(token)}>
-                    {token.text}
-                  </span>
-                ))}
-              </code>
-            </div>
-          </Fragment>
-        );
-      })}
-    </>
-  );
 }
 
 /** How far below the feed's top a card revealed stands, in pixels: the feed's scroll padding, which clears the call's checkpoint stuck there and the fade beneath it. */

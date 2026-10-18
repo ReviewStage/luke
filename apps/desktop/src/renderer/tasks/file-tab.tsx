@@ -4,6 +4,7 @@ import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { useFindOpen } from "@luke/panel/find-in-tab";
 import { BusyLabel, SpinnerRegion } from "@luke/panel/spinner";
+import { CodeLinesView, useLinesLook } from "@luke/panel/tasks/code-lines";
 import {
   FILE_READ,
   type FileLines,
@@ -17,7 +18,6 @@ import {
   windowUnread,
   withWindow,
 } from "@luke/panel/tasks/file-tab-model";
-import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import type { OpenFile } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -25,12 +25,13 @@ import {
   ErrorState,
   type ErrorStatePlacement,
   RetryRowLabel,
+  SCROLL_FADE,
   TEXT_BUTTON_LINES,
   TextButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CodeLineRows, centreWithin } from "./code-pane";
+import { centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
 import { useMentionDrop, useTaskMentions } from "./task-mentions";
 
@@ -132,20 +133,6 @@ function EdgeRow({
   );
 }
 
-/** The attributes every run of a File tab's lines, or a Changes tab's diff, is drawn by: its numbers shown or not, wrapped or not, as the File tabs' settings say. */
-interface LinesLook {
-  readonly "data-line-numbers": string;
-  readonly "data-wrap": string;
-}
-
-export function useLinesLook(): LinesLook {
-  const { settings } = useFileViewSettings();
-  return {
-    "data-line-numbers": String(settings.lineNumbers),
-    "data-wrap": String(settings.wordWrap),
-  };
-}
-
 /** The run of lines held after a window's answer, or why there is none. */
 function afterAnswer(held: FileRead, answer: TasksFileAnswer): FileRead {
   if ("file" in answer) return { kind: FILE_READ.READY, ...withWindow(held, answer.file) };
@@ -197,28 +184,33 @@ function FileLinesView({
   });
 
   return (
-    <div className="code-lines file-tab-lines scroll-fade-top" ref={scroller} {...look}>
-      {above === undefined ? null : (
-        <EdgeRow
-          key={above.firstLine}
-          label={`Show lines ${above.firstLine}–${above.lastLine}`}
-          onRead={() => readWindow(above)}
-        />
-      )}
-      <CodeLineRows
-        firstLine={held.firstLine}
-        lines={held.lines}
-        pointed={pointed}
-        before={notesBefore(notes)}
-      />
-      {below === undefined ? null : (
-        <EdgeRow
-          key={below.firstLine}
-          label={`Show lines ${below.firstLine}–${Math.min(below.lastLine, held.lineCount)}`}
-          onRead={() => readWindow(below)}
-        />
-      )}
-    </div>
+    <CodeLinesView
+      look={look}
+      fade={SCROLL_FADE.START}
+      scrollerRef={scroller}
+      firstLine={held.firstLine}
+      lines={held.lines}
+      pointed={pointed}
+      before={notesBefore(notes)}
+      above={
+        above === undefined ? null : (
+          <EdgeRow
+            key={above.firstLine}
+            label={`Show lines ${above.firstLine}–${above.lastLine}`}
+            onRead={() => readWindow(above)}
+          />
+        )
+      }
+      below={
+        below === undefined ? null : (
+          <EdgeRow
+            key={below.firstLine}
+            label={`Show lines ${below.firstLine}–${Math.min(below.lastLine, held.lineCount)}`}
+            onRead={() => readWindow(below)}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -444,14 +436,14 @@ export function FileTab({
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
-            <CodeLineRows
-              firstLine={snippet.firstLine}
-              lines={snippet.lines}
-              pointed={snippet.ref}
-              before={notesBefore(notes)}
-            />
-          </div>
+          <CodeLinesView
+            look={look}
+            fade={SCROLL_FADE.START}
+            firstLine={snippet.firstLine}
+            lines={snippet.lines}
+            pointed={snippet.ref}
+            before={notesBefore(notes)}
+          />
         </>
       )}
     </section>

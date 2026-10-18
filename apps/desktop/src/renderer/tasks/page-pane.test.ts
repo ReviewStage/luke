@@ -72,7 +72,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   };
   // The source's lines as drawn, each its number then its text.
   const sourceLines = () =>
-    [...container.querySelectorAll(".file-tab-lines .code-line")].map(
+    [...container.querySelectorAll(".code-lines .code-line")].map(
       (line) =>
         `${line.querySelector(".code-line-number")?.textContent} ${line.querySelector(".code-line-text")?.textContent}`,
     );
@@ -103,7 +103,7 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   const tag = container.querySelector<HTMLElement>(".code-line-text span");
   assert.equal(tag?.textContent, "<h1>");
   assert.notEqual(tag?.getAttribute("style") ?? "", "");
-  assert.ok(container.querySelector(".file-tab-lines")?.closest(".ph-no-capture"));
+  assert.ok(container.querySelector(".code-lines")?.closest(".ph-no-capture"));
 
   await press("View page");
 
@@ -124,7 +124,7 @@ test("the source stays shown while the versions are stepped, each version's own"
   await press("View page");
   await press("Later version");
 
-  assert.equal(container.querySelector(".file-tab-lines"), null);
+  assert.equal(container.querySelector(".code-lines"), null);
   assert.ok(container.querySelector(`iframe[src="${versionUrl(3)}"]`));
 });
 

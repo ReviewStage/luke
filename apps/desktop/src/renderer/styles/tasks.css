@@ -1020,36 +1020,26 @@
   background: var(--code-ground);
 }
 
-.file-tab-lines {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-/* The File tabs' settings (file-view-settings.ts): lines unwrapped scroll
-   sideways together, each as wide as the longest, so the lit lines' ground
-   runs under the whole of every one; and the numbers' gutter may be gone. */
-.file-tab-lines[data-wrap="false"] {
-  overflow-x: auto;
-}
-
-.file-tab-lines[data-wrap="false"] > .code-line {
+/* How a run of lines filling its place is drawn (code-lines.tsx), as
+   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
+   which scroll on both axes together, each stand as wide as their text or
+   the place, so the lit lines' ground runs under the whole of every one;
+   and the numbers' gutter may be gone. */
+.code-lines[data-wrap="false"] > .code-line {
   width: max-content;
   min-width: 100%;
 }
 
-.file-tab-lines[data-wrap="false"] .code-line-text {
+.code-lines[data-wrap="false"] .code-line-text {
   overflow-wrap: normal;
   white-space: pre;
 }
 
-.file-tab-lines[data-line-numbers="false"] .code-line-number {
+.code-lines[data-line-numbers="false"] .code-line-number {
   display: none;
 }
 
-.file-tab-lines[data-line-numbers="false"] .code-line-text {
+.code-lines[data-line-numbers="false"] .code-line-text {
   padding-left: var(--luke-space-12);
 }
 
@@ -1496,11 +1486,18 @@
 
 /* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
    (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
-   the panel's look (diff-view/index.ts); the list's box fills the File
-   tab's place and scrolls as a File tab's lines do. */
+   the panel's look (diff-view/index.ts). */
 .diff-view {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* The list fills the File tab's place, its scroll area the whole of it. */
+.diff-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 /* Files changed's list of diffs (diff-list.tsx): every file under a header
@@ -2687,7 +2684,7 @@
   line-height: var(--luke-type-body-leading);
 }
 
-.file-tab-lines[data-wrap="false"] > .file-note {
+.code-lines[data-wrap="false"] > .file-note {
   position: sticky;
   left: var(--luke-space-12);
 }
@@ -2839,7 +2836,7 @@
   white-space: pre-wrap;
 }
 
-/* Each run carries its colour in both appearances (`code-pane.tsx`); a run
+/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
    in the theme's own foreground carries neither and takes the pane's. A
    transcript's fenced block is coloured the same way. */
 .code-line-text > span,
@@ -4476,11 +4473,12 @@ ol.transcript-list {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
+/* A text file's lines fill the card under its header and scroll there
+   (code-lines.tsx), on the code's ground. */
 .attachment-viewer-lines {
-  overflow-x: hidden;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--code-ground);
-  user-select: text;
 }
 
 .attachment-viewer-other {

@@ -4,9 +4,10 @@ import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
 import { FindScope } from "@luke/panel/find-in-tab";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { CodeLinesView, useLinesLook } from "@luke/panel/tasks/code-lines";
 import { LinesMenu } from "@luke/panel/tasks/file-menu";
 import { Tooltip } from "@luke/panel/tooltip";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, SCROLL_FADE } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
@@ -16,8 +17,6 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CodeLineRows } from "./code-pane";
-import { useLinesLook } from "./file-tab";
 
 /**
  * page-pane.tsx -- one page an agent wrote for the task, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
@@ -161,9 +160,13 @@ function PageSource({
   }
   return (
     <section className="file-tab" aria-label={`${title} source`}>
-      <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
-        <CodeLineRows firstLine={1} lines={read.lines} pointed={{ path: title }} />
-      </div>
+      <CodeLinesView
+        look={look}
+        fade={SCROLL_FADE.START}
+        firstLine={1}
+        lines={read.lines}
+        pointed={{ path: title }}
+      />
     </section>
   );
 }
