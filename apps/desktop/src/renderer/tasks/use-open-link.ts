@@ -1,8 +1,15 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
-import { pullRequestAgentOf } from "@luke/ui/pull-request-link";
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { listedPullRequestOf, pullRequestAgentOf } from "@luke/ui/pull-request-link";
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+} from "react";
 import { appPlatform } from "../app-platform";
 
 /**
@@ -30,7 +37,11 @@ import { appPlatform } from "../app-platform";
  * request of the item's task in the panel beside the item rather than
  * leaving for the task, and a task, or an agent with no task, opens a pull
  * request one of its agents opened in that agent's Pull request tab rather
- * than on GitHub (`openPullRequestsHere`).
+ * than on GitHub (`openPullRequestsHere`). Past the place, the window opens
+ * a pull request any listed task's agent opened in that agent's Pull request
+ * tab, on its task (`ListedPullRequestsProvider`), wherever it is pressed:
+ * Factory, Chat, a version, a task's card, or another task. Inside a pull
+ * request's own tab, a link leaves for GitHub (`PullRequestsOnGitHub`).
  */
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
@@ -45,6 +56,27 @@ const OpenHereContext = createContext<OpenHere | undefined>(undefined);
 
 /** Hands everything under it the place's own opener, asked first of every link opened there. */
 export const OpenHereProvider = OpenHereContext.Provider;
+
+/** The tasks the window lists, as their rows name their pull requests; none outside the window. */
+type ListedTasks = Parameters<typeof listedPullRequestOf>[1];
+
+const ListedTasksContext = createContext<ListedTasks | undefined>(undefined);
+
+/** Hands everything under it the tasks the window lists, whose agents' pull requests open in their Pull request tabs. */
+export const ListedPullRequestsProvider = ListedTasksContext.Provider;
+
+/**
+ * Under it, a link to a pull request leaves for GitHub, neither the place
+ * nor the window opening it in a tab: as inside a pull request's own tab,
+ * which already is that pull request.
+ */
+export function PullRequestsOnGitHub({ children }: { children: ReactNode }): ReactNode {
+  return createElement(
+    OpenHereContext.Provider,
+    { value: undefined },
+    createElement(ListedTasksContext.Provider, { value: undefined }, children),
+  );
+}
 
 /**
  * A place's opener for its agents' pull requests: a link to the page on
@@ -121,14 +153,32 @@ function lukeLinkOf(href: string): ReadLink | undefined {
     : undefined;
 }
 
-/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the capability it belongs to. */
+/** The Pull request tab a link to a listed task's agent's pull request opens, as a Luke link names it; nothing for any other address. */
+function listedPullRequestLink(
+  href: string,
+  listed: ListedTasks | undefined,
+): ReadLink | undefined {
+  const found = listed === undefined ? undefined : listedPullRequestOf(href, listed);
+  return found === undefined
+    ? undefined
+    : {
+        workspace: "",
+        place: { kind: LINK_PLACE.CHANGES, planId: found.taskId, agentId: found.agentId },
+      };
+}
+
+/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, a listed task's agent's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to. */
 export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
+  const listed = useContext(ListedTasksContext);
   return useCallback(
     (href: string) => {
       if (openHere?.(href) === true) return;
-      const link = openPlace === undefined ? undefined : lukeLinkOf(href);
+      const link =
+        openPlace === undefined
+          ? undefined
+          : (lukeLinkOf(href) ?? listedPullRequestLink(href, listed));
       if (openPlace !== undefined && link !== undefined) {
         openPlace(link);
       } else if (isGitHubAddress(href)) {
@@ -137,6 +187,6 @@ export function useOpenLink(): (href: string) => void {
         appPlatform().openWeb(href);
       }
     },
-    [openPlace, openHere],
+    [openPlace, openHere, listed],
   );
 }
