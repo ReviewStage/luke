@@ -9,9 +9,9 @@ import {
   type ChatMessage,
   formValueLines,
   GENERAL_CHANNEL,
+  LUKE_HANDLE,
   MEMBER_KIND,
   mentionedHandles,
-  PLANNER_HANDLE,
   replyWords,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
@@ -320,8 +320,8 @@ export function fixtureChat(
       { id: MEMBER.MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", userId: "maria", left: false },
       {
         id: MEMBER.LUKE,
-        kind: MEMBER_KIND.PLANNER,
-        handle: PLANNER_HANDLE,
+        kind: MEMBER_KIND.LUKE,
+        handle: LUKE_HANDLE,
         planId: FIXTURE_TASK_ID,
         left: false,
       },

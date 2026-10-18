@@ -10,12 +10,24 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
-import { GAP, LAYOUT_ELEMENT, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  BUTTON_SHAPE,
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  GAP,
+  IconButton,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
 import { ArrowUpIcon, CheckIcon } from "lucide-react";
 import { useState } from "react";
-import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, FormFields } from "./inbox-pane";
@@ -186,43 +198,37 @@ function Presses({
   if (presses === undefined) {
     return (
       <Tooltip label="Send">
-        <button
-          type="submit"
-          className="chat-send"
-          aria-label="Send"
+        <IconButton
+          type={BUTTON_TYPE.SUBMIT}
+          icon={<ArrowUpIcon aria-hidden="true" />}
+          label="Send"
+          variant={BUTTON_VARIANT.PRIMARY}
+          shape={BUTTON_SHAPE.ROUND}
           disabled={
-            sending || inbox === undefined || inboxReply({ response: inbox }, draft) === undefined
+            !sending &&
+            (inbox === undefined || inboxReply({ response: inbox }, draft) === undefined)
           }
-        >
-          <BusyLabel busy={sending} label="Sending">
-            <ArrowUpIcon aria-hidden="true" />
-          </BusyLabel>
-        </button>
+          busy={sending}
+          busyLabel="Sending"
+        />
       </Tooltip>
     );
   }
   const { back, ahead } = presses;
   return (
     <div className="chat-ask-presses">
-      <button
-        type="button"
-        className="primary-button"
-        disabled={sending}
+      <Button
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={sending}
+        busyLabel="Sending"
         onClick={() => onAnswer(ahead.reply)}
       >
-        <BusyLabel busy={sending} label="Sending">
-          {ahead.label}
-        </BusyLabel>
-      </button>
+        {ahead.label}
+      </Button>
       {back === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={sending}
-          onClick={() => onAnswer(back.reply)}
-        >
+        <Button disabled={sending} onClick={() => onAnswer(back.reply)}>
           {back.label}
-        </button>
+        </Button>
       )}
     </div>
   );

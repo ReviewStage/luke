@@ -1,7 +1,7 @@
-import { ChevronDownIcon, WingFace } from "@luke/ui";
+import { ChevronDownIcon, FoldingButton, type FoldingButtonHint, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { CodeXmlIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import type { FileNote } from "./file-tab-model";
@@ -44,6 +44,26 @@ export interface FileNotes {
   readonly onShow: (callId: string) => void;
 }
 
+/**
+ * The pill a folded Show in Code raises: its words and how long ago the note
+ * was shown, since a narrow panel draws the age nowhere else. Note that it is
+ * one component for as long as the age reads the same, because a hint
+ * minted anew each render would mount its button afresh.
+ */
+function useAgedHint(ago: string): FoldingButtonHint {
+  return useMemo(
+    () =>
+      function AgedHint({ label, children }) {
+        return (
+          <Tooltip label={label === undefined ? undefined : `${label} · ${ago}`}>
+            {children}
+          </Tooltip>
+        );
+      },
+    [ago],
+  );
+}
+
 /** One note's card: its header, which folds it, then Luke's words while it is open. */
 function FileNoteCard({
   note,
@@ -61,6 +81,7 @@ function FileNoteCard({
   const now = useMinute();
   const link = useMentionLink();
   const openLink = useOpenLink();
+  const hint = useAgedHint(agoText(note.shownAt, now));
   return (
     <aside
       className="file-note"
@@ -86,17 +107,12 @@ function FileNoteCard({
           )}
         </button>
         <RelativeTime className="file-note-time" at={note.shownAt} now={now} />
-        <Tooltip label={`${SHOW_IN_CODE_LABEL} · ${agoText(note.shownAt, now)}`}>
-          <button
-            type="button"
-            className="file-note-show"
-            aria-label={SHOW_IN_CODE_LABEL}
-            onClick={onShow}
-          >
-            <CodeXmlIcon aria-hidden="true" />
-            <span className="file-note-show-words">{SHOW_IN_CODE_LABEL}</span>
-          </button>
-        </Tooltip>
+        <FoldingButton
+          label={SHOW_IN_CODE_LABEL}
+          icon={<CodeXmlIcon aria-hidden="true" />}
+          onClick={onShow}
+          hint={hint}
+        />
       </header>
       {folded ? null : (
         <MarkdownMessage

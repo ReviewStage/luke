@@ -176,19 +176,23 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
-        <span className="agent-servers-waiting" title={row.note}>
-          <Spinner label={row.note ?? ""} />
-        </span>
+        <Tooltip label={row.note}>
+          <span className="agent-servers-waiting">
+            <Spinner label={row.note ?? ""} />
+          </span>
+        </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <span className="agent-servers-problem" title={row.problem}>
-          {row.problem}
-        </span>
+        <Tooltip label={row.problem}>
+          <span className="agent-servers-problem">{row.problem}</span>
+        </Tooltip>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-        <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
-          {row.note}
-        </span>
+        <Tooltip label={row.note}>
+          <span className="agent-servers-problem" data-tone="quiet">
+            {row.note}
+          </span>
+        </Tooltip>
       ) : null}
     </>
   );

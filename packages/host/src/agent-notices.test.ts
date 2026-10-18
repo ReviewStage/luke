@@ -413,7 +413,7 @@ it.effect(
 const AUTOMATION_NAME = "Morning Sentry triage";
 
 /** An agent an automation started with no plan, as the plan list carries it, started by the signed-in account unless a test says. */
-function planlessAgent(
+function tasklessAgent(
   status: CodingAgentStatus,
   patch: Partial<TasklessAgent> = {},
 ): TasklessAgent {
@@ -443,8 +443,8 @@ it.effect(
       const f = fixture();
       const notices = yield* f.notices;
       f.focus(false);
-      const running = planlessAgent(CODING_AGENT_STATUS.RUNNING);
-      f.answerPage(AGENT_ID, pageOf(planlessAgent(CODING_AGENT_STATUS.COMPLETED)));
+      const running = tasklessAgent(CODING_AGENT_STATUS.RUNNING);
+      f.answerPage(AGENT_ID, pageOf(tasklessAgent(CODING_AGENT_STATUS.COMPLETED)));
 
       notices.observeTaskless([running]);
       yield* TestClock.adjust(WATCH);
@@ -467,8 +467,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(true);
 
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.FAILED)]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.FAILED)]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.toasted, [
@@ -513,8 +513,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING, { title: null })]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.FAILED, { title: null })]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.said(), [{ title: AUTOMATION_NAME, body: `${AUTOMATION_NAME} failed` }]);
@@ -529,9 +529,9 @@ it.effect(
       f.focus(false);
       const theirs = { startedBy: { userId: "user-sam", name: "Sam" } };
 
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
       yield* TestClock.adjust(WATCH);
-      notices.observeTaskless([planlessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
+      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
       yield* Effect.yieldNow;
 
       assert.deepEqual(f.readAgents, []);
@@ -1047,13 +1047,13 @@ it.effect(
       f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
       yield* settled;
       notices.shownChat({ workspaceId: "workspace-acme", planId: TASK_ID });
-      const otherPlan = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
+      const otherTask = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
       f.answerInbox({
         items: [],
         chat: [
           chatEntry(60),
           chatEntry(61, { planId: null }),
-          chatEntry(62, { planId: otherPlan }),
+          chatEntry(62, { planId: otherTask }),
         ],
         cursor: "2",
         readAt: READ_AT,

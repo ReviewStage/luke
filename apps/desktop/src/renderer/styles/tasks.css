@@ -1069,13 +1069,6 @@
   user-select: text;
 }
 
-/* A typed field of an Inbox form: its name over its box. */
-.inbox-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
 /* A code card's failure stands at its foot, so it draws no rule under it. */
 .code-card > .file-tab-notice {
   border-bottom: 0;
@@ -1718,12 +1711,6 @@ button.file-ref:hover .file-ref-path {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-
-/* The source's toggle reads as on while the source is shown, as the File
-   tab's tree toggle does. */
-.page-view-source-toggle[data-source="true"] {
-  color: var(--luke-color-text);
 }
 
 /* What became of a changed file, lettered quietly beside its path in a
@@ -2436,7 +2423,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The checks, one boxed list, each row opening the check's page, folded
-   past five behind a quiet control along its foot. */
+   past five behind a quiet button under it. */
 .pull-request-checks {
   overflow: clip;
   border: 1px solid var(--luke-color-border);
@@ -2451,26 +2438,6 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-check-list > li + li {
   border-top: 1px solid var(--luke-color-border);
-}
-
-.pull-request-checks-fold {
-  display: block;
-  width: 100%;
-  padding: var(--luke-space-6) var(--boxed-inset);
-  border: 0;
-  border-top: 1px solid var(--luke-color-border);
-  background: none;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-align: center;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.pull-request-checks-fold:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -2611,8 +2578,6 @@ button.pull-request-check:hover {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-hover);
   vertical-align: middle;
 }
 
@@ -2683,17 +2648,6 @@ button.pull-request-check:hover {
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's
    name wears (desktop.css's `.actor-bot`). */
-.pull-request-thread-label {
-  flex: 0 0 auto;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
@@ -2736,6 +2690,7 @@ button.pull-request-check:hover {
 .pull-request-thread-actions-row {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--luke-control-gap);
 }
 
@@ -2756,10 +2711,6 @@ button.pull-request-check:hover {
 
 .pull-request-thread-reply-open:hover {
   border-color: var(--luke-color-border-strong);
-}
-
-.pull-request-thread-resolve {
-  margin-inline-start: auto;
 }
 
 .pull-request-thread-reply {
@@ -2940,40 +2891,16 @@ button.pull-request-check:hover {
   white-space: nowrap;
 }
 
-.file-note-show {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  white-space: nowrap;
-}
-
-.file-note-show > svg {
-  display: none;
-  width: 14px;
-  height: 14px;
-}
-
 /* A narrow panel's note says its age in the link's pill, and the link
-   draws the Code tab's glyph alone, named still. */
+   folds to the Code tab's glyph alone, named still. */
 @container side-panel (max-width: 359px) {
-  .file-note-time,
-  .file-note-show-words {
+  .file-note-time {
     display: none;
   }
 
-  .file-note-show > svg {
-    display: block;
+  .file-note-header {
+    --luke-fold: folded;
   }
-}
-
-.file-note-show:hover {
-  color: var(--luke-color-text);
-  text-decoration: underline;
 }
 
 .file-note-words {
@@ -4507,18 +4434,6 @@ button.skill-chip:hover,
   translate: -50% 0;
 }
 
-.reply-to-selection .toolbar-button {
-  height: 26px;
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.reply-to-selection .toolbar-button svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
@@ -5915,23 +5830,6 @@ button.inbox-option:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-.inbox-recommended {
-  flex: none;
-  margin-top: 3px;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-recommended[data-settled="true"] {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
 /* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
    words, below, whose room around it is the card's gap between blocks. */
 [data-inbox-image] > .picture-block {
@@ -6066,22 +5964,6 @@ button.picture-frame {
   white-space: nowrap;
 }
 
-.picture-tool {
-  display: inline-flex;
-  height: 26px;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: transparent;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-}
-
 /* With no room above the picture inside the plan's scroller, as at its top,
    the tools stand inside the picture's top edge rather than be cut off. */
 .picture-tools[data-above="false"] {
@@ -6090,25 +5972,10 @@ button.picture-frame {
   translate: none;
 }
 
-/* A tool that is its glyph alone, in a column too narrow for its name, is square. */
-.picture-tools[data-worded="false"] .picture-tool {
-  width: 26px;
-  justify-content: center;
-  padding: 0;
-}
-
-.picture-tool:hover {
-  background: color-mix(in srgb, var(--luke-color-text) 8%, transparent);
-}
-
-.picture-tool > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.picture-tool[data-tone="danger"] {
-  color: var(--luke-color-danger-text);
+/* A tool that is its glyph alone, in a column too narrow for its name, folds
+   its words away, named by its pill. */
+.picture-tools[data-worded="false"] {
+  --luke-fold: folded;
 }
 
 /* A field under a picture that describes it anew, in Settings' well. */
