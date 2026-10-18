@@ -323,9 +323,6 @@ importers:
       react-markdown:
         specifier: 10.1.0
         version: 10.1.0(@types/react@19.2.18)(react@19.2.8)
-      rehype-raw:
-        specifier: 7.0.0
-        version: 7.0.0
       remark-gfm:
         specifier: 4.0.1
         version: 4.0.1
@@ -872,6 +869,9 @@ importers:
 
   packages/panel:
     dependencies:
+      '@effect/atom-react':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
       '@luke/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -890,9 +890,15 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      rehype-raw:
+        specifier: 7.0.0
+        version: 7.0.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

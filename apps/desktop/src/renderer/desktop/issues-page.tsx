@@ -14,6 +14,8 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { type IssueChange, useIssue, useIssues } from "@luke/panel/desktop/use-issues";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -48,21 +50,19 @@ import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
-import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
+import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
 import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
 import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { createdByEntries } from "./sidebar-task-view";
-import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
 
 /**
@@ -455,26 +455,27 @@ function DetailFrame({
   onBack: () => void;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
-  return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Issue"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <IssueCrumbs onBack={onBack} />
-            <ExperimentTag />
-          </div>
-        </header>
-      }
-    >
-      {failure === undefined ? (
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <IssueCrumbs onBack={onBack} />
+        <ExperimentTag />
+      </div>
+    </header>
+  );
+  // Note that the blocks stand in the issue's own document, so the issue lands where they stood.
+  if (failure === undefined) {
+    return (
+      <IssueDocumentPage label="Issue" toolbar={toolbar}>
         <IssueDetailSkeleton label={READING_ONE_LINE} />
-      ) : (
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-        </ErrorState>
-      )}
+      </IssueDocumentPage>
+    );
+  }
+  return (
+    <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Issue" toolbar={toolbar}>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+      </ErrorState>
     </DetailPage>
   );
 }

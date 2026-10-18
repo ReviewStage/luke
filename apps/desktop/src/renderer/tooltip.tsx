@@ -48,6 +48,7 @@
 
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import {
   APP_SHORTCUTS,
   type KeyedCommand,
@@ -62,7 +63,6 @@ import {
   type TooltipLeaving,
   TooltipPill,
 } from "@luke/ui";
-
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
@@ -82,7 +82,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { rendererRuntime } from "./renderer-runtime";
 import { Shortcut } from "./shortcut";
 
 /**
@@ -226,7 +225,9 @@ function Hint({
     <TooltipPill
       {...placed}
       label={drawn.label}
-      shortcut={chord === undefined ? undefined : <Shortcut chord={chord} />}
+      shortcut={
+        chord === undefined ? undefined : <Shortcut chord={chord} className="tooltip-chord" />
+      }
     />
   );
 }

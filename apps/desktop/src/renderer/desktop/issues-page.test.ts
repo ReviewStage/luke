@@ -424,7 +424,7 @@ function titleOf(page: HTMLElement): string | undefined {
 
 /** What the line under the issue's title says, a phrase at a time, each face left out. */
 function bylineOf(page: HTMLElement): (string | undefined)[] {
-  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
+  return [...page.querySelectorAll(".plan-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -775,7 +775,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
+  const picture = page.querySelector<HTMLImageElement>(".plan-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -893,10 +893,39 @@ test("an issue's page opened before its issue is read, as a link opens it, stand
   await settle();
 
   assert.equal(readingWords, "Reading the issue");
-  assert.ok(reading?.closest(".desktop-document"), "the blocks stand in the issue's own document");
+  assert.ok(
+    reading?.closest(".desktop-document .plan-document-scroll"),
+    "the blocks stand in the issue's own document, in a plan's own column",
+  );
   assert.equal(readingTitle, undefined);
   assert.equal(page.querySelector('[role="status"]'), null);
   assert.equal(titleOf(page), "Fix login");
+});
+
+test("an issue's description is drawn a section at a time, as a plan's text is, so its sections stand a plan's gap apart", async () => {
+  standing = [
+    issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice.\n\n## Fix\n\nRetry once." }),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(
+    [...descriptionOf(page).querySelectorAll(":scope > .plan-unit")].map(
+      (unit) => unit.textContent,
+    ),
+    ["Fails on CI.", "Steps\nRun it twice.", "Fix\nRetry once."],
+  );
+  assert.ok(descriptionOf(page).classList.contains("document-sections"));
+});
+
+test("an issue's document stands in a plan's own scrolling column and body, its title, byline, and description together, as a plan's do", async () => {
+  standing = [issue(1, { title: "Fix login", description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const body = page.querySelector(".desktop-document > .plan-document-scroll > .plan-body");
+  assert.ok(body, "the issue's body stands where a plan's does");
+  assert.equal(body.querySelector("[aria-label='Issue title']")?.textContent, "Fix login");
+  assert.ok(body.querySelector(".plan-byline"), "the line under the title is a plan's");
+  assert.equal(descriptionOf(page).closest(".plan-body"), body);
 });
 
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
@@ -954,7 +983,7 @@ test("a click into the description opens the plan's editor in its place, the car
 });
 
 /**
- * The issue's page laid out as a window draws it: its main column scrolls,
+ * The issue's page laid out as a window draws it: its document's column scrolls,
  * as its stylesheet says, and stands from 0 to 1000 across, and the
  * description's words from 100 to 800 across and 200 to 240 down. Laid out
  * before the page is drawn, as a window's stylesheet is.
@@ -962,21 +991,21 @@ test("a click into the description opens the plan's editor in its place, the car
 function layPageOut(): void {
   const sheet = document.createElement("style");
   sheet.dataset.laidOut = "";
-  sheet.textContent = ".luke-detail-page-main { overflow-y: auto; }";
+  sheet.textContent = ".plan-document-scroll { overflow-y: auto; }";
   document.head.append(sheet);
   const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
   const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.classList.contains("luke-detail-page-main") ? wide : words;
+    return this.classList.contains("plan-document-scroll") ? wide : words;
   });
 }
 
-/** The page's main column, whose room is the description's way in. */
+/** The document's column, whose room is the description's way in. */
 function columnOf(page: HTMLElement): HTMLElement {
   return (
-    page.querySelector<HTMLElement>(".luke-detail-page-main") ?? assert.fail("the page's column")
+    page.querySelector<HTMLElement>(".plan-document-scroll") ?? assert.fail("the document's column")
   );
 }
 
@@ -1108,7 +1137,7 @@ test("a description left as it opened sends nothing and closes", async () => {
   assert.equal(descriptionOf(page).textContent, "Fails on CI.");
 });
 
-test("a save the service refused keeps every word typed in the open editor and says so", async () => {
+test("a save the service refused keeps every word typed in the open editor and says so, with a Retry that sends them again", async () => {
   standing = [issue(1)];
   changeRefused = true;
   const page = await openIssue(issue(1).id);
@@ -1121,6 +1150,16 @@ test("a save the service refused keeps every word typed in the open editor and s
   assert.ok(!editor.destroyed, "the editor stays open");
   assert.equal(editor.text, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
+
+  changeRefused = false;
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+  ]);
+  assert.ok(editor.destroyed, "the editor closes once Retry's save is kept");
 });
 
 test("a description past its bound is not sent, and the open editor says why", async () => {
@@ -1134,7 +1173,7 @@ test("a description past its bound is not sent, and the open editor says why", a
 
   assert.deepEqual(changes, []);
   assert.ok(!editor.destroyed, "the editor stays open");
-  assert.match(page.textContent ?? "", /The description is too long/u);
+  assert.match(page.textContent ?? "", /Not saved: the description is too long/u);
 });
 
 test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {

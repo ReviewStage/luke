@@ -1,3 +1,4 @@
+import { agoText, useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   DISCLOSURE_BODY,
@@ -18,7 +19,6 @@ import { Tooltip } from "../tooltip";
 import type { FileNote } from "./file-tab-model";
 import { RelativeTime } from "./relative-time";
 import { useMentionLink } from "./task-mentions";
-import { agoText, useMinute } from "./task-time";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.

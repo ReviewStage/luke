@@ -72,7 +72,7 @@ What `update(state)` gets (`WorldState`), whole, on every change:
 | `live` | `true` when the scrubber is at now. |
 | `selected`, `hovered` | `PickTarget`s (`{ kind, id }`) to highlight. Draw both in `SIGNAL_COLOR.SELECTION`. |
 | `blast` | The selected agent's blast radius: zone path to distance, where 0 means touched. Empty when no agent is selected. |
-| `layers` | `{ planned, building, shipped, defects }`, which the pipeline bar's counts switch. Leave out what is off. |
+| `layers` | `{ planned, building, shipped, defects }`. Leave out what is off. The pipeline bar turns every layer but one off while the pointer or keyboard rests on that count, and while it is pressed, so a world must redraw promptly as layers come and go. |
 | `still` | `true` under reduced motion or a capture run (see [Motion](#motion)). |
 | `dark` | The window's appearance. Dress your ground to match. |
 
@@ -96,8 +96,8 @@ Don't rebuild any of this:
   target within 18 px on screen. Hidden objects are never picked. A drag never
   picks. An instanced mesh's bounds are recomputed on every pick, so moving
   instances never makes them unpickable.
-- **Chrome, all DOM over the canvas:** the pipeline bar (its counts are the
-  layer toggles), the hover label, the selection card (PR number, title, +/−
+- **Chrome, all DOM over the canvas:** the pipeline bar (resting on a count
+  previews its layer alone; a press keeps it alone), the hover label, the selection card (PR number, title, +/−
   bar, mini blast radius, and doors to the agent's page, the PR on GitHub and
   the task), the time scrubber, and the home button.
 - **Data:** reads the snapshot on open, refreshes it every three minutes while

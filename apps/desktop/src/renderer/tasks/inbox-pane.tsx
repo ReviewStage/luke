@@ -24,6 +24,8 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { opensAsLink } from "@luke/panel/tasks/use-open-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -118,11 +120,9 @@ import { REPLY_SCOPE } from "./reply-to-selection";
 import { SentWords } from "./skill-chip";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { WordsWorkspace } from "./use-link-standing";
 import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**

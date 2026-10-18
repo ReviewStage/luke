@@ -27,6 +27,7 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -45,7 +46,6 @@ import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
-import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
 
 /**

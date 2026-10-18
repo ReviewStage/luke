@@ -1,9 +1,12 @@
 /* inline-edit.css -- words edited in place: the field takes the type of the
    words it stands over. As a field, on the ground inside the selected
    hairline, the body's size; as an input, a settings input's box a label's
-   line and 3px to spare each side tall, in the label's own type; in a well,
-   bare in the type around it, ringed by the well rather than by itself. How wide it stands and how it overhangs
-   the words' own line is its container's to say. */
+   line and 3px to spare each side tall, in the label's own type, filling
+   the label's line and overhanging it by those 3px and by its own inset and
+   edge at the start, so its words stand where the label's stood and the row
+   keeps its height; in a well, bare in the type around it, ringed by the
+   well rather than by itself. How wide a field or a well stands is its
+   container's to say. */
 
 @layer components {
   .luke-inline-edit {
@@ -22,7 +25,11 @@
   }
 
   .luke-inline-edit[data-look="input"] {
+    display: block;
+    width: 100%;
     height: 24px; /* off-scale */
+    margin-block: -3px; /* off-scale: a 24px box over an 18px line */
+    margin-inline-start: calc(-1 * var(--luke-space-8) - 1px);
     padding: 0 var(--luke-space-8);
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-control-radius);

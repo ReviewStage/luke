@@ -182,10 +182,10 @@
   }
 }
 
-/* Who created the task and when, and who last edited its plan and when,
-   under its title, in the words of an issue's own line
-   (`.issue-byline`). Each phrase wraps whole onto the next line rather
-   than leaving a name cut from its time. */
+/* The line under a document's title, a plan's and an issue's alike
+   (`DocumentByline`): who created it and when, then its last edit. Each
+   phrase wraps whole onto the next line rather than leaving a name cut
+   from its time. */
 .plan-byline {
   display: flex;
   flex-wrap: wrap;
@@ -3749,7 +3749,7 @@ ol.transcript-list {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
   animation:
     luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
@@ -3763,7 +3763,7 @@ ol.transcript-list {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
   animation:
     luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;

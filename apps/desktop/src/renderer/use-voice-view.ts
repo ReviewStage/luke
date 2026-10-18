@@ -1,6 +1,7 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
+import { useAppState } from "@luke/panel/use-app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -10,7 +11,6 @@ import {
 } from "@luke/voice/voice-view";
 import { useCallback } from "react";
 import { useCallCommands } from "./call-commands";
-import { useAppState } from "./use-app-state";
 
 /**
  * The conversation a capture run stages, since no voice window stands in one:

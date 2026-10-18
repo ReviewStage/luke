@@ -1,4 +1,5 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -34,7 +35,6 @@ import {
   waitsOnReader,
 } from "../tasks/inbox-model";
 import { RelativeTime } from "../tasks/relative-time";
-import { useMinute } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { commandKeyshortcuts } from "../tooltip";
@@ -116,7 +116,7 @@ function NewTaskButton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       onClick={tasks.onNewTask}
     >
       New task
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="button-chord" />
     </Button>
   );
 }

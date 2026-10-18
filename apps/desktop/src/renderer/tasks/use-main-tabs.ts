@@ -1,3 +1,4 @@
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
   type AgentStripTab,
   type DraftStripTab,
@@ -11,7 +12,6 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useChatOn } from "./chat-gate";
 
 /**
  * use-main-tabs.ts -- the task's column's tabs: the task's own, then each of its coding agents and its draft agent, which is chosen, and the order they stand in, kept per task across launches.

@@ -481,6 +481,11 @@ body {
   --luke-fold: folded;
 }
 
+/* A toolbar shorter still, leaving a split button its main part's glyph. */
+.catalog-bare {
+  --luke-fold: bare;
+}
+
 /* A toolbar whose corner resizes it, folding its buttons below 360px. */
 .catalog-folding-toolbar {
   overflow: hidden;
