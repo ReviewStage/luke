@@ -11,6 +11,9 @@ import {
   ErrorState,
   GearIcon,
   ProviderMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -278,9 +281,11 @@ export function RepositoryChip(props: {
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>
         {unconnectedNotes(chooser).map((words) => (
-          <p key={words} className="task-compose-menu-note">
-            {words}
-          </p>
+          <div key={words} className="task-compose-menu-note">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {words}
+            </Text>
+          </div>
         ))}
         {chooser.manages ? (
           <button
@@ -298,7 +303,11 @@ export function RepositoryChip(props: {
         <Spinner label="Loading repositories" />
       </div>
     ) : rows.length === 0 && listed?.installed ? (
-      <p className="task-compose-menu-note">{MENU_NOTE.NONE_REACHED}</p>
+      <div className="task-compose-menu-note">
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {MENU_NOTE.NONE_REACHED}
+        </Text>
+      </div>
     ) : undefined;
 
   return (

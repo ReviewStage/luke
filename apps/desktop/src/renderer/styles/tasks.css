@@ -66,7 +66,7 @@
 
 .plan-body {
   font-size: var(--luke-type-caption-size);
-  line-height: 1.5;
+  line-height: var(--luke-type-reading-leading);
 }
 
 /* A plan is a document rather than a message, so its sections breathe. Every
@@ -709,7 +709,7 @@
     overflow-clip-margin: var(--luke-focus-ring-room);
     color: var(--luke-color-text);
     font-size: var(--luke-type-body-size);
-    line-height: 1.625;
+    line-height: var(--luke-type-reading-leading);
   }
 
   /* Note that the rhythm between a message's blocks weighs nothing, so a
@@ -1496,7 +1496,7 @@
   gap: var(--luke-space-8);
   padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
   background: var(--luke-color-surface);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -1532,7 +1532,7 @@
   margin: 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A changed image in Files changed's list (image-diff.tsx), under its
@@ -1573,7 +1573,7 @@
 
 .image-diff-side > figcaption {
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .image-diff-picture,
@@ -1620,7 +1620,7 @@
 .image-diff-note {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The tree's search field and its filter, in one row over the tree. */
@@ -1936,7 +1936,7 @@
   min-height: 96px;
   max-height: 240px;
   overflow-y: auto;
-  padding: 9px 11px;
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
 }
@@ -2000,12 +2000,12 @@
   overflow: hidden;
   padding: 1px var(--luke-space-8);
   border: 1px solid var(--label-edge-dark, var(--luke-color-border));
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--label-fill-dark, transparent);
   color: var(--label-words-dark, var(--luke-color-text-muted));
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2047,7 +2047,7 @@
   width: 10px;
   height: 10px;
   border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--label-dot, transparent);
 }
 
@@ -2291,7 +2291,7 @@
   min-width: 0;
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
-  line-height: 1.55;
+  line-height: var(--luke-type-reading-leading);
   user-select: text;
 }
 
@@ -2524,10 +2524,10 @@
   gap: var(--luke-space-4);
   padding: var(--luke-space-2) var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .pull-request-reaction-count {
@@ -2884,7 +2884,7 @@ ol.transcript-list {
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: anywhere;
   user-select: text;
   white-space: pre-wrap;
@@ -3047,7 +3047,7 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: anywhere;
   user-select: text;
   white-space: pre-wrap;
@@ -4889,7 +4889,7 @@ ol.transcript-list {
 .agent-servers-page-title {
   overflow: hidden;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-section-size);
   font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5512,8 +5512,8 @@ button.picture-frame {
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--picture-veil);
-  color: var(--picture-veil-ink);
+  background: var(--luke-color-veil);
+  color: var(--luke-color-on-veil);
   font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-semibold);
 }
