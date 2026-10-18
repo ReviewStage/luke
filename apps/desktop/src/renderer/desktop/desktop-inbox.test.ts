@@ -1190,6 +1190,38 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });
 
+test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+  const reads = new Map([
+    [BILLING.id, pending()],
+    [INVITES.id, pending()],
+  ]);
+  startRead = (taskId) => reads.get(taskId)?.promise;
+  const { page } = mount();
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.deepEqual(listed(page), []);
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
+  reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+});
+
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
