@@ -1430,23 +1430,49 @@ test("the page opens again in the layout last chosen, the list after List and th
   assert.equal(thirdTime.querySelector(".home-section"), null);
 });
 
-test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
+/** The empty workspace's own New issue, under its line. */
+function emptyStateNewIssue(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector<HTMLButtonElement>(".luke-empty-state button");
+}
+
+test("a workspace with no issue yet says so on the board and in the list, its New issue opening the card, and the first issue filed stands the board's columns", async () => {
   const page = mount();
   await settle();
+  const boardSays = page.querySelector(".luke-empty-state")?.textContent;
+  const boardColumns = columns(page).length;
+  showList();
+  const listSays = page.querySelector(".luke-empty-state")?.textContent;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
 
+  const newIssue = emptyStateNewIssue(page);
+  assert.ok(newIssue, "the empty state offers New issue");
+  act(() => newIssue.click());
+  const field = composerField();
+  assert.ok(field, "the empty state's New issue opens the card");
+  const whileOpen = emptyStateNewIssue(page)?.disabled;
+  typeInto(field, "First issue");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.equal(boardSays, "No issues yetNew issue");
+  assert.equal(boardColumns, 0, "no empty column stands on an empty workspace's board");
+  assert.equal(listSays, "No issues yetNew issue");
+  assert.equal(
+    whileOpen,
+    true,
+    "New issue is unavailable while the card stands, as the toolbar's is",
+  );
+  assert.equal(page.querySelector(".luke-empty-state"), null);
   assert.deepEqual(columns(page), [
-    ["Backlog", []],
+    ["Backlog1", ["ACME-1"]],
     ["Todo", []],
     ["In progress", []],
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(
-    [...page.querySelectorAll("[data-issue-column] p")].filter(
-      (idle) => idle.textContent === "No issues",
-    ).length,
-    5,
-  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1463,6 +1489,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
+  standing = [issue(1)];
   mount();
   await settle();
 
