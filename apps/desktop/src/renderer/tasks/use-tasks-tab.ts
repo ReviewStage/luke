@@ -439,6 +439,10 @@ export interface TasksControl {
   };
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
+  /** Whether the last read of the workspaces did not land, those held still drawn. */
+  workspacesFailed: boolean;
+  /** Reads the workspaces again after a read that did not land. */
+  onRetryWorkspaces: () => void;
   /** The workspace the sidebar lists and New task starts in; absent while none is listed, when every task is listed. */
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new task in it. */
@@ -489,6 +493,10 @@ export interface TasksControl {
   board: Board | undefined;
   /** Every code Luke showed on the open task, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
+  /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
+  workFailed: boolean;
+  /** Reads the open task's work and code again after a read that did not land. */
+  onRetryWork: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** What was said on the open task's calls, the call standing now included, and the retry of a read that failed. */
@@ -2680,6 +2688,9 @@ export function useTasksTab(input: {
     },
     listedAgents,
     workspaces: viewed.workspaces,
+    workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
+    // A failed read is taken as stale, so the refresh reads the workspaces again at once.
+    onRetryWorkspaces: () => tell(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
@@ -2742,6 +2753,8 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
+    workFailed: tasks.workStatus === TASKS_READ.FAILED,
+    onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     transcript: {
       region: transcript,

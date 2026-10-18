@@ -41,6 +41,10 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  LIST_DENSITY,
+  LIST_VARIANT,
+  List,
+  ListRow,
   ProviderMark,
   SKELETON_SHAPE,
   Skeleton,
@@ -93,6 +97,12 @@ import { useFileViewSettings } from "./file-view-settings";
 import { blockedWords, MergeActions } from "./merge-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
+import {
+  LabelPicker,
+  ReviewerPicker,
+  type ReviewOptions,
+  useReviewOptions,
+} from "./pull-request-pickers";
 import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
 import { PullRequestStack } from "./pull-request-stack";
@@ -546,7 +556,7 @@ function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | 
   const now = useWorkingNow();
   if (now === undefined) return null;
   return (
-    <span className="pull-request-quiet pull-request-check-time" role="timer" aria-live="off">
+    <span role="timer" aria-live="off">
       {workingTime(now - startedAt)}
     </span>
   );
@@ -603,6 +613,31 @@ function CheckAvatar({
   );
 }
 
+/** A check's or a deployment's lead: its glyph for where it stands, in that standing's tone, then its App's avatar where it has one. */
+function CheckLead({
+  tone,
+  agentId,
+  name,
+  avatarUrl,
+}: {
+  tone: CheckState;
+  agentId: string;
+  /** Who the avatar is of, the App or what it deploys, which its picture is named by. */
+  name: string;
+  avatarUrl: string | undefined;
+}): React.JSX.Element {
+  return (
+    <span className="pull-request-check-lead">
+      <span className="pull-request-check-glyph" data-check-state={tone}>
+        {CHECK_GLYPHS[tone]}
+      </span>
+      {avatarUrl === undefined ? null : (
+        <CheckAvatar agentId={agentId} name={name} src={avatarUrl} />
+      )}
+    </span>
+  );
+}
+
 /**
  * One check: its glyph for where it stands, its App's avatar, its name, its
  * App, and how long it ran, counting each second while it runs and is on
@@ -624,37 +659,27 @@ function CheckRow({
   const duration = durationOf(check);
   const { url, avatarUrl, startedAt } = check;
   const running = check.state === CHECK_STATE.PENDING && startedAt !== null;
-  const inner = (
-    <>
-      <span
-        className="pull-request-check-glyph"
-        data-check-state={check.state}
-        role="img"
-        aria-label={CHECK_WORDS[check.state]}
-      >
-        {CHECK_GLYPHS[check.state]}
-      </span>
-      {avatarUrl === undefined ? null : (
-        <CheckAvatar agentId={agentId} name={check.app ?? check.name} src={avatarUrl} />
-      )}
-      <span className="pull-request-check-name">{check.name}</span>
-      {check.app === null ? null : <span className="pull-request-quiet">{check.app}</span>}
-      {running && live ? <RunningTime startedAt={startedAt} /> : null}
-      {running || duration === undefined ? null : (
-        <span className="pull-request-quiet pull-request-check-time">{duration}</span>
-      )}
-    </>
-  );
   return (
-    <li>
-      {url === null ? (
-        <span className="pull-request-check">{inner}</span>
-      ) : (
-        <button type="button" className="pull-request-check" onClick={() => openLink(url)}>
-          {inner}
-        </button>
-      )}
-    </li>
+    <ListRow
+      leading={
+        <CheckLead
+          tone={check.state}
+          agentId={agentId}
+          name={check.app ?? check.name}
+          avatarUrl={avatarUrl}
+        />
+      }
+      title={
+        <>
+          {check.name}
+          {/* Note that the glyph is the row's decoration, so its words are said here. */}
+          <span className="luke-visually-hidden">, {CHECK_WORDS[check.state]}</span>
+        </>
+      }
+      description={check.app ?? undefined}
+      meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
+      onPress={url === null ? undefined : () => openLink(url)}
+    />
   );
 }
 
@@ -687,13 +712,13 @@ function Checks({
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
         <>
-          <div className="pull-request-checks">
-            <ul id={listId} className="pull-request-check-list">
+          <div id={listId}>
+            <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
               {shown.map((check, at) => (
                 // Note that two checks may share a name across Apps, so a row is keyed by its place too.
                 <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
               ))}
-            </ul>
+            </List>
           </div>
           {folds ? (
             <Button
@@ -1022,6 +1047,7 @@ function PullRequestHead({
   repository,
   shown,
   writes,
+  editing,
 }: {
   parts: OverviewParts;
   now: number;
@@ -1030,6 +1056,8 @@ function PullRequestHead({
   /** Whether the panel is on screen, which a merge asked about goes with. */
   shown: boolean;
   writes: PullRequestWrites;
+  /** What the reviewer and label pickers read, and whether the pull request is being read again after a change. */
+  editing: { readonly options: ReviewOptions; readonly refreshing: boolean };
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -1055,7 +1083,10 @@ function PullRequestHead({
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <div className="pull-request-label-row">
+        <PullRequestLabels labels={pullRequest.labels ?? []} />
+        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
+      </div>
       <div className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
           <p className="pull-request-branches">
@@ -1073,7 +1104,18 @@ function PullRequestHead({
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+        <span className="pull-request-reviewers">
+          {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+          {open ? (
+            <ReviewerPicker
+              author={author?.login}
+              requested={pullRequest.requested}
+              requestedTeams={pullRequest.requestedTeams ?? []}
+              writes={writes}
+              {...editing}
+            />
+          ) : null}
+        </span>
       </div>
       {open ? (
         <MergeLine
@@ -1102,38 +1144,27 @@ function DeploymentRow({
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const { url, avatarUrl, state } = deployment;
-  const inner = (
-    <>
-      <span
-        className="pull-request-check-glyph"
-        data-check-state={DEPLOYMENT_TONE[state]}
-        role="img"
-        aria-label={DEPLOYMENT_WORDS[state]}
-      >
-        {CHECK_GLYPHS[DEPLOYMENT_TONE[state]]}
-      </span>
-      {avatarUrl === undefined ? null : (
-        <CheckAvatar agentId={agentId} name={deployment.environment} src={avatarUrl} />
-      )}
-      <span className="pull-request-check-name">{deployment.environment}</span>
-      <span className="pull-request-quiet">{DEPLOYMENT_WORDS[state]}</span>
-      {url === null ? null : (
-        <span className="pull-request-quiet pull-request-check-time pull-request-deployment-open">
-          <ExternalLinkIcon aria-hidden="true" />
-        </span>
-      )}
-    </>
-  );
   return (
-    <li>
-      {url === null ? (
-        <span className="pull-request-check">{inner}</span>
-      ) : (
-        <button type="button" className="pull-request-check" onClick={() => openLink(url)}>
-          {inner}
-        </button>
-      )}
-    </li>
+    <ListRow
+      leading={
+        <CheckLead
+          tone={DEPLOYMENT_TONE[state]}
+          agentId={agentId}
+          name={deployment.environment}
+          avatarUrl={avatarUrl}
+        />
+      }
+      title={deployment.environment}
+      description={DEPLOYMENT_WORDS[state]}
+      meta={
+        url === null ? null : (
+          <span className="pull-request-deployment-open">
+            <ExternalLinkIcon aria-hidden="true" />
+          </span>
+        )
+      }
+      onPress={url === null ? undefined : () => openLink(url)}
+    />
   );
 }
 
@@ -1148,13 +1179,11 @@ function Deployments({
   if (deployments.length === 0) return null;
   return (
     <Section title="Deployments" count={deployments.length.toLocaleString()}>
-      <div className="pull-request-checks">
-        <ul className="pull-request-check-list">
-          {deployments.map((deployment) => (
-            <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
-          ))}
-        </ul>
-      </div>
+      <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
+        {deployments.map((deployment) => (
+          <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
+        ))}
+      </List>
     </Section>
   );
 }
@@ -1646,6 +1675,7 @@ export function AgentPullRequestTab({
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
   const picture = usePictureDrawer(agentId);
+  const options = useReviewOptions(agentId, control.readReviewOptions);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1672,6 +1702,7 @@ export function AgentPullRequestTab({
                 repository={repository}
                 shown={shown}
                 writes={writes}
+                editing={{ options, refreshing: pullRequestRead.out }}
               />
             </header>
             <Tabs<PullRequestView>

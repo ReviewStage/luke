@@ -1,7 +1,8 @@
 /* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
    title are the window's own: the list's page is @luke/ui's CollectionPage
-   under the toolbar, an issue's the Automations page's view and scroll, and
-   Home's sections and rows and a task's heading. Only
+   under the toolbar, an issue's its DetailPage under the toolbar with a
+   task's document inside, and Home's sections and rows and a task's
+   heading. Only
    what an issue adds is drawn here: its group's heading, its identifier, its
    status and priority marks, its properties' row, and its description's
    editor. Tokens only. */
@@ -10,6 +11,17 @@
    arrows are read against; it draws no box of its own. */
 .issues-pages {
   display: contents;
+}
+
+/* An issue's document, in its page's main column. It lends the description's
+   editor the plan's accent, which the plan's own scroll sets
+   (`.plan-document-scroll`), so its caret and ring are the plan's. Past the
+   page's own foot it keeps the plan's room for its last line to scroll clear
+   of the captions, which float at the window's foot over a page with no call
+   bar: the page's 40px and these 100px are the plan's 140px. */
+.issue-document {
+  --accent: var(--voice-luke);
+  padding-bottom: 100px; /* off-scale */
 }
 
 /* The list's status groups, a section's gap apart, as Home's are. Note
@@ -189,7 +201,7 @@
 
 /* A card being dragged stays in its column as its own placeholder, faded,
    while its copy follows the pointer over the board. */
-.issue-column .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
+.issue-column .sidebar-tasks > li[data-dragging="true"] {
   z-index: auto;
   background: none;
   box-shadow: none;
@@ -197,7 +209,7 @@
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-.issue-column .sidebar-tasks > .sidebar-task-item {
+.issue-column .sidebar-tasks > li {
   transition:
     transform var(--duration-fast) var(--spring-fast),
     opacity var(--duration-quick) var(--motion-exit);

@@ -39,6 +39,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -82,6 +83,7 @@ import {
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
+  codingAgentReviewOptionsAnswerViewSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -476,6 +478,7 @@ export const ACT_KIND = {
   CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -1312,6 +1315,13 @@ export const ACT = {
       isReadable(codingAgentPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentReviewOptionsAnswerView>(
+      isReadable(codingAgentReviewOptionsAnswerViewSchema),
+    ),
+    refusal: "Could not read the repository's reviewers and labels on this system.",
   },
   [ACT_KIND.CODING_AGENTS_CHANGES]: {
     payload: actSchema(codingAgentPullRequestParamsSchema),

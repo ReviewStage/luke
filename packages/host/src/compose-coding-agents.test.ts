@@ -134,6 +134,13 @@ const CHANGES = {
 };
 
 /** That pull request itself, its checks, and its conversation, as its Pull request tab's overview reads them. */
+/** What the reviewer and label pickers offer, as the service answers it. */
+const REVIEW_OPTIONS = {
+  labels: [{ name: "bug", color: "d73a4a" }],
+  users: [{ login: "priyan", bot: false }],
+  teams: [{ slug: "reviewers", name: "Reviewers" }],
+};
+
 const OVERVIEW = {
   pullRequest: {
     pullRequest: {
@@ -309,6 +316,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`overview-pull-request:${agentId}`);
         return OVERVIEW.pullRequest;
+      }),
+    reviewOptions: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`review-options:${agentId}`);
+        return REVIEW_OPTIONS;
       }),
     overviewChecks: (agentId) =>
       Effect.sync(() => {
@@ -613,6 +625,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       OVERVIEW.pullRequest,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
+      REVIEW_OPTIONS,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
       OVERVIEW.checks,
     );
@@ -756,6 +772,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `overview-pull-request:${AGENT_ID}`,
+      `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,
       `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,

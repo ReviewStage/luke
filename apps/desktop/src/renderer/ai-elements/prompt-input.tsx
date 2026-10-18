@@ -73,7 +73,7 @@ export function PromptInput({
     onSubmit();
   };
   return (
-    <form className={cn("prompt-input field-well", className)} onSubmit={handleSubmit} {...props}>
+    <form className={cn("prompt-input", className)} onSubmit={handleSubmit} {...props}>
       {children}
     </form>
   );

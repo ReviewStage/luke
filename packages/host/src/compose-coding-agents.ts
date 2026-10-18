@@ -24,6 +24,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
   codingAgentAccountInboxParamsSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -113,6 +114,7 @@ export type CodingAgentClient = Pick<
   | "pullRequest"
   | "changes"
   | "overviewPullRequest"
+  | "reviewOptions"
   | "overviewChecks"
   | "overviewConversation"
   | "githubImage"
@@ -427,6 +429,16 @@ function composed(
         );
         const answer = yield* asked(client.overviewPullRequest(agentId));
         return carried<CodingAgentOverviewPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading what an agent's pickers offer names one agent",
+        );
+        const answer = yield* asked(client.reviewOptions(agentId));
+        return carried<CodingAgentReviewOptionsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {

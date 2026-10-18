@@ -450,7 +450,7 @@ function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
   const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
-  return [...list.querySelectorAll(`${fold}, li > button`)].map((node) => {
+  return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
     if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
     const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
@@ -467,9 +467,9 @@ function wordsOf(element: Element | null | undefined): string | null {
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find(
-    (each) => each.querySelector(ROW_TITLE)?.textContent === title,
-  );
+  const row = [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+  ].find((each) => each.querySelector(ROW_TITLE)?.textContent === title);
   assert.ok(row, `no row for ${title}`);
   return row;
 }
@@ -1584,7 +1584,7 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   const { page } = mount();
   await settle();
   const offered = () =>
-    page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   assert.equal(offered(), null, "the item chosen waits on its box");
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
@@ -1600,7 +1600,8 @@ test("a settled item offers, over its box, the next item that needs you, by its 
 test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
   const { page } = mount();
   await settle();
-  const next = () => page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  const next = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board");
   assert.ok(board, "the item's thread");
@@ -3475,4 +3476,46 @@ test("Mark all as read, once the service took it, reads every listed task and ev
     [BILLING.id, INVITES.id].toSorted(),
   );
   assert.deepEqual(agentReads.slice(agentsBefore), [SWEEP_AGENT]);
+});
+
+test("a row swiped right marks its item: a long swipe marks an unread item read as it is let go, a short one leaves the row open on an Unread button for a read one, and neither opens the item", async () => {
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
+  const { page } = mount();
+  await settle();
+  readMarks = [];
+  const retry = "How is a failed email retried?";
+  const item = rowNamed(page, retry).closest("li") ?? assert.fail("the row's item");
+  vi.spyOn(item, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 300, height: 56 }),
+  );
+  Object.assign(item, { setPointerCapture: () => undefined });
+  const at = (type: string, x: number) =>
+    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 });
+  const swipe = (to: number) =>
+    act(() => {
+      const press = rowNamed(page, retry);
+      press.dispatchEvent(at("pointerdown", 10));
+      press.dispatchEvent(at("pointermove", 30));
+      press.dispatchEvent(at("pointermove", 10 + to));
+      press.dispatchEvent(at("pointerup", 10 + to));
+      press.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    });
+  swipe(220);
+  await settle();
+  assert.deepEqual(readMarks, [`read:${RETRY.id}`]);
+  assert.equal(unreadOf(page, retry), false);
+
+  swipe(40);
+  await settle();
+  const button = item.querySelector<HTMLButtonElement>("button[data-swipe-act]");
+  assert.equal(button?.textContent, "Unread");
+  act(() => button?.click());
+  await settle();
+  assert.deepEqual(readMarks, [`read:${RETRY.id}`, `unread:${RETRY.id}`]);
+  assert.equal(unreadOf(page, retry), true);
+  assert.equal(
+    page.querySelector('[aria-current="page"] .luke-list-row-title')?.textContent,
+    "Alert at 80%?",
+    "a swipe opens nothing",
+  );
 });

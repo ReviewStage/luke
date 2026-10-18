@@ -32,6 +32,7 @@ import type {
   CodingAgentChangesPeople,
   CodingAgentOverviewConversation,
   CodingAgentOverviewPullRequest,
+  CodingAgentReviewOptions,
   GitHubPerson,
   PullRequestStackEntry,
   ReactionGroup,
@@ -47,6 +48,7 @@ import {
   type GitHubOverviewConversation,
   type GitHubOverviewPullRequest,
   type GitHubReaction,
+  type GitHubReviewOptions,
   type KnownBot,
   type PullRequestPeople,
   pullRequestPeople,
@@ -195,12 +197,13 @@ type Namer = (held: GitHubAccount) => GitHubPerson;
 const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   accounts: readonly GitHubAccount[],
-  number: number,
+  /** What names the accounts, as the log says it: "pull request 7". */
+  about: string,
 ): Effect.fn.Return<Namer, never, DatabaseServices> {
   const linked = yield* linkedMembers(organizationId, idsOf(accounts)).pipe(
     Effect.catch((failure) =>
       Effect.as(
-        Effect.logWarning(`who pull request ${number} names was not linked: ${failure._tag}`),
+        Effect.logWarning(`who ${about} names was not linked: ${failure._tag}`),
         new Map<number, string>(),
       ),
     ),
@@ -279,7 +282,10 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
     const { pullRequest, author, requested, stack, ...rest } = read;
     const accounts = [...(author === undefined ? [] : [author]), ...requested];
     const [person, named] = yield* Effect.all(
-      [overviewNamer(agent.organizationId, accounts, pullRequest.number), namedStack(agent, stack)],
+      [
+        overviewNamer(agent.organizationId, accounts, `pull request ${pullRequest.number}`),
+        namedStack(agent, stack),
+      ],
       { concurrency: "unbounded" },
     );
     return {
@@ -343,7 +349,11 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     number: number,
     read: GitHubOverviewConversation,
   ): Effect.fn.Return<CodingAgentOverviewConversation, never, DatabaseServices> {
-    const person = yield* overviewNamer(agent.organizationId, accountsOfConversation(read), number);
+    const person = yield* overviewNamer(
+      agent.organizationId,
+      accountsOfConversation(read),
+      `pull request ${number}`,
+    );
     // Note that a reaction key stands only where something was given, so a read before reactions and one with none read alike.
     const reacted = (given: readonly GitHubReaction[]) => {
       const named = namedReactions(given, person);
@@ -377,3 +387,20 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     };
   },
 );
+
+/**
+ * What the reviewer and label pickers offer as the wire carries it, each
+ * user named as `overviewNamer` names them, so a teammate is offered as the
+ * member they are.
+ */
+export const namedReviewOptions = /* @__PURE__ */ Effect.fn("web/namedReviewOptions")(function* (
+  agent: { readonly organizationId: string },
+  read: GitHubReviewOptions,
+): Effect.fn.Return<CodingAgentReviewOptions, never, DatabaseServices> {
+  const person = yield* overviewNamer(
+    agent.organizationId,
+    read.users,
+    "the repository's collaborators",
+  );
+  return { labels: read.labels, users: read.users.map(person), teams: read.teams };
+});

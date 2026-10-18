@@ -32,6 +32,14 @@ export const CODER = {
    * the repository's lint panicked there at any thread count.
    */
   SANDBOX_VCPUS: 4,
+  /**
+   * The snapshots Vercel keeps of the agent's sandbox: the newest alone, which
+   * is all a resume reads, so snapshot storage stays flat however many turns
+   * stop it. An evicted one is deleted at once, and the kept one expires a
+   * month after it was last used, named here because Vercel's own pages
+   * disagree on the default.
+   */
+  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(30), deleteEvicted: true },
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
   /**

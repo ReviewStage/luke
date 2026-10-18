@@ -17,6 +17,8 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CollapseIcon,
   EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   ExpandIcon,
   IconButton,
   SidePanelIcon,
@@ -183,6 +185,14 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 
 /** What the Code tab says while Luke has shown no code on the task. */
 const NO_CODE_LINE = "No code yet.";
+
+/** What the Code tab says where the task's code could not be read and none is held. */
+const UNREAD_CODE_LINE = "The code could not be read.";
+
+/** The task's work read that did not land, and its retry, which the Code tab offers while it holds no code. */
+interface CodeFailed {
+  readonly onRetry: () => void;
+}
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -1236,6 +1246,7 @@ function TabContent({
   repository,
   board,
   shownCode,
+  codeFailed,
   files,
   pages,
   transcript,
@@ -1269,6 +1280,8 @@ function TabContent({
   repository: string | null;
   board: Board | undefined;
   shownCode: readonly TaskCodeShowing[] | undefined;
+  /** The task's work read that did not land, where the last did not. */
+  codeFailed: CodeFailed | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1460,6 +1473,13 @@ function TabContent({
       );
     case SIDE_PANEL_TAB.CODE:
       // Note that no code read yet is a wait, and only code read as none says so.
+      if (shownCode === undefined && codeFailed !== undefined) {
+        return (
+          <ErrorState onRetry={codeFailed.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_CODE_LINE}
+          </ErrorState>
+        );
+      }
       if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
       return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
@@ -1695,6 +1715,7 @@ export function SidePanel({
   repository,
   board,
   shownCode,
+  codeFailed,
   pages,
   transcript,
   work,
@@ -1719,6 +1740,8 @@ export function SidePanel({
   board: Board | undefined;
   /** Every code Luke showed on the task, oldest first. */
   shownCode: readonly TaskCodeShowing[] | undefined;
+  /** The task's work read that did not land, where the last did not; none where the panel reads no task's code. */
+  codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   transcript: SidePanelTranscript;
@@ -1922,6 +1945,7 @@ export function SidePanel({
               repository={repository}
               board={board}
               shownCode={shownCode}
+              codeFailed={codeFailed}
               files={files}
               pages={taskPages}
               transcript={transcript}

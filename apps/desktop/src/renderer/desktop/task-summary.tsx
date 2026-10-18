@@ -1,5 +1,14 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, IconButton, useMenu } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  IconButton,
+  LIST_DENSITY,
+  List,
+  ListRow,
+  useMenu,
+} from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -18,7 +27,7 @@ import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
@@ -489,10 +498,11 @@ export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolea
 
 /**
  * A row of the column or the card: its glyph, its label, and what tells it
- * apart, a file's folder, as its "+" row says it, faded at its end where it
- * is cut short, then a failed agent's mark or the Inbox's count. A row with
- * a card hangs it on hover beside the row, before its start where the
- * window ends past it, as the sidebar's rows hang theirs.
+ * apart, a file's folder, as its "+" row says it, after the label on its
+ * line, then a failed agent's mark or the Inbox's count. A row with a card
+ * hangs it on hover beside the row, before its start where the window ends
+ * past it, as the sidebar's rows hang theirs. The files Luke showed keep the
+ * file tree's own rows (`TreeRow`).
  */
 function SummaryRow({
   entry,
@@ -501,16 +511,28 @@ function SummaryRow({
 }: {
   entry: SummaryEntry;
   onPick: () => void;
-  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void;
 }) {
+  return (
+    <RowHintOptions card={entry.card} cardBeside>
+      <ListRow
+        leading={<span className="task-summary-glyph">{entry.row.icon}</span>}
+        title={entry.row.label}
+        description={entry.row.detail}
+        meta={entry.endMark}
+        hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
+        onPress={onPick}
+        onContextMenu={onContextMenu}
+      />
+    </RowHintOptions>
+  );
+}
+
+/** A file's row, in the file tree's own: its type's glyph, its name, and its folder after it, faded at its end where it is cut short, its card hung on hover. */
+function TreeRow({ entry, onPick }: { entry: SummaryEntry; onPick: () => void }) {
   const [words, clipped] = useClipped();
   const row = (
-    <button
-      type="button"
-      className="task-summary-row"
-      onClick={onPick}
-      onContextMenu={onContextMenu}
-    >
+    <button type="button" className="task-summary-row" onClick={onPick}>
       <span className="task-summary-glyph">{entry.row.icon}</span>
       <span ref={words} className="task-summary-label" data-overflow={String(clipped)}>
         {entry.row.label}
@@ -600,30 +622,41 @@ function SummaryList({
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
           <p className="section-heading">{heading}</p>
-          <ul
-            className="task-summary-rows"
-            aria-label={heading}
-            data-tree={String(heading === ADD_SECTION.FILES)}
-          >
-            {entries.map((entry) => {
-              const onPick = () => {
-                onPicked?.();
-                entry.onPick();
-              };
-              return entry.agent === undefined ? (
-                <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
-              ) : (
-                <AgentSummaryRow
+          {heading === ADD_SECTION.FILES ? (
+            <ul className="task-summary-rows" aria-label={heading} data-tree="true">
+              {entries.map((entry) => (
+                <TreeRow
                   key={entry.row.id}
                   entry={entry}
-                  agent={entry.agent}
-                  agents={agents}
-                  shown={shown}
-                  onPick={onPick}
+                  onPick={() => {
+                    onPicked?.();
+                    entry.onPick();
+                  }}
                 />
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          ) : (
+            <List label={heading} density={LIST_DENSITY.DENSE}>
+              {entries.map((entry) => {
+                const onPick = () => {
+                  onPicked?.();
+                  entry.onPick();
+                };
+                return entry.agent === undefined ? (
+                  <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+                ) : (
+                  <AgentSummaryRow
+                    key={entry.row.id}
+                    entry={entry}
+                    agent={entry.agent}
+                    agents={agents}
+                    shown={shown}
+                    onPick={onPick}
+                  />
+                );
+              })}
+            </List>
+          )}
           {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
         </div>
       ))}
@@ -672,7 +705,7 @@ function SummaryCard({
   useLayoutEffect(() => {
     if (leaving) return;
     const element = card.current;
-    (element?.querySelector<HTMLElement>(".task-summary-row") ?? element)?.focus({
+    (element?.querySelector<HTMLElement>("li > button") ?? element)?.focus({
       preventScroll: true,
     });
   }, [leaving]);

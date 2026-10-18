@@ -629,6 +629,11 @@ export function agentPullRequestViewedPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
 }
 
+/** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */
+export function agentReviewOptionsPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/review-options`;
+}
+
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
 export function agentTerminalsPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/terminals`;

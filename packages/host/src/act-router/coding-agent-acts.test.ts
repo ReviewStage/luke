@@ -228,6 +228,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`overview-pull-request:${agentId}`);
           return { pullRequest: null };
         }),
+      codingAgentReviewOptions: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`review-options:${agentId}`);
+          return { labels: [], users: [], teams: [] };
+        }),
       codingAgentOverviewChecks: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`overview-checks:${agentId}`);
