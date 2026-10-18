@@ -928,7 +928,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
   const own = await chatTabMounted(true);
   const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
-  assert.equal(tab.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
+  assert.equal(tab.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
   assert.ok(tab.querySelector('textarea[aria-label="Message #teammate-invitations"]'));
   assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
   act(() => own.root.unmount());

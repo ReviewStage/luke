@@ -15,8 +15,13 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  EmptyState,
   ScrollArea,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextButton,
   WingFace,
 } from "@luke/ui";
@@ -38,8 +43,10 @@ import {
   placeChannel,
   postTarget,
 } from "@luke/ui/chat-model";
+import { AtSignIcon, HashIcon } from "lucide-react";
 import { useState } from "react";
 import { AskCard } from "./chat-ask";
+import { FileRef } from "./file-ref";
 import { LinkBlock } from "./inbox-pane";
 import { AgentGlyph } from "./tab-look";
 import { TranscriptWords } from "./transcript-blocks";
@@ -51,9 +58,9 @@ import { TranscriptWords } from "./transcript-blocks";
  * tab wears it, Luke's initial in his blue, a person's initial, then a line
  * naming the author, its handle, and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
- * label, a code block by the file and lines it points at, an image by its
- * words, and a line naming a newer Luke for a block this build does not
- * know. A message carrying an ask draws as a card in its row, answered in
+ * label, a code block by the file and lines it points at as a transcript
+ * names a file (`file-ref.tsx`), an image by its words, and a line naming a
+ * newer Luke for a block this build does not know. A message carrying an ask draws as a card in its row, answered in
  * place (`chat-ask.tsx`). A root with replies says how many under it, and
  * a press folds the thread open there with a box to reply in under it; a
  * root with none offers Reply at its byline's end while it is hovered,
@@ -61,7 +68,9 @@ import { TranscriptWords } from "./transcript-blocks";
  * messages close on the composer (`chat-composer.tsx`), which posts to it.
  * For you lists what waits on the developer (`chat-model.ts`'s `forYou`),
  * each row saying the channel it was posted in, or that it is a direct
- * message, and answered or replied to where it stands. Every word an agent, Luke, or a person wrote draws through the
+ * message, and answered or replied to where it stands. A place with
+ * nothing in it says so under its rail glyph, as an empty pane does
+ * (`EmptyState`). Every word an agent, Luke, or a person wrote draws through the
  * panel, so the masking keeps all of it out of a session recording, and
  * the stream is out of it whole besides (`ph-no-capture`).
  */
@@ -118,17 +127,13 @@ export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): R
   );
 }
 
-/** A code block by what it points at: the file and its lines, at the agent's commit. */
+/** A code block by what it points at: the file and its lines, named as a transcript names them, with nothing to open them from here. */
 function CodeLine({ block }: { block: ChatCodeBlock }): React.JSX.Element {
-  const lines =
-    block.startLine === block.endLine
-      ? `Line ${block.startLine}`
-      : `Lines ${block.startLine}–${block.endLine}`;
+  const { path, startLine, endLine } = block;
   return (
-    <p className="chat-code" data-chat-code="">
-      <span className="chat-code-path">{block.path}</span>
-      <span className="chat-code-lines">{lines}</span>
-    </p>
+    <Text>
+      <FileRef codeRef={{ path, startLine, endLine }} note={undefined} onOpen={undefined} />
+    </Text>
   );
 }
 
@@ -140,7 +145,7 @@ function Block({
   block: ChatReadBlock;
   openLink: (url: string) => void;
 }): React.JSX.Element {
-  if (!knownBlock(block)) return <p className="chat-unknown">{NEWER_LUKE}</p>;
+  if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       return (
@@ -150,14 +155,14 @@ function Block({
       );
     case CHAT_BLOCK.LINK:
       return (
-        <p className="chat-link">
+        <Text>
           <LinkBlock url={block.url} label={block.label} openLink={openLink} />
-        </p>
+        </Text>
       );
     case CHAT_BLOCK.CODE:
       return <CodeLine block={block} />;
     case CHAT_BLOCK.IMAGE:
-      return <p className="chat-image-words">{block.alt}</p>;
+      return <Text tone={TEXT_TONE.SUBTLE}>{block.alt}</Text>;
   }
 }
 
@@ -215,10 +220,25 @@ function Byline({
 }): React.JSX.Element {
   return (
     <div className="chat-byline">
-      <span className="chat-author">{who.name}</span>
-      <span className="chat-handle">@{who.handle}</span>
-      {where === undefined ? null : <span className="chat-where">{where}</span>}
-      <RelativeTime className="chat-time" at={at} now={now} />
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+        {who.name}
+      </Text>
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        @{who.handle}
+      </Text>
+      {where === undefined ? null : (
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.CAPTION}
+          tone={TEXT_TONE.SUBTLE}
+          truncate
+        >
+          {where}
+        </Text>
+      )}
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        <RelativeTime at={at} now={now} />
+      </Text>
       {action}
     </div>
   );
@@ -317,8 +337,14 @@ function PlaceHead({
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-head">
-      <h2 className="chat-head-title">{title}</h2>
-      {meta === undefined ? null : <span className="chat-head-meta">{meta}</span>}
+      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
+        {title}
+      </Text>
+      {meta === undefined ? null : (
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
+          {meta}
+        </Text>
+      )}
     </header>
   );
 }
@@ -374,11 +400,11 @@ export function ChatPane({
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you">
         <PlaceHead title="For you" meta={FOR_YOU_META} />
-        <ScrollArea>
-          <div className="chat-stream-body">
-            {entries.length === 0 ? (
-              <p className="chat-empty">{NOTHING_WAITS}</p>
-            ) : (
+        {entries.length === 0 ? (
+          <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
+        ) : (
+          <ScrollArea>
+            <div className="chat-stream-body">
               <ol className="chat-messages">
                 {entries.map((entry) => (
                   <ThreadRow
@@ -389,9 +415,9 @@ export function ChatPane({
                   />
                 ))}
               </ol>
-            )}
-          </div>
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        )}
       </section>
     );
   }
@@ -400,11 +426,11 @@ export function ChatPane({
   return (
     <section className="chat-stream ph-no-capture" aria-label={title}>
       <PlaceHead title={title} meta={channelMeta(chat, names, channel)} />
-      <ScrollArea>
-        <div className="chat-stream-body">
-          {threads.length === 0 ? (
-            <p className="chat-empty">{NOTHING_POSTED}</p>
-          ) : (
+      {threads.length === 0 ? (
+        <EmptyState icon={<HashIcon />}>{NOTHING_POSTED}</EmptyState>
+      ) : (
+        <ScrollArea>
+          <div className="chat-stream-body">
             <ol className="chat-messages">
               {threads.map((thread) => (
                 <ThreadRow
@@ -415,9 +441,9 @@ export function ChatPane({
                 />
               ))}
             </ol>
-          )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      )}
       {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
       <ChatComposer
         key={channel.id}

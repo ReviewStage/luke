@@ -1,5 +1,15 @@
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
-import { BUTTON_SHAPE, BUTTON_VARIANT, ComboboxList, comboboxOptionId, IconButton } from "@luke/ui";
+import {
+  ComboboxList,
+  comboboxOptionId,
+  GAP,
+  Inline,
+  SUBMIT_STATE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -7,15 +17,21 @@ import {
   chooseTarget,
   matchingTargets,
 } from "@luke/ui/chat-mention";
-import { ArrowUpIcon } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+} from "../ai-elements/prompt-input.js";
 import { Tooltip } from "../tooltip.js";
 
 /**
  * chat-composer.tsx -- the box a chat message is written in: at a place's foot, or under a thread opened for a reply, with the list an `@` or a `#` opens.
  *
- * The box is a plain textarea over a bar that says what it takes, and a
- * round send press at the bar's end. Enter sends, Shift-Enter starts a new
+ * The box is the shared composer card (`prompt-input.tsx`), as the agent
+ * tab's and the Inbox's are: a plain textarea, and under it the card's foot
+ * saying what it takes, with the shared round send at its end. Enter sends, Shift-Enter starts a new
  * line, and the box is empty again once the post is taken; a post refused
  * keeps its words and says why under the box. An `@` or a `#` at the
  * start of a word opens the list over the box (`chat-mention.ts`), one row
@@ -30,7 +46,6 @@ import { Tooltip } from "../tooltip.js";
 
 /** What the send press is called. */
 const SEND = "Send";
-const SENDING = "Sending";
 
 /** The list's own name, which its listbox is read by. */
 const MENTION_MENU_LABEL = "Mention";
@@ -200,18 +215,18 @@ export function ChatComposer({
   } as const;
   return (
     <div className="chat-composer" data-compact={String(compact === true)}>
-      <div className="chat-composer-box">
-        {listed && mention !== undefined ? (
-          <MentionMenu
-            id={listId}
-            rows={rows}
-            at={at}
-            onHover={(index) =>
-              setHighlight({ start: mention.start, query: mention.query, at: index })
-            }
-            onChoose={choose}
-          />
-        ) : null}
+      {listed && mention !== undefined ? (
+        <MentionMenu
+          id={listId}
+          rows={rows}
+          at={at}
+          onHover={(index) =>
+            setHighlight({ start: mention.start, query: mention.query, at: index })
+          }
+          onChoose={choose}
+        />
+      ) : null}
+      <PromptInput onSubmit={send}>
         <textarea
           ref={field}
           className="chat-composer-field ph-no-capture"
@@ -230,24 +245,31 @@ export function ChatComposer({
           onKeyDown={onKeyDown}
           onBlur={() => setCaret(undefined)}
         />
-        <div className="chat-composer-bar">
-          {hints.map((hint) => (
-            <span key={hint}>{hint}</span>
-          ))}
+        <PromptInputFooter>
+          <PromptInputTools>
+            <Inline gap={GAP.FIELD} wrap={false}>
+              {hints.map((hint) => (
+                <Text
+                  key={hint}
+                  as={TEXT_ELEMENT.SPAN}
+                  variant={TEXT_VARIANT.CAPTION}
+                  tone={TEXT_TONE.SUBTLE}
+                  truncate
+                >
+                  {hint}
+                </Text>
+              ))}
+            </Inline>
+          </PromptInputTools>
           <Tooltip label={SEND}>
-            <IconButton
-              icon={<ArrowUpIcon aria-hidden="true" />}
+            <PromptInputSubmit
               label={SEND}
-              variant={BUTTON_VARIANT.PRIMARY}
-              shape={BUTTON_SHAPE.ROUND}
-              disabled={!sending && draft.trim() === ""}
-              busy={sending}
-              busyLabel={SENDING}
-              onClick={send}
+              status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+              disabled={sending || draft.trim() === ""}
             />
           </Tooltip>
-        </div>
-      </div>
+        </PromptInputFooter>
+      </PromptInput>
       {note === undefined ? null : (
         <p className="error-message chat-composer-note" role="alert">
           {note}
