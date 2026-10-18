@@ -1,6 +1,5 @@
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
-  PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
@@ -55,10 +54,8 @@ const COMMENT_NOTE = {
   NO_WORDS: "The words this comment was on are no longer in the plan.",
   NOT_YOURS: "Only its writer can change this comment.",
   GONE: "This comment is no longer in the thread.",
-  NO_AGENT: "That agent is no longer on this task.",
   AGENT_AWAY: "That agent isn't running, so it couldn't take the thread.",
   LUKE_AWAY: "Luke couldn't take the thread. Try again in a moment.",
-  NOT_SENT: "The thread could not be sent.",
 } as const;
 
 /** How one read is asked: the plan and the cursor to read past. */
@@ -117,10 +114,6 @@ function refusalWords(refusal: PlanCommentRefusal): string {
       return COMMENT_NOTE.GONE;
     case PLAN_COMMENT_REFUSAL.KEY_TAKEN:
       return COMMENT_NOTE.NOT_CHANGED;
-    case PLAN_COMMENT_REFUSAL.NO_AGENT:
-      return COMMENT_NOTE.NO_AGENT;
-    case PLAN_COMMENT_REFUSAL.AGENT_AWAY:
-      return COMMENT_NOTE.AGENT_AWAY;
   }
 }
 
@@ -255,14 +248,7 @@ export function usePlanComments(input: {
         return false;
       }
       if ("failure" in answer) {
-        note(
-          threadId,
-          "words" in action
-            ? COMMENT_NOTE.NOT_POSTED
-            : action.action === PLAN_COMMENT_ACTION.ASK
-              ? COMMENT_NOTE.NOT_SENT
-              : COMMENT_NOTE.NOT_CHANGED,
-        );
+        note(threadId, "words" in action ? COMMENT_NOTE.NOT_POSTED : COMMENT_NOTE.NOT_CHANGED);
         return false;
       }
       took(planId, answer);

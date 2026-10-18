@@ -1035,25 +1035,24 @@ export function mentionsIn(
 
 /** Whom a comment's words ask, as `askedInWords` reads them. */
 export interface AskedInWords {
-  /** The tasks whose Luke the words mention. */
-  readonly lukeOn: readonly string[];
+  /** Whether the words mention the comment's own task's Luke; another task's is a reference. */
+  readonly luke: boolean;
   /** The coding agents the words mention, each once. */
   readonly agentIds: readonly string[];
 }
 
 /**
- * Whom a comment's words ask: the tasks whose Luke they mention, and the
- * coding agents they mention, each once, in the order written. A mention is
- * a link the writer placed with `@`; a bare link to an agent asks no one.
+ * Whom a comment on the task's plan asks: its Luke, where the words mention
+ * him, and the coding agents they mention, each once, in the order written.
+ * A mention is a link the writer placed with `@`; a bare link to an agent
+ * asks no one.
  */
-export function askedInWords(words: string): AskedInWords {
-  const lukeOn: string[] = [];
+export function askedInWords(words: string, taskId: string): AskedInWords {
+  let luke = false;
   const agentIds: string[] = [];
   // Note that every mention of the comment's bounded words is read, beyond the twenty a message hands an agent, so no one asked is missed.
   for (const { mention } of mentionsIn(words, null, Number.POSITIVE_INFINITY)) {
-    if (mention.kind === MENTION_KIND.LUKE && !lukeOn.includes(mention.taskId)) {
-      lukeOn.push(mention.taskId);
-    }
+    if (mention.kind === MENTION_KIND.LUKE && mention.taskId === taskId) luke = true;
     if (
       mention.kind === MENTION_KIND.AGENT &&
       !agentIds.some((id) => id.toLowerCase() === mention.agentId.toLowerCase())
@@ -1061,7 +1060,7 @@ export function askedInWords(words: string): AskedInWords {
       agentIds.push(mention.agentId);
     }
   }
-  return { lukeOn, agentIds };
+  return { luke, agentIds };
 }
 
 /** The quotes a link's title may stand between, after its destination. */

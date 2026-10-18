@@ -95,9 +95,6 @@ export function commentAskMessage(ask: CommentAsk): string {
 /** What a hand-over needs: eve as the member reaches it. */
 export type CommentAskSeams = EveReach;
 
-/** The ask refused because the agent asked is not one of the plan's, or is archived. */
-const ASK_NO_AGENT = "no-agent" as const;
-
 /** The agent an ask names, where it is the plan's own and stands; nothing otherwise, which no ask is written for. */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -112,11 +109,18 @@ export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return agent.value;
 });
 
+/** Whom a thread is handed to: Luke, or the plan's own standing agent as `askableAgent` read it. */
+export type CommentRecipient =
+  | { readonly actor: typeof PLAN_COMMENT_ACTOR.LUKE }
+  | {
+      readonly actor: typeof PLAN_COMMENT_ACTOR.AGENT;
+      readonly agent: NonNullable<Effect.Success<ReturnType<typeof askableAgent>>>;
+    };
+
 /**
  * The thread handed to the one asked, under the member's key: to Luke on the
  * plan's planning conversation, or to the agent as a message from the
- * member; the agent must be the plan's own and stand. Answers nothing where
- * it was handed over, the refusal the route answers otherwise.
+ * member. Fails with the refusal the route answers where it was not.
  */
 export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CommentAskSeams,
@@ -124,23 +128,21 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   input: {
     readonly userId: string;
     readonly taskId: string;
-    readonly to: PlanCommentAsked;
+    readonly to: CommentRecipient;
     readonly clientKey: string;
     readonly text: string;
   },
 ) {
   const { userId, taskId, to, clientKey, text } = input;
   if (to.actor === PLAN_COMMENT_ACTOR.AGENT) {
-    const agent = yield* askableAgent(userId, taskId, to);
-    if (agent === undefined) return ASK_NO_AGENT;
     const eve = yield* eveFor(seams, request);
     const writer = storeWriter({ tools: CODER_TOOL_SET });
-    yield* steerCodingAgent(eve, writer, userId, agent, {
+    yield* steerCodingAgent(eve, writer, userId, to.agent, {
       text,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
-    return undefined;
+    return;
   }
   const conversation = yield* hostedStoreOrUnavailable(openTaskConversation(userId, taskId));
   if (Option.isNone(conversation))
@@ -161,5 +163,4 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Result.isFailure(accepted))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.UNAVAILABLE);
-  return undefined;
 });

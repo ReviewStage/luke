@@ -903,7 +903,8 @@ test("a comment's words ask the Luke and the agents they mention with `@`, each 
     "[this one](https://tryluke.dev/acme/plan/plan-1/agent/agent-3) or `[@code](https://tryluke.dev/acme/plan/plan-1/agent/agent-4)`.",
   ].join(" ");
 
-  assert.deepEqual(askedInWords(words), { lukeOn: ["plan-1"], agentIds: ["agent-1", "agent-2"] });
+  assert.deepEqual(askedInWords(words, "plan-1"), { luke: true, agentIds: ["agent-1", "agent-2"] });
+  assert.equal(askedInWords(words, "plan-2").luke, false, "another task's Luke is a reference");
 });
 
 test("a comment's words ask Luke though twenty other mentions come before him", () => {
@@ -912,8 +913,8 @@ test("a comment's words ask Luke though twenty other mentions come before him", 
     (_, index) => `[@f${index}.ts](https://github.com/acme/relay/blob/main/f${index}.ts)`,
   ).join(" ");
 
-  assert.deepEqual(askedInWords(`${files} [@Luke](https://tryluke.dev/acme/plan/plan-1/luke)`), {
-    lukeOn: ["plan-1"],
-    agentIds: [],
-  });
+  assert.deepEqual(
+    askedInWords(`${files} [@Luke](https://tryluke.dev/acme/plan/plan-1/luke)`, "plan-1"),
+    { luke: true, agentIds: [] },
+  );
 });

@@ -11,6 +11,7 @@ import {
   type PlanCommentActionRequest,
   type PlanCommentAnchors,
   type PlanCommentAsked,
+  type PlanCommentAskRequest,
   type PlanCommentEntry,
   type PlanCommentEntryKind,
   type PlanCommentRefusal,
@@ -598,7 +599,7 @@ export function actOnPlanCommentThread(
   writer: PlanCommentWriterRef,
   taskId: string,
   threadId: string,
-  request: PlanCommentActionRequest,
+  request: PlanCommentActionRequest | PlanCommentAskRequest,
 ): TaskStoreEffect<PlanCommentOutcome> {
   return inTransaction(
     Effect.gen(function* () {

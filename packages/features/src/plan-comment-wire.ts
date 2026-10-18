@@ -218,14 +218,20 @@ export const planCommentActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.RESOLVE) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.REOPEN) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.DELETE_THREAD) }),
-  EffectSchema.Struct({
-    action: EffectSchema.Literal(PLAN_COMMENT_ACTION.ASK),
-    clientKey: planCommentClientKeySchema,
-    to: planCommentAskedSchema,
-  }),
 ]);
 
 export type PlanCommentActionRequest = typeof planCommentActionRequestSchema.Type;
+
+/**
+ * An ask written in a thread under its own key, saying whom a comment's
+ * mention handed it to. The service writes it as it hands the thread over;
+ * no client sends one, since a mention in the words is how a member asks.
+ */
+export interface PlanCommentAskRequest {
+  readonly action: typeof PLAN_COMMENT_ACTION.ASK;
+  readonly clientKey: string;
+  readonly to: PlanCommentAsked;
+}
 
 /** Why a write to a thread took nothing, answered in band. */
 export const PLAN_COMMENT_REFUSAL = {
@@ -239,10 +245,6 @@ export const PLAN_COMMENT_REFUSAL = {
   NO_ENTRY: "no-entry",
   /** The key the reply was sent under already wrote to another thread of the plan. */
   KEY_TAKEN: "key-taken",
-  /** The agent asked is not one of the task's, or is archived. */
-  NO_AGENT: "no-agent",
-  /** The agent asked is the task's, but its session is not running to take the thread: ended, or not yet up. */
-  AGENT_AWAY: "agent-away",
 } as const;
 
 export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN_COMMENT_REFUSAL];
