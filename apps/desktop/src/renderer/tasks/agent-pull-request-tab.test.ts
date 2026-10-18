@@ -2956,6 +2956,146 @@ test("a review thread on its line in Files changed is replied on and resolved fr
   ]);
 });
 
+/** Writes in the comment box at the Conversation's foot as the member would. */
+function writeComment(tab: HTMLElement, words: string): HTMLTextAreaElement {
+  const field =
+    tab.querySelector<HTMLTextAreaElement>(
+      '.pull-request-comment-box textarea[aria-label="Comment"]',
+    ) ?? assert.fail("the Conversation ends in a comment box");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return field;
+}
+
+/** The comment box's Comment press. */
+function commentPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(".pull-request-comment-foot button") ??
+    assert.fail("the box offers Comment")
+  );
+}
+
+test("a comment written at the Conversation's foot is asked of the service for the agent, after which the box lets its words go and the comment stands in the conversation", async () => {
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            conversation: [
+              ...CONVERSATION.conversation,
+              ...changes.flatMap(([, request]) =>
+                request.action === PULL_REQUEST_ACTION.COMMENT
+                  ? [
+                      {
+                        kind: CONVERSATION_ENTRY.COMMENT,
+                        by: CHARLES_ON_GITHUB,
+                        html: null,
+                        body: request.body,
+                        at: 4_000,
+                        url: `${PAGE}#issuecomment-9`,
+                      },
+                    ]
+                  : [],
+              ),
+            ],
+          },
+        }),
+    }),
+  );
+  assert.equal(commentPress(tab).disabled, true, "a blank comment is not sent");
+
+  const field = writeComment(tab, "Shipping after **lunch**.");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+  });
+  await settle();
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.COMMENT, body: "Shipping after **lunch**." }],
+  ]);
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "",
+    "the box lets its words go",
+  );
+  assert.match(
+    tab.querySelector(".pull-request-conversation")?.textContent ?? "",
+    /Shipping after lunch\./u,
+  );
+});
+
+test("a comment GitHub refuses says so under the box in GitHub's own words, its words kept for another try", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Conversation is locked to collaborators",
+  };
+  const tab = await draw(controlAnswering());
+
+  writeComment(tab, "Ping?");
+  act(() => commentPress(tab).click());
+  await settle();
+
+  assert.equal(
+    tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
+    "GitHub said: Conversation is locked to collaborators",
+  );
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "Ping?",
+  );
+});
+
+test("a comment being written outlives a read of the conversation that failed, standing in the box again once Retry reads it", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        reads += 1;
+        return Promise.resolve(
+          reads === 2
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { pullRequest: CONVERSATION },
+        );
+      },
+    }),
+  );
+  writeComment(tab, "Half a thought");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-comment-box"),
+    null,
+    "the failed read takes it away",
+  );
+
+  const retry =
+    [...tab.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? assert.fail("the failed conversation offers Retry");
+  await act(async () => retry.click());
+  await settle();
+
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "Half a thought",
+  );
+});
+
 test("a merge asked about goes with its panel: hidden, the question is let go and nothing merges, and shown again it asks nothing", async () => {
   let show: (shown: boolean) => void = () => undefined;
   function Hiding() {
