@@ -16,6 +16,9 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  LIST_DENSITY,
+  List,
+  ListRow,
   ProviderMark,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -101,29 +104,13 @@ function RunRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
-  const glyph = <FiringGlyph kind={run.firing.kind} />;
   const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
+  const { agent } = run;
   const copyLink =
-    automationId === undefined
+    automationId === undefined || agent === null
       ? undefined
       : linkItem({ kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId: run.id });
-  const words = (
-    <>
-      <StateGlyph glyph={glyph} state={state} />
-      <span className="automation-row-copy">
-        <span className="automation-row-name">{automationRunTitle(run)}</span>
-        <Tooltip label={line}>
-          <span className="automation-row-detail">{line}</span>
-        </Tooltip>
-      </span>
-      <Tooltip label={momentText(run.firedAt)}>
-        <span className="automation-row-when">{sinceText(run.firedAt, now)}</span>
-      </Tooltip>
-      {stateEndMark(state, true)}
-    </>
-  );
-  const onContextMenu = copyLink === undefined ? undefined : menu.contextMenu();
   // A run a link named is brought into the middle of the box that scrolls it, once, as it is drawn.
   const row = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -131,34 +118,31 @@ function RunRow({
     const scroller = drawn === null ? undefined : scrollerOf(drawn);
     if (linked && drawn !== null && scroller !== undefined) centreWithin(scroller, drawn);
   }, [linked]);
-  const mark = linked ? { "aria-current": "true" as const, "data-run-linked": "" } : undefined;
-  const { agent } = run;
   return (
     <>
-      {agent === null ? (
-        <div
-          ref={(node) => {
-            row.current = node;
-          }}
-          className="automation-run"
-          {...mark}
-        >
-          {words}
-        </div>
-      ) : (
-        <button
-          ref={(node) => {
-            row.current = node;
-          }}
-          type="button"
-          className="automation-run"
-          onClick={() => onOpenAgent(agent.id)}
-          onContextMenu={onContextMenu}
-          {...mark}
-        >
-          {words}
-        </button>
-      )}
+      <ListRow
+        ref={(node) => {
+          row.current = node;
+        }}
+        leading={<StateGlyph glyph={<FiringGlyph kind={run.firing.kind} />} state={state} />}
+        title={automationRunTitle(run)}
+        description={
+          <Tooltip label={line}>
+            <span>{line}</span>
+          </Tooltip>
+        }
+        meta={
+          <span className="automation-row-meta">
+            <Tooltip label={momentText(run.firedAt)}>
+              <span>{sinceText(run.firedAt, now)}</span>
+            </Tooltip>
+            {stateEndMark(state, true)}
+          </span>
+        }
+        current={linked}
+        onPress={agent === null ? undefined : () => onOpenAgent(agent.id)}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
+      />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={RUN_ACTIONS}
@@ -244,7 +228,7 @@ export function AutomationRunsPanel({
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
-          <div className="automation-runs-list">
+          <List label="Runs" density={LIST_DENSITY.COMPACT}>
             {runs.runs.map((run) => (
               <RunRow
                 key={run.id}
@@ -256,7 +240,7 @@ export function AutomationRunsPanel({
                 onOpenAgent={onOpenAgent}
               />
             ))}
-          </div>
+          </List>
         )}
       </aside>
     </div>
