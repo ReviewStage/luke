@@ -58,7 +58,7 @@ const AVATAR_BONE = { small: "32px", large: "56px" } as const;
 export const SKELETON_PLOT = {
   USAGE: "h-48",
   SIGNUPS: "h-40",
-  SIGN_IN_METHODS: "h-[120px]",
+  SIGN_IN_METHODS: "h-30",
 } as const;
 
 type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
@@ -129,7 +129,7 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
+  return <ChartFrameSkeleton aside={false} legend plot="h-39" />;
 }
 
 function SkeletonAccountsTable({
@@ -142,7 +142,7 @@ function SkeletonAccountsTable({
   const columns = bones(numericColumns);
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="flex items-center gap-6 border-b border-border px-5 py-3">
+      <div className="flex items-center gap-6 border-b border-(--luke-color-border) px-5 py-3">
         <div className="min-w-0 flex-1">
           <SkeletonLine variant={TEXT_VARIANT.LABEL} width="64px" />
         </div>
@@ -155,7 +155,7 @@ function SkeletonAccountsTable({
       {bones(rows).map((row) => (
         <div
           key={row}
-          className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
+          className="flex items-center gap-6 border-b border-(--luke-color-border) px-5 py-3 last:border-0"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="flex shrink-0">

@@ -17,6 +17,13 @@ import {
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
 
+/**
+ * "Luke" beside the mark, in the web profile's wordmark display style
+ * (`@luke/ui`'s `tokens/display.css`): the site's banner and the admin's rail.
+ */
+export const WORDMARK =
+  "font-brand text-(length:--luke-display-wordmark-size) font-(--luke-display-wordmark-weight) tracking-(--luke-display-wordmark-tracking)";
+
 /** A mark's box is decided at its call site, the one place it is drawn. */
 type MarkProps = { readonly className?: string };
 
@@ -29,7 +36,7 @@ type MarkProps = { readonly className?: string };
  * Wider than tall, so a caller sizes both axes and lets the default
  * `xMidYMid meet` letterbox the face inside that box rather than stretch it.
  */
-export function LukeMark({ className = "block h-[18px] w-5" }: MarkProps): React.JSX.Element {
+export function LukeMark({ className = "block h-4.5 w-5" }: MarkProps): React.JSX.Element {
   const { MARK_VIEW_BOX, TILT, SMILE, STROKE_WIDTH, EYE_X, EYE_Y, EYE_RADIUS } = FACE_ART;
   return (
     <svg className={className} viewBox={MARK_VIEW_BOX} fill="none" aria-hidden="true">
@@ -89,7 +96,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
     <nav aria-label="Site" className="flex items-center justify-between">
       <a
-        className="inline-flex min-h-11 items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
+        className={`inline-flex min-h-11 items-center gap-2 no-underline ${WORDMARK}`}
         href={SITE_PAGE.HOME}
         aria-current={currentOf(SITE_PAGE.HOME, current)}
       >
@@ -162,7 +169,7 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
       {/* The notice sits under its own rule at the foot of the column, the
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
-      <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
+      <p className="mt-8 border-t border-(--luke-color-border) pt-6">© 2026 Stage Inc.</p>
     </Text>
   );
 }

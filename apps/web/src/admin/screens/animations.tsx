@@ -99,7 +99,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
             return markup === undefined ? (
               <div
                 key={variant}
-                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-border px-2 text-center`}
+                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-(--luke-color-border) px-2 text-center`}
               >
                 <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   No committed asset

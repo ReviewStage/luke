@@ -15,11 +15,16 @@ import { USAGE_CHART } from "./usage-chart";
  */
 const CALENDAR_FILL_FLOOR_PERCENT = 8;
 
-function calendarCellStyle(total: number, maxTotal: number): React.CSSProperties {
+/**
+ * A day cell's corner, a quarter of its edge, as a small workspace tile's
+ * is: the cell is too small for a radius token, whose smallest would round
+ * it into a dot.
+ */
+const CALENDAR_CELL_RADIUS = "25%";
+
+function calendarCellFill(total: number, maxTotal: number): string {
   const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
-  return {
-    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
-  };
+  return `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`;
 }
 
 /** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
@@ -39,14 +44,17 @@ function CalendarDayCell({
   onHide: () => void;
 }): React.JSX.Element {
   const provisional =
-    day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
+    day.day === partialDay ? " border border-dashed border-(--luke-color-text-muted)/60" : "";
   return (
     <div
       role="img"
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.calls)} hosted calls`}
       data-calendar-day={day.day}
-      className={`rounded-[3px] outline-offset-2 ${day.calls === 0 ? "bg-muted/60" : ""}${provisional}`}
-      style={day.calls === 0 ? undefined : calendarCellStyle(day.calls, maxTotal)}
+      className={`outline-offset-2 ${day.calls === 0 ? "bg-(--luke-color-fill-hover)/60" : ""}${provisional}`}
+      style={{
+        borderRadius: CALENDAR_CELL_RADIUS,
+        backgroundColor: day.calls === 0 ? undefined : calendarCellFill(day.calls, maxTotal),
+      }}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
         // A move straight onto a sibling cell fires that cell's enter next,
