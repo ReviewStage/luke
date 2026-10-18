@@ -300,3 +300,20 @@ test("a tight list switching between bullets and task items is handed over untou
   editor.chain().setTextSelection(end).insertContent(" again").run();
   assert.equal(handedOver(), text.replace("two", "two again"));
 });
+
+test("a checklist laid in after a list that ends the text without a line break starts on a line of its own", () => {
+  const { editor, handedOver } = opened("- one");
+
+  editor.commands.insertContentAt(editor.state.doc.content.size, {
+    type: "taskList",
+    content: [
+      {
+        type: "taskItem",
+        attrs: { checked: false },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "two" }] }],
+      },
+    ],
+  });
+
+  assert.equal(handedOver(), "- one\n- [ ] two");
+});

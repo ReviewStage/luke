@@ -1,4 +1,5 @@
 import { type AnyExtension, type Editor, type JSONContent, Node } from "@tiptap/core";
+import { BulletList, TaskList } from "@tiptap/extension-list";
 import { MarkdownManager } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { diffArrays } from "diff";
@@ -37,7 +38,7 @@ const FOOTNOTE = /\[\^[^\]\s]+\]/u;
 const BLOCK_GAP = "\n\n";
 
 /** The blocks a bullet list opens as, a run of plain items or of task items (`tokenSources`). */
-const LIST_BLOCKS = new Set(["bulletList", "taskList"]);
+const LIST_BLOCKS = new Set([BulletList.name, TaskList.name]);
 
 /** The locked block a source the editor cannot draw faithfully opens as. */
 export const RawBlock = Node.create({
@@ -179,9 +180,10 @@ export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: He
       return;
     }
     // Note that a run of a list goes on into the next run with no blank line
-    // laid between them, so a tight list stays tight; a kept run keeps its own.
+    // laid between them, so a tight list stays tight; a kept run keeps its own,
+    // and one kept from the text's end gains the line break it lacks.
     if (LIST_BLOCKS.has(node.type.name) && LIST_BLOCKS.has(doc.child(index + 1).type.name)) {
-      out += held.sources.has(node) ? block : `${block.trimEnd()}\n`;
+      out += held.sources.has(node) && block.endsWith("\n") ? block : `${block.trimEnd()}\n`;
       return;
     }
     // Note that the text's last block kept its source without the blank line after it, which a block laid in after it needs.
