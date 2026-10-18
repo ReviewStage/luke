@@ -127,7 +127,9 @@
   background: none;
 }
 
-.settings-chevron {
+/* A chip draws its own chevron (`chip.css`), which this unlayered rule
+   would otherwise win over. */
+.settings-chevron:where(:not(.luke-chip *)) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
@@ -464,18 +466,14 @@
 }
 
 /* Settings › Workspace's first row (`.workspace-identity`, its refusal
-   standing under it as API keys' does): the workspace's name, renamed in
-   place on the name's own line, the field's words where the name's stood
-   and the field standing in the label's 18px line, so the row keeps its height. */
-.workspace-name-input {
+   standing under it as API keys' does) and an integration account's row
+   (`.integration-row`): the name, renamed in place on the name's own line,
+   the field's words where the name's stood and the field standing in the
+   label's 18px line, so the row keeps its height. */
+:is(.workspace-identity, .integration-row) .luke-inline-edit {
   display: block;
-  height: 24px;
+  width: 100%;
   margin: -3px 0 -3px -9px;
-  padding: 0 var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  letter-spacing: 0;
 }
 
 /* Settings › Workspace › Members (`.workspace-member`, a role change's

@@ -114,7 +114,7 @@ export const CHAT_TOOLS = {
       "Post a message in your workspace's chat, where the other coding agents, Luke, and the developer's team talk. " +
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
       "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or @handle " +
-      "for a direct message to one member; leave it out to post in your plan's own channel, where its agents post by default. " +
+      "for a direct message to one member; leave it out to post in your task's own channel, where its agents post by default. " +
       "replyTo is a message's number to answer it in its thread, in that message's channel, with no to. " +
       "A direct message, an @handle in the words, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
@@ -186,7 +186,7 @@ export const CHAT_TOOL_REFUSAL = {
   TOO_MANY_TOPICS: `Not posted: the workspace keeps ${CHAT_BOUNDS.MAX_TOPIC_CHANNELS} topic channels open already. Post in an open channel instead.`,
   CHANNEL_ARCHIVED: "Not posted: that channel is archived and takes no post.",
   LEFT: "Not posted: you have left the chat, as an archived agent does.",
-  NO_AGENT: "Not done: this conversation is no coding agent's, or its plan is no longer reachable.",
+  NO_AGENT: "Not done: this conversation is no coding agent's, or its task is no longer reachable.",
   UNAVAILABLE: "Not done: the service could not reach the chat.",
   OFF: "Not done: Chat is not turned on for the account that started you.",
 } as const;
