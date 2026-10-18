@@ -13,6 +13,7 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
+import { beginIssueWork } from "@luke/database/models/issue-store";
 import { readTask, type StoredTaskIssue } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -122,7 +123,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * handed a plan started from a Linear issue reads that issue after the
  * plan and before the note (`linearIssueBrief`), and one handed a plan
  * started from one of the workspace's own issues reads that issue as it
- * stands then, after the Linear one (`workspaceIssueBrief`). An agent
+ * stands then, after the Linear one (`workspaceIssueBrief`); once eve has
+ * taken such an agent, the issue moves into progress where it stood in the
+ * backlog or to do and is not archived, and stands as it was otherwise
+ * (`beginIssueWork`), a move that fails logged rather than the Start's
+ * failure. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -803,6 +808,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   if (continued) yield* stoppedSource(eve, from.source);
+  // Work on the issue the task was started from has begun, so one in the backlog or to do moves
+  // into progress; a move that fails is logged, never the Start's failure.
+  const issueId = landing.task?.issueId;
+  if (issueId !== undefined) {
+    yield* beginIssueWork(userId, issueId).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
+  }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(
     Effect.tapError(logStoreFailure),

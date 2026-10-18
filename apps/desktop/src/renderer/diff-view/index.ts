@@ -1,19 +1,3 @@
-import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
-import {
-  CodeView,
-  type CodeViewDiffItem,
-  type CodeViewOptions,
-  type DiffLineAnnotation,
-  type FileContents,
-  type FileDiffMetadata,
-  type FileDiffOptions,
-  getSingularPatch,
-  type File as PierreFile,
-  FileDiff as PierreFileDiff,
-  type PostRenderPhase,
-  type SelectedLineRange,
-} from "@pierre/diffs";
-import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
 import {
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
@@ -29,7 +13,23 @@ import {
   sameListSelection,
   sameLook,
   sameNotes,
-} from "./contract";
+} from "@luke/panel/diff-view/contract";
+import { FIND_SHADOW_ATTRIBUTE } from "@luke/panel/find-matches";
+import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
+import {
+  CodeView,
+  type CodeViewDiffItem,
+  type CodeViewOptions,
+  type DiffLineAnnotation,
+  type FileContents,
+  type FileDiffMetadata,
+  type FileDiffOptions,
+  getSingularPatch,
+  type File as PierreFile,
+  FileDiff as PierreFileDiff,
+  type PostRenderPhase,
+  type SelectedLineRange,
+} from "@pierre/diffs";
 import { adoptShadowStyles } from "./inline-styles";
 
 /**

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type {
+  PictureTaken,
+  PlanEditorHandle,
+  PlanEditorPictures,
+} from "@luke/panel/plan-editor/contract";
 import { afterEach, test } from "vitest";
-import type { PictureTaken, PlanEditorHandle, PlanEditorPictures } from "./contract";
 import { mountPlanEditor } from "./plan-editor";
 
 /**

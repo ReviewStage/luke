@@ -27,6 +27,14 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
 import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -34,19 +42,11 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
-import { onRegistry } from "#testing/copy-feedback";
 import { playMotions } from "#testing/pane-motion";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
-import { OpenFeedbackProvider } from "../open-feedback";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { AutomationsPage } from "./automations-page";
 
 /**

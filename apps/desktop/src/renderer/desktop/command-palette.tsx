@@ -47,7 +47,17 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  appCommandOffered,
+  runAppCommand,
+  useAppCommand,
+  useOverlayHold,
+} from "@luke/panel/app-commands";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { settingsPageOf, settingsPageShown } from "@luke/panel/settings/pages";
+import { Shortcut } from "@luke/panel/shortcut";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { type ReadMarks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
@@ -89,18 +99,14 @@ import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search";
-import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
@@ -108,7 +114,6 @@ import { refusalLine } from "../tasks/file-tab-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { markReadItem } from "../tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
-import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";

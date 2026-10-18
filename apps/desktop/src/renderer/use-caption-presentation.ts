@@ -1,6 +1,6 @@
+import { voiceErrorToShow, voiceNoticeToShow } from "@luke/panel/use-voice-view";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import { useEffect, useRef, useState } from "react";
-import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 
 /**
  * use-caption-presentation.ts -- what the caption strip says this frame: whose words, in which tone, and the moment they stay once the speaker stops.

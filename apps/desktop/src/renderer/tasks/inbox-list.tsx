@@ -1,6 +1,11 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
+import { DraftMark } from "@luke/panel/draft-mark";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -42,8 +47,6 @@ import {
 } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useAutomation } from "../automation-directory";
 import { useInboxItemDrafted } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu";
@@ -56,9 +59,6 @@ import {
   useInboxListWidth,
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { DraftMark } from "../draft-mark";
-import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { providerOf } from "./coding-agent-model";

@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import type { FileChip } from "@luke/features/attachment-model";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
 import type { ImageView } from "@luke/ui/image-zoom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
 import { AttachmentViewer } from "./attachment-viewer";
 
 /**

@@ -9,9 +9,22 @@ import {
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { type HoverPane, useHoverPane } from "@luke/panel/desktop/hover-pane";
+import {
+  EDGE_SIDE,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "@luke/panel/desktop/use-resizable-edge";
+import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { Shortcut } from "@luke/panel/shortcut";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { useUnreadTasks } from "@luke/panel/tasks/use-task-looks";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -76,24 +89,17 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { RepositoryPicture } from "../repository-picture";
-import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
-import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
-import { type HoverPane, useHoverPane } from "./hover-pane";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarAgent } from "./sidebar-agent";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
@@ -115,8 +121,6 @@ import {
 } from "./sidebar-task-view";
 import { SidebarTask } from "./task-actions";
 import { useArchivedView, useTaskListView } from "./task-list-view";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
-import { useRowDrag } from "./use-row-drag";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**

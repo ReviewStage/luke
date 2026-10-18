@@ -18,9 +18,9 @@
  * narrows onto its item again.
  */
 
+import { useAppCommand } from "@luke/panel/app-commands";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 
 /**
  * The Inbox's widths, in CSS pixels, between which it shows one column or

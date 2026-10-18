@@ -8,6 +8,7 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
+import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
 import {
   CloseIcon,
   ConfirmDialog,
@@ -29,7 +30,6 @@ import {
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
-import type { FloatingBox } from "../desktop/hover-pane";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";

@@ -1,7 +1,9 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useAppCommand } from "@luke/panel/app-commands";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { usePerson } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -18,10 +20,8 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
-import { usePerson } from "../member-directory";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
@@ -34,7 +34,7 @@ import {
 } from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
-import { IssueWorkRow, useStartTaskItem } from "./issue-work";
+import { IssueWorkRow, useStartItems } from "./issue-work";
 
 /**
  * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.
@@ -87,7 +87,7 @@ export function IssueCrumbs({
 
 /**
  * The issue's ⋯ menu, on its page's toolbar and on its peek's head: Start
- * task…, Copy link, and Archive, which asks first and, once kept, hands back to
+ * task… and Start agent…, Copy link, and Archive, which asks first and, once kept, hands back to
  * `onArchived`, since the issue no longer stands where it was drawn.
  */
 export function IssueMenu({
@@ -106,7 +106,7 @@ export function IssueMenu({
   onArchived: () => void;
 }): React.JSX.Element {
   const menu = useMenu(surfaceOpen);
-  const startTask = useStartTaskItem(issue, identifier);
+  const starts = useStartItems(issue, identifier);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
   const archiving = useConfirmDialog({ subject: true, surfaceOpen }, () =>
     onChange({ archived: true }).then((archived) => {
@@ -125,7 +125,7 @@ export function IssueMenu({
           label={ISSUE_ACTIONS_LABEL}
           menu={menu.drawn}
           groups={[
-            ...(startTask === undefined ? [] : [[startTask]]),
+            ...(starts.length === 0 ? [] : [starts]),
             ...(copyLink === undefined ? [] : [[copyLink]]),
             [archive],
           ]}

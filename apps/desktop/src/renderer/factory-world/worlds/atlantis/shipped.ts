@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import type { TimelineEntry } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -13,7 +14,6 @@ import {
   type Scene,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { CITY, type CityLayout, DISTRICT_KIND, type District, groundOf } from "./city";
 import type { Districts } from "./districts";
 import {

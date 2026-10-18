@@ -1,3 +1,4 @@
+import { Shortcut } from "@luke/panel/shortcut";
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   type ComboboxGroup,
@@ -18,7 +19,6 @@ import {
   useComboboxField,
 } from "@luke/ui";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Shortcut } from "./shortcut";
 import { Tooltip } from "./tooltip";
 
 /**

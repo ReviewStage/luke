@@ -1,5 +1,5 @@
+import type { PickTarget, WorldModule, WorldState } from "@luke/panel/factory-world/world";
 import type { RefObject } from "react";
-import type { PickTarget, WorldModule, WorldState } from "./world";
 
 /**
  * contract.ts -- what the Factory page and the scene bundle say to each other: the one mount call, and the handle the page redraws the world through.

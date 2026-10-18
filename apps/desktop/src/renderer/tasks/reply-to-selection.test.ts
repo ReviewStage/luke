@@ -12,13 +12,15 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   editorBundleLanded,
@@ -27,8 +29,6 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";

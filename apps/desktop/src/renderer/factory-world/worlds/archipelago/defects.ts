@@ -1,4 +1,6 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import type { PickTarget, WorldPalette, WorldPicking } from "@luke/panel/factory-world/world";
+import { PICK_KIND } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   type BufferGeometry,
@@ -20,8 +22,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import type { PickTarget, WorldPalette, WorldPicking } from "../../world";
-import { PICK_KIND } from "../../world";
 import type { Effects, SmokeSource } from "./effects";
 import type { Isle } from "./islands";
 import { hashOf, merged, type Random, randomOf, TAU } from "./kit";

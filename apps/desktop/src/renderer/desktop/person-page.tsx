@@ -2,7 +2,11 @@ import { automationOwner, automationTriggerText } from "@luke/features/automatio
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { useOpenSettings } from "@luke/panel/open-settings";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -43,11 +47,7 @@ import {
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { useOpenSettings } from "../open-settings";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";

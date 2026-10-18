@@ -24,6 +24,7 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import type { ActHandle } from "@luke/panel/act";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -34,7 +35,6 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import {
   type AgentRun,
   ARCHIVE_NOT_READY,

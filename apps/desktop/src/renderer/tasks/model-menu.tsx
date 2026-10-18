@@ -1,8 +1,8 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { HarnessMark } from "../harness-marks";
+import { HarnessMark } from "@luke/panel/harness-marks";
+import { Spinner } from "@luke/panel/spinner";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
-import { Spinner } from "../spinner";
 import {
   CONTEXT_WORD,
   choiceModelId,

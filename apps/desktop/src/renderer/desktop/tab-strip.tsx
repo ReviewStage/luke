@@ -1,3 +1,5 @@
+import { useAppCommand } from "@luke/panel/app-commands";
+import { type TabMove, useTabDrag } from "@luke/panel/desktop/use-tab-drag";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   atPointer,
@@ -14,10 +16,8 @@ import {
 import { useClipped } from "@luke/ui/use-clipped";
 import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
-import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
  * tab-strip.tsx -- the window's one tab strip, drawn alike across the task's column and the side panel, the way an editor draws its tabs.

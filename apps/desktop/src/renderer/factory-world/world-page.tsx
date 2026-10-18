@@ -1,6 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
+import {
+  PICK_KIND,
+  type PickTarget,
+  WORLD_LAYER,
+  type WorldLayer,
+  type WorldLayers,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import { usePrefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { taskBlastRadiusOf } from "@luke/ui/factory-campus";
 import {
@@ -22,9 +33,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useSideBundles, WORLD_LOAD_FAILED, worldBundleAtom } from "../bundle-loader";
-import { SpinnerRegion } from "../spinner";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { CampusScene } from "./campus/campus-scene";
 import type {
   FactorySceneHandle,
@@ -33,15 +42,6 @@ import type {
   StageSceneProps,
 } from "./contract";
 import type { WorldEntry } from "./registry";
-import {
-  PICK_KIND,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldLayer,
-  type WorldLayers,
-  type WorldModule,
-  type WorldState,
-} from "./world";
 import { HomeButton, HoverLabel, namingOf, PipelineBar, Scrubber, WorldCard } from "./world-chrome";
 
 /**

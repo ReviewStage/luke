@@ -24,6 +24,10 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
+import { SpinnerRegion } from "@luke/panel/spinner";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { opensAsLink } from "@luke/panel/tasks/use-open-link";
@@ -61,11 +65,7 @@ import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useAutomation } from "../automation-directory";
-import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { SpinnerRegion } from "../spinner";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import {

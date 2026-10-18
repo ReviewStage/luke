@@ -1,5 +1,11 @@
 import { useAtom } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
+import {
+  PICK_KIND,
+  type PickTarget,
+  WORLD_LAYER,
+  type WorldLayer,
+} from "@luke/panel/factory-world/world";
 import { dayText } from "@luke/panel/tasks/task-time";
 import { cssCustomProperties, Segmented } from "@luke/ui";
 import {
@@ -79,7 +85,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { StageSceneProps } from "../contract";
-import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "../world";
 
 /**
  * campus-scene.tsx -- the Factory's campus: the world snapshot and the listed tasks drawn in SVG as an isometric town, each task a building, each pull request a container, under the chrome every world shares.

@@ -16,12 +16,12 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { ApiKeysSection } from "./api-keys-section";
 
 /**

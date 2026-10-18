@@ -5,6 +5,15 @@ import {
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  WORLD_LAYER,
+  type WorldHost,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -26,15 +35,6 @@ import {
 } from "@luke/ui/testing";
 import { InstancedMesh, Matrix4, type Object3D, PerspectiveCamera, Scene, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldHost,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**

@@ -3,9 +3,10 @@ import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { useToast } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useEffect, useMemo, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import type { CallCardInput } from "../call/call-card";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
@@ -13,7 +14,6 @@ import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
 import { revisionSummary } from "../tasks/plan-history-model";
 import { type PlanHistorySource, usePlanHistory } from "../tasks/use-plan-history";
 import { sayRestored } from "../tasks/version-view";
-import { useToast } from "../toast";
 import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page";
 
 /**

@@ -1,6 +1,15 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { AutomationListSkeleton } from "@luke/panel/desktop/automations-skeleton";
+import { useColumnDock } from "@luke/panel/desktop/column-dock";
+import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
+import { PaneGlide } from "@luke/panel/desktop/pane-motion";
+import { useWindowTitle } from "@luke/panel/desktop/window-title";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { SignInGate } from "@luke/panel/sign-in-gate";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -16,24 +25,18 @@ import {
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import { ExperimentTag } from "../experiment-marks";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { SettingsPanelProps } from "../settings/settings-panel";
-import { SignInGate } from "../sign-in-gate";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
-import { useTaskLooks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, type TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
-import { AutomationListSkeleton } from "./automations-skeleton";
-import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopChat } from "./desktop-chat";
 import { DesktopFactory } from "./desktop-factory";
@@ -41,15 +44,12 @@ import { DesktopInbox } from "./desktop-inbox";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
-import { useFloatDismiss } from "./hover-pane";
 import { OfflineMark, useOffline } from "./offline-mark";
-import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 import { taskCardOf } from "./task-card";
 import { useSummaryPin } from "./task-summary";
-import { useWindowTitle } from "./window-title";
 
 /**
  * Settings, loaded as a chunk of its own the first time it opens rather than

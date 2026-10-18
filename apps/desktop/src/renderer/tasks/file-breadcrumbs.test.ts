@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { FolderListing } from "@luke/panel/file-tree/contract";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
-import type { FolderListing } from "../file-tree/contract";
 import { FileViewBar } from "./file-view";
 
 /**

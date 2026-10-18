@@ -7,6 +7,14 @@ import {
   type LiveTransportState,
 } from "@luke/gateway";
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@luke/live";
+import {
+  LIVE_EVENTS_CHANNEL_LABEL,
+  type LiveDataChannel,
+  type LivePeerConnection,
+  type LiveSilence,
+  type LiveTrackSender,
+} from "@luke/panel/voice/live-peer";
+import { VOICE_ACTIVITY_HANGOVER_MS } from "@luke/panel/voice/voice-level-meter";
 import { AVATAR_FEED_KIND, AVATAR_STATUS, type AvatarFeed } from "@luke/voice/avatar";
 import type { LiveCaptionRow, LiveVoiceSpeakers } from "@luke/voice/orchestrator";
 import type { WireRecord } from "@luke/wire";
@@ -14,14 +22,6 @@ import { type Context, Deferred, Duration, Effect, Fiber, type Scope } from "eff
 import { TestClock } from "effect/testing";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
 import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-call";
-import {
-  LIVE_EVENTS_CHANNEL_LABEL,
-  type LiveDataChannel,
-  type LivePeerConnection,
-  type LiveSilence,
-  type LiveTrackSender,
-} from "./live-peer";
-import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice-level-meter";
 
 /**
  * Lets the fibers the call forked and the fake peer's own promises settle with

@@ -1,3 +1,4 @@
+import type { WorldPoint } from "@luke/panel/factory-world/world";
 import { ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   BoxGeometry,
@@ -10,7 +11,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { WorldPoint } from "../../world";
 import { type Kit, PART, type Part } from "./kit";
 import type { ZoneSite } from "./layout";
 import { HUE, ROOF_HUES } from "./materials";
