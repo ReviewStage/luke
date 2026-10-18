@@ -61,7 +61,8 @@ import { grainOf } from "./soil";
  *
  * Every signal wears its palette colour unchanged: the honeydew, its pools,
  * and the petals are `shipped`, the chalk `planned`, the beetles `defect`.
- * Shipped work glows by how fresh it is and a pool by how alive its zone is.
+ * Shipped work glows by how fresh it is and a pool by how alive its zone is;
+ * a merge landed in no zone is a wildflower toward the back of the meadow.
  * A planned issue's outline is dug beside the first zone it is placed on,
  * dotted toward its second; one placed on none is sketched in the open
  * soil near the top. A defect's beetles crawl over its first zone's chamber
@@ -356,6 +357,23 @@ function floodOf(chamber: Chamber, damage: number) {
   // Note that the surface reaches back from the glass, as the floor does.
   const water = new ShapeGeometry(surface).rotateX(-Math.PI / 2).translate(chamber.cx, level, 0);
   return { parts: [front, water], level };
+}
+
+/** A merge landed in no zone, as a flower on the open meadow toward its back, at a place its URL seeds. */
+function wildFlowerOf(entry: TimelineEntry, lines: number, fresh: number): Flower {
+  const random = seeded(Math.floor(hashUnit(entry.url, 17) * 1e9));
+  const x = (random() * 2 - 1) * (COLONY.HALF - 3);
+  const z = -COLONY.SLAB + 1.5 + random() * 3;
+  return {
+    url: entry.url,
+    at: new Vector3(x, 0, z),
+    soil: new Vector3(x + 0.6, 0, z + 0.3),
+    stem: 0.9 + 0.22 * lines ** 0.3,
+    head: 0.55 + 0.07 * lines ** 0.3,
+    tilt: random() * 0.4 - 0.2,
+    lines,
+    fresh,
+  };
 }
 
 /* ----- Public ----- */
@@ -779,6 +797,9 @@ export function signalsOf(
           4,
           (entry.additions + entry.deletions) / Math.max(1, chambers.length),
         );
+        if (chambers.length === 0 && flowers.length < MAX_FLOWERS) {
+          flowers.push(wildFlowerOf(entry, lines, fresh(entry)));
+        }
         for (const chamber of chambers) {
           perZone.set(chamber.index, (perZone.get(chamber.index) ?? 0) + 1);
           const random = seeded(Math.floor(hashUnit(entry.url, chamber.index + 1) * 1e9));

@@ -63,6 +63,10 @@ function samePaths(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((path, index) => path === b[index]);
 }
 
+function sameBlast(a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>): boolean {
+  return a.size === b.size && [...a].every(([path, distance]) => b.get(path) === distance);
+}
+
 function samePlanned(a: readonly FactoryPlanned[], b: readonly FactoryPlanned[]): boolean {
   return (
     a.length === b.length &&
@@ -138,6 +142,7 @@ export const world: WorldModule = {
     let elapsed = 0;
     let blastFrom: string | undefined;
     let blastAt = 0;
+    let blastShown: ReadonlyMap<string, number> = new Map();
     const looks: ZoneLook[] = Array.from({ length: FACTORY_WORLD_BOUNDS.MAX_ZONES }, () => ({
       rim: new Color(),
       strength: 0,
@@ -282,10 +287,12 @@ export const world: WorldModule = {
         }
         const selectedAgent =
           next.selected?.kind === PICK_KIND.AGENT ? next.selected.id : undefined;
-        if (selectedAgent !== blastFrom) {
+        // Note that a fresh read can move the same agent's blast radius, and a moved one ripples out again.
+        if (selectedAgent !== blastFrom || !sameBlast(blastShown, next.blast)) {
           blastFrom = selectedAgent;
           blastAt = elapsed;
         }
+        blastShown = next.blast;
         colony.cast(castingsOf(next), laid);
         signals.show({
           shipped: next.layers.shipped,
@@ -309,7 +316,12 @@ export const world: WorldModule = {
         signals.step(delta, at, true);
         light(state);
       },
-      dispose: () => undefined,
+      // Note that the host lets go of what the scene's materials hold; these are held only by uniforms and copies.
+      dispose: () => {
+        burrowsMeshes.dispose();
+        soil.rims.dispose();
+        grain.dispose();
+      },
     };
   },
 };

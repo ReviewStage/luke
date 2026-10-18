@@ -51,11 +51,15 @@ const FAILED = uuidOf(3);
 const LATE_MERGE = factoryShippedOf(3450, FACTORY_NOW - HOUR_MS, {
   areas: [areaOf("apps/web", 300)],
 });
+/** A merge that landed in no zone the snapshot names. */
+const LOOSE_MERGE = factoryShippedOf(3460, FACTORY_NOW - 3 * HOUR_MS, {
+  areas: [areaOf("docs", 10)],
+});
 const EARLY_MERGE = factoryShippedOf(3400, FACTORY_NOW - 2 * DAY_MS, {
   areas: [areaOf("packages/core", 40)],
 });
 
-/** A core two apps reach through a domain package, a tooling directory, three agents, two merges, two issues, and two defects. */
+/** A core two apps reach through a domain package, a tooling directory, three agents, three merges, two issues, and two defects. */
 const SNAPSHOT: FactoryWorld = factoryWorldOf({
   zones: [
     factoryZoneOf("packages/core", [], { bytes: 9000 }),
@@ -84,7 +88,7 @@ const SNAPSHOT: FactoryWorld = factoryWorldOf({
       pullRequest: factoryPullRequestOf({ number: 3503, areas: [areaOf("apps/desktop", 12)] }),
     }),
   ],
-  shipped: [LATE_MERGE, EARLY_MERGE],
+  shipped: [LATE_MERGE, LOOSE_MERGE, EARLY_MERGE],
   planned: [
     factoryPlannedOf(1, { zonePaths: ["packages/billing", "apps/web"] }),
     factoryPlannedOf(2),
@@ -175,11 +179,14 @@ function drawn(state: WorldState): (kind: PickKind) => Set<string> {
   return pickable;
 }
 
-test("every zone, agent, shipped pull request, planned issue, and defect can be picked, those placed on no zone too", () => {
+test("every zone, agent, shipped pull request, planned issue, and defect can be picked, those landed or placed on no zone too", () => {
   const pickable = drawn(stateOf(SNAPSHOT));
   assert.deepEqual(pickable(PICK_KIND.ZONE), new Set(SNAPSHOT.zones.map((zone) => zone.path)));
   assert.deepEqual(pickable(PICK_KIND.AGENT), new Set([WORKING, STUCK, FAILED]));
-  assert.deepEqual(pickable(PICK_KIND.SHIPPED), new Set([LATE_MERGE.url, EARLY_MERGE.url]));
+  assert.deepEqual(
+    pickable(PICK_KIND.SHIPPED),
+    new Set([LATE_MERGE.url, LOOSE_MERGE.url, EARLY_MERGE.url]),
+  );
   assert.deepEqual(pickable(PICK_KIND.PLANNED), new Set(["ENG-1", "ENG-2"]));
   assert.deepEqual(pickable(PICK_KIND.DEFECT), new Set(["1", "2"]));
 });
@@ -217,7 +224,10 @@ test("scrubbed back, a merge after the instant is not drawn, and switching back 
   colony.update(stateOf(earlier, { live: false }));
   assert.deepEqual(pickable(PICK_KIND.SHIPPED), new Set([EARLY_MERGE.url]));
   colony.update(stateOf(SNAPSHOT));
-  assert.deepEqual(pickable(PICK_KIND.SHIPPED), new Set([LATE_MERGE.url, EARLY_MERGE.url]));
+  assert.deepEqual(
+    pickable(PICK_KIND.SHIPPED),
+    new Set([LATE_MERGE.url, LOOSE_MERGE.url, EARLY_MERGE.url]),
+  );
 });
 
 test("a snapshot at the contract's bounds draws every item it names", () => {

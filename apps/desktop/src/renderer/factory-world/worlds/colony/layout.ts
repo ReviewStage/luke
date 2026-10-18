@@ -560,6 +560,48 @@ function antLine(center: readonly Point2[]): Poly {
   return poly;
 }
 
+/**
+ * Numbers each zone's strongly connected component by Tarjan's walk, so the
+ * zones of one dependency cycle share a number. A cycle's own tunnels are
+ * all kept, and only the acyclic graph between components is reduced, so a
+ * reduction never cuts a zone off.
+ */
+function componentsOf(
+  paths: readonly string[],
+  dependsOn: ReadonlyMap<string, readonly string[]>,
+): Map<string, number> {
+  const component = new Map<string, number>();
+  const order = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  let counter = 0;
+  let components = 0;
+  const visit = (path: string) => {
+    order.set(path, counter);
+    low.set(path, counter);
+    counter += 1;
+    stack.push(path);
+    onStack.add(path);
+    for (const to of dependsOn.get(path) ?? []) {
+      if (!order.has(to)) {
+        visit(to);
+        low.set(path, Math.min(low.get(path) ?? 0, low.get(to) ?? 0));
+      } else if (onStack.has(to)) low.set(path, Math.min(low.get(path) ?? 0, order.get(to) ?? 0));
+    }
+    if (low.get(path) !== order.get(path)) return;
+    const number = components;
+    components += 1;
+    for (let top = stack.pop(); top !== undefined; top = stack.pop()) {
+      onStack.delete(top);
+      component.set(top, number);
+      if (top === path) break;
+    }
+  };
+  for (const path of paths) if (!order.has(path)) visit(path);
+  return component;
+}
+
 /** The dependencies left once one reached through another is dropped, in path order, at most `MAX_TUNNELS`. */
 function reducedEdges(edges: readonly ZoneEdge[], laid: ReadonlyMap<string, Chamber>): ZoneEdge[] {
   const bored = edges
@@ -571,26 +613,33 @@ function reducedEdges(edges: readonly ZoneEdge[], laid: ReadonlyMap<string, Cham
   const dependsOn = new Map<string, string[]>();
   for (const edge of bored)
     dependsOn.set(edge.from, [...(dependsOn.get(edge.from) ?? []), edge.to]);
-  const reaches = new Map<string, Set<string>>();
-  const reach = (path: string): Set<string> => {
-    const known = reaches.get(path);
+  const component = componentsOf([...laid.keys()], dependsOn);
+  const of = (path: string) => component.get(path) ?? -1;
+  const next = new Map<number, Set<number>>();
+  for (const edge of bored) {
+    if (of(edge.from) !== of(edge.to))
+      next.set(of(edge.from), (next.get(of(edge.from)) ?? new Set()).add(of(edge.to)));
+  }
+  const reaches = new Map<number, Set<number>>();
+  // Note that the components' graph has no cycle, so each component's reach is whole once stored.
+  const reach = (from: number): Set<number> => {
+    const known = reaches.get(from);
     if (known !== undefined) return known;
-    const found = new Set<string>();
-    // Note that the set is stored before the walk, so a cycle meets it half-filled rather than recursing forever.
-    reaches.set(path, found);
-    for (const next of dependsOn.get(path) ?? []) {
-      found.add(next);
-      for (const further of reach(next)) found.add(further);
+    const found = new Set<number>();
+    for (const to of next.get(from) ?? []) {
+      found.add(to);
+      for (const further of reach(to)) found.add(further);
     }
+    reaches.set(from, found);
     return found;
   };
   return bored
-    .filter(
-      (edge) =>
-        !(dependsOn.get(edge.from) ?? []).some(
-          (other) => other !== edge.to && reach(other).has(edge.to),
-        ),
-    )
+    .filter((edge) => {
+      const from = of(edge.from);
+      const to = of(edge.to);
+      if (from === to) return true;
+      return ![...(next.get(from) ?? [])].some((other) => other !== to && reach(other).has(to));
+    })
     .slice(0, MAX_TUNNELS);
 }
 

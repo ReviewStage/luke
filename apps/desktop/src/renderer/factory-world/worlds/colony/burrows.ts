@@ -261,6 +261,8 @@ export interface BurrowsMeshes {
   readonly light: (looks: readonly ZoneLook[], count: number) => void;
   /** Ripples the blast radius out from `distances` (by chamber index), `since` seconds after it began; none draws only the faint trails. */
   readonly blast: (distances: ReadonlyMap<number, number>, since: number, colour: Color) => void;
+  /** Lets go of the zone texture, which only a shader's uniform holds, so the host's walk of the scene never meets it. */
+  readonly dispose: () => void;
 }
 
 export function burrowsMeshesOf(
@@ -671,5 +673,6 @@ export function burrowsMeshesOf(
       glowUniforms.uTrail.value = distances.size > 0 ? 0 : 0.05;
       zones.needsUpdate = true;
     },
+    dispose: () => zones.dispose(),
   };
 }
