@@ -69,9 +69,9 @@
     padding-top: var(--luke-space-4);
   }
 
-  /* Past the chevron and its gap, so the body stands under the summary's words. */
+  /* Past the chevron, so the body's rows stand under the summary's words. */
   .luke-disclosure-body[data-inset="indented"] {
-    margin-left: calc(var(--luke-space-4) + var(--luke-control-icon) + var(--luke-icon-gap));
+    margin-left: var(--luke-space-24);
   }
 
   .luke-disclosure-body[data-inset="flush"] {
