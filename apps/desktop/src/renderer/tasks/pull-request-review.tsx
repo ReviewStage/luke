@@ -4,7 +4,7 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
-import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { AnchoredPopover, BUTTON_VARIANT, Button, IconButton, POPOVER_ALIGN } from "@luke/ui";
 import { MessageSquarePlusIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Segmented } from "../segmented";
@@ -43,7 +43,7 @@ const REVIEW_WORDS = {
   EVENTS: "What the review says",
   CANCEL: "Cancel",
   SUBMIT: "Submit review",
-  SUBMITTING: "Submitting…",
+  SUBMITTING: "Submitting review",
 } as const;
 
 /** What the review may say, in the order GitHub's own review box offers it, and what each means. */
@@ -140,14 +140,7 @@ function ReviewPanel({
       <div className="pull-request-review-head">
         <h2 className="pull-request-review-title">{REVIEW_WORDS.TITLE}</h2>
         <Tooltip label={REVIEW_WORDS.CLOSE}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={REVIEW_WORDS.CLOSE}
-            onClick={onClose}
-          >
-            <XIcon />
-          </button>
+          <IconButton icon={<XIcon />} label={REVIEW_WORDS.CLOSE} onClick={onClose} />
         </Tooltip>
       </div>
       <p className="pull-request-review-lead">{REVIEW_WORDS.LEAD}</p>
@@ -202,18 +195,15 @@ function ReviewPanel({
       </fieldset>
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
       <div className="pull-request-review-foot">
-        <button type="button" className="toolbar-button" onClick={onClose}>
-          {REVIEW_WORDS.CANCEL}
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={sending}
-          aria-busy={sending}
+        <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          busy={sending}
+          busyLabel={REVIEW_WORDS.SUBMITTING}
           onClick={draft.submit}
         >
-          {sending ? REVIEW_WORDS.SUBMITTING : REVIEW_WORDS.SUBMIT}
-        </button>
+          {REVIEW_WORDS.SUBMIT}
+        </Button>
       </div>
     </div>
   );
@@ -260,18 +250,16 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
 
   return (
     <div className="pull-request-review" ref={root}>
-      <button
+      <Button
         ref={trigger}
-        type="button"
-        className="toolbar-button pull-request-review-button"
+        icon={<MessageSquarePlusIcon aria-hidden="true" />}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen(!open)}
       >
-        <MessageSquarePlusIcon aria-hidden="true" />
         {REVIEW_WORDS.OPEN}
-      </button>
+      </Button>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
           <ReviewPanel
