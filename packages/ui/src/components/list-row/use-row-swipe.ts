@@ -94,6 +94,9 @@ interface Wheel {
   frame: number;
 }
 
+/** What a press lands on that is a control of its own rather than the row's face: the act's button, or one of the row's acts. */
+const ROW_CONTROLS = "[data-swipe-act], .luke-list-row-actions";
+
 /** Whether a release at `offset` on a row `width` wide acts. */
 function acts(offset: number, width: number): boolean {
   return width > 0 && offset >= width * SWIPE.ACT_SHARE;
@@ -135,7 +138,10 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     latest.current = { act, onAct };
   });
 
+  // Note that closing lets go of a trackpad's swipe still waiting for its wheel to rest, so its frame can never settle it after.
   const close = () => {
+    if (wheel.current !== undefined) cancelAnimationFrame(wheel.current.frame);
+    wheel.current = undefined;
     setOffset(0);
     setState(SWIPE_STATE.REST);
   };
@@ -158,10 +164,11 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     width.current = ref.current?.getBoundingClientRect().width ?? 0;
   };
 
-  // An open row closes on a press or a wheel anywhere else, as another row's swipe begins.
+  // A row open, or out on a trackpad's swipe, closes on a press or a wheel anywhere else, as another row's swipe begins.
   const open = state === SWIPE_STATE.OPEN;
+  const out = state !== SWIPE_STATE.REST;
   useEffect(() => {
-    if (!open) return;
+    if (!out) return;
     const elsewhere = (event: Event) => {
       if (event.target instanceof Node && ref.current?.contains(event.target)) return;
       close();
@@ -172,7 +179,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       document.removeEventListener("pointerdown", elsewhere, true);
       document.removeEventListener("wheel", elsewhere, true);
     };
-  }, [open]);
+  }, [out]);
   // An open row whose act changed under it closes, so its button never offers what the row no longer does.
   useEffect(() => {
     if (open && openedOn.current !== act) close();
@@ -210,7 +217,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
   const wheelMoved = (event: WheelEvent) => {
     const current = latest.current.act;
     if (current === undefined || press.current !== undefined) return;
-    if (wheel.current === undefined && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+    // A wheel more up or down than sideways is the list's to scroll, a swipe under way or not, and leaves the swipe's rest uncounted.
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
     event.preventDefault();
     if (wheel.current === undefined) {
       measure();
@@ -239,11 +247,12 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       ref,
       onPointerDown: (event) => {
         swallow.current = false;
+        // A press interrupts a trackpad's swipe, which then does nothing.
+        if (wheel.current !== undefined) close();
         const current = latest.current.act;
         if (current === undefined || event.button !== 0) return;
-        if (event.target instanceof Element && event.target.closest("[data-swipe-act]") !== null) {
-          return;
-        }
+        // Note that a press on the act's button or on the row's own acts is theirs, never a swipe's, so an open row's acts still take their click.
+        if (event.target instanceof Element && event.target.closest(ROW_CONTROLS) !== null) return;
         press.current = {
           pointerId: event.pointerId,
           x: event.clientX,

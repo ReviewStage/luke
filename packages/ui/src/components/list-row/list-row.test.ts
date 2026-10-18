@@ -348,6 +348,11 @@ function SwipedRow({
     children: createElement(ListRow, {
       title: "Alert at 80%?",
       onPress: () => opened.push("open"),
+      actions: createElement(IconButton, {
+        icon: glyph(),
+        label: "Mark as read",
+        onClick: () => acted.push("hover mark"),
+      }),
       swipe: { label, icon: glyph(), onAct: () => acted.push(label) },
     }),
   });
@@ -518,22 +523,27 @@ test("an open row closes on a press anywhere else, or on a click on the row itse
   expect([itself.acted, itself.opened]).toEqual([[], []]);
 });
 
-test("a trackpad's two-finger swipe moves the row by its sideways wheel and is let go once the wheel rests: a short one rests open, a long one acts; a wheel up or down is the list's", () => {
+/** A trackpad over the window's frames: its wheel turned on an item, answering whether the event was kept from the list, and the frames asked for run at a time given, as the window draws one. */
+function trackpad() {
   const frames: FrameRequestCallback[] = [];
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-  /** Runs the frames asked for at `time`, as the window draws one. */
   const frameAt = (time: number) =>
     act(() => {
       for (const frame of frames.splice(0)) frame(time);
     });
-  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0) =>
+  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0): boolean => {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY });
     act(() => {
-      item.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY }),
-      );
+      item.dispatchEvent(event);
     });
+    return event.defaultPrevented;
+  };
+  return { frameAt, wheel };
+}
 
+test("a trackpad's two-finger swipe moves the row by its sideways wheel and is let go once the wheel rests: a short one rests open, a long one acts; a wheel up or down is the list's", () => {
+  const { frameAt, wheel } = trackpad();
   const short = swiped();
   wheel(short.item, 0, 30);
   expect(standing(short.item)).toEqual(["rest", "0px", false]);
@@ -562,4 +572,46 @@ test("a trackpad's two-finger swipe moves the row by its sideways wheel and is l
 test("a row that offers no swipe draws none and hears a press as a click", () => {
   const container = draw(createElement(Members));
   expect(container.querySelector("li[data-swipe], [data-swipe-act]")).toBeNull();
+});
+
+test("an open row's own acts take their click, the row's swipe doing nothing", () => {
+  const { item, press, acted, opened } = swiped();
+  drag(press, 10, 40);
+  release(press, 40);
+  const mark =
+    item.querySelector<HTMLButtonElement>(".luke-list-row-actions button") ?? expect.fail("act");
+  act(() => {
+    mark.dispatchEvent(pointer("pointerdown", 250));
+    mark.dispatchEvent(pointer("pointerup", 250));
+    mark.click();
+  });
+  expect([acted, opened]).toEqual([["hover mark"], []]);
+});
+
+test("a trackpad's swipe a press interrupts, on the row or anywhere else, does nothing once its wheel rests", () => {
+  const { frameAt, wheel } = trackpad();
+  const elsewhere = swiped();
+  wheel(elsewhere.item, -220);
+  act(() => {
+    document.body.dispatchEvent(pointer("pointerdown", 400));
+  });
+  expect(standing(elsewhere.item)).toEqual(["rest", "0px", false]);
+  const onRow = swiped();
+  wheel(onRow.item, -220);
+  act(() => {
+    onRow.press.dispatchEvent(pointer("pointerdown", 10));
+  });
+  frameAt(1_000);
+  frameAt(1_200);
+  frameAt(1_400);
+  expect([elsewhere.acted, onRow.acted]).toEqual([[], []]);
+});
+
+test("a wheel more up or down than sideways is the list's to scroll while a trackpad's swipe is under way, and leaves the row where it stands", () => {
+  const { wheel } = trackpad();
+  const { item } = swiped();
+  expect(wheel(item, -40)).toBe(true);
+  expect(wheel(item, 0, 40)).toBe(false);
+  expect(wheel(item, -5, 30)).toBe(false);
+  expect(standing(item)).toEqual(["moving", "40px", false]);
 });
