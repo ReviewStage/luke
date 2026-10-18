@@ -31,6 +31,9 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
   CopyIcon,
   EmptyState,
   ErrorState,
@@ -42,6 +45,7 @@ import {
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
+  BotIcon,
   CheckIcon,
   CircleCheckIcon,
   CircleDotIcon,
@@ -305,7 +309,7 @@ const CHECK_ORDER: readonly CheckState[] = [
 /** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
 const CHECKS_UNFOLDED = 5;
 
-/** The size, in CSS pixels, a check's avatar is drawn at, and the density GitHub is asked for it at. */
+/** The size, in CSS pixels, a check's avatar is drawn at (`AVATAR_SIZE.INLINE`), and the density GitHub is asked for it at. */
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
 
@@ -510,25 +514,53 @@ function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | 
   );
 }
 
-/** A check's avatar read through the service's image proxy as the agent's, drawn once read and an empty square until then or where it answered none. */
-function ProxiedCheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+/** The App's square at a check's size: its picture once it loads, and its robot on the quiet tile until then and where there is none. */
+function CheckSquare({ name, src }: { name: string; src: string | undefined }): React.JSX.Element {
+  return (
+    <Avatar
+      name={name}
+      {...(src === undefined ? {} : { src })}
+      glyph={<BotIcon />}
+      shape={AVATAR_SHAPE.SQUARE}
+      size={AVATAR_SIZE.INLINE}
+      tiled
+      decorative
+    />
+  );
+}
+
+/** A check's avatar read through the service's image proxy as the agent's, drawn once read and the App's robot until then or where it answered none. */
+function ProxiedCheckAvatar({
+  agentId,
+  name,
+  src,
+}: {
+  agentId: string;
+  name: string;
+  src: string;
+}): React.JSX.Element {
   const state = usePicture(agentId, src, useGitHubImageRead());
-  return state.kind === PICTURE_STATE.READY ? (
-    <img className="pull-request-check-avatar" src={state.url} alt="" />
-  ) : (
-    <span className="pull-request-check-avatar" aria-hidden="true" />
+  return (
+    <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
 }
 
 /** The picture of the App that runs a check, or of whoever posted it: one GitHub's avatar host serves drawn as it is, at its size, and any other through the service's image proxy. */
-function CheckAvatar({ agentId, src }: { agentId: string; src: string }): React.JSX.Element {
+function CheckAvatar({
+  agentId,
+  name,
+  src,
+}: {
+  agentId: string;
+  name: string;
+  src: string;
+}): React.JSX.Element {
   const hosted = githubAvatarUrl(src);
-  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} src={src} />;
+  if (hosted === undefined) return <ProxiedCheckAvatar agentId={agentId} name={name} src={src} />;
   return (
-    <img
-      className="pull-request-check-avatar"
+    <CheckSquare
+      name={name}
       src={githubAvatarAt(hosted, CHECK_AVATAR_PIXELS * CHECK_AVATAR_DENSITY)}
-      alt=""
     />
   );
 }
@@ -564,7 +596,9 @@ function CheckRow({
       >
         {CHECK_GLYPHS[check.state]}
       </span>
-      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
+      {avatarUrl === undefined ? null : (
+        <CheckAvatar agentId={agentId} name={check.app ?? check.name} src={avatarUrl} />
+      )}
       <span className="pull-request-check-name">{check.name}</span>
       {check.app === null ? null : <span className="pull-request-quiet">{check.app}</span>}
       {running && live ? <RunningTime startedAt={startedAt} /> : null}
@@ -935,7 +969,9 @@ function DeploymentRow({
       >
         {CHECK_GLYPHS[DEPLOYMENT_TONE[state]]}
       </span>
-      {avatarUrl === undefined ? null : <CheckAvatar agentId={agentId} src={avatarUrl} />}
+      {avatarUrl === undefined ? null : (
+        <CheckAvatar agentId={agentId} name={deployment.environment} src={avatarUrl} />
+      )}
       <span className="pull-request-check-name">{deployment.environment}</span>
       <span className="pull-request-quiet">{DEPLOYMENT_WORDS[state]}</span>
       {url === null ? null : (

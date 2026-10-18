@@ -1,8 +1,13 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
+  type AvatarSize,
+  BUTTON_SHAPE,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
   DetailPage,
+  IconButton,
   Menu,
   SKELETON_SHAPE,
   Skeleton,
@@ -10,8 +15,7 @@ import {
   Text,
   useMenu,
 } from "@luke/ui";
-import { accountInitials, accountLabel } from "@luke/ui/account-initials";
-import { useState } from "react";
+import { accountLabel } from "@luke/ui/account-initials";
 
 /** The signed-in account the header names; read from the session, shown as-is. */
 export interface ViewerAccount {
@@ -20,56 +24,32 @@ export interface ViewerAccount {
   image: string | undefined;
 }
 
-const AVATAR_FRAME = {
-  small: "size-8",
-  large: "size-14",
-} as const;
-
 /** The header avatar's stand-in while the session is still being read, the small avatar's size. */
 function AvatarSkeleton(): React.JSX.Element {
   return <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="32px" />;
 }
 
-const AVATAR_TEXT = {
-  small: "text-xs",
-  large: "text-lg",
-} as const;
-
 /**
- * An account's own avatar, falling back to its initials. A provider's avatar
- * URL can outlive the image it named, so a failed fetch falls back to the
- * letters rather than leaving a broken frame. Small is the header's, large is
- * the detail page's masthead.
+ * An account's own avatar, falling back to its letter on its hue. A
+ * provider's avatar URL can outlive the image it named, so a failed fetch
+ * falls back to the letter rather than leaving a broken frame. A row's and
+ * the header's is a card's size; the detail page's masthead is its own.
  */
 export function AccountAvatar({
   account,
-  size = "small",
+  size = AVATAR_SIZE.CARD,
 }: {
   account: ViewerAccount;
-  size?: keyof typeof AVATAR_FRAME;
+  size?: AvatarSize;
 }): React.JSX.Element {
-  const [imageFailed, setImageFailed] = useState(false);
-
-  if (account.image !== undefined && !imageFailed) {
-    return (
-      <img
-        src={account.image}
-        alt=""
-        className={`${AVATAR_FRAME[size]} rounded-full object-cover`}
-        // Google's avatar host answers 403 to a request carrying a Referer, so
-        // without this a Google-signed-in admin falls to initials every time.
-        referrerPolicy="no-referrer"
-        onError={() => setImageFailed(true)}
-      />
-    );
-  }
   return (
-    <span
-      className={`grid ${AVATAR_FRAME[size]} place-items-center rounded-full bg-muted ${AVATAR_TEXT[size]} font-semibold`}
-      aria-hidden="true"
-    >
-      {accountInitials(account.name, account.email)}
-    </span>
+    <Avatar
+      id={account.email}
+      name={accountLabel(account)}
+      {...(account.image === undefined ? {} : { src: account.image })}
+      size={size}
+      decorative
+    />
   );
 }
 
@@ -93,14 +73,14 @@ function AccountMenu({
   const label = `Account menu for ${accountLabel(account)}`;
   return (
     <>
-      <button
-        type="button"
-        className="ml-auto flex size-11 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-80"
-        aria-label={label}
-        {...menu.trigger()}
-      >
-        {avatarSkeleton ? <AvatarSkeleton /> : <AccountAvatar account={account} />}
-      </button>
+      <div className="ml-auto flex">
+        <IconButton
+          icon={avatarSkeleton ? <AvatarSkeleton /> : <AccountAvatar account={account} />}
+          label={label}
+          shape={BUTTON_SHAPE.ROUND}
+          {...menu.trigger()}
+        />
+      </div>
       {menu.drawn === undefined ? null : (
         <Menu
           label={label}

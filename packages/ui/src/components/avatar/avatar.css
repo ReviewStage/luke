@@ -1,6 +1,7 @@
-/* avatar.css -- a person's disc: one box per size, the picture filling it
-   once loaded, their letter on one of the six identity hues until then, or
-   the figure on a quiet tile. */
+/* avatar.css -- a person's disc or an app's square: one box per size, the
+   picture filling it once loaded, their letter on one of the six identity
+   hues until then, an app's glyph bare or on a quiet tile, or the figure on
+   a quiet tile. */
 
 @layer components {
   .luke-avatar {
@@ -57,9 +58,50 @@
     --luke-avatar-size: 48px;
   }
 
-  .luke-avatar > svg {
-    width: calc(var(--luke-avatar-size) * 0.62);
-    height: calc(var(--luke-avatar-size) * 0.62);
+  .luke-avatar[data-size="masthead"] {
+    --luke-avatar-size: 56px;
+  }
+
+  .luke-avatar[data-size="portrait"] {
+    --luke-avatar-size: 64px;
+  }
+
+  /* Note that a square's corner is a share of its edge, so it reads as one
+     shape at every size, and rounder than a workspace's tile of its size. */
+  .luke-avatar[data-shape="square"] {
+    border-radius: 36%;
+  }
+
+  /* An app's glyph stands alone on the ground beneath it, in the ink around
+     it, and carries no edge; tiled, it stands on the quiet tile, laid over
+     the ground so it is opaque and a face it overlaps never shows through. */
+  .luke-avatar[data-glyph="true"] {
+    background: none;
+    color: inherit;
+  }
+
+  .luke-avatar[data-glyph="true"]::after {
+    content: none;
+  }
+
+  .luke-avatar[data-tiled="true"] {
+    background: linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong))
+      var(--luke-color-ground);
+  }
+
+  /* Note that the glyph's box fills the disc and the glyph is a share of it,
+     so a caller's glyph keeps the share at every size, and that the rule
+     names the disc too, so a button's own glyph size does not reach in. */
+  .luke-avatar .luke-avatar-glyph {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+  }
+
+  .luke-avatar .luke-avatar-glyph > * {
+    width: 62%;
+    height: 62%;
   }
 
   /* Note that the picture is hidden rather than absent until it has loaded,

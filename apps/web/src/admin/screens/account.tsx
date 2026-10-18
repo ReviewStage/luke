@@ -1,6 +1,7 @@
 import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
 import {
+  AVATAR_SIZE,
   BADGE_TONE,
   Badge,
   GAP,
@@ -147,7 +148,7 @@ export function AccountScreen({
                   email: subject.email,
                   image: subject.image ?? undefined,
                 }}
-                size="large"
+                size={AVATAR_SIZE.MASTHEAD}
               />
               <div className="min-w-0">
                 <Stack gap={GAP.TIGHT}>

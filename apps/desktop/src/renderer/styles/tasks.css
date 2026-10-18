@@ -2332,17 +2332,6 @@ button.file-ref:hover .file-ref-path {
   height: 13px;
 }
 
-/* The App that runs a check, by its square logo as GitHub draws an App. */
-.pull-request-check-avatar {
-  display: block;
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: var(--luke-color-fill-hover);
-  object-fit: cover;
-}
-
 .pull-request-check {
   display: flex;
   width: 100%;

@@ -790,7 +790,7 @@ test("each member's row leads with their face, their picture where the read list
 
   const dana = memberNamed(page, "Dana");
   const sam = memberNamed(page, "Sam");
-  assert.equal(dana.querySelector(".actor-mark .actor-face")?.textContent, "D");
+  assert.equal(dana.querySelector(".actor-mark")?.textContent, "D");
   assert.equal(
     sam.querySelector<HTMLImageElement>(".actor-mark img")?.src,
     "https://lh3.googleusercontent.com/a/photo-7",
