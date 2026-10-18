@@ -150,7 +150,7 @@ export function withTaskAgents(
     // is still the task's activity, though the row names it no more.
     const held = yield* listPublishedCodingAgents(
       userId,
-      tasks.map((plan) => plan.id),
+      tasks.map((task) => task.id),
       { includeArchived: true },
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);

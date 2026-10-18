@@ -290,23 +290,23 @@ function fakeService(tasks: Task[]): FakeService {
     readRevision: (_taskId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
     pageLines: {},
-    readPages: (planId) => Effect.sync(() => service.pageLines[planId]),
+    readPages: (taskId) => Effect.sync(() => service.pageLines[taskId]),
     pictures: new Map(),
     // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
-    keepPicture: (planId, picture) =>
+    keepPicture: (taskId, picture) =>
       Effect.sync(() => {
-        const held = service.pictures.get(planId) ?? new Map();
-        service.pictures.set(planId, held);
+        const held = service.pictures.get(taskId) ?? new Map();
+        service.pictures.set(taskId, held);
         if (held.size >= 2) return { failure: PICTURE_KEEP_FAILURE.TOO_MANY };
         const id = `kept-${held.size + 1}`;
         const [, base64 = ""] = picture.split(",");
         held.set(id, { contentType: PICTURE_TYPE.PNG, base64 });
         return { id };
       }),
-    readPicture: (planId, attachmentId) =>
+    readPicture: (taskId, attachmentId) =>
       Effect.sync(
         () =>
-          service.pictures.get(planId)?.get(attachmentId) ?? {
+          service.pictures.get(taskId)?.get(attachmentId) ?? {
             failure: TASK_CALL_FAILURE.NOT_FOUND,
           },
       ),
@@ -602,7 +602,7 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readFile: (_taskId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_taskId, folder) => Effect.sync(() => service.folders[folder.path]),
-    readSkills: (planId) => Effect.sync(() => service.skills[planId]),
+    readSkills: (taskId) => Effect.sync(() => service.skills[taskId]),
     readRepositoryTree: (place, folder) =>
       Effect.sync(
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
@@ -613,12 +613,12 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
-    readBoard: (planId) => Effect.sync(() => service.boards[planId]),
-    readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
-    readWork: (planId, before) =>
+    readBoard: (taskId) => Effect.sync(() => service.boards[taskId]),
+    readTranscript: (taskId) => Effect.sync(() => service.transcripts[taskId]),
+    readWork: (taskId, before) =>
       Effect.sync(() => {
-        service.workReads.push(before === undefined ? planId : `${planId}:${before}`);
-        return before === undefined ? service.works[planId] : service.olderWorks[before];
+        service.workReads.push(before === undefined ? taskId : `${taskId}:${before}`);
+        return before === undefined ? service.works[taskId] : service.olderWorks[before];
       }),
     // The service keeps the last scene written, beside whatever drawing it holds.
     saveBoard: (taskId, elements, appliedDrawing, image) =>

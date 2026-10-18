@@ -109,8 +109,8 @@ export interface BrainChatCall {
 type BrainChatServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /** The plan's Luke as the account reaches the chat. */
-export function lukeOn(userId: string, planId: string): ChatReader {
-  return { userId, planId, self: { kind: MEMBER_KIND.LUKE, planId } };
+export function lukeOn(userId: string, taskId: string): ChatReader {
+  return { userId, planId: taskId, self: { kind: MEMBER_KIND.LUKE, planId: taskId } };
 }
 
 /** Runs one post as Luke, counted against the turn's bound, and let go of the count where it was refused. */
@@ -163,9 +163,9 @@ export function runBrainResolve(
  */
 export function chatSince(
   userId: string,
-  planId: string,
+  taskId: string,
 ): Effect.Effect<ChatSince, never, DatabaseServices> {
-  return peekAsAgent(lukeOn(userId, planId), CHAT_SINCE_MESSAGES).pipe(
+  return peekAsAgent(lukeOn(userId, taskId), CHAT_SINCE_MESSAGES).pipe(
     Effect.map(
       Option.match({
         onNone: () => NOTHING_SINCE,
@@ -181,10 +181,10 @@ export function chatSince(
 /** Marks what a settled turn was handed as read by Luke, through the place it was handed; a write that fails is logged, and the next turn is handed the lines again. */
 export function chatTakenIn(
   userId: string,
-  planId: string,
+  taskId: string,
   through: number,
 ): Effect.Effect<void, never, DatabaseServices> {
-  return readThroughAsAgent(lukeOn(userId, planId), through).pipe(
+  return readThroughAsAgent(lukeOn(userId, taskId), through).pipe(
     Effect.tapError(logStoreFailure),
     Effect.orElseSucceed(() => undefined),
   );

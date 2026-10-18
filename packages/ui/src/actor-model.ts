@@ -327,15 +327,15 @@ export function creatorActor(
  * quiet outline.
  */
 export function teammateCreator(
-  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  task: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
   reader: EditReader,
 ): Actor | undefined {
-  const creatorId = plan.createdBy?.userId ?? plan.ownerId;
+  const creatorId = task.createdBy?.userId ?? task.ownerId;
   const { readerId } = reader;
   if (creatorId === undefined || readerId === undefined || creatorId === readerId) {
     return undefined;
   }
-  return creatorActor(plan, reader, undefined);
+  return creatorActor(task, reader, undefined);
 }
 
 /**

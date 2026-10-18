@@ -404,12 +404,12 @@ function seatOf(
   agent: ChatReader,
 ): Effect.Effect<Option.Option<ChatSeat>, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const { userId, planId } = agent;
+    const { userId, planId: taskId } = agent;
     const home = yield* homeOf(agent);
     if (Option.isNone(home)) return Option.none();
     const { organizationId } = home.value;
     const members = new Set((yield* roster(userId, organizationId)).map((row) => row.agentId));
-    const onTask = planId === null ? [] : yield* listCodingAgents(userId, planId);
+    const onTask = taskId === null ? [] : yield* listCodingAgents(userId, taskId);
     // An agent whose starter has not turned Chat on is seated only once that starter does.
     const unminted = yield* Effect.filter(
       onTask.filter((each) => !members.has(each.id)),
