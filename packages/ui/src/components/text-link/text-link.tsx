@@ -1,6 +1,9 @@
 import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
 import { ArrowUpRightIcon } from "../../face/glyphs.js";
 import type { TextVariant } from "../text/text.js";
+import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
+
+export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
 
 /**
  * text-link.tsx -- a link drawn as words: muted until the pointer or the reader's place lifts it, or underlined in a line of words.
@@ -30,14 +33,6 @@ import type { TextVariant } from "../text/text.js";
  * shows and goes on (`HintProps`), which land on the link itself.
  */
 
-/** Where a link stands, which is how it looks. */
-export const TEXT_LINK_LOOK = {
-  QUIET: "quiet",
-  UNDERLINED: "underlined",
-} as const;
-
-export type TextLinkLook = (typeof TEXT_LINK_LOOK)[keyof typeof TEXT_LINK_LOOK];
-
 /** How tall a link stands: its words' own line, or a control's height. */
 export const TEXT_LINK_HEIGHT = {
   TEXT: "text",
@@ -53,15 +48,6 @@ export const TEXT_LINK_CURRENT = {
 } as const;
 
 export type TextLinkCurrent = (typeof TEXT_LINK_CURRENT)[keyof typeof TEXT_LINK_CURRENT];
-
-/**
- * What a link an engine draws without React wears, an editor's link mark,
- * so it looks as an underlined TextLink does.
- */
-export const TEXT_LINK_MARK_ATTRIBUTES = {
-  class: "luke-text-link",
-  "data-look": TEXT_LINK_LOOK.UNDERLINED,
-} as const;
 
 /** What an app's hint hands the link it wraps: when to show and go, and the words it describes it by. */
 type HintProps = {

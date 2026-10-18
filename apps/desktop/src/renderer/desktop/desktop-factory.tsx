@@ -4,6 +4,7 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ArrowUpRightIcon,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -22,7 +23,6 @@ import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   AudioLinesIcon,
   BlocksIcon,
   FactoryIcon,
@@ -331,7 +331,7 @@ function FactoryRow({
             <span className="sidebar-task-name">{words}</span>
             {external ? (
               <span className="factory-external">
-                <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                <ArrowUpRightIcon />
                 <span className="visually-hidden">(opens on GitHub)</span>
               </span>
             ) : null}

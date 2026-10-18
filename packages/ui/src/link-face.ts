@@ -11,6 +11,17 @@
  * both of the desktop's Markdown renderers read the same face.
  */
 
+import { TEXT_LINK_LOOK } from "./components/text-link/text-link-look.js";
+
+/**
+ * What a link an engine draws without React wears, the plan editor's link
+ * mark, so it looks as an underlined TextLink does.
+ */
+export const TEXT_LINK_MARK_ATTRIBUTES = {
+  class: "luke-text-link",
+  "data-look": TEXT_LINK_LOOK.UNDERLINED,
+} as const;
+
 /** A link's face: the words it says, and whether they are its address cut short. */
 export interface LinkFace {
   readonly words: string;

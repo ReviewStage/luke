@@ -233,16 +233,6 @@ blockquote.markdown-quote > * + * {
   text-decoration-color: currentColor;
 }
 
-/* The ↗ a Factory row that opens on GitHub wears, as an external TextLink's. */
-.text-link-out {
-  display: inline-block;
-  width: 0.78em;
-  height: 0.78em;
-  margin-left: 0.12em;
-  opacity: 0.55;
-  vertical-align: -0.02em;
-}
-
 /* An address the window opens nothing for, a file's say: the same line,
    dotted, with the address as its hint. */
 .text-link-inert {

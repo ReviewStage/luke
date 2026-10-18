@@ -49,7 +49,7 @@
   }
 
   /* The ↗ follows the words' size, faint until the link lights. */
-  .luke-text-link svg {
+  .luke-text-link-out {
     display: inline-block;
     width: 0.78em;
     height: 0.78em;
@@ -59,7 +59,7 @@
     transition: opacity var(--duration-hover) ease;
   }
 
-  .luke-text-link:is(:hover, :focus-visible) svg {
+  .luke-text-link:is(:hover, :focus-visible) .luke-text-link-out {
     opacity: 1;
   }
 

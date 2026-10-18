@@ -1,4 +1,4 @@
-import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui";
+import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
