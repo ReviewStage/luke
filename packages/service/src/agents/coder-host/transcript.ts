@@ -29,7 +29,7 @@ import {
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { startingGraceEdge } from "@luke/features/coding-agent-status";
+import { statusClockEdge } from "@luke/features/coding-agent-status";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -65,6 +65,7 @@ import {
   codingAgentFailureOf,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
+  statusTurnOf,
 } from "./status.js";
 import { usageOfTurns } from "./usage.js";
 
@@ -169,7 +170,7 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** The agent's status now, read from its newest turn and whether a line awaits one, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
+/** The agent's status now, read from its newest turn and when the newest line awaiting one was written, when that run began, why where that turn failed, and the instant the clock alone would move it, where one stands. */
 const statusNow = (target: ConversationTarget, createdAt: Date) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
@@ -181,12 +182,11 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
-    const graceEdge = startingGraceEdge(
-      turn === undefined
-        ? undefined
-        : { status: turn.status, cancelRequested: turn.cancelRequestedAt !== null },
-      { createdAt: createdAt.getTime(), now, lineAwaits },
-    );
+    const graceEdge = statusClockEdge(statusTurnOf(turn), {
+      createdAt: createdAt.getTime(),
+      now,
+      awaitingLineAt: awaitingLineAt?.getTime(),
+    });
     return { status, runStartedAt, failureReason, turn, graceEdge };
   });
 

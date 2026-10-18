@@ -28,12 +28,12 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { conversations, turns } from "@luke/database/schemas/storage";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { agentTranscriptLiveRowsSchema } from "@luke/features/live-wire";
@@ -446,6 +446,47 @@ const liveRowsOf = (
   });
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a line no turn takes after the agent's turn ended holds the read running, which the read says it wakes from once the line's grace ends",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target } = yield* openAgent(host);
+        const db = yield* Database;
+        const now = yield* Clock.currentTimeMillis;
+        yield* db.insert(turns).values({
+          userId,
+          conversationId: target.conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.SETTLED,
+          queuedAt: new Date(now - 60_000),
+          settledAt: new Date(now - 30_000),
+        });
+        const writtenAt = new Date(now - 10_000);
+        yield* db.insert(messages).values({
+          userId,
+          conversationId: target.conversationId,
+          seq: 50,
+          clientId: randomUUID(),
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Are you there?" }],
+          placedAt: writtenAt,
+          createdAt: writtenAt,
+          turnId: null,
+        });
+        const read = (cursor: typeof CURSOR_START) =>
+          transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        const first = yield* read(CURSOR_START);
+        const past = yield* read(first.page.cursor);
+
+        assert.equal(past.page.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(past.holds, true);
+        assert.equal(past.wakeIn, writtenAt.getTime() + LINE_GRACE_MILLIS + 1 - now);
+      }),
+  );
+
   it.effect(
     "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
     () =>

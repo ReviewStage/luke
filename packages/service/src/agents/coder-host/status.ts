@@ -68,7 +68,7 @@ export interface AgentStanding {
 }
 
 /** What of the newest turn the shared rule reads (`@luke/features/coding-agent-status`), each instant in epoch milliseconds. */
-function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | undefined {
+export function statusTurnOf(turn: CodingAgentLatestTurn | undefined): StatusTurn | undefined {
   return turn === undefined
     ? undefined
     : {
