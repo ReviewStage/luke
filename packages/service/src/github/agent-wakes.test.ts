@@ -360,7 +360,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const text = eve.sent[0]?.message.message;
         assert.ok(
           JSON.stringify(text).includes(
-            "@octocat requested changes on your pull request #41: https://github.com/Acme/Relay/pull/41#pullrequestreview-9",
+            "@octocat requested changes on your pull request [@#41](https://github.com/Acme/Relay/pull/41#pullrequestreview-9).",
           ),
         );
         const read = yield* readMessageByClientId(
