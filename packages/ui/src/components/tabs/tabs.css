@@ -1,0 +1,110 @@
+/* tabs.css -- a row of tabs on its own hairline: each tab its glyph, its
+   name, and a quiet count, the selected one underlined in the text's ink
+   over the hairline. The row scrolls sideways rather than wrap, and
+   narrower than its tabs need, a tab other than the selected one keeps its
+   glyph and its count, its name left to a reader who cannot see it. A
+   container insets the tabs, the hairline still running to its edges, by
+   setting `--luke-tabs-inset`. */
+
+@layer components {
+  .luke-tabs {
+    display: flex;
+    flex: none;
+    gap: var(--luke-space-2);
+    padding-inline: var(--luke-tabs-inset, var(--luke-space-0));
+    overflow-x: auto;
+    border-bottom: 1px solid var(--luke-color-border);
+    container: luke-tabs / inline-size;
+    scrollbar-width: none;
+  }
+
+  .luke-tab {
+    display: inline-flex;
+    flex: none;
+    height: calc(var(--luke-control-height) + var(--luke-space-4));
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    /* Note that a tab stands on the row's hairline, so the selected one's
+       underline covers it rather than sitting above it. */
+    margin: 0 0 -1px;
+    padding: 0 var(--luke-space-8);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color var(--duration-hover, 0s) ease,
+      border-color var(--duration-hover, 0s) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-tab {
+    cursor: default;
+  }
+
+  .luke-tab:hover {
+    color: var(--luke-color-text);
+  }
+
+  .luke-tab[aria-selected="true"] {
+    border-bottom-color: var(--luke-color-text);
+    color: var(--luke-color-text);
+  }
+
+  .luke-tab-icon,
+  .luke-tab-count-glyph {
+    display: inline-flex;
+  }
+
+  .luke-tab-icon > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-tab-count {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-tab-count-part {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+  }
+
+  .luke-tab-count-glyph > svg {
+    width: var(--luke-type-caption-size);
+    height: var(--luke-type-caption-size);
+  }
+
+  .luke-tab-count-part[data-tone="complete"] {
+    color: var(--luke-color-complete);
+  }
+
+  .luke-tab-count-part[data-tone="attention"] {
+    color: var(--luke-color-attention);
+  }
+
+  .luke-tab-count-part[data-tone="danger"] {
+    color: var(--luke-color-danger-text);
+  }
+
+  @container luke-tabs (width < 520px) {
+    .luke-tab[aria-selected="false"] .luke-tab-icon + .luke-tab-label {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

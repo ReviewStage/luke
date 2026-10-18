@@ -412,9 +412,19 @@ async function drawn(
 function option(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     [...tab.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-      (each) => each.querySelector(".pull-request-tab-label")?.textContent === name,
+      (each) => each.textContent?.startsWith(name) === true,
     ) ?? assert.fail(`the row offers ${name}`)
   );
+}
+
+/** What the tab named as given counts beside its name, its words after the name. */
+function tabCount(tab: HTMLElement, name: string): string {
+  return (option(tab, name).textContent ?? "").slice(name.length);
+}
+
+/** How the Checks tab's glyph says its checks went, in its words. */
+function checksGlyph(tab: HTMLElement): string | null | undefined {
+  return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
 }
 
 /** The tab named as given chosen, and what it reads landed. */
@@ -1063,19 +1073,18 @@ test("opened on its files, as the Changes chip opens it, the header stands above
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
   const tab = await draw(controlAnswering());
-  const count = (name: string) => option(tab, name).querySelector(".pull-request-tab-count");
-  assert.equal(count("Conversation")?.textContent, "2");
+  assert.equal(tabCount(tab, "Conversation"), "2");
   assert.equal(
-    count("Checks")?.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    checksGlyph(tab),
     "failing",
     "how the checks went, as published, stands before they are read",
   );
-  assert.equal(count("Checks")?.textContent, "", "how many waits on their read");
-  assert.equal(count("Files changed")?.textContent, "+4 −1");
+  assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
-  assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
+  assert.equal(tabCount(tab, "Checks"), "1", "beside a failure, how many failed");
+  assert.equal(checksGlyph(tab), "failing");
 
   act(() => option(tab, "Checks").focus());
   act(() => {
@@ -1103,10 +1112,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
   );
   await choose(waits, "Checks");
-  const countOf = (tab: HTMLElement) =>
-    option(tab, "Checks").querySelector(".pull-request-tab-count");
-  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
-  assert.equal(countOf(waits)?.textContent, "2");
+  assert.equal(checksGlyph(waits), "running");
+  assert.equal(tabCount(waits, "Checks"), "2");
 
   act(() => root?.unmount());
   const passing: CodingAgentOverviewChecks = {
@@ -1120,8 +1127,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
   );
   await choose(passed, "Checks");
-  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
-  assert.equal(countOf(passed)?.textContent, "3");
+  assert.equal(checksGlyph(passed), "passing");
+  assert.equal(tabCount(passed, "Checks"), "3");
 });
 
 test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
@@ -1220,10 +1227,7 @@ test("the bar, the title, and the files' count stand from what Luke holds before
     "Expire invitations #42",
     "the title is what Luke held of the pull request",
   );
-  assert.equal(
-    option(tab, "Files changed").querySelector(".pull-request-tab-count")?.textContent,
-    "+4 −1",
-  );
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
   assert.deepEqual(waiting(tab), [
     "Reading pull request",
     "Reading description",
