@@ -3726,42 +3726,6 @@ button.draft-fork-quote:hover {
   gap: var(--luke-space-4);
 }
 
-/* The submit: a disc at the control's height that never changes size or
-   place, filled in ink while it takes a press and on the strong fill with a
-   muted glyph while it does not. */
-.prompt-input-submit {
-  display: flex;
-  width: var(--luke-control-height);
-  height: var(--luke-control-height);
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-text);
-  color: var(--luke-color-ink-inverse);
-  cursor: default;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.prompt-input-submit:disabled {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
-.prompt-input-submit > svg,
-.prompt-input-submit-ring {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.prompt-input-submit > .prompt-input-submit-stop {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-}
-
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the
@@ -4137,16 +4101,6 @@ button.skill-chip:hover,
   white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-
-.composer-quote .composer-quote-remove {
-  width: 20px;
-  height: 20px;
-}
-
-.composer-quote .composer-quote-remove svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* Reply over words selected in an agent's message: one press on the menus'

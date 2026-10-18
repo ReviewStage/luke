@@ -15,6 +15,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  BUTTON_SIZE,
   Button,
   ComposeIcon,
   EllipsisIcon,
@@ -678,27 +679,23 @@ function RepositorySection({
           <>
             {actionGroups.length === 0 ? null : (
               <Tooltip label="Repository actions">
-                <button
+                <IconButton
                   ref={ellipsis}
-                  type="button"
-                  className="sidebar-repository-action"
-                  aria-label={`Actions for ${named}`}
+                  icon={<EllipsisIcon />}
+                  label={`Actions for ${named}`}
+                  size={BUTTON_SIZE.COMPACT}
                   {...menu.trigger()}
-                >
-                  <EllipsisIcon />
-                </button>
+                />
               </Tooltip>
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
-                <button
-                  type="button"
-                  className="sidebar-repository-action sidebar-repository-new"
-                  aria-label={`New task in ${label}`}
+                <IconButton
+                  icon={<PlusIcon />}
+                  label={`New task in ${label}`}
+                  size={BUTTON_SIZE.COMPACT}
                   onClick={() => onNewTaskIn(repository)}
-                >
-                  <PlusIcon />
-                </button>
+                />
               </Tooltip>
             )}
           </>

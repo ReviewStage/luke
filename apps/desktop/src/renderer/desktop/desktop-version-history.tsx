@@ -9,9 +9,11 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
+  BUTTON_SIZE,
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
   NavItem,
   RetryRowLabel,
   Skeleton,
@@ -254,16 +256,14 @@ function RevisionRow({
       {offered ? (
         <span className="version-row-actions">
           <Tooltip label={ACTIONS_LABEL}>
-            <button
+            <IconButton
               ref={ellipsis}
-              type="button"
-              className="sidebar-task-mark"
-              aria-label={ACTIONS_LABEL}
+              icon={<EllipsisIcon />}
+              label={ACTIONS_LABEL}
+              size={BUTTON_SIZE.COMPACT}
               {...menu.trigger()}
               onContextMenu={showMenu}
-            >
-              <EllipsisIcon />
-            </button>
+            />
           </Tooltip>
         </span>
       ) : null}
