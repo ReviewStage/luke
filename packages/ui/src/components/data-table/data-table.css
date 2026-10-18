@@ -1,0 +1,103 @@
+/* data-table.css -- a DataTable's frame and its cells: a card's edge around
+   a scroller, headings over rows, each row ruled from the next, and a row
+   that opens something lit under the pointer. */
+
+@layer components {
+  .luke-data-table {
+    overflow: hidden;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-surface);
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+  }
+
+  .luke-data-table[data-empty="true"] {
+    padding: var(--luke-space-32) var(--luke-space-20);
+    text-align: center;
+  }
+
+  .luke-data-table-scroller {
+    overflow-x: auto;
+  }
+
+  /* Note that every cell keeps to one line, because the type roles break
+     words anywhere: a narrow table would otherwise split a count or an email
+     mid-word rather than hand the width to the scroller. */
+  .luke-data-table-table {
+    width: 100%;
+    border-collapse: collapse;
+    white-space: nowrap;
+  }
+
+  /* The widths past which more columns crush instead of shrinking. */
+  .luke-data-table-table[data-min-width="narrow"] {
+    min-width: 520px;
+  }
+
+  .luke-data-table-table[data-min-width="medium"] {
+    min-width: 640px;
+  }
+
+  .luke-data-table-table[data-min-width="wide"] {
+    min-width: 760px;
+  }
+
+  .luke-data-table-table thead tr,
+  .luke-data-table-row:not(:last-child) {
+    border-bottom: 1px solid var(--luke-color-border);
+  }
+
+  .luke-data-table-cell {
+    padding: var(--luke-space-12) var(--luke-space-20);
+    font-weight: inherit;
+    text-align: start;
+  }
+
+  /* A count's or a date's cell, end-aligned in figures of one width. */
+  .luke-data-table-cell[data-kind="numeric"] {
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  /* A mark's column is as narrow as its mark, standing against the next
+     column's words. */
+  .luke-data-table-cell[data-kind="mark"] {
+    width: 0;
+    padding-inline-end: 0;
+  }
+
+  .luke-data-table-sort {
+    display: inline-flex;
+    align-items: baseline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    outline-offset: var(--luke-space-2);
+  }
+
+  .luke-data-table-row {
+    transition: background-color var(--duration-hover) ease;
+  }
+
+  .luke-data-table-row[data-pressable="true"] {
+    cursor: pointer;
+  }
+
+  .luke-data-table-row[data-pressable="true"]:hover {
+    background: var(--luke-color-fill-hover);
+  }
+
+  /* A desktop row answers a press the way a Mac's list does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-data-table-row[data-pressable="true"],
+  [data-luke-profile="desktop"] .luke-data-table-sort {
+    cursor: default;
+  }
+}

@@ -21,6 +21,7 @@
     "./search-tokens": "./src/search-tokens.js",
     "./reply-quote": "./src/reply-quote.js",
     "./skill-mention": "./src/skill-mention.js",
+    "./sort-direction": "./src/sort-direction.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./task-list-model": "./src/task-list-model.js",
     "./task-sections-model": "./src/task-sections-model.js",
