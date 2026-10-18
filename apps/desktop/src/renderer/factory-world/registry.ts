@@ -2,6 +2,7 @@ import {
   Building2Icon,
   CastleIcon,
   CloudSunIcon,
+  EarthIcon,
   FactoryIcon,
   FlaskConicalIcon,
   type LucideIcon,
@@ -46,6 +47,12 @@ const FACTORY_WORLDS = [
     name: "Citadel",
     icon: CastleIcon,
     load: () => import("./worlds/citadel/index"),
+  },
+  {
+    key: "planet",
+    name: "Planet",
+    icon: EarthIcon,
+    load: () => import("./worlds/planet/index"),
   },
   {
     key: "factory",
