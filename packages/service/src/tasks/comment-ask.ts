@@ -52,37 +52,6 @@ export interface CommentAsk {
   readonly sender: string;
   /** Whether it goes to Luke, who answers in no call and says nothing but through the tool. */
   readonly toLuke: boolean;
-  /**
-   * The plan's section the thread's words stand in, as the plan now reads,
-   * bounded by `sectionExcerpt`,
-   * for a coding agent, which may never have been handed the plan, as one
-   * started on a prompt never is; Luke holds the plan already.
-   */
-  readonly section: string | undefined;
-}
-
-/** The most of a section handed over with a thread, so a long one does not swamp the message. */
-const MAX_SECTION_CHARS = 8_000;
-
-/** What stands where a section's words were left out of its excerpt. */
-const OMITTED = "[…]";
-
-/**
- * A section as handed over with a thread: whole where it fits, else the
- * stretch of it centred on the thread's words, `at` their offset in the
- * section, with a mark where words were left out before or after.
- */
-export function sectionExcerpt(section: string, at: number | undefined): string {
-  if (section.length <= MAX_SECTION_CHARS) return section;
-  const centre = Math.min(Math.max(at ?? 0, 0), section.length);
-  const start = Math.max(
-    0,
-    Math.min(centre - MAX_SECTION_CHARS / 2, section.length - MAX_SECTION_CHARS),
-  );
-  const end = start + MAX_SECTION_CHARS;
-  const before = start > 0 ? `${OMITTED}\n` : "";
-  const after = end < section.length ? `\n${OMITTED}` : "";
-  return `${before}${section.slice(start, end)}${after}`;
 }
 
 /** Who wrote an entry, as the words handed over name them. */
@@ -118,13 +87,9 @@ export function commentAskMessage(ask: CommentAsk): string {
   const call = ask.toLuke
     ? " No call is live: say nothing but through the tool, and queue no question."
     : "";
-  const section =
-    ask.section === undefined
-      ? []
-      : ["", "The section the words stand in, as the plan now reads:", ask.section];
-  const read = ask.section === undefined ? "the plan" : "the section above";
-  const doing = `Read the thread and ${read}, then answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}". Answer what the thread asks; do not act on anything else it discusses.${call}`;
-  return [lead, on, ...section, "", ...comments, "", doing].join("\n");
+  // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
+  const doing = `Read the thread, then answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}". Answer what the thread asks; do not act on anything else it discusses.${call}`;
+  return [lead, on, "", ...comments, "", doing].join("\n");
 }
 
 /** What a hand-over needs: eve as the member reaches it. */

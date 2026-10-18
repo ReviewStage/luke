@@ -26,7 +26,6 @@ import {
   planCommentStartRequestSchema,
   planCommentsCursorSchema,
 } from "@luke/features/plan-comment-wire";
-import { planSections } from "@luke/features/plan-document";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
@@ -58,7 +57,6 @@ import {
   type CommentAskSeams,
   commentAskMessage,
   handCommentAskOver,
-  sectionExcerpt,
 } from "./comment-ask.js";
 
 /**
@@ -209,7 +207,7 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
   if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
     return yield* outcomeAnswer(outcome, true);
   }
-  const asked = postedAsSent(outcome.answer.thread, userId, start.success.words)
+  const handed = postedAsSent(outcome.answer.thread, userId, start.success.words)
     ? yield* mentionsHandedOver(seams, request, {
         userId,
         taskId,
@@ -217,8 +215,8 @@ const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(f
         words: start.success.words,
         clientKey: start.success.clientKey,
       })
-    : undefined;
-  return yield* outcomeAnswer(asked ?? outcome, true);
+    : NONE_HANDED;
+  return yield* mentionedAnswer(handed.landed ?? outcome, handed.unsent, true);
 });
 
 /** POST does one thing to one thread of the plan, as the member the bearer is. */
@@ -265,7 +263,7 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
     outcome.status === PLAN_COMMENT_OUTCOME.DONE &&
     "thread" in outcome.answer
   ) {
-    const asked = postedAsSent(outcome.answer.thread, userId, action.success.words)
+    const handed = postedAsSent(outcome.answer.thread, userId, action.success.words)
       ? yield* mentionsHandedOver(seams, request, {
           userId,
           taskId,
@@ -273,8 +271,8 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
           words: action.success.words,
           clientKey: action.success.clientKey,
         })
-      : undefined;
-    return yield* outcomeAnswer(asked ?? outcome, false);
+      : NONE_HANDED;
+    return yield* mentionedAnswer(handed.landed ?? outcome, handed.unsent, false);
   }
   return yield* outcomeAnswer(outcome, false);
 });
@@ -285,8 +283,9 @@ const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint"
  * an agent of another task, or an archived one, is a reference, which asks
  * no one. Each ask is written under a key drawn from the words' own, so the
  * words sent again ask no one twice. A hand-over that does not land is taken
- * back and goes unsaid, the words posted all the same. Answers the thread as
- * the last ask that landed left it, or nothing where none did.
+ * back and said back to the member, the words posted all the same. Answers the thread as
+ * the last ask that landed left it, or nothing where none did, and the
+ * ones asked who could not take it.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: PlanCommentsAppSeams,
@@ -307,13 +306,14 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   ];
   const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
   let landed: PlanCommentOutcome | undefined;
+  const unsent: PlanCommentAsked[] = [];
   for (const to of tos) {
     const handed = yield* Effect.gen(function* () {
       if (
         to.actor === PLAN_COMMENT_ACTOR.AGENT &&
         (yield* askableAgent(userId, taskId, to)) === undefined
       ) {
-        return undefined;
+        return HANDED.REFERENCE;
       }
       const ask = {
         action: PLAN_COMMENT_ACTION.ASK,
@@ -323,21 +323,42 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
       const outcome = yield* hostedStoreOrUnavailable(
         actOnPlanCommentThread(writer, taskId, threadId, ask),
       );
-      if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE) return undefined;
+      if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE) return HANDED.UNSENT;
       const refused = yield* askedHandedOver(seams, request, {
         userId,
         taskId,
         answer: outcome.answer,
         ask,
       });
-      return refused === undefined ? outcome : undefined;
+      return refused === undefined ? outcome : HANDED.UNSENT;
     }).pipe(
-      // Note that one mention not taken leaves the others, and the words, as they are.
-      Effect.catch(() => Effect.succeed(undefined)),
+      // Note that one mention not taken leaves the others, and the words, as they are, and is said back.
+      Effect.catch(() => Effect.succeed(HANDED.UNSENT)),
     );
-    if (handed !== undefined) landed = handed;
+    if (handed === HANDED.UNSENT) unsent.push(to);
+    else if (handed !== HANDED.REFERENCE) landed = handed;
   }
-  return landed;
+  return { landed, unsent };
+});
+
+/** What one mention came to, short of the thread handed over: a reference, which asks no one, or an ask that did not land. */
+const HANDED = { REFERENCE: "reference", UNSENT: "unsent" } as const;
+
+/** What a comment whose words mention no one hands over. */
+const NONE_HANDED = { landed: undefined, unsent: [] } as const;
+
+/** The comment's answer, with the ones its mentions asked but who could not take the thread, so the member reads that they were not asked. */
+const mentionedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  outcome: PlanCommentOutcome,
+  unsent: readonly PlanCommentAsked[],
+  created: boolean,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal> {
+  if (unsent.length === 0 || outcome.status !== PLAN_COMMENT_OUTCOME.DONE) {
+    return yield* outcomeAnswer(outcome, created);
+  }
+  if (!("thread" in outcome.answer)) return yield* outcomeAnswer(outcome, created);
+  const status = created ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK;
+  return hostedJsonResponse(status, { thread: outcome.answer.thread, unsent });
 });
 
 /**
@@ -362,18 +383,6 @@ function postedAsSent(thread: PlanCommentThread, userId: string, words: string):
  */
 function mentionKey(clientKey: string, to: PlanCommentAsked): string {
   return JSON.stringify({ comment: clientKey, actor: to.actor, agent: to.agentId ?? null });
-}
-
-/** The section a thread's words stand in, by where they stand, else by its heading; nothing where neither is found. */
-function sectionOf(text: string, thread: PlanCommentThread): string | undefined {
-  const sections = planSections(text);
-  const { anchor } = thread;
-  const found =
-    anchor === undefined
-      ? sections.find((each) => each.heading === thread.section)
-      : sections.find((each) => each.from <= anchor.from && anchor.from <= each.to);
-  if (found === undefined) return undefined;
-  return sectionExcerpt(found.text, anchor === undefined ? undefined : anchor.from - found.from);
 }
 
 /**
@@ -407,8 +416,6 @@ const askedHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     thread,
     sender: asked?.writer.by?.name ?? "A member",
     toLuke: ask.to.actor === PLAN_COMMENT_ACTOR.LUKE,
-    section:
-      ask.to.actor === PLAN_COMMENT_ACTOR.AGENT ? sectionOf(task.value.text, thread) : undefined,
   });
   const withdraw = withdrawPlanCommentAsk(taskId, ask.clientKey).pipe(
     Effect.tapError(logStoreFailure),

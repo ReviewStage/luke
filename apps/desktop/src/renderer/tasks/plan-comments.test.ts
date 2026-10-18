@@ -729,3 +729,29 @@ test("a comment's field offers Luke first among the agents, with no Send to besi
   assert.ok(rows[0]?.startsWith("Luke"), `Luke leads the list: ${rows.join(" | ")}`);
   assert.equal(card.querySelector(".comment-send-to"), null);
 });
+
+test("a reply's field empties as it is sent, and takes the words back where the send fails", async () => {
+  const { container } = drawn("page", THREADS, () => false);
+  act(() =>
+    container
+      .querySelector<HTMLElement>(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.click(),
+  );
+  const field = container.querySelector<HTMLTextAreaElement>(
+    `.comment-card[data-thread="${ID.OPEN}"] textarea`,
+  );
+  assert.ok(field);
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, "Not for v1.");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  assert.equal(field.value, "", "the field empties as the words are sent");
+
+  await act(async () => undefined);
+  assert.equal(field.value, "Not for v1.", "and takes them back where the send fails");
+});

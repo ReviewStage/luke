@@ -249,7 +249,11 @@ export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN
 
 /** What a write to a thread answers: the thread as it now stands, that it was deleted, or why nothing was taken. */
 export const planCommentThreadAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ thread: planCommentThreadSchema }),
+  EffectSchema.Struct({
+    thread: planCommentThreadSchema,
+    /** The ones a comment's mentions asked who could not take the thread, an agent whose session is not running say; absent where every one did. */
+    unsent: EffectSchema.optionalKey(EffectSchema.Array(planCommentAskedSchema)),
+  }),
   EffectSchema.Struct({ deleted: wireUuidSchema }),
   EffectSchema.Struct({ refused: EffectSchema.Literals(Object.values(PLAN_COMMENT_REFUSAL)) }),
 ]);

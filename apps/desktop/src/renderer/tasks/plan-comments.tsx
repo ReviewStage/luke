@@ -659,10 +659,14 @@ function ReplyField({
     if (trimmed === "" || sending) return;
     const key = attempt.current?.words === trimmed ? attempt.current.key : crypto.randomUUID();
     attempt.current = { words: trimmed, key };
+    // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails and nothing was typed since.
+    setWords("");
     void onSend(trimmed, key).then((sent) => {
-      if (!sent) return;
-      attempt.current = undefined;
-      setWords("");
+      if (sent) {
+        attempt.current = undefined;
+        return;
+      }
+      setWords((now) => (now === "" ? trimmed : now));
     });
   };
   return (
