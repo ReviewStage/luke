@@ -165,14 +165,14 @@ test("New task says the workspace it starts in, and the workspace chosen there l
     "the list is the chosen workspace's repositories",
   );
 
-  const create = document.querySelector<HTMLButtonElement>(START_PLANNING);
+  const create = document.querySelector<HTMLButtonElement>(START_WITH_LUKE);
   act(() => create?.click());
   await settle();
   assert.deepEqual(starts, [ACME.id], "the plan starts in the workspace chosen");
 });
 
 /** Plan mode's Start, the composer's round button. */
-const START_PLANNING = 'button[aria-label="Start planning"]';
+const START_WITH_LUKE = 'button[aria-label="Start planning"]';
 
 /** The menu's option that names `name`. */
 function optionNamed(menu: ParentNode, name: string): HTMLElement {
@@ -212,7 +212,7 @@ async function openNewTask(workspaceId: string, preset?: string) {
     document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("the repository chip stands");
   const create = async () => {
-    const button = document.querySelector<HTMLButtonElement>(START_PLANNING);
+    const button = document.querySelector<HTMLButtonElement>(START_WITH_LUKE);
     act(() => button?.click());
     await settle();
   };

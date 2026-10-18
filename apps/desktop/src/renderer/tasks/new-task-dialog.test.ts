@@ -83,7 +83,7 @@ async function settle(): Promise<void> {
 }
 
 /** The card stood in Plan mode, as New task keeps the mode it was left in. */
-function inPlanMode(): void {
+function keptInLukeMode(): void {
   window.localStorage.setItem(MODE_KEY, "plan");
 }
 
@@ -241,7 +241,7 @@ async function mount(
 }
 
 /** The Plan toggle, pressed where `planning` is. */
-function planToggle(): HTMLButtonElement {
+function modeToggle(): HTMLButtonElement {
   return (
     document.querySelector<HTMLButtonElement>('button[aria-label="Plan with Luke first"]') ??
     assert.fail("the Plan toggle stands")
@@ -266,7 +266,7 @@ test("the card holds the composer with its words focused, the repository chip af
     true,
     "the model chip names the account's default",
   );
-  assert.equal(planToggle().getAttribute("aria-pressed"), "false", "New task starts in Agent mode");
+  assert.equal(modeToggle().getAttribute("aria-pressed"), "false", "New task starts in Agent mode");
 });
 
 test("Agent mode: Return starts the task without planning, Untitled, on the repository last used, and an agent on the words with the chip's model", async () => {
@@ -318,7 +318,7 @@ test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start be
   card.type("Rethink automations\nwhich agent they reuse");
   await card.key("Enter");
 
-  assert.equal(planToggle().getAttribute("aria-pressed"), "true");
+  assert.equal(modeToggle().getAttribute("aria-pressed"), "true");
   assert.equal(placeholder, "What should you and Luke plan? (optional)");
   assert.equal(modelChip, null);
   assert.deepEqual(card.starts, [["Rethink automations", "acme/web"]]);
@@ -327,7 +327,7 @@ test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start be
 });
 
 test("Plan mode starts with nothing typed and with no repository, as today's blank plan", async () => {
-  inPlanMode();
+  keptInLukeMode();
   const card = await mount(undefined, undefined, { recent: [] });
   assert.equal(card.startButton().disabled, false);
   act(() => card.startButton().click());
@@ -349,7 +349,7 @@ test("Agent mode with no repository holds Start and says why under the card, and
         "An agent needs a repository to work in. Choose one, or turn on Plan.",
       ),
   };
-  act(() => planToggle().click());
+  act(() => modeToggle().click());
   await settle();
   const why = card.dialog()?.textContent?.includes("An agent needs a repository");
   await card.key("Enter");
@@ -363,15 +363,15 @@ test("Agent mode with no repository holds Start and says why under the card, and
 test("the mode is kept for the next New task, and Agent mode stands where only the old Plan switch's choice was kept", async () => {
   window.localStorage.setItem("luke.new-task-planning", "true");
   const first = await mount();
-  const firstMode = planToggle().getAttribute("aria-pressed");
-  act(() => planToggle().click());
+  const firstMode = modeToggle().getAttribute("aria-pressed");
+  act(() => modeToggle().click());
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
   await mount();
 
   assert.equal(firstMode, "false");
-  assert.equal(planToggle().getAttribute("aria-pressed"), "true");
+  assert.equal(modeToggle().getAttribute("aria-pressed"), "true");
   assert.ok(first);
 });
 
@@ -561,7 +561,7 @@ test("a member of a workspace whose GitHub was removed or suspended on GitHub is
 });
 
 test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Plan mode starts the task with none", async () => {
-  inPlanMode();
+  keptInLukeMode();
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-personal",
     workspaceName: "Dean Stratakos",
@@ -607,7 +607,7 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
         installationUrl: "https://github.com/apps/luke/installations/new",
       },
     });
-  inPlanMode();
+  keptInLukeMode();
   const unlisted = await mount(undefined, undefined, { read: listing });
   unlisted.type("Dark mode");
   await unlisted.key("Enter");
@@ -623,7 +623,7 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
 });
 
 test("the repository menu names each repository first and its owner after it, so two that share an owner tell apart, and finds one by its owner/name", async () => {
-  inPlanMode();
+  keptInLukeMode();
   const owner = "northwind-platform";
   const reached = (name: string) => ({
     owner,
@@ -842,7 +842,7 @@ test("an issue picked and Return with no words starts an agent on the issue alon
   })();
   await openLinear();
   await card.press("Enter", linearSearch());
-  act(() => planToggle().click());
+  act(() => modeToggle().click());
   await settle();
   act(() => card.startButton().click());
   await settle();

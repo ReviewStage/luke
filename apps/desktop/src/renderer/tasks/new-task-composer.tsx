@@ -114,8 +114,8 @@ const MODE_WORDS = {
 /** The Plan toggle's words, and why Agent mode's Start is held without a repository. */
 const COMPOSER_WORDS = {
   PLAN: "Plan",
-  PLAN_LABEL: "Plan with Luke first",
-  PLAN_KEYS: "Shift+Tab",
+  TOGGLE_LABEL: "Plan with Luke first",
+  TOGGLE_KEYS: "Shift+Tab",
   DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
 } as const;
@@ -244,7 +244,7 @@ export function NewTaskComposer({
   const canStart = planning || (!blocked && (filled || issue !== undefined));
   const issueName = issue === undefined ? from?.title : taskNameOfIssue(issue);
 
-  const begin = (name: string, asPlan: boolean, agent: boolean) => {
+  const begin = (name: string, withCall: boolean, agent: boolean) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
@@ -254,7 +254,7 @@ export function NewTaskComposer({
         name,
         repository,
         workspaceId,
-        asPlan,
+        withCall,
         {
           ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
           ...(from === undefined ? undefined : { issueId: from.id }),
@@ -367,12 +367,12 @@ export function NewTaskComposer({
           </>
         }
         actions={
-          <Tooltip label={COMPOSER_WORDS.PLAN_LABEL}>
+          <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
             <Chip
               look={CHIP_LOOK.FILTER}
-              aria-label={COMPOSER_WORDS.PLAN_LABEL}
+              aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
               aria-pressed={planning}
-              aria-keyshortcuts={COMPOSER_WORDS.PLAN_KEYS}
+              aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
               disabled={starting}
               onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
             >

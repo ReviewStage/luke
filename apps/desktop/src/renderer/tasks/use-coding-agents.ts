@@ -356,7 +356,7 @@ function taskDraft(
 }
 
 /** What New task hands a task it started for its draft agent: the key the agent starts under, its prompt, its files, and the choice its chip made, none for the account's default. */
-export interface HandedDraft {
+interface HandedDraft {
   readonly id: string;
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
