@@ -6,6 +6,10 @@ import {
   PUBLIC_TITLE,
   PublicPage,
   PublicSection,
+  TEXT_FONT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DemoVideo } from "./DemoVideo";
@@ -44,9 +48,11 @@ export function App(): React.JSX.Element {
 
         {/* A requirement, not a sentence: mono is what the page reserves for
             technical tokens. */}
-        <p className="mt-3 mb-0 font-mono text-xs text-muted-foreground">
-          macOS 14+ · Apple silicon
-        </p>
+        <div className="mt-3">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} font={TEXT_FONT.MONO}>
+            macOS 14+ · Apple silicon
+          </Text>
+        </div>
 
         <DemoVideo />
       </PublicSection>

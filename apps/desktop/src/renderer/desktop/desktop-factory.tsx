@@ -383,7 +383,7 @@ function Station({
     >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
           {name}
         </Text>
         {held > 0 ? (

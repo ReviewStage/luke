@@ -3,9 +3,13 @@ import {
   IconButtonLink,
   MARK_PROVIDER,
   ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_LINK_CURRENT,
   TEXT_LINK_HEIGHT,
+  TEXT_TONE,
   TEXT_VARIANT,
+  Text,
   TextLink,
   type TextLinkCurrent,
 } from "@luke/ui";
@@ -130,7 +134,12 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
  */
 export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
-    <div className="font-mono text-xs text-muted-foreground">
+    <Text
+      as={TEXT_ELEMENT.DIV}
+      variant={TEXT_VARIANT.CAPTION}
+      tone={TEXT_TONE.MUTED}
+      font={TEXT_FONT.MONO}
+    >
       {/* The separator belongs to the gap between items rather than to any
             item, so adding or reordering a link never leaves a stray dot. */}
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
@@ -154,6 +163,6 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
       <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
-    </div>
+    </Text>
   );
 }
