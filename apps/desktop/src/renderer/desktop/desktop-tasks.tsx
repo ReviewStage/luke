@@ -220,10 +220,14 @@ function TaskInboxTab({
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const needsYou = useTaskInboxWaitingOnly();
   const { act } = useAct();
-  const marks = useInboxReadMarks({ act, workspaceId: task.workspaceId });
-  const groups = marks.over([
-    { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
-  ]);
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: task.workspaceId,
+    groups: [{ holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] }],
+    // Note that a task's own Inbox offers no Mark all as read.
+    onMarkedAll: () => undefined,
+  });
+  const { groups } = marks;
   const items = groups.flatMap((group) => group.items);
   const filter = {
     grouping: INBOX_GROUPING.NEWEST,

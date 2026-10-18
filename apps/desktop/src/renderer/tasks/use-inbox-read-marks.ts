@@ -2,7 +2,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act";
 import { useAppCommand } from "../app-commands";
 import { type InboxGroup, type InboxReadMark, isUnread, withReadMarks } from "./inbox-model";
@@ -10,14 +10,18 @@ import { type InboxGroup, type InboxReadMark, isUnread, withReadMarks } from "./
 /**
  * use-inbox-read-marks.ts -- the Inbox's read and unread marks as one control: an item marked read or unread, or every item marked read, its dot flipping at once.
  *
- * A mark goes to the service as an act, which wakes the held reads of the
- * account on its own, so nothing here reads again; until those reads
- * answer, the mark is laid over what they hold (`inbox-model.ts`'s
- * `withReadMarks`), so the dot flips the moment it is pressed. A mark the
- * service did not take is let go, and the dot stands as the reads hold it.
- * Marking every item read marks only the items the Inbox lists that are
- * unread, in the one workspace it lists, as the service marks them; an item
- * waiting on the developer keeps waiting, since the dots are all it clears.
+ * A mark goes to the service as an act, and is laid over what the reads
+ * hold (`inbox-model.ts`'s `withReadMarks`) so the dot flips the moment it
+ * is pressed, until the reads hold the item as the mark left it; then the
+ * mark is let go, so a later read, another window's mark among them, is
+ * what the row draws. The acts go one at a time, in the order the marks
+ * were made, so a quick read, unread, read reaches the service as the last,
+ * Mark all as read in its turn among them. A mark the service did not take
+ * is let go, and the dot stands as the reads hold it. Marking every item
+ * read marks the items the Inbox lists in the one workspace it lists, as
+ * the service marks them, and asks the reads again once it is taken, since
+ * the write moves nothing main hears of; an item waiting on the developer
+ * keeps waiting, since the dots are all it clears.
  *
  * Opening an item marks it read, once each time it is shown
  * (`useReadOnOpen`), so an item the reader marks unread while it is shown
@@ -27,29 +31,61 @@ import { type InboxGroup, type InboxReadMark, isUnread, withReadMarks } from "./
 
 /** What the Inbox's read marks offer: the reads with the marks laid over them, and the marks themselves. */
 export interface InboxReadMarks {
-  /** The groups as the reads hold them, the marks not yet read back laid over them. */
-  readonly over: (groups: readonly InboxGroup[]) => readonly InboxGroup[];
+  /** The groups as the reads hold them, the marks they have not caught up with laid over them. */
+  readonly groups: readonly InboxGroup[];
   /** Marks one item read or unread. */
   readonly onMark: (item: InboxItem, unread: boolean) => void;
   /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
 
-/** What a mark the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-
 /** No marks, one map so a hook that holds none hands down the same one. */
 const NO_MARKS: ReadonlyMap<string, InboxReadMark> = new Map();
 
-/** The Inbox's read marks, sent through `act`, every item marked read in `workspaceId` where the Inbox lists one. */
+/** What a mark the act channel refused hears, as the service not answering. */
+const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** Whether the reads hold an item as a mark left it, or have moved past the item it was made on: either way the mark has nothing left to say. */
+function caughtUp(groups: readonly InboxGroup[], itemId: string, mark: InboxReadMark): boolean {
+  for (const { items } of groups) {
+    const item = items.find((each) => each.id === itemId);
+    if (item !== undefined)
+      return item.updatedAt !== mark.updatedAt || isUnread(item) === mark.unread;
+  }
+  return false;
+}
+
+/**
+ * The Inbox's read marks over `groups`, the reads as they stand, sent
+ * through `act`; every item marked read in `workspaceId` where the Inbox
+ * lists one, and `onMarkedAll` heard once the service took it, so the
+ * reads are asked again.
+ *
+ * A mark stands over the reads until they hold the item as it left it, and
+ * is let go then, so a later read, another window's mark included, is what
+ * the row draws. The marks go to the service one at a time, in the order
+ * they were made, an item's later mark standing for any of its own still
+ * waiting to go, so a quick read, unread, read reaches it as the last.
+ */
 export function useInboxReadMarks({
   act,
   workspaceId,
+  groups,
+  onMarkedAll,
 }: {
   act: ActHandle["act"];
   workspaceId: string | undefined;
+  groups: readonly InboxGroup[];
+  onMarkedAll: () => void;
 }): InboxReadMarks {
   const [marks, setMarks] = useState(NO_MARKS);
+  // The writes, one after another, and each item's latest mark still to go, which its queued write sends.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const wanted = useRef(new Map<string, ReadonlyMap<string, InboxReadMark>>());
+  const heard = useRef(onMarkedAll);
+  useLayoutEffect(() => {
+    heard.current = onMarkedAll;
+  });
   // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
   const letGo = useCallback((made: ReadonlyMap<string, InboxReadMark>) => {
     setMarks((held) => {
@@ -61,17 +97,34 @@ export function useInboxReadMarks({
   const lay = useCallback((made: ReadonlyMap<string, InboxReadMark>) => {
     setMarks((held) => new Map([...held, ...made]));
   }, []);
+  const send = useCallback((write: () => Promise<void>) => {
+    queue.current = queue.current.then(write);
+  }, []);
+  useEffect(() => {
+    const done = [...marks].filter(([itemId, mark]) => caughtUp(groups, itemId, mark));
+    if (done.length > 0) letGo(new Map(done));
+  });
   const onMark = useCallback(
     (item: InboxItem, unread: boolean) => {
       const made = new Map([[item.id, { unread, updatedAt: item.updatedAt }]]);
       lay(made);
-      void act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
-        .catch(() => UNANSWERED)
-        .then((answer) => {
-          if ("failure" in answer) letGo(made);
-        });
+      wanted.current.set(item.id, made);
+      send(() => {
+        const latest = wanted.current.get(item.id);
+        const mark = latest?.get(item.id);
+        if (latest === undefined || mark === undefined) return Promise.resolve();
+        wanted.current.delete(item.id);
+        return act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
+          itemId: item.id,
+          unread: mark.unread,
+        })
+          .catch(() => UNANSWERED)
+          .then((answer) => {
+            if ("failure" in answer) letGo(latest);
+          });
+      });
     },
-    [act, lay, letGo],
+    [act, lay, letGo, send],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
@@ -82,22 +135,19 @@ export function useInboxReadMarks({
       );
       if (made.size === 0) return;
       lay(made);
-      void act(
-        ACT_KIND.CODING_AGENTS_INBOX_READ_ALL,
-        workspaceId === undefined ? {} : { workspaceId },
-      )
-        .catch(() => UNANSWERED)
-        .then((answer) => {
-          if ("failure" in answer) letGo(made);
-        });
+      send(() =>
+        act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, workspaceId === undefined ? {} : { workspaceId })
+          .catch(() => UNANSWERED)
+          .then((answer) => {
+            if ("failure" in answer) letGo(made);
+            else heard.current();
+          }),
+      );
     },
-    [act, workspaceId, lay, letGo],
+    [act, workspaceId, lay, letGo, send],
   );
-  const over = useCallback(
-    (groups: readonly InboxGroup[]) => withReadMarks(groups, marks),
-    [marks],
-  );
-  return { over, onMark, onMarkAll };
+  const marked = useMemo(() => withReadMarks(groups, marks), [groups, marks]);
+  return { groups: marked, onMark, onMarkAll };
 }
 
 /**

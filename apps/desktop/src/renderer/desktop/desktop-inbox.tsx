@@ -278,11 +278,26 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
           },
         ]
       : [];
-  const marks = useInboxReadMarks({ act, workspaceId: tasks.workspace?.id });
-  const entries = marks.over([
-    ...taskEntries,
-    ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ]);
+  const { onReread: rereadTasks } = read;
+  const { onReread: rereadTaskless } = taskless;
+  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: tasks.workspace?.id,
+    groups: [
+      ...taskEntries,
+      ...tasklessGroups(
+        [...tasks.inboxTaskless, ...settledAgent],
+        tasklessRead,
+        tasks.workspace?.id,
+      ),
+    ],
+    onMarkedAll: () => {
+      rereadTasks();
+      rereadTaskless();
+    },
+  });
+  const entries = marks.groups;
   const filter = {
     grouping: choices.grouping,
     waitingOnly: choices.waitingOnly,
@@ -362,12 +377,6 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
-  useReadOnOpen({
-    shown: tasks.shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
-    chosen: chosen?.item,
-    active: tasks.shown,
-    onMark: markItem,
-  });
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -414,6 +423,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const { onArea, focus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  useReadOnOpen({
+    shown:
+      tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+        ? chosen?.item
+        : undefined,
+    chosen: chosen?.item,
+    active: tasks.shown && !sideFocused,
+    onMark: markItem,
+  });
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({

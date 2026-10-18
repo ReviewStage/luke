@@ -3450,3 +3450,29 @@ test("Mark all as read in the view's menu, under the groupings, marks every unre
   openOptions();
   assert.equal(menuItem("Mark all as read").matches(":disabled"), true);
 });
+
+test("Mark all as read, once the service took it, reads every listed plan and every agent with no plan again, since the write moves nothing main hears of", async () => {
+  listedWorkspace = ACME;
+  const planReads: string[] = [];
+  startRead = (taskId) => {
+    planReads.push(taskId);
+    return undefined;
+  };
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
+  agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, unread: true }]]]);
+  const { page } = mount([waitingTaskless(QUARANTINE)]);
+  await settle();
+  const plansBefore = planReads.length;
+  const agentsBefore = agentReads.length;
+  const marksBefore = readMarks.length;
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => menuItem("Mark all as read").click());
+  await settle();
+  assert.deepEqual(readMarks.slice(marksBefore), ["all:workspace-acme"]);
+  assert.deepEqual(
+    [...new Set(planReads.slice(plansBefore))].toSorted(),
+    [BILLING.id, INVITES.id].toSorted(),
+  );
+  assert.deepEqual(agentReads.slice(agentsBefore), [SWEEP_AGENT]);
+});
