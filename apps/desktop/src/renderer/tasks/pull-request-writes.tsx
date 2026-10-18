@@ -15,7 +15,7 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ErrorState, useMenu } from "@luke/ui";
+import { BADGE_TONE, Badge, type BadgeTone, ErrorState, useMenu } from "@luke/ui";
 import { ChevronDownIcon, GitPullRequestDraftIcon, GitPullRequestIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
@@ -62,6 +62,14 @@ const STATE_WORDS = {
   [PULL_REQUEST_STATE.MERGED]: "Merged",
   [PULL_REQUEST_STATE.CLOSED]: "Closed",
 } as const satisfies Record<PullRequestState, string>;
+
+/** The badge's tone for a pull request no change can be sent to, as its mark's colour says it. */
+const STATE_TONES = {
+  [PULL_REQUEST_STATE.OPEN]: BADGE_TONE.COMPLETE,
+  [PULL_REQUEST_STATE.DRAFT]: BADGE_TONE.NEUTRAL,
+  [PULL_REQUEST_STATE.MERGED]: BADGE_TONE.MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: BADGE_TONE.DANGER,
+} as const satisfies Record<PullRequestState, BadgeTone>;
 
 /** The line's own words. */
 const WRITE_WORDS = {
@@ -195,21 +203,26 @@ export function PullRequestStateMenu({
   const actions = actionsFrom(pullRequest.state);
   const menu = useMenu(actions.length > 0);
   const label = `Pull request ${STATE_WORDS[pullRequest.state]}`;
+  const words =
+    writes.pending === undefined
+      ? STATE_WORDS[pullRequest.state]
+      : `${ACTION_WORDS[writes.pending]}…`;
+  if (actions.length === 0) {
+    return (
+      <Badge
+        tone={STATE_TONES[pullRequest.state]}
+        icon={<PullRequestMark pullRequest={pullRequest} />}
+      >
+        {words}
+      </Badge>
+    );
+  }
   const inner = (
     <>
       <PullRequestMark pullRequest={pullRequest} />
-      {writes.pending === undefined
-        ? STATE_WORDS[pullRequest.state]
-        : `${ACTION_WORDS[writes.pending]}…`}
+      {words}
     </>
   );
-  if (actions.length === 0) {
-    return (
-      <span className="pull-request-state" data-pull-request-state={pullRequest.state}>
-        {inner}
-      </span>
-    );
-  }
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],

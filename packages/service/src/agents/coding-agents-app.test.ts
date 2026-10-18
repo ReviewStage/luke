@@ -18,7 +18,7 @@ import {
 import {
   answerAsk,
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   findOrMakeDm,
   history,
   memberNamed,
@@ -3739,7 +3739,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           userId: opened.owner,
         }),
       );
-      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.task.id));
+      const channel = Option.getOrThrow(yield* ensureTaskChannel(opened.owner, opened.task.id));
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const telling: ChatTelling = {
         eveFor: (starter) => eve.eve(`Bearer ${starter}`),
@@ -3941,7 +3941,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a plain post steers nobody, a mention steers the agent it names, and a planner, a person, and a handle naming no one are told no agent's way",
+    "a plain post steers nobody, a mention steers the agent it names, and Luke, a person, and a handle naming no one are told no agent's way",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -6363,7 +6363,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           agentId: started.agent.id,
         }),
       );
-      const channel = Option.getOrThrow(yield* ensurePlanChannel(opened.owner, opened.task.id));
+      const channel = Option.getOrThrow(yield* ensureTaskChannel(opened.owner, opened.task.id));
       const at = (bearer: string | undefined, method: string, body?: WireBoundaryInput) => {
         const url = new URL(CHAT, ORIGIN);
         url.searchParams.set("workspaceId", workspace);

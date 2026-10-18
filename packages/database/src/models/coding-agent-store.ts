@@ -183,7 +183,7 @@ export interface CodingAgent {
 }
 
 /** One agent with no plan as the sidebar lists it for its reader: the agent, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
-export interface PlanlessCodingAgent extends CodingAgent {
+export interface TasklessCodingAgent extends CodingAgent {
   readonly pinnedAt: Date | null;
   readonly pinPosition: string | null;
 }
@@ -359,7 +359,7 @@ const CodingAgentRowSchema = Schema.Struct({
 });
 
 /** An agent's row with the reader's own pin beside it; null where they hold none. */
-const PlanlessAgentRowSchema = Schema.Struct({
+const TasklessAgentRowSchema = Schema.Struct({
   ...CodingAgentRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
@@ -854,9 +854,9 @@ const findAgentsOfWorkspace = SqlSchema.findAll({
 });
 
 /** Every agent with no plan in the account's workspaces, newest started first, each with the account's own pin of it. */
-const findPlanlessAgents = SqlSchema.findAll({
+const findTasklessAgents = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
-  Result: PlanlessAgentRowSchema,
+  Result: TasklessAgentRowSchema,
   execute: ({ userId, includeArchived }) =>
     Database.use((db) =>
       db
@@ -1316,17 +1316,17 @@ export function listWorkspaceCodingAgents(
 export function listTasklessCodingAgents(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
-): CodingAgentStoreEffect<readonly PlanlessCodingAgent[]> {
-  return findPlanlessAgents({ userId, includeArchived: options.includeArchived ?? false });
+): CodingAgentStoreEffect<readonly TasklessCodingAgent[]> {
+  return findTasklessAgents({ userId, includeArchived: options.includeArchived ?? false });
 }
 
 /** The plan an agent stands on, as a list of agents names it: its name, and whether it is archived. */
-export interface AgentPlanName {
+export interface AgentTaskName {
   readonly name: string;
   readonly archived: boolean;
 }
 
-const findPlanNames = SqlSchema.findAll({
+const findTaskNames = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({ id: Schema.String, name: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planIds }) =>
@@ -1343,14 +1343,14 @@ const findPlanNames = SqlSchema.findAll({
 });
 
 /** The plans named, by id, each with its name and whether it is archived; a plan of a workspace the account is not in names nothing. None asked, none read. */
-export function planNamesOf(
+export function taskNamesOf(
   userId: string,
   planIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, AgentPlanName>> {
+): CodingAgentStoreEffect<ReadonlyMap<string, AgentTaskName>> {
   const ids = [...new Set(planIds)];
   if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    findPlanNames({ userId, planIds: ids }),
+    findTaskNames({ userId, planIds: ids }),
     (rows) => new Map(rows.map((row) => [row.id, { name: row.name, archived: row.archived }])),
   );
 }
