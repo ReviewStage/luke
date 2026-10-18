@@ -2,6 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentPullRequestViewedAnswerView,
+} from "@luke/features/coding-agent-view";
+import {
   CHANGED_FILE_STATUS,
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
@@ -9,6 +13,13 @@ import {
   DIFF_SIDE,
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
+import {
+  FILE_VIEWED_STATE,
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+  type PullRequestActionRequest,
+  type PullRequestWriteAnswer,
+} from "@luke/features/pull-request-write-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -97,10 +108,21 @@ let commits: ImageCommits = {};
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
 let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
 
+/** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
+let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
+  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+};
+/** How many times the marks were read. */
+let viewedReads = 0;
+
 const control = codingAgentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
+  readPullRequestViewed: () => {
+    viewedReads += 1;
+    return Promise.resolve(viewedAnswer);
+  },
   readChanges: () =>
     Promise.resolve({
       pullRequest: {
@@ -172,6 +194,8 @@ beforeEach(() => {
   treeOpens = [];
   files = [changed("src/seats.ts")];
   commits = {};
+  viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  viewedReads = 0;
   boxWidth = 900;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -966,4 +990,129 @@ test("after Refresh changes an image far from the view reads nothing until it co
     asked.at(-1),
     `https://raw.githubusercontent.com/acme/relay/${"c".repeat(40)}/logo.png`,
   );
+});
+
+/** The viewed marks the service names: the seats file viewed, the plan viewed and changed since, the readme not. */
+const MARKED: CodingAgentPullRequestViewedAnswerView = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+  files: [
+    { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
+    { path: "b.ts", state: FILE_VIEWED_STATE.DISMISSED },
+    { path: "c.ts", state: FILE_VIEWED_STATE.UNVIEWED },
+  ],
+};
+
+/** Every mark asked of the service, answered as `answer` says. */
+function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
+  const asked: PullRequestActionRequest[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      }
+      asked.push(request.payload.request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer() });
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+/** The Viewed box in a file's header. */
+function viewedBox(path: string): HTMLInputElement {
+  return (
+    header(path).querySelector<HTMLInputElement>('.diff-list-viewed input[type="checkbox"]') ??
+    assert.fail(`${path} offers a Viewed box`)
+  );
+}
+
+test("the member's viewed marks tick their files, count toward the foot's progress, and fold them; a file changed since reads not viewed", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+
+  assert.deepEqual(
+    ["a.ts", "b.ts", "c.ts"].map((path) => viewedBox(path).checked),
+    [true, false, false],
+  );
+  assert.deepEqual(folds(), [
+    ["a.ts", true],
+    ["b.ts", false],
+    ["c.ts", false],
+  ]);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /1 \/ 3 viewed/u);
+});
+
+test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
+  viewedAnswer = MARKED;
+  let refuse = false;
+  const asked = answerMarks(() =>
+    refuse
+      ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Pull request is locked." }
+      : { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
+  );
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.deepEqual(folds()[2], ["c.ts", true]);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /2 \/ 3 viewed/u);
+
+  refuse = true;
+  act(() => viewedBox("a.ts").click());
+  await flush();
+  assert.equal(viewedBox("a.ts").checked, true, "a refused unmark leaves the mark standing");
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /Pull request is locked\./u,
+  );
+  assert.deepEqual(asked, [
+    { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
+    { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: "a.ts" },
+  ]);
+});
+
+test("V marks the file the keys stand on viewed and steps on to the next, and is no key at all until the marks are read", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  await drawTab();
+  assert.equal(press(listBox(), { key: "v" }), false, "with no marks read V is not the list's");
+
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  await drawTab();
+  press(listBox(), { key: "j" });
+  press(listBox(), { key: "v" });
+  await flush();
+
+  assert.deepEqual(asked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "a.ts" }]);
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.equal(viewedBox("a.ts").checked, true);
+});
+
+test("a member with no GitHub sign-in is offered one, and no Viewed box stands until the marks are read", async () => {
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  files = [changed("a.ts")];
+  await drawTab();
+
+  assert.equal(header("a.ts").querySelector(".diff-list-viewed") === null, true);
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
+});
+
+test("the marks are read again with the files on Refresh changes, so the two describe the same push", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts")];
+  await drawTab();
+  assert.equal(viewedReads, 1);
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+
+  assert.equal(viewedReads, 2);
 });

@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
@@ -55,6 +56,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REPLY_TO_THREAD]: "Reply",
   [PULL_REQUEST_ACTION.RESOLVE_THREAD]: "Resolve conversation",
   [PULL_REQUEST_ACTION.UNRESOLVE_THREAD]: "Unresolve conversation",
+  [PULL_REQUEST_ACTION.MARK_FILE_VIEWED]: "Mark as viewed",
+  [PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED]: "Unmark as viewed",
   [PULL_REQUEST_ACTION.MERGE]: "Merge",
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enable auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
@@ -96,7 +99,7 @@ const WRITE_NOTE = {
   WORDS: "words",
 } as const;
 
-type WriteNote =
+export type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
   | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
 
@@ -115,7 +118,9 @@ export interface PullRequestWrites {
 }
 
 /** What an answer leaves to say: nothing where GitHub made the change. */
-function noteOf(answer: CodingAgentPullRequestWriteAnswerView): WriteNote | undefined {
+export function noteOf(
+  answer: CodingAgentPullRequestWriteAnswerView | CodingAgentPullRequestViewedAnswerView,
+): WriteNote | undefined {
   if ("failure" in answer) return { kind: WRITE_NOTE.WORDS, words: failureWords(answer.failure) };
   switch (answer.outcome) {
     case PULL_REQUEST_WRITE_OUTCOME.DONE:
@@ -256,7 +261,8 @@ export function PullRequestWriteNote({
   writes,
   className = "pull-request-write-note",
 }: {
-  writes: PullRequestWrites;
+  /** What the last change left to say, and the door that lets it go: a tab's changes', or Files changed's viewed marks'. */
+  writes: Pick<PullRequestWrites, "note" | "dismiss">;
   className?: string;
 }): React.JSX.Element | null {
   const { connect } = useGitHubConnection();

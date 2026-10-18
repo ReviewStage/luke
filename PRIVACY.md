@@ -459,7 +459,10 @@ sent to GitHub by our service as you, on the token of your own GitHub sign-in,
 whoever started the agent, so it can do only what your GitHub account may; it
 is never sent as the Luke GitHub App, and where you hold no GitHub sign-in
 GitHub takes, nothing is sent and the tab asks you to sign in with GitHub
-again. Wherever Luke names someone on
+again. Files changed's Viewed boxes are GitHub's own, which GitHub keeps for
+each account: our service reads which files you marked viewed, and marks or
+unmarks one when you press its box, on the same token of your own GitHub
+sign-in and never as the Luke GitHub App, and stores none of it. Wherever Luke names someone on
 GitHub, as the tab does who opened, reviewed, and commented on the pull
 request, it draws them by their GitHub avatar, which your Mac loads straight
 from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP

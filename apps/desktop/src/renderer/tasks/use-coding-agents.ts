@@ -8,6 +8,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CONTEXT_WINDOW,
@@ -285,6 +286,8 @@ export interface CodingAgentsControl {
   readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
   readOverviewConversation: (agentId: string) => Promise<CodingAgentOverviewConversationAnswerView>;
+  /** One read of which of an agent's pull request's files the member marked viewed on GitHub, on their own GitHub sign-in. */
+  readPullRequestViewed: (agentId: string) => Promise<CodingAgentPullRequestViewedAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
@@ -1110,6 +1113,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readPullRequestViewed = useCallback<CodingAgentsControl["readPullRequestViewed"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId }),
+    [act],
+  );
+
   const readInbox = useCallback<InboxReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -1204,6 +1212,7 @@ export function useCodingAgents(input: {
     readOverviewPullRequest,
     readOverviewChecks,
     readOverviewConversation,
+    readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,
