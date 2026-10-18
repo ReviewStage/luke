@@ -15,8 +15,8 @@ import {
 } from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
-import { useTaskRename } from "@luke/ui/use-task-rename";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act";
@@ -395,7 +395,7 @@ function PlanDocument({
   useEffect(() => {
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
-  const rename = useTaskRename(planId, tasks.onRenameTask);
+  const rename = useInlineRename(planId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
@@ -686,9 +686,9 @@ function PlanDocument({
                       />
                     }
                   >
-                    {rename.note !== undefined ? (
+                    {rename.refused ? (
                       <p className="error-message" role="alert">
-                        {rename.note}
+                        {RENAME_FAILED_NOTE}
                       </p>
                     ) : null}
                     {repositoryNote !== undefined ? (

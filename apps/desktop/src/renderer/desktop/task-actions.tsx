@@ -22,8 +22,13 @@ import {
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
-import { useTaskRename } from "@luke/ui/use-task-rename";
+import {
+  DOCUMENT_REGION,
+  RENAME_FAILED_NOTE,
+  TASK_MARK,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
@@ -480,7 +485,7 @@ export function SidebarTask({
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const rename = useTaskRename(task.id, tasks.onRenameTask);
+  const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -559,9 +564,9 @@ export function SidebarTask({
           onContextMenu={showMenu}
         />
       )}
-      {rename.note !== undefined ? (
+      {rename.refused ? (
         <p className="sidebar-note" role="alert">
-          {rename.note}
+          {RENAME_FAILED_NOTE}
         </p>
       ) : null}
       {actions.menu}
