@@ -327,6 +327,7 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
         taskId,
         thread: outcome.answer.thread,
         clientKey: ask.clientKey,
+        words: comment.words,
         to:
           agent === undefined
             ? { actor: PLAN_COMMENT_ACTOR.LUKE }
@@ -365,10 +366,11 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly taskId: string;
     readonly thread: PlanCommentThread;
     readonly clientKey: string;
+    readonly words: string;
     readonly to: CommentRecipient;
   },
 ) {
-  const { userId, taskId, thread, clientKey, to } = input;
+  const { userId, taskId, thread, clientKey, words, to } = input;
   // The member's own newest ask names them, since an earlier one may be another member's.
   const asked = thread.entries.findLast(
     (entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.writer.by?.userId === userId,
@@ -381,7 +383,7 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: asked?.writer.by?.name ?? "A member",
     toLuke: to.actor === PLAN_COMMENT_ACTOR.LUKE,
   });
-  yield* handCommentAskOver(seams, request, { userId, taskId, to, clientKey, text }).pipe(
+  yield* handCommentAskOver(seams, request, { userId, taskId, to, clientKey, text, words }).pipe(
     Effect.onError(() =>
       withdrawPlanCommentAsk(taskId, clientKey).pipe(
         Effect.tapError(logStoreFailure),

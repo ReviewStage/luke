@@ -131,14 +131,17 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly to: CommentRecipient;
     readonly clientKey: string;
     readonly text: string;
+    /** The asking member's own words, whose servers and links alone the agent's next turn takes up, never another writer's in the thread. */
+    readonly words: string;
   },
 ) {
-  const { userId, taskId, to, clientKey, text } = input;
+  const { userId, taskId, to, clientKey, text, words } = input;
   if (to.actor === PLAN_COMMENT_ACTOR.AGENT) {
     const eve = yield* eveFor(seams, request);
     const writer = storeWriter({ tools: CODER_TOOL_SET });
     yield* steerCodingAgent(eve, writer, userId, to.agent, {
       text,
+      serverWords: words,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
