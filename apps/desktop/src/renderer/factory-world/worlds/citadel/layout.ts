@@ -234,7 +234,7 @@ export function layoutOf(zones: readonly ZoneView[]): ZoneSite[] {
   return sites;
 }
 
-/** Whether two layouts were read from the same zones, placed and sized the same: the test for whether the town must be rebuilt. */
+/** Whether two layouts were read from the same zones, placed and sized the same and ranked for the heart the same: the test for whether the town must be rebuilt. */
 export function sameZones(left: readonly ZoneView[], right: readonly ZoneView[]): boolean {
   if (left.length !== right.length) return false;
   return left.every((zone, index) => {
@@ -247,6 +247,7 @@ export function sameZones(left: readonly ZoneView[], right: readonly ZoneView[])
       other.y === zone.y &&
       other.ring === zone.ring &&
       other.footprint === zone.footprint &&
+      other.bytes === zone.bytes &&
       other.transitiveDependents === zone.transitiveDependents
     );
   });

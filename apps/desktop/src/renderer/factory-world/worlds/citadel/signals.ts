@@ -364,7 +364,7 @@ export function buildSignals(
           used.set(site, k + 1);
           const at = torchSpot(site, k, gates);
           torches.push({ entry, at });
-          if (!torchSpots.has(entry.url)) torchSpots.set(entry.url, at);
+          if (shown && !torchSpots.has(entry.url)) torchSpots.set(entry.url, at);
         }
       }
       const drawn = shown ? torches : [];

@@ -23,9 +23,17 @@ import {
   HOUR_MS,
   uuidOf,
 } from "@luke/ui/testing";
-import { type InstancedMesh, type Object3D, PerspectiveCamera, Scene } from "three";
+import {
+  Color,
+  InstancedMesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  type Object3D,
+  PerspectiveCamera,
+  Scene,
+} from "three";
 import { test } from "vitest";
-import { scenePicking } from "../../scene/picking";
+import { type ScenePicking, scenePicking } from "../../scene/picking";
 import {
   PICK_KIND,
   type PickKind,
@@ -67,6 +75,7 @@ function shown(object: Object3D): boolean {
 /** A stand-in host, and what the world registered with it. */
 interface StandIn {
   readonly host: WorldHost;
+  readonly picking: ScenePicking;
   readonly registrations: Registration[];
 }
 
@@ -93,7 +102,7 @@ function standInHost(): StandIn {
     },
     invalidate: () => undefined,
   };
-  return { host, registrations };
+  return { host, picking, registrations };
 }
 
 /** Every target the pointer could land on now, as `kind:id`. */
@@ -133,14 +142,16 @@ function stateOf(snapshot: FactoryWorld, patch: Partial<WorldState> = {}): World
 /** A world as drawn on a stand-in host, and what it registered there. */
 interface Drawn {
   readonly instance: WorldInstance;
+  readonly scene: Scene;
+  readonly picking: ScenePicking;
   readonly registrations: Registration[];
 }
 
 function drawn(state: WorldState): Drawn {
-  const { host, registrations } = standInHost();
+  const { host, picking, registrations } = standInHost();
   const instance = world.create(host);
   instance.update(state);
-  return { instance, registrations };
+  return { instance, scene: host.scene, picking, registrations };
 }
 
 function idsOf(found: ReadonlySet<string>, kind: PickKind): string[] {
@@ -148,6 +159,43 @@ function idsOf(found: ReadonlySet<string>, kind: PickKind): string[] {
     .filter((key) => key.startsWith(`${kind}:`))
     .map((key) => key.slice(kind.length + 1))
     .sort();
+}
+
+/** How many instances the scene draws, among the shown instanced meshes `drawnIn` picks. */
+function instancesDrawn(scene: Scene, drawnIn: (mesh: InstancedMesh) => boolean): number {
+  let count = 0;
+  scene.traverse((object) => {
+    if (object instanceof InstancedMesh && shown(object) && drawnIn(object)) count += object.count;
+  });
+  return count;
+}
+
+/** Whether a mesh's own material is the colour `hex`, as a ring drawn in a signal's colour is. */
+function paintedIn(hex: string): (mesh: InstancedMesh) => boolean {
+  const wanted = new Color(hex).getHex();
+  return (mesh) =>
+    (mesh.material instanceof MeshBasicMaterial || mesh.material instanceof MeshStandardMaterial) &&
+    mesh.material.color.getHex() === wanted;
+}
+
+/** Whether a mesh's own material glows `hex`, as a broken crown's embers do. */
+function glowingIn(hex: string): (mesh: InstancedMesh) => boolean {
+  const wanted = new Color(hex).getHex();
+  return (mesh) =>
+    mesh.material instanceof MeshStandardMaterial && mesh.material.emissive.getHex() === wanted;
+}
+
+/** How many road segments carry the blast. */
+function blastRoads(scene: Scene): number {
+  let lit = 0;
+  scene.traverse((object) => {
+    const road =
+      object instanceof InstancedMesh ? object.geometry.getAttribute("aRoad") : undefined;
+    if (!(object instanceof InstancedMesh) || road === undefined) return;
+    for (let segment = 0; segment < object.count; segment += 1)
+      if (road.getZ(segment) > 0) lit += 1;
+  });
+  return lit;
 }
 
 const MERGED_EARLY = FACTORY_NOW - 2 * DAY_MS;
@@ -336,4 +384,60 @@ test("at the snapshot's bounds, every zone, agent, merge, issue, and defect is s
   assert.equal(idsOf(found, PICK_KIND.SHIPPED).length, FACTORY_WORLD_BOUNDS.MAX_SHIPPED);
   assert.equal(idsOf(found, PICK_KIND.PLANNED).length, FACTORY_WORLD_BOUNDS.MAX_PLANNED);
   assert.equal(idsOf(found, PICK_KIND.DEFECT).length, FACTORY_WORLD_BOUNDS.MAX_DEFECTS);
+});
+
+test("the keep's donjon moves to the core zone that now leads, when a tie between two of them turns on their bytes alone", () => {
+  const snapshotWith = (first: number, second: number) =>
+    factoryWorldOf({
+      zones: [
+        factoryZoneOf("packages/first", [], { bytes: first }),
+        factoryZoneOf("packages/second", [], { bytes: second }),
+        factoryZoneOf("apps/web", ["packages/first", "packages/second"], { bytes: 1_000_000 }),
+        factoryZoneOf("apps/desktop", ["packages/first", "packages/second"], { bytes: 1_000_000 }),
+      ],
+    });
+  const atHeart = (picking: ScenePicking, path: string) => {
+    const anchor = picking.anchorOf({ kind: PICK_KIND.ZONE, id: path });
+    return anchor !== undefined && Math.hypot(anchor.x, anchor.z) < 1;
+  };
+  const { instance, picking } = drawn(stateOf(snapshotWith(100, 110)));
+  assert.ok(atHeart(picking, "packages/second"));
+  instance.update(stateOf(snapshotWith(120, 110)));
+  assert.ok(atHeart(picking, "packages/first"));
+  assert.ok(!atHeart(picking, "packages/second"));
+});
+
+test("a defect burning in the keep's donjon breaks its crown, as it would any tower's", () => {
+  const keep = factoryWorldOf({ ...SNAPSHOT, defects: [] });
+  const burning = factoryWorldOf({
+    ...SNAPSHOT,
+    defects: [factoryDefectOf(1, { events: 9, zonePaths: ["packages/core"] })],
+  });
+  const embers = glowingIn(SIGNAL_COLOR.DEFECT);
+  assert.equal(instancesDrawn(drawn(stateOf(keep)).scene, embers), 0);
+  assert.ok(instancesDrawn(drawn(stateOf(burning)).scene, embers) > 0);
+});
+
+test("a selected merge's ring goes with its torch when the shipped layer is switched off", () => {
+  const selected = { kind: PICK_KIND.SHIPPED, id: SNAPSHOT.shipped[0]?.url ?? "" };
+  const { instance, scene } = drawn(stateOf(SNAPSHOT, { selected }));
+  const ring = paintedIn(SIGNAL_COLOR.SELECTION);
+  assert.equal(instancesDrawn(scene, ring), 1);
+  instance.update(stateOf(SNAPSHOT, { selected, layers: { ...ALL_LAYERS, shipped: false } }));
+  assert.equal(instancesDrawn(scene, ring), 0);
+});
+
+test("the blast still runs down the dependency roads after the town is rebuilt round a new plan", () => {
+  const view = factoryWorldViewOf(SNAPSHOT);
+  const blast = new Map(blastRadiusOf(view, uuidOf(1)).map((zone) => [zone.path, zone.distance]));
+  const selected = { kind: PICK_KIND.AGENT, id: uuidOf(1) };
+  const { instance, scene } = drawn(stateOf(SNAPSHOT, { selected, blast }));
+  const lit = blastRoads(scene);
+  assert.ok(lit > 0);
+  const replanned = factoryWorldOf({
+    ...SNAPSHOT,
+    planned: [...SNAPSHOT.planned, factoryPlannedOf(3, { zonePaths: ["apps/desktop"] })],
+  });
+  instance.update(stateOf(replanned, { selected, blast }));
+  assert.equal(blastRoads(scene), lit);
 });
