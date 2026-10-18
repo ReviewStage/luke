@@ -78,7 +78,8 @@ function field(): HTMLInputElement {
 function nameOf(each: HTMLButtonElement): string {
   const label = each.getAttribute("aria-label");
   if (label !== null) return label;
-  const heard = each.cloneNode(true) as HTMLElement;
+  const heard = each.cloneNode(true);
+  if (!(heard instanceof HTMLElement)) return "";
   for (const hidden of heard.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
   return heard.textContent ?? "";
 }

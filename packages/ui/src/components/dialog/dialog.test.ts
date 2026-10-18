@@ -248,7 +248,7 @@ test("a question that must be answered is an alert dialog, named by its title an
 });
 
 test("a dialog given a title and actions is named by its title, and what it holds comes before its tool and then its answers, Tab wrapping from the last answer", () => {
-  const field = { current: null as HTMLTextAreaElement | null };
+  const field: { current: HTMLTextAreaElement | null } = { current: null };
   draw(
     createElement(Dialog, {
       title: "Send feedback",
