@@ -496,6 +496,7 @@
 .integration-tools-list {
   min-height: 0;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--luke-color-border);
   overscroll-behavior: contain;

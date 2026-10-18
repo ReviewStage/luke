@@ -548,6 +548,7 @@ body,
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -877,6 +878,7 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -1399,6 +1401,7 @@ ul.actor-stack {
 
 .section-icon-scroll {
   height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -3246,6 +3249,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -3520,6 +3524,7 @@ body:has(.app-stage[data-capture="true"])
 .inbox-tasks-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -3777,6 +3782,65 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+/* A comment holding a form's composer field lets what stands over the
+   field, its @ and / lists, run past its top and foot, clipping only what
+   runs long across, as every comment does. */
+.inbox-comment-body:has(.inbox-field-composer) {
+  overflow-y: visible;
+}
+
+/* A form's fields stacked, each its name over its control at one left edge
+   (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
+   that may be left empty, a number in a short field, and a select's name
+   over its pills in the label's type, as a field's label stands. */
+.inbox-field-optional {
+  margin-left: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.inbox-field-name {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
+}
+
+.inbox-field-short {
+  max-width: calc(10 * var(--luke-space-16));
+}
+
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
+   drawn at a text field's size: a field's ground in a hairline, its line
+   at the field's insets, growing a line at a time to eight, and the
+   focused field's ground once the caret is in it, as a text field's is. */
+.inbox-field-composer {
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-field-composer:focus-within {
+  background: var(--luke-color-input-focus);
+}
+
+.inbox-field-composer .agent-composer-field {
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
+}
+
+.inbox-field-composer .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-control-inset);
+}
+
 /* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
    ticked in the complete green, and under a hairline a pill saying it could
    not be done, filled in the danger tint once picked. Each pick wears its
@@ -3887,6 +3951,41 @@ body:has(.app-stage[data-capture="true"])
 .inbox-todo-step:disabled,
 .inbox-todo-pill:disabled {
   opacity: 0.4;
+}
+
+/* A settled form's values, a field a line in the form's order: its name in
+   the muted ink, then what was put in it, a text field's words drawn as a
+   sent message's are, their mentions chips. */
+.inbox-values {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--luke-space-8);
+}
+
+/* A name too long for the line, one unbroken word, wraps anywhere rather
+   than pushing the value past the comment's clip. */
+.inbox-value-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
+}
+
+.inbox-value-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4555,6 +4654,7 @@ body:has(.app-stage[data-capture="true"])
 .automations-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
@@ -4923,6 +5023,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
@@ -4958,6 +5059,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-rail-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -5042,6 +5144,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5733,6 +5836,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 8vh;
 }
@@ -5841,6 +5945,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: var(--column-inset);
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--luke-color-ground);
 }
@@ -5902,6 +6007,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
@@ -6279,6 +6385,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
@@ -6996,6 +7103,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--luke-space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -7188,6 +7296,7 @@ body:has(.app-stage[data-capture="true"])
 .home-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }

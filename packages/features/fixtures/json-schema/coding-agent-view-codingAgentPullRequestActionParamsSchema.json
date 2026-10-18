@@ -396,6 +396,26 @@
             "action": {
               "type": "string",
               "enum": [
+                "comment"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          },
+          "required": [
+            "action",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
                 "add-reaction",
                 "remove-reaction"
               ]

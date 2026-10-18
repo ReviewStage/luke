@@ -515,6 +515,21 @@ export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMerge
   yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });
 
+const COMMENT_MUTATION = `mutation($id: ID!, $body: String!) {
+  addComment(input: { subjectId: $id, body: $body }) { commentEdge { node { id } } }
+}`;
+
+/** A comment on the pull request itself, at the foot of its conversation, on the member's token. */
+export const commentOnPullRequest = /* @__PURE__ */ Effect.fn("web/commentOnPullRequest")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    body: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* githubWrite(token, COMMENT_MUTATION, { id: pullRequestId, body }, Schema.Unknown);
+  },
+);
+
 const CLOSE_MUTATION = `mutation($id: ID!) {
   closePullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
 }`;

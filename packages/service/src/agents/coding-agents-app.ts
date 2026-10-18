@@ -84,6 +84,7 @@ import {
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
+  commentOnPullRequest,
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
@@ -256,8 +257,8 @@ import {
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
  * its words as GitHub renders them. A change to that pull request
  * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
- * review, submitting a review, or replying on or resolving a review
- * thread, is made on GitHub as the member who asks, on their own GitHub
+ * review, submitting a review, replying on or resolving a review thread,
+ * or commenting on it, is made on GitHub as the member who asks, on their own GitHub
  * sign-in and never the App's, through the one seam every such change takes
  * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
  * published answer is let go, so the next read asks GitHub afresh. What the
@@ -1171,6 +1172,8 @@ function writeOf(
         request.threadId,
         request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD,
       );
+    case PULL_REQUEST_ACTION.COMMENT:
+      return commentOnPullRequest(token, id, request.body);
     case PULL_REQUEST_ACTION.ADD_REACTION:
     case PULL_REQUEST_ACTION.REMOVE_REACTION:
       return reactOnPullRequest(token, id, {
