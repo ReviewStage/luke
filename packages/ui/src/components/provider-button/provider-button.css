@@ -59,9 +59,9 @@
     opacity: 0.4;
   }
 
-  /* The provider's own mark, at the size its guidelines draw beside a label,
-     and the ring that stands in its place while its sign-in is waited on. */
-  .luke-provider-button :is(.provider-mark, .luke-provider-button-wait) {
+  /* The ring that stands in the mark's place while its sign-in is waited on,
+     at the mark's own size (`PROVIDER_MARK_SIZE.ICON`). */
+  .luke-provider-button-wait {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;

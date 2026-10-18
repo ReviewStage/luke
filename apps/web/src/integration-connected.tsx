@@ -7,7 +7,7 @@ import {
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
-import { AuthPage, ProviderMark } from "@luke/ui";
+import { AuthPage, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
@@ -76,7 +76,7 @@ function IntegrationConnected(): React.JSX.Element {
           </span>
         ) : (
           <ConnectionGraphic
-            mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
+            mark={<ProviderMark provider={landing.provider} size={PROVIDER_MARK_SIZE.TILE} />}
           />
         )
       }

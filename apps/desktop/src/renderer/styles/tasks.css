@@ -4960,12 +4960,6 @@ ol.transcript-list {
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.agent-servers-page-head .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: none;
-}
-
 .agent-servers-page-title {
   overflow: hidden;
   color: var(--luke-color-text);

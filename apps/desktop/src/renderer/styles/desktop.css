@@ -2849,10 +2849,10 @@ ul.actor-stack {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A harness's or a provider's mark keeps its box in a row however tight the
-   row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
-   traced ones (`@luke/ui`'s `ProviderMark`) do. */
-:is(.harness-mark, .provider-mark) {
+/* A harness's mark keeps its box in a row however tight the row is, drawn
+   as an image (`harness-marks.tsx`) as the traced provider marks
+   (`@luke/ui`'s `ProviderMark`) keep theirs. */
+.harness-mark {
   flex: 0 0 auto;
 }
 
@@ -4839,11 +4839,6 @@ body:has(.app-stage[data-capture="true"])
   display: inline-flex;
   align-items: center;
   gap: var(--luke-space-4);
-}
-
-.automation-servers > .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
 }
 
 /* A picker here grows from a Settings picker's width to name its whole

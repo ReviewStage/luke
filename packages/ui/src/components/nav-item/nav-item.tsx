@@ -31,6 +31,10 @@ import { ChevronRightIcon } from "../../face/glyphs.js";
  * gives way first, so the name stays whole. An `unread` row reads in the
  * heavier weight and the primary ink until it is looked at.
  *
+ * A NavItemLink is a row's look on a link, for a place with an address of
+ * its own: the browser follows it, so a modified click opens it in a new tab
+ * as any link does, and its caller's `onClick` may take a plain one instead.
+ *
  * A row that drops a menu takes the props `useMenu().trigger()` hands out
  * (`menu`), and is lit while its menu stands. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
@@ -160,6 +164,46 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
         </span>
       ) : null}
     </span>
+  );
+}
+
+/** A place in a column at an address: `icon` and its name, going to `href` when pressed. */
+export function NavItemLink({
+  href,
+  icon,
+  children,
+  current,
+  title,
+  onClick,
+  ...props
+}: {
+  href: string;
+  /** The glyph before its name, decoration a reader is not told. */
+  icon?: ReactNode;
+  /** Its name. */
+  children: ReactNode;
+  /** Whether, and as what, it is the place shown. */
+  current?: NavCurrent | undefined;
+  /** Its name as a pointer's hint, where its words are not drawn whole. */
+  title?: string | undefined;
+  /** Called as the press leaves, before the browser follows the link. */
+  onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
+  /** Its name, where the words drawn do not say the whole of it. */
+  "aria-label"?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <a
+      className="luke-nav-item"
+      data-variant={NAV_ITEM_VARIANT.ROW}
+      href={href}
+      title={title}
+      aria-label={props["aria-label"]}
+      aria-current={current}
+      onClick={onClick}
+    >
+      {said(icon) ? <Glyph icon={icon} folds={false} /> : null}
+      <span className="luke-nav-item-name">{children}</span>
+    </a>
   );
 }
 

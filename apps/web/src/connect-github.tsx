@@ -14,7 +14,14 @@ import {
   githubConnectClaimAnswerSchema,
 } from "@luke/features/github-connection-wire";
 import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
-import { AuthPage, MARK_PROVIDER, ProviderMark, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
+import {
+  AuthPage,
+  MARK_PROVIDER,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
+  TEXT_LINK_LOOK,
+  TextLink,
+} from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
@@ -166,7 +173,7 @@ function ConnectGitHub(): React.JSX.Element {
     <AuthPage
       mark={
         <ConnectionGraphic
-          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.TILE} />}
         />
       }
       title={view.kind === VIEW.WORKING ? "Connecting GitHub…" : view.title}
