@@ -571,9 +571,25 @@ function swiped(label = "Read") {
   return { container, item, press, acted, opened, redraw: draw };
 }
 
-/** A pointer event of the first pointer at `x`, `y`. */
-function pointer(type: string, x: number, y = 10): PointerEvent {
-  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+/** An event stamped as the window would have stamped it, `at` milliseconds in. */
+function stamped<E extends Event>(event: E, at: number): E {
+  Object.defineProperty(event, "timeStamp", { value: at });
+  return event;
+}
+
+/**
+ * A pointer event of the first pointer at `x`, `y`, stamped `at` milliseconds
+ * in. Note that every one is stamped, at one instant unless a test says
+ * otherwise, because the swipe reads the hand's speed off the stamps and
+ * jsdom's own come off the wall clock, so a busy machine would make a slow
+ * drag a flick; and never at 0, which React reads as no stamp and replaces
+ * with the wall clock's.
+ */
+function pointer(type: string, x: number, y = 10, at = 1): PointerEvent {
+  return stamped(
+    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 }),
+    at,
+  );
 }
 
 /** A press on `target` dragged right by each of `steps` in turn, from x 10, left held down. */
@@ -729,9 +745,11 @@ function trackpad() {
     act(() => {
       for (const frame of frames.splice(0)) frame(time);
     });
-  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0, at?: number): boolean => {
-    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY });
-    if (at !== undefined) Object.defineProperty(event, "timeStamp", { value: at });
+  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0, at = 1): boolean => {
+    const event = stamped(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY }),
+      at,
+    );
     act(() => {
       item.dispatchEvent(event);
     });
@@ -853,25 +871,19 @@ test("a pointer's swipe interrupted and let go off the row leaves no click to sw
   expect([acted, opened]).toEqual([[], ["open"]]);
 });
 
-/** An event stamped as the window would have stamped it, `at` milliseconds in. */
-function stamped<E extends Event>(event: E, at: number): E {
-  Object.defineProperty(event, "timeStamp", { value: at });
-  return event;
-}
-
-/** A press on `target` moved through each `[dx, at]` in turn, from x 10 at time 0, then let go at the last. */
+/** A press on `target` moved through each `[dx, at]` in turn, from x 10, then let go at the last. */
 function flick(target: HTMLElement, ...moves: [number, number][]): void {
   act(() => {
-    target.dispatchEvent(stamped(pointer("pointerdown", 10), 0));
+    target.dispatchEvent(pointer("pointerdown", 10));
   });
   for (const [dx, at] of moves) {
     act(() => {
-      target.dispatchEvent(stamped(pointer("pointermove", 10 + dx), at));
+      target.dispatchEvent(pointer("pointermove", 10 + dx, 10, at));
     });
   }
   const [dx, at] = moves[moves.length - 1] ?? [0, 0];
   act(() => {
-    target.dispatchEvent(stamped(pointer("pointerup", 10 + dx), at + 4));
+    target.dispatchEvent(pointer("pointerup", 10 + dx, 10, at + 4));
     target.dispatchEvent(pointerClick());
   });
 }
