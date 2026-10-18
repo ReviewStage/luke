@@ -239,6 +239,8 @@ function conversationExchange(
     const said = newest.findLast((record) => saidByDeveloper(record.message));
     const answered = answerToDeveloper(newest, yield* turnsNoticed(target, tools, newest));
     const opened = saidByDeveloper(first?.message) ? first : undefined;
+    // An answer to no word of the developer's, as to a wake the brain took before anyone spoke, names nothing.
+    if (origin === null && opened === undefined && said === undefined) return "";
     return [
       {
         speaker: SPEAKER.DEVELOPER,

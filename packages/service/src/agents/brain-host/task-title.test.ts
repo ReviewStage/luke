@@ -46,7 +46,7 @@ function scriptedTitleModel(title: string) {
 }
 
 /** A task started with `name`, or none, its conversation opened, and a talk with Luke in it. */
-const openTalkedTask = (name?: string) =>
+const openTalkedTask = (name?: string, spoke = true) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const organizationId = yield* openWorkspace(owner);
@@ -72,9 +72,13 @@ const openTalkedTask = (name?: string) =>
         metadata: { author: MESSAGE_AUTHOR.BRAIN },
       },
     ];
+    // A conversation the developer has not spoken in holds the brain's wake and its answer alone.
+    const said = spoke
+      ? rows
+      : rows.filter((row) => row.text !== "Invited teammates never get the email.");
     yield* Database.use((db) =>
       db.insert(messages).values(
-        rows.map((row, index) => ({
+        said.map((row, index) => ({
           userId: owner,
           conversationId,
           seq: index + 1,
@@ -135,6 +139,18 @@ it.layer(getTestDB())("a task's generated name", (it) => {
       yield* titleTask(model, owner, target, yield* named());
       assert.equal(asked.length, 0);
       assert.equal((yield* named()).task.name, "Invites");
+    }),
+  );
+
+  it.effect("a wake Luke answered before the developer said anything names nothing", () =>
+    Effect.gen(function* () {
+      const { owner, target, named } = yield* openTalkedTask(undefined, false);
+      yield* ranTurns(target, 1);
+      const { model, asked } = scriptedTitleModel("Watch the agent list");
+
+      yield* titleTask(model, owner, target, yield* named());
+      assert.equal(asked.length, 0);
+      assert.equal((yield* named()).task.name, UNTITLED_TASK_NAME);
     }),
   );
 

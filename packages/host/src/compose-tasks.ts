@@ -878,8 +878,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * the page says it is still written or the call woke it meanwhile. A read
    * the service did not answer is asked again after the backoff; a task it
    * no longer holds, or a gate that closed, ends the follow. A follow of an
-   * Untitled task that saw the brain writing and then settled asks for the
-   * list again, for the name the turn may have given the task.
+   * Untitled task that finds a turn settled, one it saw the brain writing or
+   * one a settled page carries words of, asks for the list again, for the
+   * name the turn may have given the task, and draws it on the open document.
    */
   function followConversation(taskId: string, newest: boolean) {
     return Effect.gen(function* () {
@@ -901,7 +902,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const untitled = view.tasks.some(
           (row) => row.id === taskId && row.name === UNTITLED_TASK_NAME,
         );
-        if (!writing && wasWriting && untitled) Queue.offerUnsafe(nameReads, taskId);
+        // A turn that settled before this follow's first page is caught by the page's words.
+        const settledTurn = wasWriting || page.value.messages.length > 0;
+        if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
         wasWriting = writing;
         if (!writing && !conversationWoken) return;
         after = page.value.cursor;
@@ -1005,6 +1008,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (view.activeTaskId !== taskId) return;
     Queue.offerUnsafe(callEndReads, taskId);
     wakeConversation(taskId);
+  }
+
+  /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
+  function nameHeldAsListed(taskId: string): void {
+    const held = heldTaskOf(taskId);
+    const listed = view.tasks.find((row) => row.id === taskId);
+    if (held === undefined || listed === undefined || listed.name === held.name) return;
+    write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
   }
 
   /** Draws `task` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -2028,10 +2039,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
       yield* Effect.forkScoped(
         Effect.forever(
-          Effect.flatMap(Queue.take(nameReads), () =>
+          Effect.flatMap(Queue.take(nameReads), (taskId) =>
             Effect.andThen(
               Effect.sleep(NAME_SETTLE),
-              Effect.suspend(() => (gate() ? serial(readList) : Effect.void)),
+              Effect.suspend(() =>
+                gate()
+                  ? serial(
+                      Effect.andThen(
+                        readList,
+                        Effect.sync(() => nameHeldAsListed(taskId)),
+                      ),
+                    )
+                  : Effect.void,
+              ),
             ),
           ),
         ),
