@@ -1794,50 +1794,6 @@
   margin: 0;
 }
 
-.pull-request-review-events {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.pull-request-review-event {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-}
-
-.pull-request-review-event:has(input:checked) {
-  border-color: var(--luke-color-border-strong);
-  background: var(--luke-color-fill-selected);
-}
-
-.pull-request-review-events:disabled .pull-request-review-event {
-  opacity: 0.6;
-}
-
-.pull-request-review-event input {
-  margin: var(--luke-space-2) 0 0;
-  accent-color: var(--luke-color-accent);
-}
-
-.pull-request-review-event-words {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  min-width: 0;
-}
-
-.pull-request-review-event-label {
-  font-weight: var(--luke-weight-semibold);
-}
-
 .pull-request-review-note {
   margin: 0;
   color: var(--luke-color-text-muted);
@@ -2112,17 +2068,6 @@
   height: 13px;
 }
 
-/* The App that runs a check, by its square logo as GitHub draws an App. */
-.pull-request-check-avatar {
-  display: block;
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-hover);
-  object-fit: cover;
-}
-
 .pull-request-check {
   display: flex;
   width: 100%;
@@ -2271,6 +2216,36 @@ button.pull-request-check:hover {
   overflow: clip;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
+}
+
+/* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
+   InlineThread): Pierre stands it under its line, in the diff's light DOM,
+   so the window's own type and card draw it, inset from the code's edges
+   as GitHub's are; an outdated one stands in a list above the diff. */
+.diff-note {
+  padding: var(--space-6) var(--space-12);
+  font-family: var(--luke-font-sans);
+  white-space: normal;
+}
+
+.diff-inline-thread {
+  --focus-ring-offset: var(--focus-ring-inset);
+  max-width: 720px;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.diff-outdated-threads {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  list-style: none;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .pull-request-thread-head {
@@ -3426,6 +3401,13 @@ button.draft-fork-quote:hover {
    on the composer's own inset, so its card and the composer's line up; a
    column or a panel that pads the composer in pads the list in alike. */
 .agent-todos-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
+/* The agent's pull request's row (agent-published.tsx), pinned over the
+   composer under the docked to-do list on the same inset, so the row, the
+   list, and the composer's card line up. */
+.agent-published-dock {
   padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
@@ -5053,7 +5035,7 @@ button.attached-file-face:hover img {
   --context-part: var(--luke-color-text-muted);
 }
 
-/* The published chip's box (agent-published.tsx) draws no box of its
+/* The branch's chip's box (agent-published.tsx) draws no box of its
    own, so the chip stands in the composer's row as the row's own. */
 .agent-published-chip {
   display: contents;
@@ -5117,7 +5099,7 @@ button.attached-file-face:hover img {
   color: var(--luke-color-text-subtle);
 }
 
-/* The pull request's row at a finished transcript's end: a boxed line, the
+/* The pull request's row pinned over the composer: a boxed line, the
    whole of it the button that opens the pull request, drawn as the
    subagent's row is and for the same reason written here. The lines it
    adds and removes read in the success green and the danger red, in
@@ -5330,83 +5312,6 @@ button.subagent-line:hover {
 }
 
 /* Inbox ----------------------------------------------------------------------- */
-
-/* A choice's option on the Inbox (`inbox-pane.tsx`): a row the width of
-   its card, its label over its trade-off, picked the way Settings' segments
-   are (`.segment`), the fill of a chosen segment once pressed, ringed
-   so it reads apart from the hover that shares the fill. The
-   one control of the tab with no kin elsewhere, since no other pick-one
-   carries a line of detail. */
-.inbox-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.inbox-option:hover:not(:disabled) {
-  background: var(--luke-color-fill-strong);
-}
-
-.inbox-option[aria-pressed="true"],
-.inbox-option[data-picked="true"] {
-  background: var(--luke-color-fill-strong);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-/* A settled item keeps every option it offered: the pick wears the
-   pressed look, and the rest step back to an outline in muted words. */
-.inbox-option[data-picked="false"] {
-  background: none;
-  box-shadow: inset 0 0 0 1px var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-}
-
-.inbox-picked {
-  margin-left: var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-.inbox-picked svg {
-  width: 13px;
-  height: 13px;
-  margin-right: var(--luke-space-2);
-  vertical-align: -2px;
-}
-
-.inbox-option:disabled {
-  opacity: 0.4;
-}
-
-/* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
-   agent's recommendation as a badge at the option's top right, so it stands
-   in one place however the label wraps. The badge is the app's badge
-   in the accent's fill, the primary button's,
-   while the item waits, and steps back to the quiet badge once it is
-   settled. It sits on the label's first line, centred on its 13px words. */
-.inbox-option-head {
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--luke-space-8);
-}
-
-/* The label gives the badge its room: it shrinks past its longest word,
-   and a word too long for what is left, a path or an identifier, breaks
-   anywhere rather than pushing the badge out past the option's edge. */
-.inbox-option-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 
 /* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
    words, below, whose room around it is the card's gap between blocks. */

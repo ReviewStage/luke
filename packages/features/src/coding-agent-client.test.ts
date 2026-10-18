@@ -294,6 +294,49 @@ it.effect(
 );
 
 it.effect(
+  "marks an inbox item read with a PUT and unread with a DELETE at the item's read path, every item read with a PUT naming the workspace, reads an item the account cannot reach as not found, and sends nothing for a workspace that is no id",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const api = fakeCloudApi({
+        [`PUT /api/inbox/${itemId}/read`]: { answer: () => ({ id: itemId, unread: false }) },
+        [`DELETE /api/inbox/${itemId}/read`]: { answer: () => ({ id: itemId, unread: true }) },
+        "PUT /api/inbox/read": { answer: () => ({ marked: 3 }) },
+      });
+      const refusing = fakeCloudApi({
+        [`PUT /api/inbox/${itemId}/read`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().markInboxItemRead(itemId), api.layer);
+      const unread = yield* Effect.provide(client().markInboxItemUnread(itemId), api.layer);
+      const all = yield* Effect.provide(
+        client().markInboxRead({ workspaceId: WORKSPACE_ID }),
+        api.layer,
+      );
+      const everywhere = yield* Effect.provide(client().markInboxRead(), api.layer);
+      const missing = yield* Effect.provide(client().markInboxItemRead(itemId), refusing.layer);
+      const malformed = yield* Effect.provide(
+        client().markInboxRead({ workspaceId: "" }),
+        api.layer,
+      );
+
+      assert.deepEqual(read, { id: itemId, unread: false });
+      assert.deepEqual(unread, { id: itemId, unread: true });
+      assert.deepEqual([all, everywhere], [{ marked: 3 }, { marked: 3 }]);
+      assert.deepEqual(
+        api.requests().map((sent) => sent.body),
+        [undefined, undefined, JSON.stringify({ workspaceId: WORKSPACE_ID }), "{}"],
+      );
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(malformed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 4, "nothing is sent for a workspace that is no id");
+    }),
+);
+
+it.effect(
   "lists a workspace's agents by its id and the repository named, and a workspace the account is not in as not found",
   () =>
     Effect.gen(function* () {

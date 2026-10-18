@@ -100,14 +100,14 @@ function lastUsedBadges(container: HTMLElement) {
 }
 
 test("the provider this Mac last signed in with wears the one Last used badge, outside its label", () => {
-  for (const [lastUsed, other] of [
-    [ACCOUNT_PROVIDER.GOOGLE, "Continue with GitHub"],
-    [ACCOUNT_PROVIDER.GITHUB, "Continue with Google"],
+  for (const [lastUsed, own, other] of [
+    [ACCOUNT_PROVIDER.GOOGLE, "Continue with Google", "Continue with GitHub"],
+    [ACCOUNT_PROVIDER.GITHUB, "Continue with GitHub", "Continue with Google"],
   ] as const) {
     const container = mount(gate({ lastUsed }));
     const badges = lastUsedBadges(container);
     assert.equal(badges.length, 1);
-    assert.equal(badges[0]?.described?.getAttribute("data-provider"), lastUsed);
+    assert.equal(badges[0]?.described, button(container, own));
     assert.equal(badges[0]?.described?.contains(badges[0].badge), false);
     assert.equal(button(container, other).hasAttribute("aria-describedby"), false);
   }
@@ -128,12 +128,15 @@ test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes 
     }),
   );
   const waiting = button(container, "Waiting for browser…");
-  assert.equal(waiting.getAttribute("data-provider"), ACCOUNT_PROVIDER.GITHUB);
   assert.equal(waiting.disabled, true);
   assert.equal(button(container, "Continue with Google").disabled, true);
+  assert.equal(
+    buttons(container).some((each) => each.textContent === "Continue with GitHub"),
+    false,
+  );
   assert.deepEqual(
-    lastUsedBadges(container).map(({ described }) => described?.getAttribute("data-provider")),
-    [ACCOUNT_PROVIDER.GITHUB],
+    lastUsedBadges(container).map(({ described }) => described),
+    [waiting],
   );
   act(() => button(container, "Cancel").click());
   assert.equal(cancelled, 1);

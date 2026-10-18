@@ -5,20 +5,17 @@ import {
   CHANGED_FILE_STATUS,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
+  DIFF_SIDE,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettingsView } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
-import { stateWith } from "#testing/app-state";
+import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
@@ -26,6 +23,7 @@ import { codingAgentsControl } from "#testing/tasks-control";
 import { appBridge } from "../app-bridge";
 import type { SideBundles } from "../bundle-loader";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import type { ChangesThreads } from "./agent-changes-tab";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -60,6 +58,8 @@ const PATCH = [
   "+const extra = 1;",
 ].join("\n");
 
+const PAGE = "https://github.com/acme/relay/pull/7";
+
 const control = codingAgentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
@@ -86,42 +86,6 @@ const control = codingAgentsControl({
       },
     }),
 });
-
-/**
- * Hands the window main's document with its settings as given, and answers
- * each settings write as main does: stored, then the document delivered
- * again to every listener, so a surface draws the setting it wrote and the
- * next surface drawn reads it, the write answered as accepted. Any other act
- * is refused.
- */
-function handSettings(settings: Partial<AppSettingsView> = {}): void {
-  let view: AppSettingsView = Object.assign(settingsView(), settings);
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(snapshot()),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
-          reason: "Not in this test.",
-        });
-      }
-      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
-      const next = snapshot();
-      for (const listener of listeners) listener(next);
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
-      });
-    },
-  });
-}
 
 /** What the stand-in bundle was handed, mount first, each draw after it. */
 let drawn: DiffViewProps[] = [];
@@ -163,7 +127,7 @@ afterEach(() => {
 });
 
 /** Draws the agent's Files changed view, its read landed, and answers what the diff was last drawn with. */
-async function drawTab(): Promise<DiffViewProps> {
+async function drawTab(threads?: ChangesThreads): Promise<DiffViewProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab");
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -181,6 +145,7 @@ async function drawTab(): Promise<DiffViewProps> {
             shown: true,
             repository: "acme/relay",
             tree: { open: false, onToggle: () => undefined },
+            threads,
           }),
         ),
       ),
@@ -380,4 +345,66 @@ test("a refused write is said under its row, and the row can be pressed again", 
   );
   assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
+});
+
+/** A review thread on the seats file, on its new side's line, or outdated where its line is gone. */
+function seatsThread(line: number | null, words: string) {
+  return {
+    path: "src/seats.ts",
+    line,
+    startLine: null,
+    originalLine: 2,
+    originalStartLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    diffHunk: PATCH,
+    resolved: false,
+    outdated: line === null,
+    comments: [
+      {
+        by: { login: "octo", bot: false },
+        html: null,
+        body: words,
+        at: 1,
+        url: `${PAGE}#${words}`,
+      },
+    ],
+    more: 0,
+  };
+}
+
+test("a review thread is drawn under its line in the diff, and one a push outdated stands above the diff", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  const props = await drawTab(threads);
+
+  assert.deepEqual(props.annotations, [{ key: `${PAGE}#why-42`, side: "additions", line: 2 }]);
+  const note = props.renderAnnotation?.(`${PAGE}#why-42`) ?? assert.fail("the note has an element");
+  assert.equal(note.textContent, "why-42");
+  const above =
+    document.querySelector('[aria-label="Comments on lines this diff does not show"]') ??
+    assert.fail("the outdated thread stands above the diff");
+  assert.equal(above.textContent, "was-3");
+});
+
+test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
+  let threadReads = 0;
+  await drawTab({
+    list: [],
+    draw: () => null,
+    refresh: () => {
+      threadReads += 1;
+    },
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+
+  assert.equal(threadReads, 1);
 });

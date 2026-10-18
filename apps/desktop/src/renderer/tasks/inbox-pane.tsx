@@ -24,10 +24,11 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   BackIcon,
-  Badge,
+  CHOICE_SELECT,
   ChevronRightIcon,
+  ChoiceList,
+  type ChoiceOption,
   DISCLOSURE_BODY,
   Disclosure,
   DisclosureBody,
@@ -37,10 +38,8 @@ import {
   type FoldingButtonHint,
   FormField,
   GAP,
-  LAYOUT_ELEMENT,
   Stack,
   Switch,
-  TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -99,7 +98,6 @@ import {
   THREAD_ENTRY,
   threadCut,
   threadEntries,
-  withChoice,
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
@@ -479,42 +477,22 @@ function Blocks({
   );
 }
 
-/**
- * An option's head: its label, what is said of it beside the label, and,
- * where the agent recommended it, a badge at the option's top right, so it
- * stands in one place however the label wraps. The badge wears the
- * working tone while the item waits and steps back to the quiet badge once
- * it is settled, when the recommendation is history rather than a call to
- * act. It is drawn inside the option alone, so wherever an option is drawn
- * it wears it.
- */
-function OptionHead({
-  label,
-  recommended,
-  settled,
-  children,
-}: {
-  label: string;
-  recommended: boolean;
-  settled: boolean;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <span className="inbox-option-head">
-      <span className="inbox-option-label">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-          {label}
-        </Text>
-        {children}
-      </span>
-      {recommended ? (
-        <Badge tone={settled ? BADGE_TONE.NEUTRAL : BADGE_TONE.WORKING}>Recommended</Badge>
-      ) : null}
-    </span>
-  );
+/** The words a choice's open options are named by, for a reader that does not see the question over them. */
+const CHOICE_LEGEND = "Options";
+
+/** A choice's options as `@luke/ui`'s ChoiceList draws them, the one the agent recommends wearing its badge. */
+export function choiceOptions(
+  options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
+): ChoiceOption<string>[] {
+  return options.map((option) => ({
+    value: option.label,
+    label: option.label,
+    detail: option.detail,
+    badge: option.recommended ? "Recommended" : undefined,
+  }));
 }
 
-/** A choice's options, each pressed to pick it, the one the agent recommends wearing its badge; several stay pressed where the choice allows. */
+/** A choice's options, each pressed to pick it and pressed again to let it go; several stay picked where the choice allows. */
 export function ChoiceOptions({
   choice,
   draft,
@@ -527,29 +505,23 @@ export function ChoiceOptions({
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const multiple = choice.multiple === true;
+  const options = choiceOptions(
+    choice.options.map((option) => ({
+      ...option,
+      recommended: choice.recommended === option.label,
+    })),
+  );
   return (
     <Stack gap={GAP.TIGHT}>
-      {choice.options.map((option) => (
-        <button
-          key={option.label}
-          type="button"
-          aria-pressed={draft.choices.includes(option.label)}
-          className="inbox-option"
-          disabled={disabled}
-          onClick={() => onDraft(withChoice(draft, option.label, multiple))}
-        >
-          <OptionHead
-            label={option.label}
-            recommended={choice.recommended === option.label}
-            settled={false}
-          />
-          {option.detail === undefined ? null : (
-            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {option.detail}
-            </Text>
-          )}
-        </button>
-      ))}
+      <ChoiceList
+        legend={CHOICE_LEGEND}
+        options={options}
+        value={draft.choices}
+        select={multiple ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
+        clearable
+        disabled={disabled}
+        onChange={(choices) => onDraft({ ...draft, choices: [...choices] })}
+      />
       {multiple ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           Pick any that apply.
@@ -739,40 +711,29 @@ function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.
 }
 
 /**
- * What a settled item offered, as the Inbox's own option rows: the
- * developer's pick in the look of a picked option, a check and whose pick
- * it was, "[disc] Your pick" or "[disc] Charles Pan’s pick", beside its
- * label, and the rest stepped back to an outline, so what was offered and
- * what was chosen read together. The option the agent recommended keeps
- * its badge, gone quiet.
+ * What a settled item offered, as a settled ChoiceList: the developer's
+ * pick in the look of a picked option, a check and whose pick it was,
+ * "Your pick" or "Charles Pan’s pick", beside its label, and the rest
+ * stepped back to an outline, so what was offered and what was chosen read
+ * together. The option the agent recommended keeps its badge.
  */
 function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} aria-label="What the agent offered">
-      {options.map((option) => (
-        <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
-          <OptionHead label={option.label} recommended={option.recommended} settled>
-            {option.picked ? (
-              <span className="inbox-picked">
-                <CheckIcon aria-hidden="true" />
-                <ActorLine>
-                  <ActorRef actor={answerer} possessive />
-                  {" pick"}
-                </ActorLine>
-              </span>
-            ) : null}
-          </OptionHead>
-          {option.detail === undefined ? null : (
-            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {option.detail}
-            </Text>
-          )}
-        </li>
-      ))}
-    </Stack>
+    <ChoiceList
+      legend="What the agent offered"
+      options={choiceOptions(options)}
+      value={options.filter((option) => option.picked).map((option) => option.label)}
+      settled
+      pickedNote={
+        <ActorLine>
+          <ActorRef actor={answerer} possessive />
+          {" pick"}
+        </ActorLine>
+      }
+    />
   );
 }
 

@@ -10,6 +10,7 @@ import {
   type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -45,6 +46,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
+import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
@@ -604,7 +606,7 @@ it.effect(
 
       const rows = [...tab.querySelectorAll(".pull-request-check")];
       assert.equal(
-        rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[0]?.querySelector("img")?.getAttribute("src"),
         "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
         "an App's logo is drawn from GitHub's avatar host at its size",
       );
@@ -613,15 +615,11 @@ it.effect(
         "a picture GitHub's avatar host serves is never asked of the service",
       );
       assert.equal(
-        rows[1]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[1]?.querySelector("img")?.getAttribute("src"),
         `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
         "any other is drawn as the service read it",
       );
-      assert.equal(
-        rows[2]?.querySelector(".pull-request-check-avatar"),
-        null,
-        "no avatar, none drawn",
-      );
+      assert.equal(rows[2]?.querySelector(".lucide-bot"), null, "no avatar, none drawn");
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
 
       yield* TestClock.adjust("1 second");
@@ -687,7 +685,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     ["Deployed", "Failed"],
   );
   assert.equal(
-    deployments.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+    deployments.querySelector("img")?.getAttribute("src"),
     "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
   );
   const buttons = deployments.querySelectorAll<HTMLButtonElement>("button.pull-request-check");
@@ -1607,9 +1605,13 @@ function writeReview(panel: HTMLElement, words: string): void {
 /** Chooses what the review says by its label, and submits it. */
 async function submitReview(panel: HTMLElement, label: string): Promise<void> {
   const choice =
-    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    [
+      ...panel.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="What the review says"] [role="radio"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(label)) ??
     assert.fail(`the panel offers ${label}`);
-  act(() => choice.querySelector("input")?.click());
+  act(() => choice.click());
   const submit =
     [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
     assert.fail("the panel submits");
@@ -1628,10 +1630,10 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     }),
   );
   const panel = openReview(tab);
-  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
-    "Comment",
-    "Approve",
-    "Request changes",
+  assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
+    "CommentSubmit general feedback without approval.",
+    "ApproveApprove this pull request.",
+    "Request changesSubmit feedback that must be addressed.",
   ]);
 
   writeReview(panel, "Ship it once **CI** is green.");
@@ -1652,8 +1654,11 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const reopened = openReview(tab);
   assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
   assert.equal(
-    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
-    REVIEW_EVENT.COMMENT,
+    reopened
+      .querySelector('[aria-label="What the review says"] [aria-checked="true"]')
+      ?.textContent?.startsWith("Comment"),
+    true,
+    "a fresh review says Comment",
   );
 });
 
@@ -2054,4 +2059,124 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   );
   assert.equal(withId.querySelector("textarea")?.value, "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
+});
+
+test("Files changed draws each review thread under its line, its comments through the overview's own drawing, folded while Minimize inline comments is on", async () => {
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.COMMENTED,
+    html: null,
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    threads: [thread()],
+  } as const;
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 2,
+            deletions: 1,
+            omitted: null,
+            // The hunk as the pull request's files carry it, its header counting the lines it holds.
+            patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
+          },
+        ],
+      },
+    });
+  handSettings();
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({ pullRequest: { ...CONVERSATION, conversation: [review] } }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      readChanges,
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const minimize = async () => {
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+    const toggle = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+      (each) => each.getAttribute("aria-label") === "Minimize inline comments",
+    );
+    act(() => toggle?.click());
+    await settle();
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+  };
+
+  const file = previews.find(
+    (each) => each.annotations !== undefined && each.annotations.length > 0,
+  );
+  assert.deepEqual(file?.annotations, [
+    { key: `${PAGE}#discussion_r1`, side: "additions", line: 13 },
+  ]);
+  const note =
+    file?.renderAnnotation?.(`${PAGE}#discussion_r1`) ?? assert.fail("the thread is drawn");
+  assert.equal(
+    note.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,
+    "once",
+  );
+  assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
+  await minimize();
+  assert.equal(note.querySelector("details")?.open, false, "minimized, the thread stands folded");
+});
+
+test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
+  const flagged = thread({ id: "PRRT_flag" });
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 2,
+            deletions: 1,
+            omitted: null,
+            patch: flagged.diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
+          },
+        ],
+      },
+    });
+  const tab = await draw(
+    controlAnswering(
+      { conversation: () => Promise.resolve({ pullRequest: reviewWith([flagged]) }) },
+      PULL_REQUEST_STATE.OPEN,
+      readChanges,
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const note =
+    previews
+      .find((each) => each.annotations?.some((one) => one.line === 13))
+      ?.renderAnnotation?.(`${PAGE}#discussion_r1`) ??
+    assert.fail("the thread is drawn on its line");
+
+  writeReply(note, "Renamed.");
+  act(() => threadPress(note, "Reply").click());
+  await settle();
+  act(() => threadPress(note, "Resolve conversation").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.REPLY_TO_THREAD, threadId: "PRRT_flag", body: "Renamed." },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
 });

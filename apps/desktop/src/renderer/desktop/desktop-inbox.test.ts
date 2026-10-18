@@ -519,14 +519,10 @@ test("a settled choice folds what its agent offered to one line saying who picke
   );
   act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
-    [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
-      option.dataset.picked,
-      option.querySelector(".inbox-option-label > :first-child")?.textContent,
-      wordsOf(option.querySelector(".inbox-picked")),
-    ]),
+    [...offered.querySelectorAll<HTMLElement>("li")].map((option) => wordsOf(option)),
     [
-      ["true", "Retry 3 times over an hour", "Your pick"],
-      ["false", "Retry once", null],
+      "Retry 3 times over an hourYour pickRecommendedBacks off 5, 15, then 40 minutes.",
+      "Retry once",
     ],
   );
   assert.equal(
@@ -550,17 +546,14 @@ test("a settled choice folds what its agent offered to one line saying who picke
   );
 });
 
-/** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
-function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
+/** An item's options as a reader meets them: each row's words, its label, its Recommended badge where it wears one, and its detail; `settled` reads what a settled item offered rather than what a waiting one asks. */
+function optionHeads(page: HTMLElement, settled = false): (string | null)[] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
-  return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
-    const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
-    return [
-      each.querySelector(".inbox-option-label > :first-child")?.textContent,
-      head.endsWith("Recommended") ? "Recommended" : null,
-    ];
-  });
+  const rows = settled
+    ? '[aria-label="What the agent offered"] li'
+    : '[role="radio"], [role="checkbox"]';
+  return [...pane.querySelectorAll<HTMLElement>(rows)].map((each) => wordsOf(each));
 }
 
 /** The shown item's subject as a reader meets it: its title, and where its line says it stands, with whether it wears the attention mark. */
@@ -636,9 +629,9 @@ test("a teammate's open item does not need you: its subject's line says it waits
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
   const { page } = mount();
   await settle();
-  assert.deepEqual(optionHeads(page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended"],
-    ["Retry once", null],
+  assert.deepEqual(optionHeads(page), [
+    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
+    "Retry once",
   ]);
 
   act(() => root?.unmount());
@@ -650,13 +643,10 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
   const again = mount();
   await settle();
-  assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", null],
-    ["Retry once", null],
-  ]);
+  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour", "Retry once"]);
 });
 
-test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge, gone quiet", async () => {
+test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge", async () => {
   inboxes.set(BILLING.id, [
     THRESHOLD,
     { ...RETRY, answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] } },
@@ -667,16 +657,10 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   openOffered(page);
 
-  assert.deepEqual(optionHeads(page, "li.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended"],
-    ["Retry once", null],
+  assert.deepEqual(optionHeads(page, true), [
+    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
+    "Retry onceYour pick",
   ]);
-  const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
-  assert.equal(
-    picked?.querySelector(".inbox-option-label > :first-child")?.textContent,
-    "Retry once",
-  );
-  assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
 });
 
 test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
@@ -690,8 +674,14 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
   openOffered(pane);
-  const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
-  assert.equal(wordsOf(picked), "Charles Pan’s pick");
+  const picked =
+    [...pane.querySelectorAll('[aria-label="What the agent offered"] li')].find((option) =>
+      option.textContent?.includes("pick"),
+    ) ?? assert.fail("the pick is marked");
+  assert.equal(
+    wordsOf(picked),
+    "Retry 3 times over an hourCharles Pan’s pickRecommendedBacks off 5, 15, then 40 minutes.",
+  );
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(
     pane.querySelector("details[data-inbox-offered] summary")?.textContent,

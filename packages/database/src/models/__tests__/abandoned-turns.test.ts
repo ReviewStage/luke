@@ -10,13 +10,19 @@ import {
 } from "@luke/features/brain";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { settleEndedSessionTurn, sweepAbandonedTurns, TURN_ABANDON } from "../abandoned-turns.js";
+import {
+  settleEndedSession,
+  settleEndedSessionTurn,
+  sweepAbandonedTurns,
+  TURN_ABANDON,
+} from "../abandoned-turns.js";
 import { latestTurnsOfReached } from "../coding-agent-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "../writer.js";
 
@@ -31,17 +37,24 @@ import { type ConversationTarget, type StoreWriter, storeWriter } from "../write
 
 const STARTED_AT = 1_800_000_000_000;
 
+/** A conversation of a new account, of the kind given, recording the eve session given where one is. */
+const openConversation = (
+  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND],
+  runtimeSessionId?: string,
+) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    const conversationId = randomUUID();
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind, runtimeSessionId: runtimeSessionId ?? null });
+    return { userId, conversationId } satisfies ConversationTarget;
+  });
+
 /** A coding agent's conversation of a new account. */
-const openAgentConversation = Effect.gen(function* () {
-  const db = yield* Database;
-  const userId = `user-${randomUUID()}`;
-  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const conversationId = randomUUID();
-  yield* db
-    .insert(conversations)
-    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-  return { userId, conversationId } satisfies ConversationTarget;
-});
+const openAgentConversation = openConversation(CONVERSATION_KIND.CODING_AGENT);
 
 /** A turn of the conversation's: queued, begun by eve, or begun and ended as it succeeded; answers its id. */
 const turnIn = (
@@ -109,6 +122,86 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const settledTurn = yield* turnIn(writer, settled, TURN_STATUS.SETTLED);
         assert.equal(yield* settle(settled, settledTurn), false);
         assert.deepEqual(yield* newestTurnOf(settled), [TURN_STATUS.SETTLED, null]);
+      }),
+  );
+
+  it.effect(
+    "the end of a session settles the queued and running turns of the coding agent's conversation recording it once, and leaves an unknown session, a settled turn, a conversation that recorded a newer session, and one no coding agent's alone",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const writer = yield* storeWriter({ tools: {} });
+        const ended = [TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+        const endOf = (session: string) =>
+          settleEndedSession(writer, session, { now: STARTED_AT + 10 });
+
+        const session = `wrun_${randomUUID()}`;
+        const agent = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, session);
+        yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
+        yield* turnIn(writer, agent, TURN_STATUS.QUEUED);
+        assert.equal(yield* endOf(`wrun_${randomUUID()}`), 0, "an unknown session settles nothing");
+        assert.equal(yield* endOf(session), 2);
+        assert.deepEqual(yield* newestTurnOf(agent), ended);
+        assert.equal(yield* endOf(session), 0, "a repeated end settles nothing again");
+        assert.deepEqual(yield* newestTurnOf(agent), ended);
+
+        const idleSession = `wrun_${randomUUID()}`;
+        const idle = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, idleSession);
+        yield* turnIn(writer, idle, TURN_STATUS.SETTLED);
+        assert.equal(yield* endOf(idleSession), 0);
+        assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
+
+        const rotatedFrom = `wrun_${randomUUID()}`;
+        const rotated = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, rotatedFrom);
+        yield* db
+          .update(conversations)
+          .set({ runtimeSessionId: `wrun_${randomUUID()}` })
+          .where(eq(conversations.id, rotated.conversationId));
+        yield* turnIn(writer, rotated, TURN_STATUS.RUNNING);
+        assert.equal(
+          yield* endOf(rotatedFrom),
+          0,
+          "the newer session's turn is not the ended one's",
+        );
+        assert.deepEqual(yield* newestTurnOf(rotated), [TURN_STATUS.RUNNING, null]);
+
+        const brainSession = `wrun_${randomUUID()}`;
+        const brain = yield* openConversation(CONVERSATION_KIND.MAIN, brainSession);
+        yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
+        assert.equal(yield* endOf(brainSession), 0);
+        assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
+      }),
+  );
+
+  it.effect(
+    "the end of a session settles a turn a Stop was asked of as cancelled, and reads on past one batch until every open turn is settled",
+    () =>
+      Effect.gen(function* () {
+        const writer = yield* storeWriter({ tools: {} });
+
+        const stoppedSession = `wrun_${randomUUID()}`;
+        const stopped = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, stoppedSession);
+        const turnId = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
+        yield* writer.requestTurnCancel(stopped, { turnId, at: new Date(STARTED_AT + 5) });
+        assert.equal(
+          yield* settleEndedSession(writer, stoppedSession, { now: STARTED_AT + 10 }),
+          1,
+        );
+        assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
+
+        const busySession = `wrun_${randomUUID()}`;
+        const busy = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, busySession);
+        yield* turnIn(writer, busy, TURN_STATUS.RUNNING);
+        yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
+        yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
+        assert.equal(
+          yield* settleEndedSession(writer, busySession, { now: STARTED_AT + 10, limit: 2 }),
+          3,
+        );
+        assert.deepEqual(yield* newestTurnOf(busy), [
+          TURN_STATUS.FAILED,
+          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        ]);
       }),
   );
 

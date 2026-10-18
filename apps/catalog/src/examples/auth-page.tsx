@@ -5,7 +5,7 @@ import {
   Button,
   FormField,
   MARK_PROVIDER,
-  ProviderMark,
+  ProviderButton,
   TEXT_FIELD_TYPE,
   TextField,
   WingFace,
@@ -32,18 +32,18 @@ function Face(): React.JSX.Element {
 function ProviderChoices(): React.JSX.Element {
   return (
     <>
-      <Button
-        variant={BUTTON_VARIANT.OUTLINE}
-        icon={<ProviderMark provider={MARK_PROVIDER.GOOGLE} className="catalog-auth-provider" />}
-      >
-        Continue with Google
-      </Button>
-      <Button
-        variant={BUTTON_VARIANT.OUTLINE}
-        icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="catalog-auth-provider" />}
-      >
-        Continue with GitHub
-      </Button>
+      <ProviderButton
+        provider={MARK_PROVIDER.GOOGLE}
+        name="Google"
+        pendingLabel="Opening Google"
+        onPress={() => undefined}
+      />
+      <ProviderButton
+        provider={MARK_PROVIDER.GITHUB}
+        name="GitHub"
+        pendingLabel="Opening GitHub"
+        onPress={() => undefined}
+      />
     </>
   );
 }

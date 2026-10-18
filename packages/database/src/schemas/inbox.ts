@@ -88,6 +88,17 @@ export const inboxItem = pgTable(
     settledAt: timestamptz("settled_at"),
     /** When the item last changed, by the agent, an answer, or a message on its thread. */
     updatedAt: timestamptz("updated_at").notNull(),
+    /**
+     * The instant every member without a read marker of their own
+     * (`inbox-item-read.ts`) has read the item through: the instant unread
+     * was first kept, on an item that stood before it, so no item that stood
+     * then reads unread until it changes again; null on an item posted
+     * since, whose every change is unread until read. The migration that
+     * added it stamped the standing rows through the column's default, in
+     * the catalog rather than by a write of each row, and then dropped the
+     * default.
+     */
+    readThrough: timestamptz("read_through"),
   },
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.
