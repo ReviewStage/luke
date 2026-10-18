@@ -12,7 +12,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
-import type { SideBundles } from "../bundle-loader";
+import { type SideBundles, sideBundles } from "../bundle-loader";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
@@ -370,7 +370,7 @@ function scrollerOf(container: HTMLElement): HTMLElement {
   );
 }
 
-test("a press anywhere on an empty plan's room opens its text with the caret in it, taking the press", () => {
+test("a press anywhere on an empty plan's room opens its text with the caret in it, leaving the press to the page", () => {
   layTextOut();
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
@@ -379,7 +379,7 @@ test("a press anywhere on an empty plan's room opens its text with the caret in 
 
   const taken = pressAt(scroller, 300, 900);
 
-  assert.ok(taken, "the press is the text's, so nothing else takes the keyboard");
+  assert.ok(!taken, "a drag from the room still selects, as a press on a page does");
   assert.equal(open().markdown, "");
   assert.deepEqual(open().placement, PLACEMENT_END);
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
@@ -405,6 +405,40 @@ test("a press on a plan's room under its text opens it at the end, beside it on 
   assert.deepEqual(onLine, { x: 51, y: 180 }, "the nearest line, at the text's own edge");
   assert.ok(!taken, "a press above the text is not the text's");
   assert.ok(above.container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
+test("a press on the room while the editor's bundle loads is where the editor opens", async () => {
+  layTextOut();
+  const landed = bundles;
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  try {
+    const { container } = mount();
+    const scroller = scrollerOf(container);
+    pressAt(scroller, 300, 500);
+    pressAt(scroller, 10, 180);
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+    await settle();
+
+    assert.deepEqual(open().placement, { x: 51, y: 180 });
+  } finally {
+    bundles = landed;
+  }
+});
+
+test("a press on the room with words selected only clears them, opening nothing", () => {
+  layTextOut();
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  window.getSelection()?.selectAllChildren(goal);
+
+  const taken = pressAt(scrollerOf(container), 300, 500);
+
+  assert.ok(!taken, "the press clears the words, as a press anywhere does");
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
 test("a press on the room while the text is open moves its caret there and keeps the editor open", () => {

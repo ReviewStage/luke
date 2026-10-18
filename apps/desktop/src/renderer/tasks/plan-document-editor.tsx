@@ -175,24 +175,28 @@ function landsInRoom(event: MouseEvent, room: HTMLElement, text: HTMLElement): b
  * while it is closed and moves the caret while it is open. `text` is what
  * holds the text, or the column it would stand in while none is drawn;
  * `box` is where its words stand now. The room is `room` where given, and
- * otherwise the scrolling column around the text. Note that the press
- * itself is taken, so focus stays in an open editor and nothing else takes
- * it, and that a press that ends a selection places nothing.
+ * otherwise the scrolling column around the text. Note that while the
+ * editor is `open` the press itself is taken, so focus stays in it, and
+ * that a press made with words selected only clears them, as it would
+ * anywhere, and one that ends a selection places nothing.
  */
 export function useTextRoom({
   text,
   box,
   room,
+  open,
   onPlace,
 }: {
   text: React.RefObject<HTMLElement | null>;
   box: () => TextBox | undefined;
+  /** Whether the editor stands open, whose focus a press on the room keeps. */
+  open: boolean;
   room?: React.RefObject<HTMLElement | null> | undefined;
   /** Puts the caret where a press on the room asks; none where the text takes no caret. */
   onPlace: ((placement: PlanEditorPlacement) => void) | undefined;
 }): void {
-  const latest = useRef({ box, onPlace });
-  latest.current = { box, onPlace };
+  const latest = useRef({ box, onPlace, open });
+  latest.current = { box, onPlace, open };
   const placing = onPlace !== undefined;
   // The text's element as last drawn, which the listeners are put on again once it changes, as an editor's bundle landing changes it.
   const [held, setHeld] = useState<HTMLElement | null>(null);
@@ -204,12 +208,19 @@ export function useTextRoom({
     if (!placing || held === null || column === undefined || column === null) return;
     const placement = (event: MouseEvent) =>
       landsInRoom(event, column, held) ? roomPlacement(event, latest.current.box()) : undefined;
+    const selecting = () => {
+      const selection = window.getSelection();
+      return selection !== null && !selection.isCollapsed;
+    };
+    // Whether the press went down on words selected, which it clears and places nothing for.
+    let clearing = false;
     const press = (event: MouseEvent) => {
-      if (placement(event) !== undefined) event.preventDefault();
+      clearing = selecting();
+      if (clearing || !latest.current.open || placement(event) === undefined) return;
+      event.preventDefault();
     };
     const click = (event: MouseEvent) => {
-      const selection = window.getSelection();
-      if (selection !== null && !selection.isCollapsed) return;
+      if (clearing || selecting()) return;
       const at = placement(event);
       if (at !== undefined) latest.current.onPlace?.(at);
     };
@@ -700,12 +711,17 @@ export function PlanDocumentEditor({
   const chips = useEditorDrawings<MentionNode>();
   const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
-  // A press on the document's empty room puts the caret there, at the text's end where it lands under it.
+  // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.
+  const [pending, setPending] = useState<PlanEditorPlacement | undefined>(undefined);
   useTextRoom({
     text: room,
     box: () => room.current?.getBoundingClientRect(),
     room: scroller,
-    onPlace: (placement) => handle.current?.focusAt(placement),
+    open: true,
+    onPlace: (placement) => {
+      if (handle.current === undefined) setPending(placement);
+      else handle.current.focusAt(placement);
+    },
   });
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
@@ -743,7 +759,7 @@ export function PlanDocumentEditor({
   });
   if (!AsyncResult.isSuccess(module)) {
     return (
-      <section className="plan-document-editor ph-no-capture" aria-busy="true">
+      <section ref={room} className="plan-document-editor ph-no-capture" aria-busy="true">
         {drawn}
         {AsyncResult.isFailure(module) ? (
           <p className="plan-editor-note" role="alert">
@@ -755,7 +771,7 @@ export function PlanDocumentEditor({
   }
   const props: PlanEditorProps = {
     markdown: editor.draft,
-    placement: editing.placement,
+    placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
     className: "markdown luke-prose plan-unit",

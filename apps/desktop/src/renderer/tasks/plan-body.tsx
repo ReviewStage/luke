@@ -806,6 +806,7 @@ export function PlanBody({
     text: body,
     box: () => textBoxOf(body.current),
     room: scroller,
+    open: false,
     onPlace: editable && editing.editor === undefined ? editing.open : undefined,
   });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.

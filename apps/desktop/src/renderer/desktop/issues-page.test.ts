@@ -23,7 +23,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
-import type { SideBundles } from "../bundle-loader";
+import { type SideBundles, sideBundles } from "../bundle-loader";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
@@ -968,7 +968,7 @@ function pressAt(target: Element, x: number, y: number): boolean {
   return down.defaultPrevented;
 }
 
-test("a press anywhere on the page's room under an empty description opens its editor at the end, taking the press", async () => {
+test("a press anywhere on the page's room under an empty description opens its editor at the end", async () => {
   standing = [issue(1)];
   layPageOut();
   const page = await openIssue(issue(1).id);
@@ -976,7 +976,7 @@ test("a press anywhere on the page's room under an empty description opens its e
 
   const taken = pressAt(column, 400, 700);
 
-  assert.ok(taken, "the press is the description's, so the column does not take the keyboard");
+  assert.ok(!taken, "a drag from the room still selects, as a press on a page does");
   assert.equal(openEditor().props.markdown, "");
   assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
 });
@@ -999,6 +999,25 @@ test("a press on the room beside the description opens it on the nearest line, a
     { x: 799, y: 220 },
     "the nearest line, at the words' own edge",
   );
+});
+
+test("a press on the room while the description's editor loads is where the editor opens", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  pressAt(column, 400, 700);
+  pressAt(column, 900, 220);
+  await act(async () => {
+    gate.resolve(EDITOR_STAND_IN);
+    await gate.promise;
+  });
+  await settle();
+
+  assert.deepEqual(openEditor().props.placement, { x: 799, y: 220 });
 });
 
 test("a press on the room while the description is open moves its caret to the end and keeps it open", async () => {

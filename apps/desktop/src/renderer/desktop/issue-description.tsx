@@ -162,9 +162,11 @@ export function IssueDescription({
   useTextRoom({
     text: room,
     box: () => room.current?.getBoundingClientRect(),
+    open,
     onPlace: (at) => {
       if (!open) begin(at);
-      else handle.current?.focusAt(at);
+      else if (handle.current === undefined) setPlacement(at);
+      else handle.current.focusAt(at);
     },
   });
 
