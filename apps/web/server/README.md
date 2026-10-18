@@ -612,6 +612,29 @@ request's origin itself, is let through from any page; a provider returns
 the browser to every other address with a GET, which the guard never
 refuses.
 
+Past the guard, an account route reads its caller through
+`resolveHostedUserId` (`packages/service/src/auth/bearer.ts`): the OAuth
+bearer wherever `Authorization` is present, refused when it does not verify
+rather than read past to the cookie, and the browser's session cookie only
+where no `Authorization` is carried. `/api/mac-commands` takes the bearer
+alone (`resolveHostedBearerUserId`), because its held read claims commands
+for the one Mac that asks. A task's delete and the account's take the bearer
+alone too, asked in the endpoint itself (`hostedBearerOnly`) rather than by
+the route file's resolver, because every function holding a group answers
+every path the group declares, the one a client names in the dispatcher's
+`route-path` query among them: each ends the eve sessions of what it deletes
+over that bearer. The rest of what reaches eve over the caller's bearer (an
+agent's Start, message, and Stop) is refused at eve for a cookie. The eve
+services under `/eve/v1/*` and
+`/eve/coder/v1/*` share the origin but never pass through this adaptor; they
+resolve the bearer alone (`hostedUserId`) and take no cookie. Every route
+that answers bytes rather than JSON (a task's picture, an inbox attachment,
+a picture a tool answered, a workspace's photo, and an image an agent's pull
+request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
+`nosniff`, `private, no-store`, and `default-src 'none'; style-src
+'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
+origin.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so

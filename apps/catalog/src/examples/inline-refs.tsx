@@ -54,7 +54,7 @@ const Hint: InlineRefHint = ({ label, card, children }) => {
   );
 };
 
-const PLAN_CARD = (
+const TASK_CARD = (
   <HoverCard>
     <HoverCardHead glyph={<DocumentIcon />} name="Teammate invitations" sub="acme/relay" />
     <HoverCardNote>
@@ -87,7 +87,7 @@ function InlineRefs(): React.JSX.Element {
             glyph={<DocumentIcon />}
             label="Teammate invitations"
             hint={Hint}
-            card={PLAN_CARD}
+            card={TASK_CARD}
           />{" "}
           beside it.
         </Text>
@@ -122,7 +122,7 @@ function InlineRefs(): React.JSX.Element {
             label="Teammate invitations"
             onPress={press}
             hint={Hint}
-            card={PLAN_CARD}
+            card={TASK_CARD}
           />
           , its issue{" "}
           <InlineRef
