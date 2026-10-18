@@ -73,7 +73,7 @@ import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
+import { AgentChangesTab, THREAD_PLACE, type ThreadPlace, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import {
@@ -84,6 +84,7 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
+import { useFileViewSettings } from "./file-view-settings";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
@@ -186,6 +187,8 @@ const PULL_REQUEST_WORDS = {
   earlier: (count: number) => `${count} earlier ${count === 1 ? "comment" : "comments"} on GitHub`,
   /** What a review thread says of the replies a read left on GitHub, by how many. */
   moreReplies: (count: number) => `${count} more ${count === 1 ? "reply" : "replies"} on GitHub`,
+  /** What a thread drawn on its line says of how many comments it holds. */
+  commentCount: (count: number) => `${count} ${count === 1 ? "comment" : "comments"}`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
   /** What the folded checks' control says while folded, by how many checks there are in all. */
@@ -199,6 +202,14 @@ function threadLines(thread: ReviewThread): string | undefined {
   const start = thread.line === null ? thread.originalStartLine : thread.startLine;
   if (line === null) return undefined;
   return start === null || start === line ? `line ${line}` : `lines ${start}–${line}`;
+}
+
+/** What a review thread's head says of it: that it was resolved, and that a later push outdated it. */
+function threadLabels(thread: ReviewThread): readonly string[] {
+  return [
+    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
+    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
+  ];
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
@@ -787,14 +798,9 @@ function ThreadCard({
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
-  const openLink = useOpenLink();
   const preview = threadPreview(thread);
   const lines = threadLines(thread);
-  const labels = [
-    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
-    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
-  ];
-  const last = thread.comments.at(-1);
+  const labels = threadLabels(thread);
   return (
     <li className="pull-request-thread">
       <Fold defaultOpen={labels.length === 0}>
@@ -820,28 +826,96 @@ function ThreadCard({
               className="diff-view pull-request-thread-lines"
             />
           )}
-          <ol className="pull-request-thread-comments">
-            {thread.comments.map((comment) => (
-              <li key={comment.url} className="pull-request-thread-comment">
-                <span className="changes-comment-head">
-                  <PersonRef person={comment.by} />
-                  <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-                </span>
-                <EntryWords entry={comment} picture={picture} />
-              </li>
-            ))}
-          </ol>
-          {thread.more === 0 || last === undefined ? null : (
-            <p className="pull-request-more pull-request-thread-more">
-              <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
-                {PULL_REQUEST_WORDS.moreReplies(thread.more)}
-              </TextButton>
-            </p>
-          )}
-          <ThreadActions thread={thread} />
+          <ThreadComments thread={thread} now={now} picture={picture} />
         </FoldBody>
       </Fold>
     </li>
+  );
+}
+
+/** A review thread's comments, oldest first, as the conversation draws an entry, with the replies a read left on GitHub counted after them, then its Reply and Resolve (`pull-request-thread-actions.tsx`), wherever the thread is drawn. */
+function ThreadComments({
+  thread,
+  now,
+  picture,
+}: {
+  thread: ReviewThread;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const last = thread.comments.at(-1);
+  return (
+    <>
+      <ol className="pull-request-thread-comments">
+        {thread.comments.map((comment) => (
+          <li key={comment.url} className="pull-request-thread-comment">
+            <span className="changes-comment-head">
+              <PersonRef person={comment.by} />
+              <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
+            </span>
+            <EntryWords entry={comment} picture={picture} />
+          </li>
+        ))}
+      </ol>
+      {thread.more === 0 || last === undefined ? null : (
+        <p className="pull-request-more pull-request-thread-more">
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
+            {PULL_REQUEST_WORDS.moreReplies(thread.more)}
+          </TextButton>
+        </p>
+      )}
+      <ThreadActions thread={thread} />
+    </>
+  );
+}
+
+/**
+ * A review thread drawn on its line in Files changed, as GitHub's own diff
+ * draws one: whether it was resolved or a later push outdated it, at its
+ * head, which folds it closed until opened, as Minimize inline comments
+ * folds every one; then its comments. An outdated one, whose line is gone,
+ * names the line it was made on.
+ */
+function InlineThread({
+  thread,
+  place,
+  now,
+  picture,
+}: {
+  thread: ReviewThread;
+  /** Under its line, or above the diff, where it names the lines it is on. */
+  place: ThreadPlace;
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const { settings } = useFileViewSettings();
+  const labels = threadLabels(thread);
+  const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
+  const folded = labels.length > 0 || settings.diffMinimizeComments;
+  const first = thread.comments[0];
+  return (
+    <div className="diff-inline-thread">
+      {/* Note that the fold is drawn anew as the setting changes, so minimizing folds every thread at once. */}
+      <Fold key={String(settings.diffMinimizeComments)} defaultOpen={!folded}>
+        <FoldSummary className="pull-request-thread-head">
+          {first === undefined ? null : <PersonRef person={first.by} />}
+          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
+          {labels.map((label) => (
+            <span key={label} className="pull-request-thread-label">
+              {label}
+            </span>
+          ))}
+          <span className="pull-request-quiet">
+            {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
+          </span>
+          <FoldChevron />
+        </FoldSummary>
+        <FoldBody>
+          <ThreadComments thread={thread} now={now} picture={picture} />
+        </FoldBody>
+      </Fold>
+    </div>
   );
 }
 
@@ -1385,6 +1459,13 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
   return read.answer !== undefined || read.out;
 }
 
+/** Every review thread a read's conversation holds, in its order; none before a read lands or where it failed. */
+function reviewThreadsOf(
+  conversation: CodingAgentOverviewConversation | undefined,
+): readonly ReviewThread[] {
+  return conversation?.conversation.flatMap((entry) => entry.threads ?? []) ?? [];
+}
+
 /**
  * One agent's Pull request tab, laid out as stage-cli's pull request page:
  * a fixed header that stays put while what is under it scrolls (the bar
@@ -1398,7 +1479,8 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
  * where each reviewer stands, are asked as the tab is shown; the checks and
  * the files as their tab is first shown. Only a read saying there is no
  * pull request yet takes the header and the tabs away; a read that failed
- * says so in its own part, with its own Retry, the others standing.
+ * says so in its own part, with its own Retry, the others standing. Files
+ * changed draws the conversation's review threads on their lines.
  */
 export function AgentPullRequestTab({
   agentId,
@@ -1480,6 +1562,7 @@ export function AgentPullRequestTab({
   const written = refresh;
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
+  const picture = usePictureDrawer(agentId);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1549,6 +1632,13 @@ export function AgentPullRequestTab({
             shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
             repository={repository}
             tree={tree}
+            threads={{
+              list: reviewThreadsOf(landed(parts.conversation)),
+              draw: (thread, place) => (
+                <InlineThread thread={thread} place={place} now={now} picture={picture} />
+              ),
+              refresh: ask.conversation,
+            }}
           />
         </div>
       </div>
