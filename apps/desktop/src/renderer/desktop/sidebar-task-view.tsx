@@ -1,6 +1,15 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ArchiveIcon, IconButton, NAV_ITEM_VARIANT, NavItem, useMenu } from "@luke/ui";
+import {
+  ArchiveIcon,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  IconButton,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -12,7 +21,6 @@ import {
   SlidersHorizontalIcon,
   UserIcon,
   UsersIcon,
-  XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
@@ -264,7 +272,7 @@ export function TaskViewOptions({
   );
 }
 
-/** One chip under the Tasks head: what it says, led by a glyph, and its × that lifts it. */
+/** One chip under the Tasks head: `@luke/ui`'s removable filter, what it says led by a glyph, and its × that lifts it. */
 function ViewChip({
   glyph,
   words,
@@ -273,20 +281,15 @@ function ViewChip({
 }: {
   glyph: React.JSX.Element;
   words: string;
-  /** What the × does, said in its hint and to a screen reader. */
+  /** What the × does, said to a screen reader. */
   lift: string;
   onLift: () => void;
 }): React.JSX.Element {
   return (
-    <span className="sidebar-view-chip">
+    <Chip look={CHIP_LOOK.FILTER} removeLabel={lift} onRemove={onLift}>
       {glyph}
-      <span className="sidebar-view-chip-words">{words}</span>
-      <Tooltip label={lift}>
-        <button type="button" aria-label={lift} onClick={onLift}>
-          <XIcon />
-        </button>
-      </Tooltip>
-    </span>
+      <ChipName>{words}</ChipName>
+    </Chip>
   );
 }
 

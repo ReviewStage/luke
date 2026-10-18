@@ -12,9 +12,9 @@ import { SELECT_ALIGN, SELECT_WIDTH, Select, SettingsRow, Switch } from "@luke/u
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
-import { ACTOR_SIZE, PictureMark } from "../actor-ref";
 import { ChangedMark } from "./marks";
 import { Picker } from "./picker-row";
+import { PictureChoiceRow } from "./picture-choice-row";
 import type { SettingsWrites } from "./writes";
 
 /** One value a choice's control offers, as the schema hands it. */
@@ -80,8 +80,9 @@ function SchemaSwitchRow({
 
 /**
  * A choice's row: the shared row, and the shared pop-up for a short set read
- * whole. A set long enough to search, or whose values have faces, drops the
- * window's searchable menu instead (`picker-row.tsx`), which the pop-up is not.
+ * whole. A set long enough to search drops the window's searchable menu
+ * instead (`picker-row.tsx`), which the pop-up is not. A set whose values
+ * have faces is a `PictureChoiceRow`, never this.
  */
 function SchemaChoiceRow({
   id,
@@ -104,7 +105,6 @@ function SchemaChoiceRow({
   onChange: (token: string) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
-  const pictured = options.some((option) => option.picture !== undefined);
   // A token the set does not hold is not written, so a stale menu writes nothing.
   const pick = (token: string) => {
     if (options.some((option) => option.value === token)) run(token);
@@ -112,7 +112,7 @@ function SchemaChoiceRow({
   return (
     <SettingsRow label={rowLabel(label, changed)} description={detail} error={rejection}>
       {(control) =>
-        search === undefined && !pictured ? (
+        search === undefined ? (
           <Select
             {...anchorOf(id)}
             label={label}
@@ -143,7 +143,7 @@ function SchemaChoiceRow({
   );
 }
 
-/** A choice's chip over the window's searchable menu, a face on every value where the set has faces. */
+/** A choice's chip over the window's searchable menu. */
 function SearchedChoice({
   id,
   label,
@@ -166,10 +166,6 @@ function SearchedChoice({
   onPick: (token: string) => void;
 }): React.JSX.Element {
   const chosen = options.find((option) => option.value === value);
-  const pictured = options.some((option) => option.picture !== undefined);
-  const face = (option: SettingOption, size: typeof ACTOR_SIZE.INLINE | typeof ACTOR_SIZE.ROW) => (
-    <PictureMark id={option.value} name={option.label} pictureUrl={option.picture} size={size} />
-  );
   return (
     <Picker
       label={label}
@@ -177,13 +173,7 @@ function SearchedChoice({
       invalid={invalid}
       value={value}
       valueLabel={chosen?.label ?? value}
-      valueIcon={pictured && chosen !== undefined ? face(chosen, ACTOR_SIZE.INLINE) : undefined}
-      // A set with faces draws one on every row, its letter where it has no picture.
-      rows={options.map((option) => ({
-        id: option.value,
-        label: option.label,
-        ...(pictured ? { icon: face(option, ACTOR_SIZE.ROW) } : undefined),
-      }))}
+      rows={options.map((option) => ({ id: option.value, label: option.label }))}
       placeholder={search}
       noMatch={NO_MATCH}
       anchor={isAppSettingId(id) ? id : undefined}
@@ -227,6 +217,24 @@ export function SchemaSettingRows({
       ];
     }
     if (entry.kind !== APP_SETTING_KIND.CHOICE || !control) return [];
+    // A set whose every value has a face is chosen from the faces, drawn large, rather than from a menu.
+    const pictured = control.options.flatMap(({ value, label, picture }) =>
+      picture === undefined ? [] : [{ value, label, picture }],
+    );
+    if (pictured.length > 0 && pictured.length === control.options.length) {
+      return [
+        <PictureChoiceRow
+          key={entry.id}
+          label={entry.label}
+          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
+          detail={entry.detail}
+          changed={changed}
+          value={control.value}
+          options={pictured}
+          onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
+        />,
+      ];
+    }
     return [
       <SchemaChoiceRow
         key={entry.id}

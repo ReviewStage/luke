@@ -124,7 +124,7 @@ export interface SettingsVisibility {
 export interface SettingOption {
   value: string;
   label: string;
-  /** The address of a small picture drawn ahead of the words, such as an avatar's face. */
+  /** The address of its picture, such as an avatar's face. A set whose every option has one is chosen from the pictures. */
   picture?: string;
 }
 

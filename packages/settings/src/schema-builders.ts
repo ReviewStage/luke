@@ -139,7 +139,7 @@ export function choiceSetting<
   token: (value: Value) => string;
   /** How a value is worded on the control, when that differs from `token`. */
   optionLabel?: (value: Value) => string;
-  /** The address of the picture a value is shown with, for a choice whose values have faces. */
+  /** The address of the picture a value is shown with, for a choice whose values have faces, which is then chosen from them. */
   optionPicture?: (value: Value) => string | undefined;
   default: Default;
   /** The word for no choice at all, required where the default is nothing. */

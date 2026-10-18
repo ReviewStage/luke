@@ -23,8 +23,6 @@
 @import "./components/card/card.css";
 @import "./components/folding-button/folding-button.css";
 @import "./components/chip/chip.css";
-/* After the chip's, whose width the field column sets. */
-@import "./components/select/select.css";
 @import "./components/collection-page/collection-page.css";
 @import "./components/combobox/combobox.css";
 @import "./components/confirm-dialog/confirm-dialog.css";

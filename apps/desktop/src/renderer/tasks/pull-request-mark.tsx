@@ -2,7 +2,9 @@ import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
+  type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { CHIP_TONE, type ChipTone } from "@luke/ui";
 import {
   GitMergeIcon,
   GitPullRequestClosedIcon,
@@ -21,8 +23,8 @@ import { pullRequestPillLabel } from "./coding-agent-model";
  * muted ink, merged in the merged purple, closed in the danger red, and
  * the danger red over any of them once its checks have failed, the one
  * result that asks for a look. The colour is the stylesheet's, keyed on
- * `data-pull-request-state` (`tasks.css`), which a chip wearing the
- * pull request's colour carries too.
+ * `data-pull-request-state` (`tasks.css`); a chip naming the pull request
+ * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).
  */
 
 /** The glyph a pull request is drawn with for where it stands, as GitHub draws it. */
@@ -32,6 +34,14 @@ const PULL_REQUEST_GLYPH = {
   [PULL_REQUEST_STATE.MERGED]: GitMergeIcon,
   [PULL_REQUEST_STATE.CLOSED]: GitPullRequestClosedIcon,
 } as const;
+
+/** The chip tone a pull request is named in for where it stands: GitHub's colour for it, in the shared palette. */
+export const PULL_REQUEST_TONE = {
+  [PULL_REQUEST_STATE.OPEN]: CHIP_TONE.COMPLETE,
+  [PULL_REQUEST_STATE.DRAFT]: CHIP_TONE.NEUTRAL,
+  [PULL_REQUEST_STATE.MERGED]: CHIP_TONE.MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: CHIP_TONE.DANGER,
+} as const satisfies Record<PullRequestState, ChipTone>;
 
 /** What a failed check run adds to the mark's words for a reader who cannot see its colour. */
 const CHECKS_FAILING_WORDS = ", checks failing";
