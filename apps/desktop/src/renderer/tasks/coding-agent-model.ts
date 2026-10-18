@@ -86,8 +86,7 @@ import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-mo
  * than in the transcript, what its working line says it is doing, when a
  * line the developer sent has been read back, what a Start or a message
  * that did not land says, and what its
- * pull request chip, its branch chip, and the pull request's row say and
- * open, and how what an agent or a turn cost is told.
+ * branch chip and the pull request's row say and open, and how what an agent or a turn cost is told.
  * Nothing here asks anything.
  */
 
@@ -1770,11 +1769,3 @@ export function pullRequestPillLabel(
 
 /** How long a tab lets pass between two reads of what the agent published while its transcript keeps landing pages, the service keeping its own answer about as long. */
 export const PUBLISHED_REREAD_MS = 15_000;
-
-/** Whether the row summing the turn up is drawn: the agent has ended and a pull request stands. */
-export function showsPublishedRow(
-  status: CodingAgentStatus,
-  published: CodingAgentPullRequestAnswer | undefined,
-): published is CodingAgentPullRequestAnswer & { pullRequest: CodingAgentPullRequest } {
-  return !agentStillWriting(status) && published?.pullRequest != null;
-}
