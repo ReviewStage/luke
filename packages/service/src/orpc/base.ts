@@ -47,7 +47,7 @@ export interface HostedCaller {
 }
 
 /** A Better Auth session's account, and the headers that carry it on to the plugin. */
-export interface HostedSessionCaller extends HostedCaller {
+interface HostedSessionCaller extends HostedCaller {
   readonly sessionHeaders: Headers;
 }
 
