@@ -38,7 +38,15 @@ import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { type InboxDraft, inboxMessageOf, inboxReply, pressesOf } from "./inbox-model";
+import {
+  type InboxDraft,
+  type InboxMissing,
+  inboxMessageOf,
+  inboxMissing,
+  inboxReply,
+  pickedWords,
+  pressesOf,
+} from "./inbox-model";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
@@ -56,7 +64,10 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * or Enter, or ✕ or Escape. The note goes to the agent in the "Inbox
  * answer" message as it was written, links and all, so what a mention names
  * reaches the agent as a message's does. Enter sends, Shift+Enter is a new
- * line, and Escape leaves the box, as in the agent's box. Files go with an
+ * line, and Escape leaves the box, as in the agent's box; Enter, or Send,
+ * on an answer that lacks something sends nothing, and says what it lacks
+ * on the quiet line, "Pick an option", taking the keyboard there, while a
+ * choice of several counts its picks there. Files go with an
  * answer as they go with a message (`attached-files.ts`): the "+" at the
  * foot's left opens the system's file picker, an image pasted into the box
  * is taken, and files dropped on the card are, each drawn as a chip above
@@ -136,6 +147,31 @@ function quietLine(draft: InboxDraft): string {
   return draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED;
 }
 
+/**
+ * What the quiet line says of an open item, first what holds: what a send
+ * found the answer lacking, while it still lacks it; how many options a
+ * choice of several has picked; and, where the agent need not hear back,
+ * whether the answer will message it.
+ */
+function openQuietLine(
+  item: InboxItem,
+  draft: InboxDraft,
+  wanting: string | undefined,
+): { readonly line: string; readonly wanting: boolean } | undefined {
+  if (wanting !== undefined && inboxMissing(item, draft)?.line === wanting) {
+    return { line: wanting, wanting: true };
+  }
+  const response = item.response;
+  if (
+    knownResponse(response) &&
+    response.type === INBOX_RESPONSE.CHOICE &&
+    response.multiple === true
+  ) {
+    return { line: pickedWords(draft.choices.length), wanting: false };
+  }
+  return item.needsReply ? undefined : { line: quietLine(draft), wanting: false };
+}
+
 /** The presses that send a card, in the box's footer: its response's where it is answered by a press, Send for the rest. */
 function SendPresses({
   item,
@@ -206,6 +242,8 @@ interface AnswerBoxProps {
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
+  /** Takes the keyboard to what a send found the answer lacking, in the item's question or in the box. */
+  onMissing: (missing: InboxMissing) => void;
 }
 
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
@@ -216,6 +254,7 @@ function AnswerCard({
   agentName,
   skills,
   keywords,
+  onMissing,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
@@ -223,6 +262,8 @@ function AnswerCard({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const picker = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
+  // What the last send found the answer lacking, which the quiet line says until it is filled.
+  const [wanting, setWanting] = useState<string | undefined>(undefined);
   // How many hand-offs of files are still being read, during which the answer waits.
   const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
@@ -267,6 +308,16 @@ function AnswerCard({
     setRefusal(undefined);
     control.onAnswer(item, draft, press);
   };
+  // A send of an answer that lacks something goes nowhere: it says what, and takes the keyboard there.
+  const send = () => {
+    const missing = inboxReply(item, draft) === undefined ? inboxMissing(item, draft) : undefined;
+    if (missing === undefined) {
+      answer();
+      return;
+    }
+    setWanting(missing.line);
+    onMissing(missing);
+  };
   const message = () => {
     setRefusal(undefined);
     control.onMessage(item, draft);
@@ -295,6 +346,7 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
+  const quiet = answering ? openQuietLine(item, draft, wanting) : undefined;
   const takes = !answering || knownResponse(item.response);
   const takesFiles = takes && !sending;
   return (
@@ -327,7 +379,7 @@ function AnswerCard({
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => {
             if (byPress || reading > 0) return;
-            if (answering) answer();
+            if (answering) send();
             else message();
           }}
         >
@@ -361,7 +413,10 @@ function AnswerCard({
             takesFocus={false}
             {...pickers.field}
             onEnter={() => {
-              if (room.current !== null) submitPromptInput(room.current);
+              if (room.current === null) return;
+              // Note that an answer's Enter sends whatever Send would say, since an answer that lacks something is told what.
+              if (answering) room.current.closest("form")?.requestSubmit();
+              else submitPromptInput(room.current);
             }}
             onPasteFiles={(files) => {
               // Only images are taken from the clipboard; text pastes as it always does.
@@ -398,8 +453,14 @@ function AnswerCard({
                     }}
                   />
                   <span className="inbox-answer-quiet">
-                    {item.needsReply || !answering ? null : (
-                      <span data-inbox-quiet="">{quietLine(draft)}</span>
+                    {quiet === undefined ? null : (
+                      <span
+                        data-inbox-quiet=""
+                        data-wanting={quiet.wanting ? "" : undefined}
+                        role={quiet.wanting ? "status" : undefined}
+                      >
+                        {quiet.line}
+                      </span>
                     )}
                   </span>
                 </PromptInputTools>
