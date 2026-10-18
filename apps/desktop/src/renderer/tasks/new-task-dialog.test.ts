@@ -47,14 +47,15 @@ async function settle(): Promise<void> {
 
 /**
  * The dialog open in its owner, a start answered by `answer` and each
- * start's name and repository written down; `preset` is the repository the
- * press that opened it chose, as a repository group's + does, `issues`
+ * start's name and repository written down; `preset` is what the press
+ * that opened it chose, a repository as a repository group's + does or an
+ * issue as its Start task… does, `issues`
  * the workspace's Linear issues where it has Linear connected, and `finds`
  * what its Linear answers a search or an identifier with.
  */
 async function mount(
   answer: string | undefined = undefined,
-  preset?: string | NewTaskPreset,
+  preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
@@ -78,7 +79,7 @@ async function mount(
       newTask: {
         ...control.newTask,
         open,
-        preset: typeof preset === "string" ? { repository: preset } : preset,
+        preset,
         repositoriesIn: () => repositories,
         start: (
           name: string,
@@ -245,7 +246,7 @@ test("Plan starts on, a task started with it off starts without planning, and th
 });
 
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
-  const card = await mount(undefined, "acme/api");
+  const card = await mount(undefined, { repository: "acme/api" });
   card.type("Rate limits");
   act(() => card.button("Create task").click());
   await settle();
@@ -296,10 +297,14 @@ test("a refusal keeps the dialog and the name, says why under the field, and Cre
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
-  const dialog = await mount(undefined, "alice/private", {
-    scope: "workspace-personal",
-    recent: ["alice/notes"],
-  });
+  const dialog = await mount(
+    undefined,
+    { repository: "alice/private" },
+    {
+      scope: "workspace-personal",
+      recent: ["alice/notes"],
+    },
+  );
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
@@ -309,10 +314,14 @@ test("a workspace switch lets the pick go for the new workspace's recent reposit
 });
 
 test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
-  const dialog = await mount(undefined, "alice/private", {
-    scope: undefined,
-    recent: ["alice/notes"],
-  });
+  const dialog = await mount(
+    undefined,
+    { repository: "alice/private" },
+    {
+      scope: undefined,
+      recent: ["alice/notes"],
+    },
+  );
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-personal" });
@@ -474,7 +483,7 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
-  const listed = await mount(undefined, "acme/api", { read: listing });
+  const listed = await mount(undefined, { repository: "acme/api" }, { read: listing });
   listed.type("Rate limits");
   await listed.press("Enter", listed.field());
 
