@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { forgetPosthogPersonEffect, type PosthogForgetOptions } from "./posthog.js";
 
 const PERSONAL_KEY = "phx_personal";
@@ -22,7 +23,7 @@ interface Sent {
   init: RequestInit;
 }
 
-function upstream(status = 202, body: string = JSON.stringify(QUEUED)) {
+function upstream(status = 202, body: BodyInit = JSON.stringify(QUEUED)) {
   const sent: Sent[] = [];
   const layer = fakeHttpClientLayer((url, init) => {
     sent.push({ url, init });
@@ -102,6 +103,34 @@ it.effect("a success whose body cannot be read fails with the status alone", () 
 
     assert.match(error.message, /unreadable answer with status 202/);
     assert.doesNotMatch(error.message, new RegExp(PERSONAL_KEY));
+  }),
+);
+
+it.effect("a success that never says whether anything failed is unreadable, not taken", () =>
+  Effect.gen(function* () {
+    const posthog = upstream(202, "{}");
+    const error = yield* forgetPosthogPersonEffect("user-1", options()).pipe(
+      Effect.provide(posthog.layer),
+      Effect.flip,
+    );
+
+    assert.match(error.message, /unreadable answer with status 202/);
+  }),
+);
+
+it.effect("a success whose body never ends fails at the deadline", () =>
+  Effect.gen(function* () {
+    const posthog = upstream(202, new ReadableStream());
+    const pending = yield* Effect.forkChild(
+      forgetPosthogPersonEffect("user-1", options({ timeoutMs: 5_000 })).pipe(
+        Effect.provide(posthog.layer),
+        Effect.flip,
+      ),
+    );
+    yield* TestClock.adjust("5 seconds");
+    const error = yield* Fiber.join(pending);
+
+    assert.match(error.message, /no answer within 5000ms/);
   }),
 );
 

@@ -129,10 +129,11 @@ export class PosthogForgetError extends Data.TaggedError("PosthogForgetError")<{
 /**
  * The part of the bulk-delete answer erasure reads. PostHog reports a person
  * it could not delete in `deletion_errors` under a 202 rather than as an
- * error status, so a 2xx alone does not mean the erasure was taken.
+ * error status, so a 2xx alone does not mean the erasure was taken; both of
+ * its paths always answer the list, so an answer without it is unreadable.
  */
 const bulkDeleteAnswerSchema = Schema.Struct({
-  deletion_errors: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+  deletion_errors: Schema.Array(Schema.Unknown),
 });
 
 const readBulkDeleteAnswer = readEither(bulkDeleteAnswerSchema, { excess: EXCESS_KEYS.DROP });
@@ -149,46 +150,58 @@ const readBulkDeleteAnswer = readEither(bulkDeleteAnswerSchema, { excess: EXCESS
  * answer naming any deletion error, or one that cannot be read, fails, and no
  * failure quotes the body. The request runs over the ambient `HttpClient`.
  */
-export const forgetPosthogPersonEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
+export function forgetPosthogPersonEffect(
   distinctId: string,
   options: PosthogForgetOptions,
-): Effect.fn.Return<void, PosthogForgetError, HttpClient.HttpClient> {
+): Effect.Effect<void, PosthogForgetError, HttpClient.HttpClient> {
+  const requestTimeoutMs = options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS;
   const call = accountCall({
     baseUrl: resolvePosthogApiHost(options.host),
     credential: fixedBearer(options.personalApiKey),
-    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+    requestTimeoutMs,
   });
-  const answer = yield* call.send({
-    method: HTTP_METHOD.POST,
-    path: `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/`,
-    body: JSON.stringify({
-      distinct_ids: [distinctId],
-      delete_events: true,
-      delete_recordings: true,
+  // Note that the deadline spans the body's read too, because the call's own
+  // deadline ends with the headers and a body that never ends would hold the
+  // account's deletion behind it.
+  return Effect.gen(function* () {
+    const answer = yield* call.send({
+      method: HTTP_METHOD.POST,
+      path: `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/`,
+      body: JSON.stringify({
+        distinct_ids: [distinctId],
+        delete_events: true,
+        delete_recordings: true,
+      }),
+    });
+    if (!callAnswered(answer)) {
+      return yield* new PosthogForgetError({
+        message: `network fault: ${answer.errorName ?? "unknown"}`,
+      });
+    }
+    const status = answer.response.status;
+    // The status alone diagnoses the refusal; the body could name the key.
+    if (!answer.response.ok) {
+      return yield* new PosthogForgetError({ message: `refused with status ${status}` });
+    }
+    const payload = yield* Effect.orElseSucceed(
+      Effect.tryPromise(() => answer.response.json()),
+      () => undefined,
+    );
+    const read = readBulkDeleteAnswer(payload);
+    if (Result.isFailure(read)) {
+      return yield* new PosthogForgetError({ message: `unreadable answer with status ${status}` });
+    }
+    const errors = read.success.deletion_errors.length;
+    if (errors > 0) {
+      return yield* new PosthogForgetError({
+        message: `answered status ${status} with ${errors} deletion error(s)`,
+      });
+    }
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: requestTimeoutMs,
+      orElse: () =>
+        Effect.fail(new PosthogForgetError({ message: `no answer within ${requestTimeoutMs}ms` })),
     }),
-  });
-  if (!callAnswered(answer)) {
-    return yield* new PosthogForgetError({
-      message: `network fault: ${answer.errorName ?? "unknown"}`,
-    });
-  }
-  const status = answer.response.status;
-  // The status alone diagnoses the refusal; the body could name the key.
-  if (!answer.response.ok) {
-    return yield* new PosthogForgetError({ message: `refused with status ${status}` });
-  }
-  const payload = yield* Effect.orElseSucceed(
-    Effect.tryPromise(() => answer.response.json()),
-    () => undefined,
   );
-  const read = readBulkDeleteAnswer(payload);
-  if (Result.isFailure(read)) {
-    return yield* new PosthogForgetError({ message: `unreadable answer with status ${status}` });
-  }
-  const errors = read.success.deletion_errors?.length ?? 0;
-  if (errors > 0) {
-    return yield* new PosthogForgetError({
-      message: `answered status ${status} with ${errors} deletion error(s)`,
-    });
-  }
-});
+}
