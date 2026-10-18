@@ -219,3 +219,19 @@ it.effect("a day marked for one account is never sent under the next account's b
     assert.equal(yield* launch(options), 1);
   }),
 );
+
+it.effect("a clock set back across midnight counts no day again", () =>
+  Effect.gen(function* () {
+    let now = NEXT_NOON;
+    const options = {
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed("ada@luke.test"),
+      now: () => now,
+    };
+
+    assert.equal(yield* launch(options), 1);
+    now = NOON;
+    assert.equal(yield* launch(options), 0);
+    assert.equal(yield* launch(options), 0);
+  }),
+);
