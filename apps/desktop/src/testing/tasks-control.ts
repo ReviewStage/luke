@@ -356,7 +356,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       models: undefined,
       readModels: ignore,
       readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-      writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
       onClose: ignore,
       linearIssuesIn: () => undefined,
     },

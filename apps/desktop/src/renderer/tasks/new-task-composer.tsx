@@ -62,8 +62,8 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   it on a draft agent's tab holding the words, the files, and the model on
  *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
  *   agent refused leaves the words there with why and Retry. The model chip
- *   starts on the account's default, and a pick here is written as the
- *   default, as Start's menu writes it.
+ *   starts on the account's default, and a pick here runs this one agent
+ *   alone: only Settings changes the default.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the
@@ -96,10 +96,6 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  * owner's, as is a workspace's own issue it was opened from, which names
  * the task and offers no Linear chip.
  */
-
-/** What the card says where a model picked on its chip was not kept as the account's default. */
-const DEFAULT_NOT_KEPT =
-  "The model could not be kept as your default. This agent still starts on it.";
 
 /** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
@@ -167,12 +163,11 @@ function IssueChip({
   );
 }
 
-/** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
+/** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
-): readonly [ModelChoice | undefined, (next: ModelChoice) => void, string | undefined] {
+): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
-  const [refused, setRefused] = useState<string | undefined>(undefined);
   // Note that the control is read through a ref, because the tab hands a
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
@@ -186,17 +181,7 @@ function useDefaultChoice(
       live = false;
     };
   }, []);
-  // A pick names the chip at once and is kept as the default, as Start's menu
-  // keeps it; a write that did not take says so under the card, and the
-  // agent still starts on the pick.
-  const choose = (next: ModelChoice) => {
-    setChoice(next);
-    setRefused(undefined);
-    latest.current.writeDefault(next).then((answer) => {
-      setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
-    });
-  };
-  return [choice, choose, refused];
+  return [choice, setChoice];
 }
 
 export function NewTaskComposer({
@@ -227,7 +212,7 @@ export function NewTaskComposer({
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  const [choice, choose, choiceNote] = useDefaultChoice(newTask);
+  const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
   // How many times ⌘L asked the Linear chip to open its menu.
@@ -352,7 +337,7 @@ export function NewTaskComposer({
         wording={MODE_WORDS[mode]}
         sendsEmpty={planning || onIssue}
         sendable={!blocked}
-        model={planning || choice === undefined ? undefined : { choice, note: choiceNote, choose }}
+        model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         readModels={newTask.readModels}
         usage={undefined}

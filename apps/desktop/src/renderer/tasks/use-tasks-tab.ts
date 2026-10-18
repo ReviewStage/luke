@@ -706,8 +706,6 @@ export interface TasksControl {
     readModels: () => void;
     /** Reads the account's default model, which the composer's chip starts on. */
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
-    /** Keeps the composer chip's pick as the account's default, as Start's menu does. */
-    writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
@@ -3140,7 +3138,6 @@ export function useTasksTab(input: {
       models: agents.models,
       readModels: agents.readModels,
       readDefault: agents.readDefault,
-      writeDefault: agents.writeDefault,
       onClose: () => setNewTaskAsk(undefined),
       linearIssuesIn,
     },
