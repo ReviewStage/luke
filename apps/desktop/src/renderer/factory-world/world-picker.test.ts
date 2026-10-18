@@ -125,7 +125,8 @@ function choose(page: HTMLElement, name: string): void {
 /** Whether the board's stations stand, rather than a world. */
 function boardStands(page: HTMLElement): boolean {
   return (
-    page.querySelector(".factory-scroll") !== null && page.querySelector(".factory-world") === null
+    page.querySelector('section[aria-label="Factory"]') !== null &&
+    page.querySelector(".factory-world") === null
   );
 }
 
