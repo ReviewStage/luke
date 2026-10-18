@@ -86,7 +86,7 @@ const BETA_MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const PLAN: TaskSummary = {
+const TASK: TaskSummary = {
   id: TASK_ID,
   workspaceId: ACME.id,
   name: "Teammate invitations",
@@ -128,7 +128,7 @@ const STATE: AppStateSnapshot = (() => {
     ...snapshot,
     tasks: {
       ...IDLE_TASKS_VIEW,
-      tasks: [PLAN],
+      tasks: [TASK],
       workspaces: [ACME, BETA],
       activeTaskId: TASK_ID,
       pages: [
@@ -185,7 +185,7 @@ const taskCards = {
     taskId !== TASK_ID
       ? undefined
       : createElement(TaskCard, {
-          task: PLAN,
+          task: TASK,
           models: [],
           pictures: false,
           now,
@@ -198,7 +198,7 @@ const taskCards = {
 /** The plan's page, whose words the section's heading is read from. */
 const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
-  taskName: PLAN.name,
+  taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
   text: () => PLAN_TEXT,
@@ -309,17 +309,17 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
       `[v4](${HOME}/plan/${TASK_ID}/version/4)`,
     ].join(" "),
   );
-  const [plan, section, gone, version] = chipsOf(container);
+  const [task, section, gone, version] = chipsOf(container);
 
-  const taskCard = await cardOf(plan);
+  const taskCard = await cardOf(task);
   const sectionCard = await cardOf(section);
 
   assert.equal(taskCard.card, "data-task-card");
-  assert.equal(taskCard.name, PLAN.name);
+  assert.equal(taskCard.name, TASK.name);
   assert.deepEqual(taskCard.details, ["acme/relay"]);
   assert.equal(taskCard.focus, undefined);
   assert.equal(sectionCard.card, "data-task-card");
-  assert.equal(sectionCard.name, PLAN.name);
+  assert.equal(sectionCard.name, TASK.name);
   assert.equal(sectionCard.focus, "Roll it out");
   assert.equal((await cardOf(gone)).focus, "Pricing · No longer in the plan");
   assert.equal((await cardOf(version)).focus, "Version 4");

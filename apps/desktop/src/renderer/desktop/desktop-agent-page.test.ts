@@ -689,9 +689,9 @@ const OPEN_TASK = "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b";
 
 test("an agent of the open task brought back on its page has the task's agents read again, so its tab and ⌘K stand where it does, and one of another task's has none", async () => {
   /** How many times the open task's agents are read again around an Unarchive on the page of an agent of `planId`. */
-  const readsAround = async (planId: string): Promise<number> => {
+  const readsAround = async (taskId: string): Promise<number> => {
     let reads = 0;
-    pages = [{ agent: { ...PAGE, planId, archivedAt: 2 } }];
+    pages = [{ agent: { ...PAGE, planId: taskId, archivedAt: 2 } }];
     const page = mount(
       tasksControl({
         activeTaskId: OPEN_TASK,
@@ -832,7 +832,7 @@ function words(line: Element | null | undefined): string {
   const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
   let said = "";
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    if (node.parentElement?.closest(".actor-face") == null) said += node.textContent ?? "";
+    if (node.parentElement?.closest(".actor-mark") == null) said += node.textContent ?? "";
   }
   return said;
 }
@@ -857,10 +857,10 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
   const opened: unknown[] = [];
-  const plans = tasksControl({ workspaces: [ACME] });
+  const tasks = tasksControl({ workspaces: [ACME] });
   const page = mount({
-    ...plans,
-    automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
+    ...tasks,
+    automationsView: { ...tasks.automationsView, onOpen: (place) => opened.push(place) },
   });
   await settle();
 

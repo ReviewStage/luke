@@ -74,11 +74,11 @@ export function usePerson(
  * someone's; `readerId` stands for the reader outside a directory.
  */
 export function useCreator(
-  plan: Pick<TaskSummary, "createdBy" | "ownerId">,
+  task: Pick<TaskSummary, "createdBy" | "ownerId">,
   readerId?: string | undefined,
 ): Actor {
   const directory = useMemberDirectory();
   const account = useAppState()?.account;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
-  return creatorActor(plan, { ...directory, readerId: directory.readerId ?? readerId }, you);
+  return creatorActor(task, { ...directory, readerId: directory.readerId ?? readerId }, you);
 }

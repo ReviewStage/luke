@@ -163,8 +163,8 @@ function readyToMerge(pullRequest: TaskPullRequestLine): boolean {
   return pullRequest.state === PULL_REQUEST_STATE.OPEN && READY_CHECKS.has(pullRequest.checks);
 }
 
-function pullRequestsOf(plan: TaskSummary): readonly TaskPullRequestLine[] {
-  return plan.agents?.pullRequests ?? [];
+function pullRequestsOf(task: TaskSummary): readonly TaskPullRequestLine[] {
+  return task.agents?.pullRequests ?? [];
 }
 
 /**
@@ -172,10 +172,10 @@ function pullRequestsOf(plan: TaskSummary): readonly TaskPullRequestLine[] {
  * newest agent's turn where that is later, which stands for when its pull
  * request moved, since the wire carries no instant of its own for one.
  */
-export function factoryMovedAt(plan: TaskSummary): number {
+export function factoryMovedAt(task: TaskSummary): number {
   return Math.max(
-    taskTime(plan, TASK_ORDER.UPDATED),
-    ...(plan.agents?.agents ?? []).map((agent) => agent.at ?? 0),
+    taskTime(task, TASK_ORDER.UPDATED),
+    ...(task.agents?.agents ?? []).map((agent) => agent.at ?? 0),
   );
 }
 
@@ -185,14 +185,14 @@ export function factoryMovedAt(plan: TaskSummary): number {
  * agent's start, so an agent that failed before its first turn on an old
  * task is as recent as it is.
  */
-export function agentMovedAt(plan: TaskSummary, agent: TaskAgentLine): number {
-  return agent.at ?? taskTime(plan, TASK_ORDER.UPDATED);
+export function agentMovedAt(task: TaskSummary, agent: TaskAgentLine): number {
+  return agent.at ?? taskTime(task, TASK_ORDER.UPDATED);
 }
 
 /** An agent whose turn failed lately, which waits on the developer to retry it. */
-function failedLately(plan: TaskSummary, agent: TaskAgentLine, now: number): boolean {
+function failedLately(task: TaskSummary, agent: TaskAgentLine, now: number): boolean {
   return (
-    agent.status === CODING_AGENT_STATUS.FAILED && now - agentMovedAt(plan, agent) < LOOKBACK_MS
+    agent.status === CODING_AGENT_STATUS.FAILED && now - agentMovedAt(task, agent) < LOOKBACK_MS
   );
 }
 
@@ -204,18 +204,20 @@ function checksFailing(pullRequest: TaskPullRequestLine): boolean {
 }
 
 /** Where one plan stands: what of it stops, works, blocks, and shipped. */
-function placeTask(plan: TaskSummary, input: FactoryInput) {
-  const agents = plan.agents?.agents ?? [];
-  const items = input.waiting.find((each) => each.taskId === plan.id)?.items ?? [];
-  const questions = items.map((item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan, item }));
+function placeTask(task: TaskSummary, input: FactoryInput) {
+  const agents = task.agents?.agents ?? [];
+  const items = input.waiting.find((each) => each.taskId === task.id)?.items ?? [];
+  const questions = items.map(
+    (item): FactoryStop => ({ kind: FACTORY_STOP.QUESTION, plan: task, item }),
+  );
   const failed = agents
-    .filter((agent) => failedLately(plan, agent, input.now))
-    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.FAILED, plan, agent }));
-  const standing = pullRequestsOf(plan).filter((each) => STANDING_STATES.has(each.state));
+    .filter((agent) => failedLately(task, agent, input.now))
+    .map((agent): FactoryStop => ({ kind: FACTORY_STOP.FAILED, plan: task, agent }));
+  const standing = pullRequestsOf(task).filter((each) => STANDING_STATES.has(each.state));
   const blocked = standing.flatMap((pullRequest): FactoryBlock[] => {
-    if (readyToMerge(pullRequest)) return [{ kind: FACTORY_BLOCK.MERGE, plan, pullRequest }];
+    if (readyToMerge(pullRequest)) return [{ kind: FACTORY_BLOCK.MERGE, plan: task, pullRequest }];
     if (checksFailing(pullRequest)) {
-      return [{ kind: FACTORY_BLOCK.CHECKS, plan, pullRequest }];
+      return [{ kind: FACTORY_BLOCK.CHECKS, plan: task, pullRequest }];
     }
     return [];
   });
@@ -223,17 +225,17 @@ function placeTask(plan: TaskSummary, input: FactoryInput) {
   const working: FactoryWork[] = [
     ...agents
       .filter((agent) => agentStillWriting(agent.status))
-      .map((agent): FactoryWork => ({ kind: FACTORY_WORK.AGENT, plan, agent })),
+      .map((agent): FactoryWork => ({ kind: FACTORY_WORK.AGENT, plan: task, agent })),
     ...building.map(
-      (pullRequest): FactoryWork => ({ kind: FACTORY_WORK.PULL_REQUEST, plan, pullRequest }),
+      (pullRequest): FactoryWork => ({ kind: FACTORY_WORK.PULL_REQUEST, plan: task, pullRequest }),
     ),
   ];
-  const at = factoryMovedAt(plan);
+  const at = factoryMovedAt(task);
   const shipped =
     input.now - at < LOOKBACK_MS
-      ? pullRequestsOf(plan)
+      ? pullRequestsOf(task)
           .filter((pullRequest) => pullRequest.state === PULL_REQUEST_STATE.MERGED)
-          .map((pullRequest): FactoryShipped => ({ task: plan, pullRequest, at }))
+          .map((pullRequest): FactoryShipped => ({ task: task, pullRequest, at }))
       : [];
   return { questions, failed, working, blocked, shipped };
 }
@@ -297,8 +299,8 @@ function kindsInOrder<T extends { readonly kind: string }>(
 
 /** The board as it stands now. */
 export function factoryBoard(input: FactoryInput): FactoryBoard {
-  const plans = input.plans.filter((plan) => plan.archivedAt === undefined);
-  const placed = plans.map((plan) => placeTask(plan, input));
+  const tasks = input.plans.filter((task) => task.archivedAt === undefined);
+  const placed = tasks.map((task) => placeTask(task, input));
   const oneOff = placeOneOff(input);
   const stops = [
     ...placed.flatMap((each) => [...each.questions, ...each.failed]),
@@ -307,7 +309,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
   ];
   const blockAt = (block: FactoryBlock) => factoryMovedAt(block.plan);
   return {
-    talking: plans.filter((plan) => plan.id === input.callTaskId),
+    talking: tasks.filter((task) => task.id === input.callTaskId),
     stopped: kindsInOrder(
       stops,
       [
@@ -328,7 +330,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
     ),
     shipped: placed.flatMap((each) => each.shipped).toSorted((a, b) => b.at - a.at),
     agentsWorking:
-      plans.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0) + oneOff.working.length,
+      tasks.reduce((sum, task) => sum + (task.agents?.working ?? 0), 0) + oneOff.working.length,
   };
 }
 
@@ -343,18 +345,18 @@ export function factoryWaiting(
   main: readonly AppInboxTask[],
 ): AppInboxTask[] {
   const byTask = new Map<string, Map<string, AppInboxWaitingItem>>();
-  const add = (planId: string, item: AppInboxWaitingItem) => {
-    const items = byTask.get(planId) ?? new Map<string, AppInboxWaitingItem>();
+  const add = (taskId: string, item: AppInboxWaitingItem) => {
+    const items = byTask.get(taskId) ?? new Map<string, AppInboxWaitingItem>();
     if (!items.has(item.id)) items.set(item.id, item);
-    byTask.set(planId, items);
+    byTask.set(taskId, items);
   };
   for (const { holder, item } of read) {
     if (holder.kind !== INBOX_HOLDER.TASK) continue;
     const { id, agentId, title, postedAt } = item;
     add(holder.task.id, { id, agentId, title, postedAt });
   }
-  for (const { taskId: planId, items } of main) for (const item of items) add(planId, item);
-  return [...byTask].map(([planId, items]) => ({ taskId: planId, items: [...items.values()] }));
+  for (const { taskId, items } of main) for (const item of items) add(taskId, item);
+  return [...byTask].map(([taskId, items]) => ({ taskId: taskId, items: [...items.values()] }));
 }
 
 /**

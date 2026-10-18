@@ -55,6 +55,7 @@ import {
   inboxAnswerRequestSchema,
   inboxCursorSchema,
   inboxMessageRequestSchema,
+  inboxReadAllRequestSchema,
   inboxReplyRefusal,
   inboxThreadMessage,
 } from "@luke/features/inbox-wire";
@@ -113,6 +114,9 @@ import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
   INBOX_MESSAGE_OUTCOME,
+  markInboxItemRead,
+  markInboxItemUnread,
+  markInboxRead,
   postInboxMessage,
   readInboxAttachment,
   readInboxItem,
@@ -289,6 +293,8 @@ const AGENTS_PATH = {
   INBOX_ITEM: "/api/inbox/item",
   /** POST writes a member's message on one inbox item's thread; the rewrite moves the path's item id into the `id` query. */
   INBOX_MESSAGES: "/api/inbox/messages",
+  /** PUT marks one inbox item read for the asking member and DELETE marks it unread, where the rewrite moves the path's item id into the `id` query; PUT with no `id` marks every item their Inbox lists read. */
+  INBOX_READ: "/api/inbox/read",
   /** GET reads what waits on the developer across the account's tasks past `after`. */
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
@@ -302,7 +308,13 @@ const AGENTS_PATH = {
 /** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
 const WORKSPACE_AGENTS_LIMIT = 50;
 
-const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
+const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+  PATCH: "PATCH",
+  PUT: "PUT",
+  DELETE: "DELETE",
+} as const;
 
 const QUERY = {
   ID: "id",
@@ -1467,6 +1479,49 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item });
 });
 
+/** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
+const MAXIMUM_INBOX_READ_ALL_BODY_BYTES = 1_024;
+
+/**
+ * The member's own read state on the Inbox, which no other member's moves.
+ * Where the path names an item, PUT marks it read, which is what opening
+ * it does and writes nothing where it stands read already, and DELETE
+ * marks it unread until they read it again; each answers the item's id and
+ * its read state, and an item of a workspace the account is not in is not
+ * found. Where the path names none, PUT marks every item their Inbox lists
+ * read, in the workspace the body names or in all of theirs, and answers
+ * how many were unread.
+ */
+const inboxReadEndpoint = /* @__PURE__ */ Effect.fn("web/inboxReadEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.has(QUERY.ID);
+  const method = incoming.method;
+  if (method !== HTTP_METHOD.PUT && !(named && method === HTTP_METHOD.DELETE)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  if (!named) {
+    const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_READ_ALL_BODY_BYTES);
+    const asked = readEither(inboxReadAllRequestSchema)(body);
+    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const userId = yield* resolvedUserId(seams, request);
+    const marked = yield* hostedStoreOrUnavailable(
+      markInboxRead(userId, asked.success.workspaceId),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { marked });
+  }
+  const itemId = yield* idOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const unread = method === HTTP_METHOD.DELETE;
+  const found = yield* hostedStoreOrUnavailable(
+    unread ? markInboxItemUnread(userId, itemId) : markInboxItemRead(userId, itemId),
+  );
+  if (!found) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { id: itemId, unread });
+});
+
 /**
  * The item with the answer standing on it under the request's key: taken
  * now where the item is open at the revision named and takes the answer,
@@ -1580,6 +1635,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.INBOX_MESSAGES,
           hostedRefusing(inboxMessageEndpoint(seams, writer)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.INBOX_READ,
+          hostedRefusing(inboxReadEndpoint(seams)),
         ),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
         HttpRouter.add(

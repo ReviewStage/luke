@@ -1,0 +1,41 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "marked": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "marked"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-unanswered",
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired",
+            "plan-archived"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

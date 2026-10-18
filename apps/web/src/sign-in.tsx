@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
-import { ProviderButton } from "./sign-in-choices";
+import { SocialProviderButton } from "./sign-in-choices";
 import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -78,7 +78,7 @@ function SignIn(): React.JSX.Element {
       footnote="You can close this window after Luke confirms the sign-in."
     >
       {provider ? (
-        <ProviderButton provider={provider} pending={pending} onPress={() => void begin()} />
+        <SocialProviderButton provider={provider} pending={pending} onPress={() => void begin()} />
       ) : null}
     </AuthPage>
   );

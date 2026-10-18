@@ -175,6 +175,9 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxAnsweredSchema: inboxWire.inboxAnsweredSchema,
     inboxMessageRequestSchema: inboxWire.inboxMessageRequestSchema,
     inboxMessagedSchema: inboxWire.inboxMessagedSchema,
+    inboxReadStateSchema: inboxWire.inboxReadStateSchema,
+    inboxReadAllRequestSchema: inboxWire.inboxReadAllRequestSchema,
+    inboxReadAllSchema: inboxWire.inboxReadAllSchema,
   } satisfies RecordedEffectJsonSchemas<typeof inboxWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
@@ -230,6 +233,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
     codingAgentInboxMessageParamsSchema: codingAgentView.codingAgentInboxMessageParamsSchema,
     codingAgentInboxMessagedViewSchema: codingAgentView.codingAgentInboxMessagedViewSchema,
+    codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
+    codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
     codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
     codingAgentAccountInboxAnswerViewSchema:
       codingAgentView.codingAgentAccountInboxAnswerViewSchema,

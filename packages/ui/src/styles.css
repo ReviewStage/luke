@@ -12,6 +12,7 @@
 @import "./components/layout/layout.css";
 @import "./components/list-row/list-row.css";
 @import "./components/menu/menu.css";
+@import "./components/nav-item/nav-item.css";
 @import "./components/popover-panel/popover-panel.css";
 @import "./components/text/text.css";
 @import "./components/text-link/text-link.css";
@@ -38,6 +39,7 @@
 @import "./components/inline-edit/inline-edit.css";
 @import "./components/inline-ref/inline-ref.css";
 @import "./components/pagination/pagination.css";
+@import "./components/provider-button/provider-button.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";
