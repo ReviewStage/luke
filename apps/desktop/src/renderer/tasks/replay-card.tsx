@@ -12,9 +12,11 @@ import {
   DisclosureSummary,
   Inline,
   TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -374,16 +376,16 @@ function ReplayFoot({
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
         <span className="agent-origin-chip">
           {linkChip(pullRequest.url, words, doors) ?? (
-            <a
-              className="text-link"
+            <TextLink
               href={pullRequest.url}
+              look={TEXT_LINK_LOOK.UNDERLINED}
               onClick={(event) => {
                 event.preventDefault();
                 place.openGitHub(pullRequest.url);
               }}
             >
               {words}
-            </a>
+            </TextLink>
           )}
         </span>
       )}
