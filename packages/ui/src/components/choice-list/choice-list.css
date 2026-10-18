@@ -98,24 +98,24 @@
 
   .luke-choice-detail {
     color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
   }
 
+  /* Note that the note runs inline in the label's line, so its smaller
+     words share the label's baseline rather than a box's centre. */
   .luke-choice-picked {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--luke-space-2);
     margin-left: var(--luke-space-8);
     color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-weight-regular);
     white-space: nowrap;
-    vertical-align: 1px;
   }
 
   .luke-choice-check {
-    flex: none;
     width: 12px;
     height: 12px;
+    margin-right: var(--luke-space-2);
+    vertical-align: -1px;
   }
 }

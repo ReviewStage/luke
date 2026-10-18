@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Badge } from "../badge/badge.js";
+import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
 
 /**
  * choice-list.tsx -- a list of options a reader picks from, each a row the width of its column holding a label, a line of detail, and a badge: one of them, or any that apply, and once settled, what was offered with what was picked.
@@ -18,7 +18,9 @@ import { Badge } from "../badge/badge.js";
  * reader cannot press, the picked ones in the checked look with a check and
  * the caller's words for whose pick it was, and the rest stepped back to an
  * outline. A badge (the agent's "Recommended") stands at the row's top
- * right however the label wraps.
+ * right however the label wraps, in the attention tone while the choice
+ * waits on the reader and the neutral one once settled, when it is history
+ * rather than a call to act.
  *
  * The list owns its rows' spacing, type, and states. The caller holds the
  * value and answers every change with the values it asks for.
@@ -117,9 +119,11 @@ function afterPress<Value extends string>(
 /** A row's words: its label with the badge at its top right and anything the caller hangs after it, then its detail. */
 function ChoiceWords({
   option,
+  tone,
   after,
 }: {
   option: ChoiceOption<string>;
+  tone: BadgeTone;
   after?: ReactNode;
 }): React.JSX.Element {
   return (
@@ -129,7 +133,7 @@ function ChoiceWords({
           {option.label}
           {after}
         </span>
-        {option.badge === undefined ? null : <Badge>{option.badge}</Badge>}
+        {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
       </span>
       {option.detail === undefined ? null : (
         <span className="luke-choice-detail">{option.detail}</span>
@@ -167,7 +171,7 @@ function ChoiceRow({
   const words = (
     <>
       {option.mark === undefined ? null : <span className="luke-choice-mark">{option.mark}</span>}
-      <ChoiceWords option={option} />
+      <ChoiceWords option={option} tone={BADGE_TONE.ATTENTION} />
     </>
   );
   // Note that each role is spelled out, because a role read off a value is one the accessibility lint cannot check.
@@ -251,6 +255,7 @@ function SettledChoices<Value extends string>({
             )}
             <ChoiceWords
               option={option}
+              tone={BADGE_TONE.NEUTRAL}
               after={
                 picked ? (
                   <span className="luke-choice-picked">
