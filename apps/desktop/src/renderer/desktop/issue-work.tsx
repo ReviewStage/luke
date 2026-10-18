@@ -1,3 +1,4 @@
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { Issue } from "@luke/features/issue-wire";
 import type { TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { ComposeIcon, DocumentIcon, INLINE_REF_LOOK } from "@luke/ui";
@@ -21,8 +22,9 @@ import type { MenuAction } from "./action-menu";
  * its task; an issue no task was started from lists none and draws no row.
  * Beside each task stand its pull requests as Factory draws them, each a
  * mark for where it stands and its number, opening where Factory's row
- * opens it, and the issue's card draws the newest of them after its
- * priority. The Issues page hands these doors down once, so a card's menu, a row's,
+ * opens it, the ones the task list did not carry counted in a pill that
+ * opens the task, and the issue's card draws the one that matters most
+ * after its priority, as a task's sidebar mark picks it. The Issues page hands these doors down once, so a card's menu, a row's,
  * and the issue's own page offer the same ones.
  */
 
@@ -61,6 +63,26 @@ export function useStartItems(issue: Issue, identifier: string): MenuAction[] {
   ];
 }
 
+/** How many of a task's pull requests the list did not carry, which open with the task; nothing where it carried each. */
+function MorePullRequests({
+  task,
+  onOpen,
+}: {
+  task: TaskSummary;
+  onOpen: () => void;
+}): React.JSX.Element | null {
+  const more = (task.agents?.pullRequestTotal ?? 0) - (task.agents?.pullRequests.length ?? 0);
+  if (more <= 0) return null;
+  return (
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      label={`${more} more`}
+      pressLabel={`Open ${task.name} for ${more} more pull requests`}
+      onPress={onOpen}
+    />
+  );
+}
+
 /** The tasks started from the issue, each a chip that opens it, under its status and priority; nothing while none was. */
 export function IssueWorkRow({ issue }: { issue: Issue }): React.JSX.Element | null {
   const work = useContext(IssueWorkContext);
@@ -89,30 +111,52 @@ export function IssueWorkRow({ issue }: { issue: Issue }): React.JSX.Element | n
               data-pull-request-state={pullRequest.state}
             />
           ))}
+          <MorePullRequests task={task} onOpen={() => work.onOpenTask(task.id)} />
         </span>
       ))}
     </section>
   );
 }
 
+/** The pull request states still to be acted on, which a card's mark is drawn for first. */
+const STANDING_STATES: ReadonlySet<TaskPullRequestLine["state"]> = new Set([
+  PULL_REQUEST_STATE.OPEN,
+  PULL_REQUEST_STATE.DRAFT,
+]);
+
 /**
- * The newest pull request of the tasks started from the issue, as its card
- * draws it after its priority: its mark for where it stands and its number,
- * and how many more stand beside it where any do; nothing while none was
- * opened. It is the newest task's newest, as the tasks stand newest started
- * first and each task's newest agent's first.
+ * The pull request that matters most of the tasks started from the issue,
+ * as a task's sidebar mark picks one (`task-agents-model.ts`): one still
+ * open or a draft first, else a merged one, else a closed one, the newest
+ * task's first within each. The service lists each task's still-open ones
+ * first, so the one picked is always among those it carries.
+ */
+function leadPullRequest(tasks: readonly TaskSummary[]): TaskPullRequestLine | undefined {
+  const all = tasks.flatMap((task) => task.agents?.pullRequests ?? []);
+  return (
+    all.find((each) => STANDING_STATES.has(each.state)) ??
+    all.find((each) => each.state === PULL_REQUEST_STATE.MERGED) ??
+    all[0]
+  );
+}
+
+/**
+ * The pull request that matters most of the tasks started from the issue,
+ * as its card draws it after its priority: its mark for where it stands and
+ * its number, and how many more stand beside it where any do; nothing while
+ * none was opened.
  */
 export function IssueCardPullRequest({ issue }: { issue: Issue }): React.JSX.Element | null {
   const work = useContext(IssueWorkContext);
   const tasks = work?.tasksOf(issue.id) ?? [];
-  const newest = tasks.flatMap((task) => task.agents?.pullRequests ?? [])[0];
-  if (newest === undefined) return null;
+  const lead = leadPullRequest(tasks);
+  if (lead === undefined) return null;
   const total = tasks.reduce((sum, task) => sum + (task.agents?.pullRequestTotal ?? 0), 0);
   const more = total - 1;
   return (
-    <span className="issue-card-pull-request" data-pull-request-state={newest.state}>
-      <PullRequestMark pullRequest={newest} />
-      <span>{pullRequestNumberLabel(newest)}</span>
+    <span className="issue-card-pull-request" data-pull-request-state={lead.state}>
+      <PullRequestMark pullRequest={lead} />
+      <span>{pullRequestNumberLabel(lead)}</span>
       {more > 0 ? <span className="issue-card-pull-request-more">{`+${more}`}</span> : null}
     </span>
   );

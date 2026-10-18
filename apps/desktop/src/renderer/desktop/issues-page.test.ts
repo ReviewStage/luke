@@ -2881,7 +2881,7 @@ test("an issue's page draws each task's pull requests beside it as Factory does,
   assert.deepEqual(githubOpened, ["https://github.com/acme/web/pull/17"]);
 });
 
-test("a card draws the newest pull request of its issue's tasks after its priority, with how many more stand, and none where no pull request was opened", async () => {
+test("a card draws the pull request that matters most of its issue's tasks after its priority, with how many more stand, and none where no pull request was opened", async () => {
   standing = [issue(1), issue(2)];
   tasksListed = [
     withPullRequests(
@@ -2908,4 +2908,50 @@ test("a card draws the newest pull request of its issue's tasks after its priori
   };
   assert.deepEqual(drawn(issue(1).id), [PULL_REQUEST_STATE.DRAFT, "#42+3"]);
   assert.equal(drawn(issue(2).id), undefined);
+});
+
+test("a card draws an older agent's open pull request over a newer one's merged one, as a task's sidebar mark does, and a merged one over a closed one", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    // The service lists a task's still-open pull requests first, whatever agent opened them.
+    withPullRequests(task("task-one", "Fix login", issue(1).id, 2), [
+      pullRequestLine(10, PULL_REQUEST_STATE.OPEN),
+      pullRequestLine(11, PULL_REQUEST_STATE.MERGED),
+    ]),
+    withPullRequests(task("task-newer", "Fix logout, again", issue(2).id, 3), [
+      pullRequestLine(21, PULL_REQUEST_STATE.CLOSED),
+    ]),
+    withPullRequests(task("task-older", "Fix logout", issue(2).id, 1), [
+      pullRequestLine(20, PULL_REQUEST_STATE.MERGED),
+    ]),
+  ];
+  const page = mount();
+  await settle();
+
+  const drawn = (issueId: string) => {
+    const mark = cardOf(page, issueId).querySelector(".issue-card-pull-request");
+    return [mark?.getAttribute("data-pull-request-state"), mark?.textContent];
+  };
+  assert.deepEqual(drawn(issue(1).id), [PULL_REQUEST_STATE.OPEN, "#10+1"]);
+  assert.deepEqual(drawn(issue(2).id), [PULL_REQUEST_STATE.MERGED, "#20+1"]);
+});
+
+test("an issue's page counts a task's pull requests the list did not carry, in a pill that opens the task", async () => {
+  standing = [issue(1)];
+  tasksListed = [
+    withPullRequests(
+      task("task-busy", "Fix login", issue(1).id, 1),
+      [
+        pullRequestLine(4, PULL_REQUEST_STATE.OPEN),
+        pullRequestLine(3, PULL_REQUEST_STATE.OPEN),
+        pullRequestLine(2, PULL_REQUEST_STATE.MERGED),
+      ],
+      5,
+    ),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login", "#4", "#3", "#2", "2 more"]);
+  act(() => button("Open Fix login for 2 more pull requests").click());
+  assert.deepEqual(tasksOpened, ["task-busy"]);
 });
