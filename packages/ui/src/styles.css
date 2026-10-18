@@ -39,6 +39,7 @@
 @import "./components/inline-edit/inline-edit.css";
 @import "./components/inline-ref/inline-ref.css";
 @import "./components/pagination/pagination.css";
+@import "./components/provider-button/provider-button.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";
 @import "./components/text-field/text-field.css";

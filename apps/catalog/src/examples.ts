@@ -30,6 +30,7 @@ import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
@@ -100,6 +101,7 @@ export const EXAMPLES: readonly Example[] = [
   NAV_ITEMS_EXAMPLE,
   PAGINATION_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
+  PROVIDER_BUTTONS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEGMENTED_EXAMPLE,

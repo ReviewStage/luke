@@ -24,9 +24,10 @@
  * in the host's place, less what the attribute's selector names, and its
  * changes watched (`watchText`), each walk up from a match crossing from
  * the shadow root to its host, so a match there is painted, ordered among
- * the rest, and scrolled into view as any other. The rules that paint a
- * match are the document's, and a shadow root takes none of them, so such
- * a root adopts its own.
+ * the rest, and scrolled into view as any other; what its host slots into
+ * it, a diff's review threads under their lines, is read where its slot
+ * stands. The rules that paint a match are the document's, and a shadow
+ * root takes none of them, so such a root adopts its own.
  */
 
 /** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
@@ -156,7 +157,22 @@ interface Reading {
 
 /** Reads every searched text node under `parent`, in document order, onto the string, a shadow root searched in its host's place. */
 function readUnder(parent: Node, root: Element, skipped: string | undefined, into: Reading): void {
-  for (let node = parent.firstChild; node !== null; node = node.nextSibling) {
+  readNodes(parent.childNodes, root, skipped, into);
+}
+
+/**
+ * Reads every searched text node in and under `nodes`, in order, onto the
+ * string: a shadow root searched in its host's place, and a slot in it in
+ * the place of what its host slots there, as a diff's review threads stand
+ * under their lines.
+ */
+function readNodes(
+  nodes: Iterable<Node>,
+  root: Element,
+  skipped: string | undefined,
+  into: Reading,
+): void {
+  for (const node of nodes) {
     if (node instanceof Text) {
       if (node.data.length === 0) continue;
       const own = blockOf(node, root);
@@ -167,6 +183,10 @@ function readUnder(parent: Node, root: Element, skipped: string | undefined, int
       continue;
     }
     if (!(node instanceof Element) || unread(node, skipped)) continue;
+    if (node instanceof HTMLSlotElement) {
+      readNodes(node.assignedNodes({ flatten: true }), root, undefined, into);
+      continue;
+    }
     const shadow = searchedShadow(node);
     if (shadow === undefined) readUnder(node, root, skipped, into);
     else readUnder(shadow.root, root, shadow.skipped, into);
@@ -187,9 +207,19 @@ function inDocumentTree(node: Node): Node {
   return at;
 }
 
+/** The node a node stands for where a shadow root draws it: the slot it is assigned to, or itself where it is slotted nowhere. */
+function inFlatTree(node: Node): Node {
+  for (let at: Node | null = node; at !== null; at = at.parentNode) {
+    if (at instanceof Element && at.assignedSlot !== null) return at.assignedSlot;
+  }
+  return node;
+}
+
 /**
  * Whether range `a` starts before range `b`. Note that two ranges in
  * different trees, one in a shadow root and one outside it, are ordered by
+ * where each is drawn: what a host slots into its shadow root where its
+ * slot stands there, as the words are read (`readNodes`), and otherwise
  * where each stands in the document's own tree, because a range compares
  * boundary points only within its own tree.
  */
@@ -197,8 +227,13 @@ function startsBefore(a: Range, b: Range): boolean {
   if (a.startContainer.getRootNode() === b.startContainer.getRootNode()) {
     return a.compareBoundaryPoints(Range.START_TO_START, b) < 0;
   }
-  const one = inDocumentTree(a.startContainer);
-  const other = inDocumentTree(b.startContainer);
+  const drawnOne = inFlatTree(a.startContainer);
+  const drawnOther = inFlatTree(b.startContainer);
+  if (drawnOne !== drawnOther && drawnOne.getRootNode() === drawnOther.getRootNode()) {
+    return (drawnOne.compareDocumentPosition(drawnOther) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }
+  const one = inDocumentTree(drawnOne);
+  const other = inDocumentTree(drawnOther);
   return (
     one !== other && (one.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
   );
