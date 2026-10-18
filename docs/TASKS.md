@@ -289,8 +289,9 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   effort; its chevron drops the searchable picker over the models the service
   offers, grouped by provider with the newest first, each under its provider's
   mark and the default checked, with the efforts the chosen model lists and
-  "Start with <model> · <effort>" pinned under the scrolling list, which the
-  service also keeps as the account's default. A task with no repository has Start unavailable, saying why on
+  "Start with <model> · <effort>" pinned under the scrolling list. What the
+  chevron picks is what the main part starts on while the task is open, and
+  never the account's default, which only Settings changes. A task with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).
@@ -568,8 +569,9 @@ smaller standard one is the opt-in. The Start menu and an agent's chip offer
 the same choice as a Context row beside Effort, and the chip says the window
 after the effort only where it is the opted-in smaller one ("GPT-5.5 High
 272K"). The page
-reads the default as it opens, so a model chosen from Start's chevron, which
-the service keeps as the default too, shows there next. A first-time
+reads the default as it opens, and it is the one place the default changes:
+a model chosen from Start's chevron, an agent's chip, a draft, a fork, or by
+Luke or another agent runs that agent alone. A first-time
 account starts on Claude Opus 5.5 at high.
 
 ### Transcript

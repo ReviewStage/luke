@@ -574,7 +574,6 @@ const startClaimed = Effect.fnUntraced(function* (
       prompt: handed.prompt,
       // Only the automation's own prompt hands servers its owner switched off, never the words an outsider wrote after it.
       serverWords: automation.action.prompt,
-      rememberChoice: false,
       automationId: automation.id,
       automationOrigin: handed.origin,
       title: subjectTitle(automation, run.firing),
