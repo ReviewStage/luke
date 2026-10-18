@@ -10,9 +10,19 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * arrow keys move along the open rows and choose as they go, wrapping at
  * either end. A press on the checked row does nothing, unless the list is
  * `clearable`, where it takes the choice back. Picking several is a group of
- * checkboxes in a fieldset, each its own Tab stop, toggled by a press, Space, or Enter.
- * A row may be unavailable on its own, saying why in its detail, and the
- * keyboard steps past it.
+ * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
+ * Space, the arrow keys moving the keyboard along them without toggling.
+ * Enter presses a row as a button's Enter does, unless what holds the list
+ * takes the key first, as the Inbox does for its send. A row may be
+ * unavailable on its own, saying why in its detail, and the keyboard steps
+ * past it.
+ *
+ * A `marked` list leads each row with the control it behaves as, a radio's
+ * round mark or a checkbox's square, filled in the accent once checked, so
+ * one pick or several reads before a word does. A `numbered` list wears each
+ * of its first nine rows' number at the row's right, after the badge, and
+ * says it to a reader as the row's key; the caller answers the keys, since
+ * a number picks a row from wherever the caller lets it.
  *
  * A settled list is the record of a choice made: the same rows as a list a
  * reader cannot press, the picked ones in the checked look with a check and
@@ -33,6 +43,17 @@ export const CHOICE_SELECT = {
 } as const;
 
 export type ChoiceSelect = (typeof CHOICE_SELECT)[keyof typeof CHOICE_SELECT];
+
+/** How an open list's rows lead: with their words alone, or with the radio or checkbox each behaves as. */
+export const CHOICE_LOOK = {
+  PLAIN: "plain",
+  MARKED: "marked",
+} as const;
+
+export type ChoiceLook = (typeof CHOICE_LOOK)[keyof typeof CHOICE_LOOK];
+
+/** How many of a numbered list's rows wear their number: the keys 1 to 9. */
+export const CHOICE_NUMBERED_ROWS = 9;
 
 /** The keys that step along a pick-one list, and which way. */
 const STEP_KEYS = new Map([
@@ -71,6 +92,10 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   /** Whether a pick-one list's checked row, pressed again, takes the choice back. */
   clearable?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** Whether each row leads with its radio or its checkbox. */
+  look?: ChoiceLook | undefined;
+  /** Whether each of the first nine rows wears its number, the key the caller picks it by. */
+  numbered?: boolean | undefined;
   /** Held by the row the keyboard lands on, so a dialog can focus it as it opens. */
   focusRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   onChange: (value: readonly Value[]) => void;
@@ -116,15 +141,17 @@ function afterPress<Value extends string>(
   return props.clearable === true ? [] : undefined;
 }
 
-/** A row's words: its label with the badge at its top right and anything the caller hangs after it, then its detail. */
+/** A row's words: its label with the badge at its top right, its number after that, and anything the caller hangs after the label, then its detail. */
 function ChoiceWords({
   option,
   tone,
   after,
+  number,
 }: {
   option: ChoiceOption<string>;
   tone: BadgeTone;
   after?: ReactNode;
+  number?: number | undefined;
 }): React.JSX.Element {
   return (
     <span className="luke-choice-words">
@@ -133,7 +160,17 @@ function ChoiceWords({
           {option.label}
           {after}
         </span>
-        {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
+        {option.badge === undefined && number === undefined ? null : (
+          <span className="luke-choice-end">
+            {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
+            {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
+            {number === undefined ? null : (
+              <span className="luke-choice-number" aria-hidden="true">
+                {number}
+              </span>
+            )}
+          </span>
+        )}
       </span>
       {option.detail === undefined ? null : (
         <span className="luke-choice-detail">{option.detail}</span>
@@ -149,6 +186,8 @@ function ChoiceRow({
   checked,
   tabStop,
   disabled,
+  marked,
+  number,
   focusRef,
   onPress,
 }: {
@@ -157,6 +196,9 @@ function ChoiceRow({
   checked: boolean;
   tabStop: boolean;
   disabled: boolean;
+  marked: boolean;
+  /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
+  number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
   onPress: () => void;
 }): React.JSX.Element {
@@ -166,12 +208,20 @@ function ChoiceRow({
     tabIndex: tabStop ? 0 : -1,
     className: "luke-choice",
     disabled,
+    "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: onPress,
   } as const;
   const words = (
     <>
+      {marked ? (
+        <span
+          className="luke-choice-control"
+          data-shape={radio ? "radio" : "box"}
+          aria-hidden="true"
+        />
+      ) : null}
       {option.mark === undefined ? null : <span className="luke-choice-mark">{option.mark}</span>}
-      <ChoiceWords option={option} tone={BADGE_TONE.ATTENTION} />
+      <ChoiceWords option={option} tone={BADGE_TONE.ATTENTION} number={number} />
     </>
   );
   // Note that each role is spelled out, because a role read off a value is one the accessibility lint cannot check.
@@ -190,7 +240,16 @@ function ChoiceRow({
 
 /** The rows as a radio group or a group of checkboxes. */
 function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.JSX.Element {
-  const { legend, options, value, disabled = false, focusRef, select = CHOICE_SELECT.ONE } = props;
+  const {
+    legend,
+    options,
+    value,
+    disabled = false,
+    focusRef,
+    select = CHOICE_SELECT.ONE,
+    look = CHOICE_LOOK.PLAIN,
+    numbered = false,
+  } = props;
   const one = select === CHOICE_SELECT.ONE;
   const open = options.filter((option) => option.disabled !== true);
   const landing = open.find((option) => value.includes(option.value)) ?? open[0];
@@ -213,7 +272,21 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     if (!value.includes(next.value)) props.onChange([next.value]);
     radios[options.indexOf(next)]?.focus();
   };
-  const rows = options.map((option) => (
+  // An arrow along a pick-several list moves the keyboard to the next open row and toggles nothing.
+  const onBoxKeyDown = (event: React.KeyboardEvent<HTMLFieldSetElement>) => {
+    const step = STEP_KEYS.get(event.key);
+    if (step === undefined || disabled) return;
+    const boxes = [
+      ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+        '[role="checkbox"]:not(:disabled)',
+      ),
+    ];
+    const at = event.target instanceof HTMLButtonElement ? boxes.indexOf(event.target) : -1;
+    if (at < 0) return;
+    event.preventDefault();
+    boxes[(at + step + boxes.length) % boxes.length]?.focus();
+  };
+  const rows = options.map((option, index) => (
     <ChoiceRow
       key={option.value}
       radio={one}
@@ -221,13 +294,15 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       checked={value.includes(option.value)}
       tabStop={!one || option === landing}
       disabled={disabled || option.disabled === true}
+      marked={look === CHOICE_LOOK.MARKED}
+      number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
       focusRef={option === landing ? focusRef : undefined}
       onPress={() => press(option.value)}
     />
   ));
   if (!one) {
     return (
-      <fieldset aria-label={legend} className="luke-choice-list">
+      <fieldset aria-label={legend} className="luke-choice-list" onKeyDown={onBoxKeyDown}>
         {rows}
       </fieldset>
     );

@@ -80,6 +80,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST]: "Remove review request",
   [PULL_REQUEST_ACTION.ADD_LABEL]: "Add label",
   [PULL_REQUEST_ACTION.REMOVE_LABEL]: "Remove label",
+  [PULL_REQUEST_ACTION.ADD_REACTION]: "Add reaction",
+  [PULL_REQUEST_ACTION.REMOVE_REACTION]: "Remove reaction",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */

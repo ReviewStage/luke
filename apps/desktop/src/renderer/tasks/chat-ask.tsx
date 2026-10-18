@@ -19,6 +19,7 @@ import {
   IconButton,
   TEXT_AREA_SUBMIT,
   TEXT_TONE,
+  TEXT_VARIANT,
   Text,
   TextArea,
 } from "@luke/ui";
@@ -248,6 +249,12 @@ function Answer({
     <>
       {response.type === CHAT_ASK.CHOICE ? (
         <ChoiceOptions choice={response} draft={draft} disabled={sending} onDraft={setDraft} />
+      ) : null}
+      {/* Note that the card has no foot to count picks on, as the Inbox's box does, so it says under the options that several may be picked. */}
+      {response.type === CHAT_ASK.CHOICE && response.multiple === true ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          Pick any that apply.
+        </Text>
       ) : null}
       {response.type === CHAT_ASK.FORM ? (
         <FormFields form={response} draft={draft} disabled={sending} onDraft={setDraft} />

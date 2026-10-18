@@ -21,7 +21,13 @@ import {
 } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DRAFT_PLACE, type InboxPlace, useDraftWriter, useInboxDrafts } from "../composer-drafts";
+import {
+  DRAFT_PLACE,
+  draftOfItem,
+  type InboxPlace,
+  useDraftWriter,
+  useInboxDrafts,
+} from "../composer-drafts";
 import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
@@ -222,15 +228,6 @@ function draftPlace(item: InboxItem, taskId: string | null): InboxPlace {
     revision: item.revision,
   };
   return item.status === INBOX_STATUS.OPEN ? place : { ...place, thread: true };
-}
-
-/** Whether a kept draft is the one the item's card reads as it now stands. */
-function draftOfItem(place: InboxPlace, item: InboxItem): boolean {
-  return (
-    place.itemId === item.id &&
-    place.revision === item.revision &&
-    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
-  );
 }
 
 /** The items with one replaced by the service's newer word on it. */

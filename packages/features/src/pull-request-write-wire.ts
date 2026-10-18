@@ -49,6 +49,20 @@ const headShaSchema = EffectSchema.String.check(
   EffectSchema.isPattern(/^[0-9a-f]+$/u),
 );
 
+/** The reactions GitHub offers on a comment, in the order it draws them; a reaction is read with the conversation (`coding-agent-wire.ts`) and changed here. */
+export const REACTION = {
+  THUMBS_UP: "thumbs_up",
+  THUMBS_DOWN: "thumbs_down",
+  LAUGH: "laugh",
+  HOORAY: "hooray",
+  CONFUSED: "confused",
+  HEART: "heart",
+  ROCKET: "rocket",
+  EYES: "eyes",
+} as const;
+
+export type Reaction = (typeof REACTION)[keyof typeof REACTION];
+
 /** The changes the Pull request tab makes, each one press. */
 export const PULL_REQUEST_ACTION = {
   /** A draft marked ready for review. */
@@ -91,6 +105,10 @@ export const PULL_REQUEST_ACTION = {
   UNRESOLVE_THREAD: "unresolve-thread",
   /** A comment on the pull request itself, at the foot of its conversation. */
   COMMENT: "comment",
+  /** A reaction given to the description, a comment, a review, or a review comment. */
+  ADD_REACTION: "add-reaction",
+  /** The member's own reaction taken back. */
+  REMOVE_REACTION: "remove-reaction",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -132,6 +150,15 @@ export type PullRequestReviewerRef = typeof reviewerSchema.Type;
 
 /** GitHub's own id for a review thread of the pull request, as the conversation's read carries it. */
 const threadIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/**
+ * GitHub's own id for what wears a reaction, as the conversation's read
+ * carries it (`subject`); the service holds it to this pull request before
+ * it reacts.
+ */
+const subjectIdSchema = EffectSchema.NonEmptyString.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
 );
 
@@ -200,6 +227,14 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.COMMENT),
     body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literals([
+      PULL_REQUEST_ACTION.ADD_REACTION,
+      PULL_REQUEST_ACTION.REMOVE_REACTION,
+    ]),
+    subject: subjectIdSchema,
+    content: EffectSchema.Literals(Object.values(REACTION)),
   }),
 ]);
 

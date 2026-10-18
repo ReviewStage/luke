@@ -19,10 +19,11 @@ import {
   MERGE_STATE,
   OVERVIEW_BOUNDS,
   PULL_REQUEST_STATE,
-  REACTION,
   REVIEW_STATE,
 } from "@luke/features/coding-agent-wire";
-import { Effect, Option, Redacted } from "effect";
+import { REACTION } from "@luke/features/pull-request-write-wire";
+import { Duration, Effect, Fiber, Option, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import {
   GITHUB_FIXTURE_BOT,
   githubReaching,
@@ -35,6 +36,7 @@ import {
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestOverview,
+  viewerReactionsOf,
 } from "./pull-requests.js";
 
 /**
@@ -1104,6 +1106,191 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           ],
           "a comment the GraphQL read did not reach is counted by its REST rollup",
         );
+      }),
+  );
+
+  it.effect(
+    "each comment, review, thread comment, and the description carry the GraphQL id a reaction is added by, and the member's own read, on their own token, marks which reactions are theirs",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const member = Redacted.make("ghu_member_fixture");
+        const bearers: string[] = [];
+        const group = (content: string, totalCount: number) => ({
+          content,
+          reactors: { totalCount, nodes: [] },
+        });
+        const viewed = (content: string, viewerHasReacted: boolean) => ({
+          content,
+          viewerHasReacted,
+        });
+        const script = repository({
+          pull: pull(),
+          comments: [
+            {
+              id: 11,
+              node_id: "IC_11",
+              user: PRIYA,
+              body: "Ship it.",
+              body_html: '<p dir="auto">Ship it.</p>',
+              created_at: "2026-10-15T10:00:00Z",
+              html_url: `${PAGE}#issuecomment-11`,
+            },
+          ],
+          reviews: [
+            {
+              id: 5,
+              node_id: "PRR_5",
+              user: PRIYA,
+              state: "APPROVED",
+              body: "",
+              submitted_at: "2026-10-15T11:00:00Z",
+              html_url: `${PAGE}#pullrequestreview-5`,
+            },
+          ],
+        });
+        const answered: RepositoryScript = (sent) => {
+          if (new URL(sent.url).pathname !== "/graphql") return script(sent);
+          bearers.push(sent.headers.get("authorization") ?? "");
+          const viewer = JSON.parse(sent.body).query.includes("viewerHasReacted");
+          return Response.json({
+            data: {
+              repository: {
+                pullRequest: viewer
+                  ? {
+                      id: "PR_7",
+                      reactionGroups: [viewed("HEART", true), viewed("ROCKET", false)],
+                      comments: {
+                        nodes: [{ id: "IC_11", reactionGroups: [viewed("EYES", false)] }],
+                      },
+                      reviews: { nodes: [] },
+                      reviewThreads: {
+                        nodes: [
+                          {
+                            comments: {
+                              nodes: [
+                                { id: "PRRC_1", reactionGroups: [viewed("THUMBS_UP", true)] },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    }
+                  : {
+                      id: "PR_7",
+                      reactionGroups: [group("HEART", 2), group("ROCKET", 1)],
+                      comments: {
+                        nodes: [{ databaseId: 11, reactionGroups: [group("EYES", 1)] }],
+                      },
+                      reviews: { nodes: [] },
+                      reviewThreads: {
+                        totalCount: 1,
+                        nodes: [
+                          {
+                            id: "PRRT_viewed",
+                            path: "src/invite.ts",
+                            line: 12,
+                            startLine: null,
+                            originalLine: 12,
+                            originalStartLine: null,
+                            diffSide: "RIGHT",
+                            startDiffSide: null,
+                            isResolved: false,
+                            isOutdated: false,
+                            comments: {
+                              totalCount: 1,
+                              nodes: [
+                                {
+                                  author: null,
+                                  body: "Why?",
+                                  bodyHTML: '<p dir="auto">Why?</p>',
+                                  createdAt: "2026-10-15T10:59:00Z",
+                                  url: `${PAGE}#discussion_r1`,
+                                  pullRequestReview: { databaseId: 5, state: "APPROVED" },
+                                  id: "PRRC_1",
+                                  reactionGroups: [
+                                    { content: "THUMBS_UP", reactors: { totalCount: 1 } },
+                                  ],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+              },
+            },
+          });
+        };
+
+        const conversation = yield* Effect.flatMap(
+          pullRequestConversation(
+            TOKEN,
+            REPOSITORY,
+            { number: NUMBER, url: PAGE },
+            viewerReactionsOf(member, REPOSITORY, NUMBER),
+          ),
+          (read) => namedOverviewConversation({ organizationId: workspace }, NUMBER, read),
+        ).pipe(answering(answered));
+
+        assert.deepEqual(
+          [...bearers].sort(),
+          [`Bearer ${Redacted.value(TOKEN)}`, `Bearer ${Redacted.value(member)}`].sort(),
+          "the App's read on its token, the member's on theirs",
+        );
+        assert.equal(conversation.descriptionSubject, "PR_7");
+        assert.deepEqual(
+          conversation.descriptionReactions?.map(({ content, mine }) => [content, mine]),
+          [
+            [REACTION.HEART, true],
+            [REACTION.ROCKET, false],
+          ],
+        );
+        const [comment, approved] = conversation.conversation;
+        assert.equal(comment?.subject, "IC_11");
+        assert.deepEqual(
+          comment?.reactions?.map(({ content, mine }) => [content, mine]),
+          [[REACTION.EYES, false]],
+        );
+        assert.equal(approved?.subject, "PRR_5");
+        const threadComment = approved?.threads?.[0]?.comments[0];
+        assert.equal(threadComment?.subject, "PRRC_1");
+        assert.deepEqual(threadComment?.reactions, [
+          { content: REACTION.THUMBS_UP, count: 1, mine: true },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a member's own read that does not answer in time leaves the conversation answered without saying which reactions are theirs",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const script = repository({
+          pull: pull(),
+          graphql: {
+            data: {
+              repository: {
+                pullRequest: {
+                  id: "PR_7",
+                  reactionGroups: [{ content: "HEART", reactors: { totalCount: 1, nodes: [] } }],
+                  reviewThreads: { totalCount: 0, nodes: [] },
+                },
+              },
+            },
+          },
+        });
+        const reading = yield* Effect.forkChild(
+          Effect.flatMap(
+            pullRequestConversation(TOKEN, REPOSITORY, { number: NUMBER, url: PAGE }, Effect.never),
+            (read) => namedOverviewConversation({ organizationId: workspace }, NUMBER, read),
+          ).pipe(answering(script)),
+        );
+        yield* TestClock.adjust(Duration.seconds(1));
+        const conversation = yield* Fiber.join(reading);
+        assert.deepEqual(conversation.descriptionReactions, [
+          { content: REACTION.HEART, count: 1, by: [] },
+        ]);
       }),
   );
 

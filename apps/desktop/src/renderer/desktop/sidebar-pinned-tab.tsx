@@ -47,7 +47,7 @@ import { PullRequestLine, RepositoryDetail } from "./task-card";
  * is a task card (`task-card.tsx`), drawn from its rows: the tab's whole
  * name after its glyph, then the task it is of, which opens the task, and
  * the task's repository, which opens on GitHub, and for an agent's pin or
- * its Changes' the pull request it opened, which opens on GitHub too, once the one read of
+ * its Changes' the pull request it opened, which opens in its Pull request tab where the window lists it and on GitHub otherwise, once the one read of
  * it the card makes as it opens lands. A press opens the task, where it is not the open one, and the tab
  * in its column: an agent's in the task's column, any other in the side
  * panel, opening either where it is closed. The row it opened from is
@@ -243,7 +243,7 @@ function PinnedTabCard({
         <>
           <HoverCardRule />
           <HoverCardList label="Pull request">
-            <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
+            <PullRequestLine pullRequest={pullRequest} />
           </HoverCardList>
         </>
       )}

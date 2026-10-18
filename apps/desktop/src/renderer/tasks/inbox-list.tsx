@@ -38,6 +38,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
+import { useInboxItemDrafted } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
@@ -50,9 +51,11 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
+import { DraftMark } from "../draft-mark";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
+import { providerOf } from "./coding-agent-model";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -76,6 +79,7 @@ import {
   needsReader,
   readersItem,
 } from "./inbox-model";
+import { ReadAgentModel } from "./mentioned-agent-card";
 import { RelativeTime } from "./relative-time";
 import { markReadItem } from "./task-menu-items";
 import { useMinute } from "./task-time";
@@ -236,8 +240,10 @@ function itemSubject(
 
 /**
  * The tile of the agent that posted an item, hanging the agent's card and
- * leaving the press to its row; a bare tile of no known harness where the
- * holder names no such agent.
+ * leaving the press to its row; where the holder names no such agent, an
+ * archived one say, whose items still stand, a bare tile of the harness
+ * read for it on its task (`ReadAgentModel`), and of no known harness
+ * while that is read and where nothing is.
  */
 export function ItemMark({
   holder,
@@ -251,7 +257,21 @@ export function ItemMark({
   readerId: string | undefined;
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
-  if (subject === undefined) return <ActorMark actor={UNNAMED_AGENT} />;
+  if (subject === undefined) {
+    if (holder.kind !== INBOX_HOLDER.TASK) return <ActorMark actor={UNNAMED_AGENT} />;
+    return (
+      <ReadAgentModel agentId={agentId} taskId={holder.task.id}>
+        {(model) => (
+          <ActorMark
+            actor={{
+              ...UNNAMED_AGENT,
+              provider: model === undefined ? undefined : providerOf(model),
+            }}
+          />
+        )}
+      </ReadAgentModel>
+    );
+  }
   return <AgentMarkRef subject={subject} models={models} />;
 }
 
@@ -266,7 +286,11 @@ export function ItemMark({
  * unread, wears the blue dot in a gutter before its tile, its title in the
  * unread weight and its preview in the body's ink; the gutter stands on
  * every row, so the tiles line up whether a row wears a dot or not. Where
- * the list hands down `onMark`, the row offers to mark it read or unread:
+ * an answer or a message waits unsent in the item's box and that box is not
+ * the one standing beside the list, which shows its own words, the row wears
+ * the Draft pencil before its marks, as a sidebar task's row does
+ * (`draft-mark.tsx`).
+ * Where the list hands down `onMark`, the row offers to mark it read or unread:
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
  * its right-click menu, which names the key that does the same to the
@@ -281,6 +305,7 @@ export function ItemMark({
 export function InboxItemRow({
   listed,
   chosen,
+  open = chosen,
   now,
   models,
   readerId,
@@ -292,6 +317,8 @@ export function InboxItemRow({
 }: {
   listed: InboxListed;
   chosen: boolean;
+  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked: the chosen item's unless said, and none while the list stands alone. */
+  open?: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
@@ -311,6 +338,7 @@ export function InboxItemRow({
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
   const needsYou = needsReader(item, reader);
+  const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
@@ -374,6 +402,7 @@ export function InboxItemRow({
             {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
               <span className="visually-hidden">{waitingOn(starter)}</span>
             )}
+            {drafted ? <DraftMark /> : null}
             {needsYou ? (
               <span className="inbox-row-attention">
                 <AttentionMark />
@@ -808,6 +837,7 @@ export function InboxList({
       key={listed.item.id}
       listed={listed}
       chosen={listed.item.id === chosen}
+      open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
       now={now}
       models={models}
       readerId={readerId}

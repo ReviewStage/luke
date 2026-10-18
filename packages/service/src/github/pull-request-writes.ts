@@ -560,3 +560,71 @@ export const setPullRequestTitle = /* @__PURE__ */ Effect.fn("web/setPullRequest
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   yield* githubWrite(token, TITLE_MUTATION, { id: pullRequestId, title }, Schema.Unknown);
 });
+
+/**
+ * The pull request what a reaction names is on, read on the member's token:
+ * the pull request itself, a comment on it, one of its reviews, or a
+ * review's comment, each by its GraphQL id.
+ */
+const SUBJECT_PULL_REQUEST_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest { id }
+    ... on IssueComment { issue { id } }
+    ... on PullRequestReview { pullRequest { id } }
+    ... on PullRequestReviewComment { pullRequest { id } }
+  }
+}`;
+
+const NodeIdOfSchema = Schema.optionalKey(Schema.Struct({ id: Schema.String }));
+
+const SubjectPullRequestSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      id: Schema.optionalKey(Schema.String),
+      issue: NodeIdOfSchema,
+      pullRequest: NodeIdOfSchema,
+    }),
+  ),
+});
+
+/** What the member is told where a reaction names nothing of this pull request, or nothing they can see. */
+const NOT_THIS_SUBJECT = "Could not resolve to a comment on this pull request.";
+
+const ADD_REACTION_MUTATION = `mutation($id: ID!, $content: ReactionContent!) {
+  addReaction(input: { subjectId: $id, content: $content }) { reaction { content } }
+}`;
+
+const REMOVE_REACTION_MUTATION = `mutation($id: ID!, $content: ReactionContent!) {
+  removeReaction(input: { subjectId: $id, content: $content }) { reaction { content } }
+}`;
+
+/**
+ * A reaction given, or the member's own taken back where `add` is false, on
+ * the member's token: what it names is first confirmed this pull request's,
+ * its description, a comment, a review, or a review comment, so nothing
+ * else on GitHub is reacted to through this one's tab. `content` is the
+ * reaction in GitHub's GraphQL words (`ReactionContent`).
+ */
+export const reactOnPullRequest = /* @__PURE__ */ Effect.fn("web/reactOnPullRequest")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  reaction: { readonly subject: string; readonly content: string; readonly add: boolean },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const { subject, content, add } = reaction;
+  const read = yield* githubWrite(
+    token,
+    SUBJECT_PULL_REQUEST_QUERY,
+    { id: subject },
+    SubjectPullRequestSchema,
+  );
+  const node = read.node;
+  // Note that the pull request itself answers its own id; anything on it answers its pull request's.
+  const on = node?.pullRequest?.id ?? node?.issue?.id ?? node?.id;
+  if (on !== pullRequestId) return yield* refusalOf([NOT_THIS_SUBJECT]);
+  yield* githubWrite(
+    token,
+    add ? ADD_REACTION_MUTATION : REMOVE_REACTION_MUTATION,
+    { id: subject, content },
+    Schema.Unknown,
+  );
+});
