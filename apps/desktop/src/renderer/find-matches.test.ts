@@ -74,3 +74,34 @@ test("a change inside a marked shadow root is a change of the tab's text", async
 
   assert.equal(changes, 1);
 });
+
+test("what a marked host slots into its shadow root is found where its slot stands", () => {
+  const tab = document.body.appendChild(document.createElement("div"));
+  const host = tab.appendChild(document.createElement("div"));
+  host.setAttribute(FIND_SHADOW_ATTRIBUTE, "");
+  const shadow = host.attachShadow({ mode: "open" });
+  shadow.innerHTML = "<div>line one seats</div><slot name='note'></slot><div>line two seats</div>";
+  const note = host.appendChild(document.createElement("div"));
+  note.slot = "note";
+  note.textContent = "a comment on seats";
+
+  assert.deepEqual(
+    findRanges(tab, "seats").map((range) => range.startContainer.parentElement?.textContent),
+    ["line one seats", "a comment on seats", "line two seats"],
+  );
+});
+
+test("a find kept at a match after a slotted comment keeps to it, and one at the comment keeps to the comment", () => {
+  const tab = document.body.appendChild(document.createElement("div"));
+  const host = tab.appendChild(document.createElement("div"));
+  host.setAttribute(FIND_SHADOW_ATTRIBUTE, "");
+  const shadow = host.attachShadow({ mode: "open" });
+  shadow.innerHTML = "<div>line one seats</div><slot name='note'></slot><div>line two seats</div>";
+  const note = host.appendChild(document.createElement("div"));
+  note.slot = "note";
+  note.textContent = "a comment on seats";
+  const ranges = findRanges(tab, "seats");
+
+  assert.equal(matchFrom(ranges, ranges[2], tab), 2);
+  assert.equal(matchFrom(ranges, ranges[1], tab), 1);
+});
