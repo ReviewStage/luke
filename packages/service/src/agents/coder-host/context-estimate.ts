@@ -16,6 +16,7 @@ import {
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
@@ -161,6 +162,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.MOVE_TASK]: {
     description: MOVE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_TASK]: {
+    description: UPDATE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

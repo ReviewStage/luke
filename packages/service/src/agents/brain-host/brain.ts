@@ -64,9 +64,11 @@ import {
   runStartAgent,
   runStopAgent,
   runUnarchiveAgent,
+  runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -253,6 +255,8 @@ On a request for a new agent, start it when the developer clearly asks for one (
 
 On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
+On a request to put tasks away or change one ("archive the tasks of the finished rollout", "clean up the done tasks", "rename this one", "pin the billing task"), update_task changes each task of the workspace the developer means, found with list_tasks (with includeArchived for one already archived), as their own task menu would: archived true archives it and false brings it back, and a name, a repository, or pinned change the rest. Change only what the developer asked for: never a task a teammate is still using, unless the developer named it, and never archive this task itself, which is refused; the developer archives it from its menu. Like the menu, an archive stops no agent: one still working on the task finishes the turn it is on. Then say in your return which tasks you changed and how.
+
 On a request to stop an agent ("stop the agent", "it's going the wrong way, stop it"), stop_agent stops the turn under way of the one the developer means, as their Stop button would: the agent stays, with its transcript and branch, and a message to it later starts a new turn. Stop only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent already idle is answered as idle and nothing changes. Then say in your return which agent you stopped.
 
 ### The sidebar's sections
@@ -289,6 +293,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
+- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
@@ -650,6 +655,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...MOVE_TASK_TOOL,
     run: (call, input) => runMoveTask(call.agents, input),
+  },
+  {
+    ...UPDATE_TASK_TOOL,
+    run: (call, input) => runUpdateTask(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,

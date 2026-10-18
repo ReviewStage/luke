@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { CALL_KIND } from "@luke/features/turn-rows";
+import { CALL_KIND, callLine } from "@luke/features/turn-rows";
+import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
@@ -525,6 +526,52 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
     kind: TOOL_TARGET.AGENT,
     agent: "agent-2",
   });
+});
+
+test("a task's change says it archived, unarchived, or updated the task its answer names, by what it asked, and opens it, while one still out or refused names none and opens nothing", () => {
+  const call = (input: WireRecord, output?: WireRecord) => ({
+    tool: "update_task",
+    callId: "call-1",
+    input: { taskId: "task-2", ...input },
+    output,
+  });
+  const answer = {
+    status: "accepted",
+    task: {
+      id: "task-2",
+      name: "Seat billing",
+      mention: "[@Seat billing](https://tryluke.dev/acme/plan/task-2)",
+    },
+    already: false,
+  };
+  const opened = { kind: TOOL_TARGET.TASK, task: "task-2" };
+  const line = (input: WireRecord, output?: WireRecord) => {
+    const view = toolCallView(call(input, output));
+    return [view.kind, callLine(view.kind, view.subject, undefined).verb, view.subject];
+  };
+
+  assert.deepEqual(line({ archived: true }, answer), [
+    CALL_KIND.ARCHIVE_TASK,
+    "Archived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ archived: false }, answer), [
+    CALL_KIND.UNARCHIVE_TASK,
+    "Unarchived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ name: "Seat billing", pinned: true }, answer), [
+    CALL_KIND.UPDATE_TASK,
+    "Updated the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(toolTarget(call({ archived: true }, answer)), opened);
+
+  assert.deepEqual(line({ archived: true }), [CALL_KIND.ARCHIVE_TASK, "Archived the task", ""]);
+  assert.equal(toolTarget(call({ archived: true })), undefined);
+  const refused = call({ archived: true }, { status: "rejected", reason: "Not archived." });
+  assert.equal(toolCallView(refused).subject, "");
+  assert.equal(toolTarget(refused), undefined);
 });
 
 test("a list of the models reads as one, not as a tool this build does not know, and opens nothing", () => {

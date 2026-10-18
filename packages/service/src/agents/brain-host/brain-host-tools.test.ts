@@ -17,7 +17,12 @@ import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { writePage } from "@luke/database/models/plan-pages";
-import { listTasks, openTaskConversation, readTask } from "@luke/database/models/task-store";
+import {
+  createTask,
+  listTasks,
+  openTaskConversation,
+  readTask,
+} from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
@@ -93,6 +98,8 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
+  UPDATE_TASK_REFUSAL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
@@ -800,6 +807,49 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: ARCHIVE_AGENT_REFUSAL.WORKING,
   });
+});
+
+test("Luke archives a teammate's task of the call's workspace for the member on the call and brings it back, and refuses the call's own task and one of another workspace", async () => {
+  const opener = await database.createUser();
+  const teammate = await database.createUser();
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, teammate));
+  const done = await database.run(
+    createTask(teammate, { organizationId: task.workspaceId, name: "Rollout step 3" }),
+  );
+  const eve = await fakeCoderEve(task.workspaceId);
+  const call = await callerOn(brainHost(seams), task, eve.services, CATALOG);
+  const archivedAt = async () =>
+    Option.getOrThrow(await database.run(readTask(teammate, done.id))).task.archivedAt;
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+
+  const archived = await call(UPDATE_TASK_TOOL.name, { taskId: done.id, archived: true });
+  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
+  assert.deepEqual(
+    [isRecord(archived.task) && archived.task.archived, archived.already],
+    [true, false],
+  );
+  assert.ok((await archivedAt()) !== undefined);
+  const back = await call(UPDATE_TASK_TOOL.name, { taskId: done.id, archived: false }, "call-2");
+  assert.deepEqual(
+    [back.status, isRecord(back.task) && back.task.archived, back.already],
+    [ACTION_RESULT_STATUS.ACCEPTED, false, false],
+  );
+  assert.equal(await archivedAt(), undefined);
+
+  assert.deepEqual(
+    await call(UPDATE_TASK_TOOL.name, { taskId: task.taskId, archived: true }, "call-3"),
+    rejected(UPDATE_TASK_REFUSAL.OWN_TASK),
+  );
+  assert.deepEqual(
+    await call(UPDATE_TASK_TOOL.name, { taskId: stranger.taskId, archived: true }, "call-4"),
+    rejected(UPDATE_TASK_REFUSAL.NO_TASK),
+  );
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(opener, task.taskId))).task.archivedAt,
+    undefined,
+  );
 });
 
 test("Luke reads a page of the call's task by its id, as the member on the call, and nothing of another workspace's", async () => {
