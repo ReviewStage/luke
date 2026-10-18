@@ -451,7 +451,6 @@ function transcriptResponse(
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
-    ...(page.turnUsage === undefined ? undefined : { turnUsage: page.turnUsage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
   });
 }
