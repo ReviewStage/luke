@@ -23,7 +23,10 @@ import { bashStartingIn } from "./shell.js";
  * rather than backgrounding it under `/tmp/.eve`, which keeps the test
  * inside its own directory. A command's description is for the developer's
  * transcript, so it reaches the shell as nothing, and what the model is
- * offered is recorded the way the wire's schemas are.
+ * offered is recorded the way the wire's schemas are. A command whose
+ * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
+ * it, answers that it is unknown where the sandbox still runs a command, and
+ * fails as eve failed it where it does not.
  */
 
 /** What eve's `bash` answers a command that finished. */
@@ -71,15 +74,12 @@ function unreached(name: string): () => never {
   return () => assert.fail(`${name} is not reached by the shell`);
 }
 
-/** The shell started in the checkout given, called as eve calls a tool with the command and what it is for where given, over a sandbox rooted at the root given. */
-async function run(
-  root: string,
-  checkout: string,
-  command: string,
-  description?: string,
-): Promise<Completed> {
-  const shell = bashStartingIn(checkout);
-  const context: EveToolContext = {
+/** A sandbox as the doubles here stand for one: a real shell, or one whose API loses what it ran. */
+type SandboxDouble = ReturnType<typeof shellSandbox> | ReturnType<typeof sandboxLosing>;
+
+/** The context eve calls a tool in, over the sandbox given. */
+function contextOver(sandbox: SandboxDouble): EveToolContext {
+  return {
     session: {
       id: "session-1",
       auth: { current: null, initiator: null },
@@ -91,11 +91,28 @@ async function run(
     messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
-    // SAFETY: the shell reaches the sandbox only to spawn the command, which is what the double answers.
-    getSandbox: (async () => shellSandbox(root)) as unknown as EveToolContext["getSandbox"],
+    // SAFETY: the shell reaches the sandbox only to spawn and run commands, which is what the doubles answer.
+    getSandbox: (async () => sandbox) as unknown as EveToolContext["getSandbox"],
   };
+}
+
+/** The shell started in the directory given, called as eve calls a tool with the command given, over the sandbox given. */
+async function call(directory: string, sandbox: SandboxDouble, command: string) {
+  const answer = await bashStartingIn(directory).execute({ command }, contextOver(sandbox));
+  assert.ok(!(Symbol.asyncIterator in answer));
+  return answer;
+}
+
+/** The shell started in the checkout given, called as eve calls a tool with the command and what it is for where given, over a sandbox rooted at the root given. */
+async function run(
+  root: string,
+  checkout: string,
+  command: string,
+  description?: string,
+): Promise<Completed> {
+  const shell = bashStartingIn(checkout);
   const input = description === undefined ? { command } : { command, description };
-  const answer = await shell.execute(input, context);
+  const answer = await shell.execute(input, contextOver(shellSandbox(root)));
   assert.ok(!(Symbol.asyncIterator in answer) && answer.status === "completed");
   return answer;
 }
@@ -105,4 +122,63 @@ test("a command starts in the checkout, and a `cd` lasts only for the call it is
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
   assert.equal((await run(root, checkout, "cd .. && pwd")).stdout.trim(), root);
   assert.equal((await run(root, checkout, "pwd")).stdout.trim(), checkout);
+});
+
+/**
+ * What `@vercel/sandbox` throws for an answer of Vercel Sandbox's API that
+ * is not ok: its status and words in the message, and the response it read
+ * them from.
+ */
+function sandboxApiError(status: number, words: string): Error {
+  return Object.assign(new Error(`Status code ${status} is not ok: ${words}`), {
+    response: new Response(JSON.stringify({ error: { message: words } }), { status }),
+  });
+}
+
+/** What undici's fetch throws where the other side closes the socket of a response it is still reading. */
+function streamCut(): Error {
+  const closed = Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" });
+  return new TypeError("terminated", { cause: closed });
+}
+
+/** An output stream that ends at once, with nothing in it. */
+function nothing(): ReadableStream<Uint8Array> {
+  return webBytes(Readable.from([]));
+}
+
+/**
+ * A sandbox whose every command starts, then whose wait for it fails as
+ * Vercel's API failed it; and which answers a command run whole as `up` says.
+ */
+function sandboxLosing(failure: Error, up: boolean) {
+  return {
+    spawn: async () => ({
+      stdout: nothing(),
+      stderr: nothing(),
+      wait: async () => {
+        throw failure;
+      },
+    }),
+    run: async () => {
+      if (!up) throw sandboxApiError(404, "Vercel Sandbox not found.");
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+  };
+}
+
+test("a command whose output Vercel answered 404 for, in a sandbox still up, answers that its outcome is unknown", async () => {
+  const lost = sandboxApiError(404, "Vercel Sandbox not found.");
+  const answer = await call("/workspace/repository", sandboxLosing(lost, true), "git push");
+  assert.equal(answer.status, "unknown");
+  assert.ok("message" in answer && answer.message.includes("before you run it again"));
+});
+
+test("a command whose output stream Vercel cut, in a sandbox still up, answers that its outcome is unknown", async () => {
+  const answer = await call("/workspace/repository", sandboxLosing(streamCut(), true), "pnpm test");
+  assert.equal(answer.status, "unknown");
+});
+
+test("a command in a sandbox that no longer answers fails as eve failed it", async () => {
+  const lost = sandboxApiError(404, "Vercel Sandbox not found.");
+  await assert.rejects(call("/workspace/repository", sandboxLosing(lost, false), "ls"), lost);
 });
