@@ -12,13 +12,22 @@ import {
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
+  BADGE_TONE,
+  Badge,
   BUTTON_SHAPE,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  CARD_PADDING,
+  Card,
   ChoiceList,
+  GAP,
   IconButton,
+  Inline,
+  LAYOUT_ELEMENT,
+  Stack,
   TEXT_AREA_SUBMIT,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -42,7 +51,9 @@ function asInboxResponse(response: ChatReadResponse): InboxReadResponse | undefi
 /**
  * chat-ask.tsx -- an ask a chat message carries, drawn as a card in its row: what it asks, and its answer, given in place or as it was given.
  *
- * The card heads itself with what kind of ask it is, then its title, then
+ * The card is the shared `Card`, its pieces stacked in it. It heads itself
+ * with what kind of ask it is, a badge in the attention ink while the ask
+ * stands open and a plain one once it is settled, then its title, then
  * the blocks the poster wrote, which the row hands it. What the ask asks
  * for follows, from the Inbox's own answer pieces (`inbox-pane.tsx`): a
  * choice's options, pressed one at a time or several where it allows, one
@@ -128,34 +139,36 @@ function Settled({
 }): React.JSX.Element | null {
   if (ask.status === ASK_STATUS.CLOSED) {
     return (
-      <p className="chat-ask-settled" data-settled="closed">
+      <Text tone={TEXT_TONE.MUTED}>
         Resolved{ask.closedReason === undefined ? "" : `: ${ask.closedReason}`}
-      </p>
+      </Text>
     );
   }
   if (ask.answer === undefined) return null;
   const by = ask.answeredBy === undefined ? undefined : nameOf(ask.answeredBy);
   const values = ask.answer.values ?? [];
   return (
-    <div className="chat-ask-settled" data-settled="answered">
+    <Stack gap={GAP.TIGHT}>
       <Text tone={TEXT_TONE.MUTED}>
         {by === undefined ? "" : `${by}: `}
         {replyWords(ask.answer)}
         {ask.answer.note === undefined ? null : (
-          <span className="chat-ask-settled-note"> {ask.answer.note}</span>
+          <Text as={TEXT_ELEMENT.SPAN}> {ask.answer.note}</Text>
         )}
       </Text>
       {/* A form's answer is what was filled in, so each field stands under the line, in the form's order. */}
       {values.length === 0 ? null : (
-        <ul className="chat-ask-values">
+        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE}>
           {values.map(({ label, value }) => (
             <li key={label}>
-              {label}: <span className="chat-ask-settled-note">{fieldValueWords(value)}</span>
+              <Text tone={TEXT_TONE.MUTED}>
+                {label}: <Text as={TEXT_ELEMENT.SPAN}>{fieldValueWords(value)}</Text>
+              </Text>
             </li>
           ))}
-        </ul>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -194,7 +207,7 @@ function Presses({
   }
   const { back, ahead } = presses;
   return (
-    <div className="chat-ask-presses">
+    <Inline gap={GAP.CONTROL}>
       <Button
         variant={BUTTON_VARIANT.PRIMARY}
         busy={sending}
@@ -208,7 +221,7 @@ function Presses({
           {back.label}
         </Button>
       )}
-    </div>
+    </Inline>
   );
 }
 
@@ -226,7 +239,7 @@ function Answer({
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const { response } = ask;
-  if (!knownResponse(response)) return <p className="chat-unknown">{NEWER_LUKE}</p>;
+  if (!knownResponse(response)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   const byPress = pressesOf(response) !== undefined;
   const send = (press?: ChatReplyKind) => {
     const reply = inboxReply({ response }, draft, press);
@@ -259,7 +272,7 @@ function Answer({
       {response.type === CHAT_ASK.FORM ? (
         <FormFields form={response} draft={draft} disabled={sending} onDraft={setDraft} />
       ) : null}
-      {ask.needsReply ? null : <p className="chat-ask-quiet">{QUIET}</p>}
+      {ask.needsReply ? null : <Text tone={TEXT_TONE.MUTED}>{QUIET}</Text>}
       <form
         className="chat-ask-note"
         onSubmit={(event) => {
@@ -320,19 +333,25 @@ export function AskCard({
   const open = ask.status === ASK_STATUS.OPEN;
   return (
     <div className="chat-ask" data-status={ask.status}>
-      <p className="chat-ask-kind">
-        {knownResponse(response) ? ASK_KIND[response.type] : ASK_KIND[CHAT_ASK.NONE]}
-      </p>
-      {ask.title === undefined ? null : <p className="chat-ask-title">{ask.title}</p>}
-      {blocks}
-      {open && mine ? <p className="chat-ask-quiet">{WAITING}</p> : null}
-      {open && !mine ? <Answer message={message} ask={ask} onAnswer={onAnswer} /> : null}
-      {open ? null : (
-        <>
-          <Picked ask={ask} />
-          <Settled ask={ask} nameOf={nameOf} />
-        </>
-      )}
+      <Card padding={CARD_PADDING.SNUG}>
+        <Stack gap={GAP.CONTROL}>
+          <Inline>
+            <Badge tone={open ? BADGE_TONE.ATTENTION : BADGE_TONE.NEUTRAL}>
+              {knownResponse(response) ? ASK_KIND[response.type] : ASK_KIND[CHAT_ASK.NONE]}
+            </Badge>
+          </Inline>
+          {ask.title === undefined ? null : <Text variant={TEXT_VARIANT.DIALOG}>{ask.title}</Text>}
+          {blocks}
+          {open && mine ? <Text tone={TEXT_TONE.MUTED}>{WAITING}</Text> : null}
+          {open && !mine ? <Answer message={message} ask={ask} onAnswer={onAnswer} /> : null}
+          {open ? null : (
+            <>
+              <Picked ask={ask} />
+              <Settled ask={ask} nameOf={nameOf} />
+            </>
+          )}
+        </Stack>
+      </Card>
     </div>
   );
 }
