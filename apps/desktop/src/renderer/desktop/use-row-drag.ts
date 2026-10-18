@@ -35,7 +35,9 @@
  * a list that reorders is held within its list only while the pointer is
  * level with its own zone; carried above or below it, across the gap
  * between two zones, it follows the pointer too, and is let go nowhere
- * unless it is over another zone. A list of groups dragged by their headers
+ * unless it is over another zone. Out of its list a row is still held within
+ * the column that scrolls it, the sidebar's, so it never leaves sight nor
+ * lengthens the column past its rows. A list of groups dragged by their headers
  * names the handle a press must land on, so a press on a row inside a group
  * starts that row's own drag and not the group's.
  *
@@ -140,6 +142,8 @@ interface RowPress {
   carried: Carried | undefined;
   /** The frame the scrolling column next runs along in, while the pointer is held at its edge. */
   frame: number | undefined;
+  /** The column that scrolls the list, which a row carried out of its list stays within; none for a scope's, or where nothing scrolls it. */
+  scroller: HTMLElement | undefined;
 }
 
 /** What a list's rows may do beyond moving among themselves. */
@@ -290,10 +294,22 @@ function drawCarried(press: RowPress, carried: Carried, scope: Element): void {
   carried.shell.style.transform = `translate(${across}px, ${down}px)`;
 }
 
-/** Draws the row carried out of its list: it follows the pointer, and the rows it left stand home. */
+/**
+ * Draws the row carried out of its list: it follows the pointer, held
+ * within the column that scrolls the list where one does, and the rows it
+ * left stand home. Note that it is held there because
+ * a row drawn past the column's foot would lengthen what the column
+ * scrolls, which a row held at that edge would then run on into, and on.
+ */
 function drawOut(press: RowPress, list: HTMLElement): void {
   const scrolled = press.listTop - list.getBoundingClientRect().top;
-  const moved = press.pointer - press.y + scrolled;
+  const own = press.slots[press.at];
+  const from = own?.top ?? 0;
+  const top = from + press.pointer - press.y;
+  const view = press.scroller?.getBoundingClientRect();
+  const held =
+    view === undefined ? top : Math.max(view.top, Math.min(view.bottom - (own?.height ?? 0), top));
+  const moved = held - from + scrolled;
   press.to = press.at;
   press.rows.forEach((row, index) => {
     row.style.transform = index === press.at ? `translateY(${moved}px)` : "";
@@ -392,9 +408,7 @@ export function useRowDrag(
 
   const begin = (list: HTMLElement, press: RowPress) => {
     const pressed = () => press.rows[press.at];
-    // A scope's rows are carried over it as a copy, so only a list that
-    // moves its own rows runs the column it stands in.
-    const scroller = press.scope === null ? scrollerOf(list) : undefined;
+    const { scroller } = press;
     // Note that the column is run along at once rather than gliding, because
     // a glide would be restarted, and cut short, by every frame.
     const runAlong = () => {
@@ -535,6 +549,9 @@ export function useRowDrag(
       scope,
       carried: undefined,
       frame: undefined,
+      // A scope's rows are carried over it as a copy, so only a list that
+      // moves its own rows runs the column it stands in.
+      scroller: scope === null ? scrollerOf(list) : undefined,
     };
     begin(list, { ...pointer, listTop, at, rows, slots, gap, ...state });
   };

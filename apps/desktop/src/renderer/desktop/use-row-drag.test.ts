@@ -351,6 +351,51 @@ test("a row carried into the gap between two zones follows the pointer, and land
   assert.deepEqual(outs, []);
 });
 
+test("a row carried out of its list is held within the column that scrolls it, however far past its foot the pointer goes", () => {
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  function Column() {
+    const drag = useRowDrag(undefined, { onDropOut: () => undefined });
+    return createElement(
+      "div",
+      { style: { overflowY: "auto" }, "data-box": "0 100" },
+      createElement(
+        "nav",
+        { "data-row-drop": "a", "data-box": "0 60" },
+        createElement(
+          "ul",
+          { onPointerDown: drag, "data-box": "0 60" },
+          ["a0", "a1"].map((name, index) =>
+            createElement(
+              "li",
+              { key: name, "data-box": `${index * ROW_HEIGHT} ${ROW_HEIGHT}` },
+              createElement("button", { type: "button" }, name),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Column)));
+  layOutByBoxes();
+  // The column scrolls rows longer than it, 180 against its 100.
+  const column = container.firstElementChild ?? assert.fail("the column stands");
+  Object.defineProperties(column, { clientHeight: { value: 100 }, scrollHeight: { value: 180 } });
+  const list = container.querySelector("ul") ?? assert.fail("the list stands");
+  Object.assign(list, { setPointerCapture: () => undefined });
+  let shown: string | undefined;
+  act(() => {
+    named(container, "a0").dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 400));
+    shown = drawnAt(container, "a0");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+  assert.equal(shown, "translateY(70px)");
+});
+
 test("a zone in a drop scope takes no row from a list outside it, and is never marked for one", () => {
   const outs: [number, string, number][] = [];
   const column = twoZones(outs, false, true);
