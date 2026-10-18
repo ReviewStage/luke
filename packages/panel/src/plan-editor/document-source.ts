@@ -3,7 +3,7 @@ import { BulletList, TaskList } from "@tiptap/extension-list";
 import { MarkdownManager } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { diffArrays } from "diff";
-import { withMentions } from "./mention-node";
+import { withMentions } from "./mention-node.js";
 
 /**
  * document-source.ts -- a plan's whole Markdown document as the editor's top-level blocks, each keeping its exact source, and back.

@@ -48,6 +48,13 @@ import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
 import { DRAFT_WORD } from "@luke/panel/draft-mark";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { relayout } from "@luke/panel/testing/resize-observer";
@@ -64,13 +71,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "#testing/composer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";

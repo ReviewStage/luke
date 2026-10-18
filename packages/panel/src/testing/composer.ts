@@ -2,8 +2,8 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import type { Effect } from "effect";
 import { act } from "react";
-import { SIDE_BUNDLES } from "../renderer/bundle-loader";
-import { bundleLanded } from "./side-bundles";
+import { SIDE_BUNDLES } from "../bundle-loader.js";
+import { bundleLanded } from "./side-bundles.js";
 
 /**
  * composer.ts -- an agent's message box under jsdom: the editor bundle there as the panel finds it, and words typed into the box's editor.

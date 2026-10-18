@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditorHandle } from "@luke/panel/plan-editor/contract";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
-import { installEditorLayout } from "#testing/composer";
-import { mountPlanEditor } from "./plan-editor";
+import { installEditorLayout } from "../testing/composer.js";
+import type { PlanEditorHandle } from "./contract.js";
+import { mountPlanEditor } from "./plan-editor.js";
 
 /**
  * diagram-preview.test.ts -- a Mermaid code block in the plan editor stays

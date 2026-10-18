@@ -1,32 +1,33 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import type { DiffViewModule } from "@luke/panel/diff-view/contract";
-import type { FactorySceneModule } from "@luke/panel/factory-world/contract";
-import type { WorldModule } from "@luke/panel/factory-world/world";
-import type { FileTreeModule } from "@luke/panel/file-tree/contract";
-import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
-import { rendererRuntime } from "@luke/panel/renderer-runtime";
-import type { TerminalModule } from "@luke/panel/terminal/contract";
-import type { WhiteboardModule } from "@luke/panel/whiteboard/contract";
 import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
-import type { WorldEntry } from "./factory-world/registry";
+import type { DiffViewModule } from "./diff-view/contract.js";
+import type { FactorySceneModule } from "./factory-world/contract.js";
+import type { WorldEntry } from "./factory-world/registry.js";
+import type { WorldModule } from "./factory-world/world.js";
+import type { FileTreeModule } from "./file-tree/contract.js";
+import type { PlanEditorModule } from "./plan-editor/contract.js";
+import { rendererRuntime } from "./renderer-runtime.js";
+import { shellBundles } from "./shell-bundles.js";
+import type { TerminalModule } from "./terminal/contract.js";
+import type { WhiteboardModule } from "./whiteboard/contract.js";
 
 /**
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
  * The panel's editors (`plan-editor/`), the whiteboard (`whiteboard/`), a File
  * tab's tree (`file-tree/`), a Terminal tab's screen (`terminal/`), a plan's
- * diagrams (`diagram/`), a Files changed diff (`diff-view/`), the Factory's
- * scene host (`factory-world/scene/`) and each of its worlds
- * (`factory-world/worlds/<key>/`), and a call's avatar (`avatar-session/`)
- * are each reached through a dynamic `import()` of
- * their entry, which the bundler splits off the bundle every window parses
+ * diagrams (`diagram/`), and a Files changed diff (`diff-view/`) are each
+ * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. The answer is kept alive,
- * so leaving the surface and coming back loads nothing.
+ * so leaving the surface and coming back loads nothing. The Factory's scene
+ * host is the shell's to reach, and the shell hands it in through a
+ * `SideBundlesContext` of its own; each of the Factory's worlds, and a call's
+ * avatar, are imported through what it installed (`shell-bundles.ts`).
  *
  * A surface reads its bundle through `useSideBundles`, whose atoms are built
  * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
@@ -86,17 +87,18 @@ const LOAD_FAILED = {
 
 /** Each bundle's entry, imported where the bundler put it. */
 const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
-  planEditor: () => import("./plan-editor/index").then((entry) => entry.planEditor),
+  planEditor: () => import("./plan-editor/index.js").then((entry) => entry.planEditor),
   // Note that Excalidraw is told where its fonts are before any of it runs.
   whiteboard: () =>
-    import("./whiteboard/asset-path")
-      .then(() => import("./whiteboard/index"))
+    import("./whiteboard/asset-path.js")
+      .then(() => import("./whiteboard/index.js"))
       .then((entry) => entry.whiteboard),
-  fileTree: () => import("@luke/panel/file-tree/index").then((entry) => entry.fileTree),
-  terminal: () => import("./terminal/index").then((entry) => entry.terminal),
-  diagram: () => import("./diagram/index").then((entry) => entry.diagram),
-  diffView: () => import("./diff-view/index").then((entry) => entry.diffView),
-  factoryScene: () => import("./factory-world/scene/index").then((entry) => entry.factoryScene),
+  fileTree: () => import("./file-tree/index.js").then((entry) => entry.fileTree),
+  terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
+  diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
+  diffView: () => import("./diff-view/index.js").then((entry) => entry.diffView),
+  // Note that the Factory's scene is the shell's to hand in through `SideBundlesContext`.
+  factoryScene: () => Promise.reject(new Error("This window draws no Factory scene.")),
 };
 
 /**
@@ -147,7 +149,7 @@ export const SIDE_BUNDLES = sideBundles();
  * is read here rather than through the context.
  */
 export const avatarSessionAtom = bundleAtom(
-  () => import("./avatar-session/index").then((entry) => entry.avatarSession),
+  () => shellBundles().avatarSession(),
   "The video could not be started.",
 );
 

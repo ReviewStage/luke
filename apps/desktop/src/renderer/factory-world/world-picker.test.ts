@@ -6,6 +6,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { factoryWorldOf } from "@luke/ui/testing";
@@ -13,7 +14,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { DesktopFactory } from "../desktop/desktop-factory";
 

@@ -1,13 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type {
-  PictureTaken,
-  PlanEditorHandle,
-  PlanEditorPictures,
-} from "@luke/panel/plan-editor/contract";
 import { afterEach, test } from "vitest";
-import { mountPlanEditor } from "./plan-editor";
+import type { PictureTaken, PlanEditorHandle, PlanEditorPictures } from "./contract.js";
+import { mountPlanEditor } from "./plan-editor.js";
 
 /**
  * A plan's pictures in its editor: a file pasted or chosen is laid in as a

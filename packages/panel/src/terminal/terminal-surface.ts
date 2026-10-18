@@ -1,19 +1,19 @@
-import {
-  TERMINAL_FIND,
-  type TerminalFind,
-  type TerminalFindWay,
-  type TerminalHandle,
-  type TerminalProps,
-} from "@luke/panel/terminal/contract";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { adoptInlineStyles } from "./adopted-styles";
-import { TERMINAL_KEY, terminalKey } from "./terminal-keys";
-import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-theme";
+import { adoptInlineStyles } from "./adopted-styles.js";
+import {
+  TERMINAL_FIND,
+  type TerminalFind,
+  type TerminalFindWay,
+  type TerminalHandle,
+  type TerminalProps,
+} from "./contract.js";
+import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
+import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
 /**
  * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, coloured from the window's tokens, its keys sorted between the shell and the window.

@@ -1,14 +1,4 @@
 import {
-  COMPOSER_INPUT,
-  type ComposerEditorHandle,
-  type ComposerEditorProps,
-  type ComposerInput,
-  type ComposerMark,
-  type ComposerQuote,
-  type ComposerTrigger,
-  type MentionNode,
-} from "@luke/panel/plan-editor/contract";
-import {
   cutReply,
   MESSAGE_BLOCK,
   messageBlocks,
@@ -35,13 +25,23 @@ import {
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type ComposerEditorProps,
+  type ComposerInput,
+  type ComposerMark,
+  type ComposerQuote,
+  type ComposerTrigger,
+  type MentionNode,
+} from "./contract.js";
+import {
   MENTION_NODE,
   type MentionToken,
   mentionLink,
   mentionNode,
   mentionTokens,
   pastedMention,
-} from "./mention-node";
+} from "./mention-node.js";
 
 /**
  * composer-editor.ts -- an agent's message box on TipTap: plain words, a line break, a chosen skill as a chip, and a quote of the agent's words as a block, read out as the one string the message is.

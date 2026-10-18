@@ -44,6 +44,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import type { SideBundles } from "@luke/panel/bundle-loader";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -60,6 +61,7 @@ import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handSettings } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import { landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -68,9 +70,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { SideBundles } from "../bundle-loader";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";

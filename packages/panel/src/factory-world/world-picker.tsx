@@ -1,9 +1,9 @@
 import { useAtom } from "@effect/atom-react";
-import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { Select, type SelectOption } from "@luke/ui";
 import * as Atom from "effect/reactivity/Atom";
 import { Building2Icon, SquareKanbanIcon } from "lucide-react";
+import { useAppState, useExperiment } from "../use-app-state.js";
 import {
   FACTORY_BOARD,
   FACTORY_CAMPUS,
@@ -11,7 +11,7 @@ import {
   type WorldEntry,
   type WorldKey,
   worldsOffered,
-} from "./registry";
+} from "./registry.js";
 
 /**
  * world-picker.tsx -- the Factory toolbar's pop-up of what the page shows: the board first, as it always was, then the campus, then each world the build offers.

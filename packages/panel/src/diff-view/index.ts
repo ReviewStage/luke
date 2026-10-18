@@ -1,21 +1,3 @@
-import {
-  DIFF_SELECTION_SIDE,
-  type DiffAnnotation,
-  type DiffListFile,
-  type DiffListHandle,
-  type DiffListProps,
-  type DiffListSelection,
-  type DiffLook,
-  type DiffSelection,
-  type DiffViewHandle,
-  type DiffViewModule,
-  type DiffViewProps,
-  sameListSelection,
-  sameLook,
-  sameNotes,
-} from "@luke/panel/diff-view/contract";
-import { type Highlighting, startHighlighting } from "@luke/panel/diff-view/highlight-pool";
-import { FIND_SHADOW_ATTRIBUTE } from "@luke/panel/find-matches";
 import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
 import {
   CodeView,
@@ -32,7 +14,25 @@ import {
   parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
-import { adoptShadowStyles } from "./inline-styles";
+import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffAnnotation,
+  type DiffListFile,
+  type DiffListHandle,
+  type DiffListProps,
+  type DiffListSelection,
+  type DiffLook,
+  type DiffSelection,
+  type DiffViewHandle,
+  type DiffViewModule,
+  type DiffViewProps,
+  sameListSelection,
+  sameLook,
+  sameNotes,
+} from "./contract.js";
+import { type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { adoptShadowStyles } from "./inline-styles.js";
 
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.

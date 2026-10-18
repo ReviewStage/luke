@@ -35,6 +35,14 @@ import { MemberDirectory } from "@luke/panel/member-directory";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  QUIET_COMPOSER,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -45,14 +53,6 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  QUIET_COMPOSER,
-  typeInComposer,
-} from "#testing/composer";
 import { AgentComposer } from "./agent-composer";
 import type { SkillSource } from "./skill-picker";
 import {

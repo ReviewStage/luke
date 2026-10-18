@@ -1,10 +1,3 @@
-import type {
-  MentionNode,
-  PlanEditorHandle,
-  PlanEditorPictures,
-  PlanEditorPlacement,
-  PlanEditorProps,
-} from "@luke/panel/plan-editor/contract";
 import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
@@ -17,7 +10,14 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { diagramPreview } from "./diagram-preview";
+import type {
+  MentionNode,
+  PlanEditorHandle,
+  PlanEditorPictures,
+  PlanEditorPlacement,
+  PlanEditorProps,
+} from "./contract.js";
+import { diagramPreview } from "./diagram-preview.js";
 import {
   documentManager,
   documentMarkdown,
@@ -26,8 +26,8 @@ import {
   type HeldSources,
   RawBlock,
   sourcesOf,
-} from "./document-source";
-import { mentionNode, pastedMention } from "./mention-node";
+} from "./document-source.js";
+import { mentionNode, pastedMention } from "./mention-node.js";
 import {
   copiedPictures,
   droppedPictures,
@@ -36,8 +36,8 @@ import {
   pictureNode,
   removedPicture,
   settledPicture,
-} from "./picture-node";
-import { planMentions } from "./plan-mentions";
+} from "./picture-node.js";
+import { planMentions } from "./plan-mentions.js";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.

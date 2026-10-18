@@ -1,8 +1,8 @@
-import type { EditorDiagram } from "@luke/panel/plan-editor/contract";
 import { Extension } from "@tiptap/core";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import type { EditorDiagram } from "./contract.js";
 
 /**
  * diagram-preview.ts -- a Mermaid code block's diagram previewed under it while a plan's text is edited, drawn by the panel.

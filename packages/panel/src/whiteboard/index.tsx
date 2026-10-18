@@ -26,14 +26,14 @@ import {
   LUKE_MARK,
 } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
+import { useSyncExternalStore } from "react";
+import { createRoot } from "react-dom/client";
 import {
   sceneSignature,
   type WhiteboardHandle,
   type WhiteboardModule,
   type WhiteboardProps,
-} from "@luke/panel/whiteboard/contract";
-import { useSyncExternalStore } from "react";
-import { createRoot } from "react-dom/client";
+} from "./contract.js";
 
 /**
  * index.tsx -- the whiteboard bundle: Excalidraw mounted into the Tasks tab, Luke's drawings put on it, and the panel told when the scene changed.

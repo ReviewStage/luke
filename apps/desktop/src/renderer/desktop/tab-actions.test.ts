@@ -10,13 +10,13 @@ import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopTasks } from "./desktop-tasks";
 

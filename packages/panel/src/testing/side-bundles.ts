@@ -8,7 +8,7 @@ import {
   type SideBundles,
   SideBundlesContext,
   sideBundles,
-} from "../renderer/bundle-loader";
+} from "../bundle-loader.js";
 
 /**
  * side-bundles.ts -- the panel's own bundles under jsdom: one landed as a window that has shown it holds it, and stand-ins for others at their importers.

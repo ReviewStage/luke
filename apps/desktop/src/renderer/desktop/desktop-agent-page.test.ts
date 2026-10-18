@@ -38,6 +38,11 @@ import {
   handState,
   stateWith,
 } from "@luke/panel/testing/app-state";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -53,7 +58,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { archiveWords } from "../tasks/coding-agent-model";
 import type { TasksControl } from "../tasks/use-tasks-tab";

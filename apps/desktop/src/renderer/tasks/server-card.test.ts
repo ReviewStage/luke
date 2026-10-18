@@ -23,6 +23,12 @@ import {
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -33,12 +39,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import {
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "#testing/composer";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab } from "./agent-tab";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
