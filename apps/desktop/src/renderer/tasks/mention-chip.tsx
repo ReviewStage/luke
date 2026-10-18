@@ -341,7 +341,7 @@ function MentionGlyph({
           agentId={mention.agentId}
           taskId={mention.taskId}
           name={name}
-          where={{ planId: doors.taskId, workspace: doors.place.workspace }}
+          where={{ taskId: doors.taskId, workspace: doors.place.workspace }}
           known={known}
         />
       ) : (
@@ -652,7 +652,7 @@ function PlaceGlyph({
           agentId={place.agentId}
           taskId={place.planId}
           name={name}
-          where={{ planId: place.planId ?? NO_TASK_ID, workspace }}
+          where={{ taskId: place.planId ?? NO_TASK_ID, workspace }}
           known={known}
         />
       );
