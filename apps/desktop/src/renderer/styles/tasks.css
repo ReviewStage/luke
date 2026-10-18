@@ -417,36 +417,15 @@
   max-width: 360px;
 }
 
-/* The list an @ opens (`mention-picker.tsx`): a searchable menu whose field
-   is the editor it was typed in, hung under the word's line inside it, its
-   rows grouped by kind under the menu's own headings, each with its kind's
-   glyph and a muted detail, and the keys it hears at its foot. Named with
-   the menu's own class, since the menu's rule opens it under a trigger and
-   is read later. */
+/* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
+   on a searchable menu's surface, whose field is the editor it was typed
+   in, hung under the word's line inside it, under a narrowed kind's crumb
+   and over the keys it hears at its foot. Named with the menu's own class,
+   since the menu's rule opens it under a trigger and is read later. */
 .searchable-menu.mention-menu {
   z-index: 3;
   width: 360px;
   max-width: 100%;
-}
-
-.mention-menu .task-compose-menu-list {
-  max-height: 320px;
-}
-
-/* A row's detail gives way first, and a name too long for the row even
-   then, a pull request's title, is cut as a searchable menu cuts one. */
-.mention-menu .task-compose-menu-name {
-  flex: 0 1 auto;
-}
-
-.mention-row-detail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mention-menu .mention-row-detail {
-  flex-shrink: 1000;
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page

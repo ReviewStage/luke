@@ -14,7 +14,8 @@ import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ArrowLeftIcon,
-  ChevronRightIcon,
+  type ComboboxGroup,
+  ComboboxList,
   DocumentIcon,
   IconButton,
   ProviderMark,
@@ -37,7 +38,7 @@ import {
   HashIcon,
   UsersIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useId, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
@@ -736,9 +737,24 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   }
 }
 
-/** One row's id, under the list's own. */
-function optionId(listId: string, index: number): string {
-  return `${listId}-${index}`;
+/** A row's key, stable while it stands: its skill's name, its kind's narrowing, or its mention. */
+function rowKey(row: MentionRow): string {
+  if ("skill" in row) return row.skill;
+  return JSON.stringify("from" in row ? row.from.narrow : row.mention);
+}
+
+/** The groups as the list draws them: each row its glyph, its name, its detail, and a chevron where it opens. */
+function comboboxGroups(groups: readonly MentionGroup[]): ComboboxGroup[] {
+  return groups.map((group) => ({
+    label: group.label,
+    options: group.rows.map((row) => ({
+      id: rowKey(row),
+      label: row.name,
+      icon: <RowGlyph row={row} />,
+      detail: row.detail,
+      opens: "from" in row,
+    })),
+  }));
 }
 
 /** What a narrowed list stands under: its kind, the folder walked into, and the way back, where a key made it. */
@@ -780,7 +796,6 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
 
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
-  id,
   crumb,
   groups,
   at,
@@ -789,7 +804,6 @@ function MentionMenu({
   onHover,
   onChoose,
 }: {
-  id: string;
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
@@ -798,65 +812,23 @@ function MentionMenu({
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
-  let index = -1;
+  const rows = groups.flatMap((group) => group.rows);
   return (
     <div className="menu-surface searchable-menu mention-menu" style={place}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
-      {/* Note that a press on a row keeps the caret in the editor, where the keys are read. */}
-      <div
-        id={id}
-        className="task-compose-menu-list"
-        role="listbox"
-        aria-label={MENU_LABEL}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        {groups.map((group) => (
-          // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
-          <div key={group.label} role="group" aria-label={group.label}>
-            {/* A narrowed list's one group is named by its crumb. */}
-            {crumb === undefined ? (
-              <div className="menu-heading" aria-hidden="true">
-                {group.label}
-              </div>
-            ) : null}
-            {group.rows.map((row) => {
-              index += 1;
-              const mine = index;
-              return (
-                <button
-                  key={
-                    "skill" in row
-                      ? row.skill
-                      : JSON.stringify("from" in row ? row.from.narrow : row.mention)
-                  }
-                  id={optionId(id, mine)}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  className="menu-item"
-                  aria-selected={mine === at}
-                  onMouseMove={() => onHover(mine)}
-                  onClick={() => onChoose(row)}
-                >
-                  <span className="menu-item-glyph">
-                    <RowGlyph row={row} />
-                  </span>
-                  <span className="task-compose-menu-name">{row.name}</span>
-                  {row.detail === undefined ? null : (
-                    <span className="menu-item-hint mention-row-detail">{row.detail}</span>
-                  )}
-                  {"from" in row ? (
-                    <span className="menu-item-end">
-                      <ChevronRightIcon />
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-        {groups.length === 0 ? <p className="task-compose-menu-note">{NO_MATCH}</p> : null}
-      </div>
+      <ComboboxList
+        label={MENU_LABEL}
+        groups={comboboxGroups(groups)}
+        active={at}
+        onActiveChange={onHover}
+        onChoose={(index) => {
+          const row = rows[index];
+          if (row !== undefined) onChoose(row);
+        }}
+        // A narrowed list's one group is named by its crumb.
+        headed={crumb === undefined}
+        empty={NO_MATCH}
+      />
       <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
         {keys.map((key) => (
           <Text
@@ -1081,7 +1053,6 @@ export function useMentionPicker({
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
 }): MentionPicker {
-  const listId = useId();
   const { act } = useAct();
   const { members, readerId } = useMemberDirectory();
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
@@ -1313,7 +1284,6 @@ export function useMentionPicker({
   const menu =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
-        id={listId}
         crumb={
           scope?.kind === undefined
             ? undefined

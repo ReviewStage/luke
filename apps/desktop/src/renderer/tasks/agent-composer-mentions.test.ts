@@ -392,13 +392,15 @@ function carryingTarget(container: HTMLElement): string | undefined {
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".task-compose-menu-name")].map((name) => name.textContent ?? ""),
+    [...group.querySelectorAll(".luke-combobox-option-label")].map(
+      (name) => name.textContent ?? "",
+    ),
   ]);
 }
 
 /** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
@@ -797,8 +799,8 @@ async function workspaceBox() {
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     ],
   );
 }
@@ -1005,8 +1007,8 @@ function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
   ]);
 }
 
@@ -1016,7 +1018,7 @@ function highlightRow(container: HTMLElement, group: string, name: string): void
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
     return (
       row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
-      row.querySelector(".task-compose-menu-name")?.textContent === name
+      row.querySelector(".luke-combobox-option-label")?.textContent === name
     );
   };
   for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
@@ -1218,8 +1220,8 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
   ]);
 }
@@ -1312,8 +1314,8 @@ async function memberBox() {
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
       row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
     ],
   );
