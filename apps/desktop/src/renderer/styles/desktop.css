@@ -8811,11 +8811,10 @@ button.automation-run:hover {
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
-   card: the other workspaces as rows, a tile and two lines each, the chosen
-   one ringed and one that cannot take the task dimmed, then what the move
-   does in a well under them, and the answers at its foot. The rows are the
-   card's body, which scrolls where the window is too short for all of them,
-   padded by the ring's reach so a row's ring is never cut off. */
+   card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
+   lines each, then what the move does in a well under them, and the answers
+   at its foot. The list is the card's body, which scrolls where the window
+   is too short for all of it. */
 .move-dialog {
   display: flex;
   min-height: 0;
@@ -8824,47 +8823,10 @@ button.automation-run:hover {
 }
 
 .move-list {
-  display: grid;
   min-height: 0;
-  gap: var(--luke-space-2);
-  margin: calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.move-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.move-row:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-}
-
-.move-row[aria-checked="true"] {
-  background: var(--luke-color-fill-strong);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-.move-row:disabled {
-  opacity: 0.55;
-}
-
-.move-row .workspace-ref-name {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .move-effects {

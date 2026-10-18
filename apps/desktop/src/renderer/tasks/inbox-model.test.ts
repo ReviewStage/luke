@@ -35,7 +35,6 @@ import {
   settlementOf,
   taskHolder,
   tasklessGroups,
-  withChoice,
   withValue,
 } from "./inbox-model";
 
@@ -131,13 +130,8 @@ test("a choice is answered by its option with the note beside it, or by the deve
   );
 });
 
-test("a press picks one option at a time on a choice and any number where the choice allows several, pressing a picked one again lets it go, and the picks are the answer in the order pressed", () => {
-  const one = withChoice(withChoice(EMPTY_INBOX_DRAFT, "Postgres", false), "Redis", false);
-  assert.deepEqual(one.choices, ["Redis"]);
-  assert.deepEqual(withChoice(one, "Redis", false).choices, []);
-  const several = withChoice(withChoice(EMPTY_INBOX_DRAFT, "Slack", true), "Email", true);
-  assert.deepEqual(several.choices, ["Slack", "Email"]);
-  assert.deepEqual(withChoice(several, "Slack", true).choices, ["Email"]);
+test("the picks are the answer in the order pressed, and a choice of one takes no two", () => {
+  const several = { ...EMPTY_INBOX_DRAFT, choices: ["Slack", "Email"] };
   assert.deepEqual(inboxReply(CHANNELS, several), {
     reply: INBOX_REPLY.CHOSE,
     choices: ["Slack", "Email"],

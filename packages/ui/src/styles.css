@@ -36,6 +36,7 @@
 @import "./components/text-field/text-field.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
+@import "./components/choice-list/choice-list.css";
 @import "./components/switch/switch.css";
 @import "./components/segmented/segmented.css";
 @import "./components/settings-page/settings-page.css";
