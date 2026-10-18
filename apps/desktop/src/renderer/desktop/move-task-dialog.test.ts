@@ -243,11 +243,9 @@ test("a row calls the account's own first workspace personal while no one else i
   const fresh: Workspace = { ...NORTHWIND, id: "ws-fresh", name: "Platform", memberCount: 1 };
   openMenu(openTab({ ...TASK, repository: null }, [personal, STUDIO, fresh]));
 
-  const rows = [...chooseMove().querySelectorAll('[role="radio"] .workspace-ref-line')].map(
-    (line) => line.textContent,
-  );
+  const rows = [...chooseMove().querySelectorAll('[role="radio"]')].map((row) => row.textContent);
 
-  assert.deepEqual(rows, ["Personal workspace", "1 member"]);
+  assert.deepEqual(rows, ["DDanaPersonal workspace", "PPlatform1 member"]);
 });
 
 test("a refused move keeps the dialog up, saying so under the list", async () => {

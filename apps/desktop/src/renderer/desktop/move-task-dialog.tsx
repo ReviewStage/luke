@@ -3,6 +3,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   BUTTON_VARIANT,
   Button,
+  ChoiceList,
   DIALOG_SIZE,
   Dialog,
   type DialogConfirm,
@@ -14,7 +15,8 @@ import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
+import { sharedWords } from "./workspace-ref";
+import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**
  * move-task-dialog.tsx -- Move to workspace, from a task's ⋯: the account's other workspaces to move the task to, and what the move does.
@@ -37,14 +39,6 @@ import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
  * landed puts it away, and a refused one keeps it up saying so under the
  * list, the toast the move would raise held back in its favour.
  */
-
-/** The keys that step along the list, and which way. */
-const STEP_KEYS = new Map([
-  ["ArrowDown", 1],
-  ["ArrowRight", 1],
-  ["ArrowUp", -1],
-  ["ArrowLeft", -1],
-]);
 
 /** What the dialog says under its list when the service refused the move. */
 const MOVE_REFUSED = "The task could not be moved. Try again.";
@@ -121,42 +115,25 @@ function WorkspaceChoices({
   first: React.RefObject<HTMLButtonElement | null>;
   onChoose: (workspaceId: string) => void;
 }): React.JSX.Element {
-  const open = workspaces.filter((workspace) => reaches(workspace, repository));
-  // An arrow chooses the next workspace that can take the task and takes the keyboard there, wrapping at either end.
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = STEP_KEYS.get(event.key);
-    if (step === undefined || open.length === 0 || disabled) return;
-    event.preventDefault();
-    const at = open.findIndex((workspace) => workspace.id === chosen?.id);
-    const next = open[(Math.max(at, 0) + step + open.length) % open.length];
-    if (next === undefined) return;
-    onChoose(next.id);
-    event.currentTarget
-      .querySelectorAll<HTMLButtonElement>('[role="radio"]')
-      [workspaces.indexOf(next)]?.focus();
-  };
+  const options = workspaces.map((workspace) => ({
+    value: workspace.id,
+    label: workspace.name,
+    detail: rowLine(workspace, repository, personalId),
+    mark: <WorkspaceTile workspace={workspace} size={TILE_SIZE.ROW} />,
+    disabled: !reaches(workspace, repository),
+  }));
   return (
-    <div className="move-list" role="radiogroup" aria-label="Workspace" onKeyDown={onKeyDown}>
-      {workspaces.map((workspace) => {
-        const line = rowLine(workspace, repository, personalId);
-        const checked = workspace.id === chosen?.id;
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: a row is drawn as a button holding a tile and two lines, which a native radio cannot be, and speaks as the radio it behaves as.
-          <button
-            key={workspace.id}
-            ref={checked ? first : undefined}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            className="move-row"
-            disabled={disabled || !reaches(workspace, repository)}
-            onClick={() => onChoose(workspace.id)}
-          >
-            <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} line={line} />
-          </button>
-        );
-      })}
+    <div className="move-list">
+      <ChoiceList
+        legend="Workspace"
+        options={options}
+        value={chosen === undefined ? [] : [chosen.id]}
+        disabled={disabled}
+        focusRef={first}
+        onChange={([workspaceId]) => {
+          if (workspaceId !== undefined) onChoose(workspaceId);
+        }}
+      />
     </div>
   );
 }

@@ -15,22 +15,18 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
-  GAP,
+  ChoiceList,
   IconButton,
-  LAYOUT_ELEMENT,
-  Stack,
-  TEXT_ELEMENT,
   TEXT_TONE,
-  TEXT_VARIANT,
   Text,
 } from "@luke/ui";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
-import { ArrowUpIcon, CheckIcon } from "lucide-react";
+import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 import { Tooltip } from "../tooltip";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
-import { ChoiceOptions, FormFields } from "./inbox-pane";
+import { ChoiceOptions, choiceOptions, FormFields } from "./inbox-pane";
 
 /** Reads a chat ask's response as the Inbox's answer parts take one, the two sharing one wire shape. */
 const readInboxResponse = Schema.decodeUnknownOption(inboxReadResponseSchema);
@@ -104,39 +100,18 @@ function placeholderOf(response: ChatReadResponse): string {
 function Picked({ ask }: { ask: CarriedAsk }): React.JSX.Element | null {
   const { response } = ask;
   if (!knownResponse(response) || response.type !== CHAT_ASK.CHOICE) return null;
-  const picks = ask.answer?.choices ?? [];
+  const options = response.options.map((option) => ({
+    ...option,
+    recommended: response.recommended === option.label,
+  }));
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} aria-label="What was offered">
-      {response.options.map((option) => {
-        const picked = picks.includes(option.label);
-        return (
-          <li key={option.label} className="inbox-option" data-picked={String(picked)}>
-            <span>
-              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-                {option.label}
-              </Text>
-              {response.recommended === option.label ? (
-                <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-                  {" "}
-                  · Recommended
-                </Text>
-              ) : null}
-              {picked ? (
-                <span className="inbox-picked">
-                  <CheckIcon aria-hidden="true" />
-                  Picked
-                </span>
-              ) : null}
-            </span>
-            {option.detail === undefined ? null : (
-              <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-                {option.detail}
-              </Text>
-            )}
-          </li>
-        );
-      })}
-    </Stack>
+    <ChoiceList
+      legend="What was offered"
+      options={choiceOptions(options)}
+      value={ask.answer?.choices ?? []}
+      settled
+      pickedNote="Picked"
+    />
   );
 }
 

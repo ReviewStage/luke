@@ -9,6 +9,7 @@ export * from "./components/button/button.js";
 export * from "./components/card/card.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
+export * from "./components/choice-list/choice-list.js";
 export * from "./components/collection-page/collection-page.js";
 export * from "./components/combobox/combobox.js";
 export * from "./components/combobox/use-combobox-field.js";
