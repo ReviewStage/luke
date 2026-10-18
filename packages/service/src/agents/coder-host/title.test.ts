@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  readCodingAgent,
+  renameCodingAgent,
+} from "@luke/database/models/coding-agent-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
@@ -19,7 +25,8 @@ import { titleCodingAgent } from "./title.js";
  * alone, without the lines Luke adds of the firing, and the subject of the
  * GitHub event that fired it; an agent started from another is named from
  * its brief and note, never the replay between them; the model's answer is
- * the agent's title. The
+ * the agent's title, and the name of its task where that still stands
+ * untitled. The
  * model is a script that keeps what it was asked; the store is PGlite.
  * Synthetic throughout.
  */
@@ -49,6 +56,94 @@ function scriptedTitleModel(title: string) {
   });
   return { model, asked };
 }
+
+/** An agent started on the task with `prompt`, its session opened on the prompt as eve records it. */
+const startOnTask = (owner: string, taskId: string, prompt: string) =>
+  Effect.gen(function* () {
+    const started = Option.getOrThrow(
+      yield* createCodingAgent(owner, {
+        taskId,
+        planSnapshot: null,
+        prompt,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: "acme/relay",
+      }),
+    );
+    yield* Database.use((db) =>
+      db.insert(messages).values({
+        userId: owner,
+        conversationId: started.agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: prompt }],
+        metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+        placedAt: new Date(),
+      }),
+    );
+    return started.agent;
+  });
+
+/** The agent titled by a model answering `title`. */
+const titledAs = (owner: string, agent: CodingAgent, title: string) =>
+  titleCodingAgent(
+    scriptedTitleModel(title).model,
+    { userId: owner, conversationId: agent.conversationId },
+    agent,
+  );
+
+/** The task's name as the account reads it. */
+const taskName = (owner: string, taskId: string) =>
+  Effect.map(readTask(owner, taskId), (read) => Option.getOrThrow(read).task.name);
+
+it.layer(getTestDB())("an untitled task's name", (it) => {
+  it.effect("an untitled task takes its first titled agent's title, and keeps it", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const task = yield* createTask(owner, { organizationId, planning: false });
+      const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
+      const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
+
+      yield* titledAs(owner, first, "Expire teammate invitations");
+      yield* titledAs(owner, second, "Send invitation reminders");
+
+      assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations");
+      const secondTitled = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
+      assert.equal(secondTitled.title, "Send invitation reminders");
+    }),
+  );
+
+  it.effect("a task named by a member keeps its name when its agent is titled", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const task = yield* createTask(owner, { organizationId, name: "Invitations" });
+      const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
+
+      yield* titledAs(owner, agent, "Expire teammate invitations");
+
+      assert.equal(yield* taskName(owner, task.id), "Invitations");
+    }),
+  );
+
+  it.effect("an agent the developer titled by hand meanwhile names no task", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const task = yield* createTask(owner, { organizationId, planning: false });
+      const agent = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
+      yield* renameCodingAgent(owner, agent.id, "My invitations agent");
+
+      // The agent as the host read it before the developer's title landed.
+      yield* titledAs(owner, agent, "Expire teammate invitations");
+
+      assert.equal(yield* taskName(owner, task.id), "Untitled");
+    }),
+  );
+});
 
 it.layer(getTestDB())("an agent's title", (it) => {
   it.effect(

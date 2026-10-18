@@ -763,6 +763,30 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /**
+ * The name written only where the task still stands untitled and not
+ * archived, so the check and the write are one statement and a name a
+ * member gave the task meanwhile is never written over.
+ */
+const nameUntitled = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, name: Schema.String }),
+  Result: TaskIdRowSchema,
+  execute: ({ userId, taskId, name }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ name })
+        .where(
+          and(
+            reachableTask(userId, taskId),
+            eq(task.name, UNTITLED_TASK_NAME),
+            isNull(task.archivedAt),
+          ),
+        )
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
  * The text an account's plan started as at `createdAt`, epoch milliseconds:
  * a copy of the account's template as it stood then, as its history reads,
  * or the template it holds now where it has no history. A note reads it to
@@ -1055,6 +1079,23 @@ export function updateTask<E = never, R = never>(
       }),
     ),
   );
+}
+
+/**
+ * Names a task that still stands as `UNTITLED_TASK_NAME`, as its first
+ * coding agent's generated title does; false, and nothing written, where
+ * the task has a name of its own, is archived, or is no task the account
+ * reaches. A rename, like `updateTask`'s, is not a save, so the list's
+ * order and the document stand.
+ */
+export function nameUntitledTask(
+  userId: string,
+  taskId: string,
+  name: string,
+): TaskStoreEffect<boolean> {
+  const named = name.trim();
+  if (named.length === 0) return Effect.succeed(false);
+  return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
 }
 
 /**

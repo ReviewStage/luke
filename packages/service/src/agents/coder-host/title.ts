@@ -7,6 +7,7 @@ import {
   listTurnOpeners,
   turnsBefore,
 } from "@luke/database/models/message-reads";
+import { nameUntitledTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { firstMessageParts } from "@luke/features/agent-replay";
@@ -53,6 +54,11 @@ import { CURSOR_START } from "./transcript.js";
  * planning worker, is named by the same call over the task it was handed alone, and its title
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
+ *
+ * A task still standing untitled, as one started from a prompt alone does,
+ * takes the title its first agent to be titled is given, and keeps it: a
+ * name a member or Luke gave the task, before or meanwhile, is never
+ * written over, and a later agent's title never renames it.
  */
 
 const AGENT_TITLE = {
@@ -295,7 +301,8 @@ export function titleSubagent(
  * already standing, the developer's own included, is never asked for
  * again, an agent past those turns is left on the model's name, and an
  * exchange with no words in it asks nothing. A call that answers nothing
- * writes nothing, so the next words or turn's end ask again.
+ * writes nothing, so the next words or turn's end ask again. The title
+ * written also names the agent's task where it still stands untitled.
  */
 export function titleCodingAgent(
   model: LanguageModel,
@@ -315,6 +322,9 @@ export function titleCodingAgent(
     if (exchange.length === 0) return;
     const title = yield* generateAgentTitle(model, exchange);
     if (Option.isNone(title)) return;
-    yield* fillCodingAgentTitle(target.userId, agent.id, title.value);
+    const filled = yield* fillCodingAgentTitle(target.userId, agent.id, title.value);
+    // A title the developer set meanwhile is theirs for the agent alone, so it names no task.
+    if (!filled || agent.taskId === null) return;
+    yield* nameUntitledTask(target.userId, agent.taskId, title.value);
   });
 }
