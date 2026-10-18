@@ -36,7 +36,10 @@
     justify-content: center;
   }
 
-  .luke-hover-card-glyph > :is(svg, img) {
+  /* Note that the slot sizes whatever it holds, a glyph, a picture, or an
+     app's own mark around one, so no app has to size what it hands in; a
+     face (`Avatar`) brings its own size. */
+  .luke-hover-card-glyph > :not(.luke-avatar, :has(.luke-avatar)) {
     width: 14px; /* off-scale: the card's own glyph */
     height: 14px;
   }
@@ -173,7 +176,7 @@
     justify-content: center;
   }
 
-  .luke-hover-card-row-glyph > svg {
+  .luke-hover-card-row-glyph > :not(.luke-avatar, :has(.luke-avatar)) {
     width: var(--luke-menu-glyph);
     height: var(--luke-menu-glyph);
   }

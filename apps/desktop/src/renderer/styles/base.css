@@ -736,15 +736,18 @@ body,
    the working mark stands in the glyph's place, centred in the glyph's own
    footprint, so a tab or a row moves nothing as its work starts or ends.
    Failed, the glyph stands as at rest, and the failed mark at its row's end
-   says it (`.failed-mark`). */
-.state-glyph {
-  position: relative;
-  display: inline-flex;
-  width: var(--state-glyph-size, 16px);
-  height: var(--state-glyph-size, 16px);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
+   says it (`.failed-mark`). In the `base` layer, so a shared component's
+   glyph slot that holds one sizes it as it sizes any glyph of its own. */
+@layer base {
+  .state-glyph {
+    position: relative;
+    display: inline-flex;
+    width: var(--state-glyph-size, 16px);
+    height: var(--state-glyph-size, 16px);
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 .state-glyph > svg,

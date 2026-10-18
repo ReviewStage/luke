@@ -126,8 +126,8 @@
     color: inherit;
   }
 
-  /* A glyph with no size of its own fills the slot it is in. */
-  .luke-menu-item-glyph svg,
+  /* A glyph or a picture with no size of its own fills the slot it is in. */
+  .luke-menu-item-glyph :is(svg, img),
   .luke-menu-item-end > svg {
     width: var(--luke-menu-glyph);
     height: var(--luke-menu-glyph);
@@ -207,6 +207,12 @@
   .luke-menu-item-end > svg.settings-chevron {
     width: 14px;
     height: 14px;
+  }
+
+  /* Note that the end's glyph wears the end's ink rather than any its own
+     class gives it elsewhere, a connected check's green among them. */
+  .luke-menu-item-end > svg {
+    color: inherit;
   }
 
   .luke-menu-rule {

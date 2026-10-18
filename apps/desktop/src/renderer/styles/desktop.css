@@ -1802,11 +1802,14 @@ ul.actor-stack {
 /* Buttons --------------------------------------------------------------------- */
 
 /* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
-   glyph size. */
-.icon-button-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
+   glyph size; in the `base` layer, so a shared component holding one sizes
+   it as its own. */
+@layer base {
+  .icon-button-glyph {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    flex: 0 0 auto;
+  }
 }
 
 /* The file tree's Retry, beside the words saying why it is empty
@@ -1915,10 +1918,8 @@ ul.actor-stack {
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
    looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
-   from; its presses claimed back from the toolbar's drag strip it sits
-   over; and a repository's picture in the glyph slot, at a menu glyph's
-   size, because its own rule here would otherwise win over the shared
-   layer. */
+   from, and its presses claimed back from the toolbar's drag strip it sits
+   over. */
 .luke-menu {
   z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
@@ -1926,12 +1927,6 @@ ul.actor-stack {
 
 .luke-menu[data-layer="dialog"] {
   z-index: calc(var(--luke-z-dialog) + 1);
-}
-
-.luke-menu-item-glyph .repository-picture {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -6507,17 +6502,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* Every card the window hangs in a pill's place is drawn from `@luke/ui`'s
-   hover card parts (hover-card.css); what is the window's own is the size a
-   state glyph takes on its head and on the line under its name. */
-.luke-hover-card-glyph {
-  --state-glyph-size: 14px;
-}
-
-.luke-hover-card-sub {
-  --state-glyph-size: 12px;
-}
-
 /* A card's corner leading with a pull request's mark sets it inline, so the
    corner keeps the head's baseline. */
 .card-corner-mark {
@@ -7462,12 +7446,6 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   from {
     transform: translateY(var(--luke-space-12));
   }
-}
-
-/* A card's rows (`@luke/ui`'s HoverCardRow) draw an agent's mark at a menu
-   glyph's size, as its tab does. */
-.luke-hover-card-row-glyph {
-  --state-glyph-size: var(--luke-menu-glyph);
 }
 
 /* A server's line at a card's head (`server-card.tsx`), set as a card's

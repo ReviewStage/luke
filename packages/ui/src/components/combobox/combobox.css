@@ -144,9 +144,12 @@
     color: var(--luke-color-text-subtle);
   }
 
+  /* Note that the end's glyph wears the end's ink rather than any its own
+     class gives it elsewhere, a connected check's green among them. */
   .luke-combobox-option-end svg {
     width: 16px;
     height: 16px;
+    color: inherit;
   }
 
   :is(.luke-combobox-option-detail, .luke-combobox-option-hint) + .luke-combobox-option-end {
