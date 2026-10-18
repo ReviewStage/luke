@@ -22,12 +22,10 @@
     border: 1px solid var(--luke-color-border-strong);
     border-radius: var(--luke-menu-radius);
     background: var(--luke-color-overlay);
-    box-shadow: 0 12px 32px var(--luke-color-shadow);
+    box-shadow: var(--luke-menu-shadow);
     animation:
       luke-menu-arrive var(--duration-quick, 0s) var(--motion-exit, ease) both,
       luke-menu-drop var(--duration-fast, 0s) var(--spring-fast, ease) both;
-    /* The glyph slot every row keeps, at its end as at its start. */
-    --luke-menu-glyph: 16px;
   }
 
   /* Hidden for the one layout pass that measures where it fits. */

@@ -17,7 +17,9 @@ const CALENDAR_FILL_FLOOR_PERCENT = 8;
 
 function calendarCellStyle(total: number, maxTotal: number): React.CSSProperties {
   const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
-  return { backgroundColor: `color-mix(in oklab, var(--chart-1) ${fill}%, transparent)` };
+  return {
+    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
+  };
 }
 
 /** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */

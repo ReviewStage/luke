@@ -92,7 +92,7 @@
   /* Note that a card's row rings inside its press, because the card's
      corner clips whatever stands past its edge. */
   .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
-    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
   }
 
   /* A compact row keeps its words and gives up some of the room around them. */
