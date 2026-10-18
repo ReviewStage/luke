@@ -119,9 +119,6 @@
   /* How a scroller the app moves itself, a tab strip bringing a tab into
      view, gets there: a glide, held still where the durations are. */
   --scroll-glide: smooth;
-
-  /* The darkest fill, opaque, for what nothing behind may show through. */
-  --surface-fill: #000;
   --scroll-fade: 26px;
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
@@ -174,8 +171,6 @@
     --file-icon-purple: #a631be;
     --file-icon-pink: #d32a61;
     --file-icon-mauve: #594c5b;
-
-    --surface-fill: #fff;
   }
 }
 
