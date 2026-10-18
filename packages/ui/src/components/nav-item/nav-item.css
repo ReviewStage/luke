@@ -186,8 +186,11 @@
     opacity: 0;
   }
 
+  /* Note that the accent count takes the button's blue rather than the
+     links' ink, because it should read as the same blue as the app's other
+     accents. */
   .luke-nav-item-count[data-tone="accent"] {
-    color: var(--luke-color-accent-text);
+    color: var(--luke-color-accent);
   }
 
   .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-count[data-shown="on-hover"] {

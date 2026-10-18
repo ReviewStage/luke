@@ -69,7 +69,7 @@ test("a count of none is left out", () => {
   expect(button(container).textContent).toBe("Inbox");
 });
 
-test("a count is muted unless it is drawn in the accent's ink", () => {
+test("a count is muted unless it is drawn in the accent's blue", () => {
   const container = mount(
     createElement(
       "div",

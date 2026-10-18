@@ -24,7 +24,7 @@ import { ChevronRightIcon } from "../../face/glyphs.js";
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
- * muted, or in the accent's ink where it counts what waits on the reader;
+ * muted, or in the accent's blue where it counts what waits on the reader;
  * a fold's count can stand only while the head is hovered. Its `shortcut`,
  * the chord the app draws, stands there while it is hovered or has the
  * keyboard and takes the count's and the mark's place then, so showing it
@@ -68,7 +68,7 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
-/** A count's ink: muted, as a group's tally, or the accent's, for what waits on the reader. */
+/** A count's ink: muted, as a group's tally, or the accent's blue, for what waits on the reader. */
 export const NAV_COUNT_TONE = {
   MUTED: "muted",
   ACCENT: "accent",

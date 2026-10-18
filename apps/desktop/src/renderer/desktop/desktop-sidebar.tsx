@@ -939,7 +939,7 @@ function SidebarHomeRow({
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
  * task at its end, the sum of the counts the Inbox's rows show, in even
- * figures and the accent's ink, since they wait on the developer, and
+ * figures and the accent's blue, since they wait on the developer, and
  * nothing at none. Its chord takes the count's place while the row is hovered or
  * reached from the keyboard, as New task's and Search's show theirs. A press
  * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
