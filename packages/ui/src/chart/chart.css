@@ -45,6 +45,17 @@
     outline: none;
   }
 
+  /* Note that forced colours keep an outline, drawn transparent, because the
+     system paints it in its own ink there and it is the focus's only cue. */
+  @media (forced-colors: active) {
+    .luke-chart .recharts-layer,
+    .luke-chart .recharts-sector,
+    .luke-chart .recharts-surface {
+      outline: var(--luke-focus-ring-width) solid transparent;
+      outline-offset: var(--luke-focus-ring-offset);
+    }
+  }
+
   /* The tooltip floats over a chart that sits on a card, so it is drawn on
      the overlay's ground, a step above the card in the dark, never the
      page's, which would draw the one floating surface below what it covers. */
