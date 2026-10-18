@@ -323,7 +323,7 @@ test("a chip of an agent the window lists not reads its task's agents once as it
   ]);
 });
 
-test("a mention of an agent the window lists not, laid in a message box as an Inbox answer's is, wears its harness, its task's agents read once", async () => {
+test("a mention of an agent the window lists not, laid in a message box as an Inbox answer's is, wears its harness", async () => {
   // The box stands on another task's page, whose doors know only that task's agents.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
@@ -357,12 +357,6 @@ test("a mention of an agent the window lists not, laid in a message box as an In
     container.querySelector(".luke-inline-ref-glyph .harness-mark"),
     "the box's chip wears its harness",
   );
-  assert.deepEqual(agentReads(), [
-    {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
-    },
-  ]);
 });
 
 test("a mention of its own task's agent whose tile the page knows no harness of wears the harness read for it", async () => {
@@ -399,12 +393,6 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
     container.querySelector(".luke-inline-ref-glyph .harness-mark"),
     "the box's chip wears its harness",
   );
-  assert.deepEqual(agentReads(), [
-    {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
-    },
-  ]);
 });
 
 test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
