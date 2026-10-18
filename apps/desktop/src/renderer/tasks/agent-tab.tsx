@@ -825,8 +825,9 @@ function TaskSender({
 /**
  * The issue or pull request an automation's GitHub event named, by number
  * and title: where the event gave its address, its chip, as the transcript
- * draws a link to it, wearing GitHub's mark for where it stands and opening
- * it on GitHub (`mention-chip.tsx`); a link opening on GitHub where the
+ * draws a link to it, wearing GitHub's mark for where it stands, called by
+ * its number once GitHub answers for it, and opening it on GitHub
+ * (`mention-chip.tsx`); a link opening on GitHub where the
  * address names no chip; and its words alone where the event gave none.
  */
 function OriginSubject({

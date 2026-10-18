@@ -1040,7 +1040,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
-    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
   );
 });
 
