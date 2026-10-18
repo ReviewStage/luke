@@ -95,7 +95,7 @@
   "types": "./src/schemas/index.ts",
   "scripts": {
     "check:migrations": "drizzle-kit check",
-    "check:renames": "tsx scripts/refuse-renames.ts",
+    "check:contractions": "tsx scripts/refuse-contractions.ts",
     "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
     "migrations:convert": "tsx scripts/convert-journal-migrations.ts",
     "test:vitest": "vitest run",
