@@ -43,6 +43,7 @@
             "action": {
               "type": "string",
               "enum": [
+<<<<<<< HEAD
                 "merge"
               ]
             },
@@ -57,10 +58,27 @@
             "headSha": {
               "type": "string",
               "maxLength": 64
+=======
+                "submit-review"
+              ]
+            },
+            "event": {
+              "type": "string",
+              "enum": [
+                "comment",
+                "approve",
+                "request-changes"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 65536
+>>>>>>> origin/main
             }
           },
           "required": [
             "action",
+<<<<<<< HEAD
             "method",
             "headSha"
           ],
@@ -121,6 +139,10 @@
           },
           "required": [
             "action"
+=======
+            "event",
+            "body"
+>>>>>>> origin/main
           ],
           "additionalProperties": false
         }

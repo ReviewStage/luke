@@ -22,6 +22,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_REFUSAL_CHARS: 1_000,
   /** A commit's id as GitHub spells one: forty hex digits for SHA-1, sixty-four for SHA-256. */
   MAX_COMMIT_CHARS: 64,
+  /** The longest body a review may carry, GitHub's own bound on a comment's. */
+  MAX_BODY_CHARS: 65_536,
 } as const;
 
 /** How a pull request is merged, as GitHub offers each where the repository allows it. */
@@ -59,9 +61,26 @@ export const PULL_REQUEST_ACTION = {
   DISABLE_AUTO_MERGE: "disable-auto-merge",
   /** Taken out of the merge queue. */
   DEQUEUE: "dequeue",
+  /** A review submitted: the member's own pending review where they hold one, else a new one. */
+  SUBMIT_REVIEW: "submit-review",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
+
+/** What a submitted review says of the pull request, as GitHub's own review box offers it. */
+export const REVIEW_EVENT = {
+  /** Feedback that neither approves nor asks for changes. */
+  COMMENT: "comment",
+  APPROVE: "approve",
+  REQUEST_CHANGES: "request-changes",
+} as const;
+
+export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
+
+/** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
+const reviewBodySchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
+);
 
 /** One change, as the tab asks the service to make it (POST). */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
@@ -79,6 +98,12 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DEQUEUE) }),
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
+    event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),
+    body: reviewBodySchema,
+  }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;

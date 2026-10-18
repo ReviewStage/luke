@@ -20,6 +20,8 @@ import {
   MERGE_METHOD,
   type MergeMethod,
   PULL_REQUEST_WRITE_BOUNDS,
+  REVIEW_EVENT,
+  type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -186,6 +188,41 @@ const GRAPHQL_MERGE_METHOD = {
 const MERGE_MUTATION = `mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) {
   mergePullRequest(input: { pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head }) {
     pullRequest { merged }
+/** GitHub's own word for each review event, as `PullRequestReviewEvent` spells it. */
+const GRAPHQL_REVIEW_EVENT = {
+  [REVIEW_EVENT.COMMENT]: "COMMENT",
+  [REVIEW_EVENT.APPROVE]: "APPROVE",
+  [REVIEW_EVENT.REQUEST_CHANGES]: "REQUEST_CHANGES",
+} as const satisfies Record<ReviewEvent, string>;
+
+/** At most this many pending reviews are read to find the member's own; GitHub shows a member only theirs, so one is the most ever answered. */
+const PENDING_REVIEWS_READ = 10;
+
+const PENDING_REVIEW_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest {
+      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor } }
+    }
+  }
+}`;
+
+const PendingReviewsSchema = Schema.Struct({
+  node: Schema.Struct({
+    reviews: Schema.Struct({
+      nodes: Schema.Array(Schema.Struct({ id: Schema.String, viewerDidAuthor: Schema.Boolean })),
+    }),
+  }),
+});
+
+const SUBMIT_PENDING_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!, $body: String) {
+  submitPullRequestReview(input: { pullRequestReviewId: $id, event: $event, body: $body }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const ADD_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!, $body: String) {
+  addPullRequestReview(input: { pullRequestId: $id, event: $event, body: $body }) {
+    pullRequestReview { id }
   }
 }`;
 
@@ -264,3 +301,33 @@ export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMerge
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });
+ * A review submitted on the member's token: their own pending review,
+ * where they hold one, so the comments they started it with are what
+ * publishes, else a new review made and submitted at once. An empty body
+ * is left unsent, so a pending review keeps the words it already holds.
+ * GitHub's own rules, such as no approving one's own pull request, are its
+ * refusal in its words.
+ */
+export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPullRequestReview")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    review: { readonly event: ReviewEvent; readonly body: string },
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    const pending = yield* githubWrite(
+      token,
+      PENDING_REVIEW_QUERY,
+      { id: pullRequestId },
+      PendingReviewsSchema,
+    );
+    const own = pending.node.reviews.nodes.find((node) => node.viewerDidAuthor);
+    const event = GRAPHQL_REVIEW_EVENT[review.event];
+    const body = review.body.trim() === "" ? {} : { body: review.body };
+    yield* githubWrite(
+      token,
+      own === undefined ? ADD_REVIEW_MUTATION : SUBMIT_PENDING_REVIEW_MUTATION,
+      { id: own?.id ?? pullRequestId, event, ...body },
+      Schema.Unknown,
+    );
+  },
+);

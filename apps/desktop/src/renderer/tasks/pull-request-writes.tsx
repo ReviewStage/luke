@@ -54,6 +54,7 @@ type StateAction =
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
+<<<<<<< HEAD
 } as const satisfies Record<StateAction, string>;
 
 /** What the pill says while a change is out, whichever control sent it. */
@@ -64,6 +65,9 @@ const PENDING_WORDS = {
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enabling auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disabling auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Leaving the queue",
+=======
+  [PULL_REQUEST_ACTION.SUBMIT_REVIEW]: "Submit review",
+>>>>>>> origin/main
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -110,8 +114,13 @@ export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
   readonly pending: PullRequestAction | undefined;
   readonly note: WriteNote | undefined;
+<<<<<<< HEAD
   /** Sends the change; settles once GitHub answered and what it said is drawn. */
   readonly write: (request: PullRequestActionRequest) => Promise<void>;
+=======
+  /** Sends the change; `onDone` hears once GitHub made it, so the press that sent it can let go of what it held. */
+  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => void;
+>>>>>>> origin/main
   readonly dismiss: () => void;
 }
 
@@ -138,7 +147,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
   const write = useCallback(
-    (request: PullRequestActionRequest) => {
+    (request: PullRequestActionRequest, onDone?: () => void) => {
       setPending(request.action);
       setNote(undefined);
       return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
@@ -150,6 +159,9 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
         .then((answer) => {
           setPending(undefined);
           setNote(noteOf(answer));
+          if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
+            onDone?.();
+          }
           // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again.
           if (!("failure" in answer)) onWritten();
         });
@@ -159,6 +171,11 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const dismiss = useCallback(() => setNote(undefined), []);
   return { pending, note, write, dismiss };
 }
+
+/** The changes the pill's menu offers: where the pull request stands, never a review. */
+type StateAction =
+  | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
+  | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT;
 
 /** The changes the pill's menu offers from where the pull request stands. */
 function actionsFrom(state: PullRequestState): readonly StateAction[] {
@@ -235,17 +252,24 @@ export function PullRequestStateMenu({
   );
 }
 
-/** The line under the bar where GitHub did not take the last change: why, the sign-in that mends it where that is why, and its dismissal. */
+/**
+ * The line where GitHub did not take the last change: why, the sign-in
+ * that mends it where that is why, and its dismissal. It stands under the
+ * bar unless the control that sent the change draws it in its own place
+ * (`className`), as the review panel does.
+ */
 export function PullRequestWriteNote({
   writes,
+  className = "pull-request-write-note",
 }: {
   writes: PullRequestWrites;
+  className?: string;
 }): React.JSX.Element | null {
   const { connect } = useGitHubConnection();
   const { note, dismiss } = writes;
   if (note === undefined) return null;
   return (
-    <p className="failure-note pull-request-write-note" role="alert">
+    <p className={`failure-note ${className}`} role="alert">
       <span className="failure-note-words">
         {note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words}
       </span>

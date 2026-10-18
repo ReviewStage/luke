@@ -1,8 +1,13 @@
 import { ISSUE_STATUS_WORDS, issueColumns, issueIdentifier } from "@luke/features/issue-list-model";
-import type { Issue } from "@luke/features/issue-wire";
+import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
+import { Tooltip } from "../tooltip";
+import { useActionMenu } from "./action-menu";
+import { IssueActions } from "./issue-actions";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
+import type { IssueChange } from "./use-issues";
 
 /**
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
@@ -14,13 +19,21 @@ import { PriorityMark, StatusGlyph } from "./issue-pickers";
  * the page's height and scrolls its own cards, so its head stays in view. A
  * card is a row of the sidebar's own on two lines, its identifier, mark,
  * and time over its whole title, since a column is too narrow for the
- * list's one line. ↑ and ↓ move through a column's cards,
+ * list's one line. A column's head ends in a + that opens the new issue's
+ * card with that column's status chosen. ↑ and ↓ move through a column's cards,
  * ← and → to the nearest card of the next column holding any, from the
- * window itself as from a card, and Return opens the card reached.
+ * window itself as from a card, and Return opens the card reached. A
+ * right-click on a card, or the menu key or ⇧F10 on it, opens its actions
+ * (`issue-actions.tsx`).
  */
 
 /** What a column with no issue says in its own place. */
 const NO_ISSUES = "No issues";
+
+/** What a column's + is called, by the column it files into. */
+function newIssueIn(status: IssueStatus): string {
+  return `New issue in ${ISSUE_STATUS_WORDS[status]}`;
+}
 
 /** A card, as the list's rows are drawn: a button inside its item. */
 const CARDS = ".sidebar-task";
@@ -126,14 +139,20 @@ function IssueCard({
   workspaceName,
   now,
   focused,
+  shown,
   onOpen,
+  onChange,
 }: {
   issue: Issue;
   workspaceName: string;
   now: number;
   focused: boolean;
+  shown: boolean;
   onOpen: () => void;
+  onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
+  const menu = useActionMenu(shown);
+  const identifier = issueIdentifier(workspaceName, issue.number);
   const card = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     // Note that the board was drawn again on the way back, its scroller at its start, so the column is brought whole into view as an arrow brings it.
@@ -143,34 +162,59 @@ function IssueCard({
   }, [focused]);
   return (
     <li className="sidebar-task-item home-row factory-row" data-issue-id={issue.id}>
-      <button ref={card} type="button" className="sidebar-task" onClick={onOpen}>
+      <button
+        ref={card}
+        type="button"
+        className="sidebar-task"
+        onClick={onOpen}
+        onContextMenu={menu.contextMenu()}
+        onKeyDown={menu.keyMenu}
+      >
         <span className="sidebar-task-line">
-          <span className="issue-row-identifier">
-            {issueIdentifier(workspaceName, issue.number)}
-          </span>
+          <span className="issue-row-identifier">{identifier}</span>
           <PriorityMark priority={issue.priority} />
           <RelativeTime className="sidebar-task-time" at={issue.updatedAt} now={now} />
         </span>
         <span className="sidebar-task-name issue-row-title issue-card-title">{issue.title}</span>
       </button>
+      <IssueActions
+        issue={issue}
+        identifier={identifier}
+        menu={menu}
+        shown={shown}
+        onChange={onChange}
+      />
     </li>
   );
 }
 
-/** The board: a column for every status, each headed by its glyph, its name, and how many issues stand in it, a column holding none saying so instead. */
+/**
+ * The board: a column for every status, each headed by its glyph, its name,
+ * how many issues stand in it, and a + filing a new one into it; a column
+ * holding none says so in place of its count.
+ */
 export function IssueBoard({
   issues,
   workspaceName,
   now,
   focused,
+  shown,
   onOpen,
+  onCompose,
+  onChange,
 }: {
   issues: readonly Issue[];
   workspaceName: string;
   now: number;
   /** The issue whose card takes the keyboard as the board is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** Whether the page stands, which a card's menu and question do not outlive. */
+  shown: boolean;
   onOpen: (issue: Issue) => void;
+  /** Opens the new issue's card with a column's status chosen; none while no workspace is listed to file one in. */
+  onCompose: ((status: IssueStatus) => void) | undefined;
+  /** Sends a change to an issue from its menu, answering whether it was kept. */
+  onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   return (
     <div className="issue-board">
@@ -187,6 +231,18 @@ export function IssueBoard({
             {column.issues.length === 0 ? null : (
               <span className="factory-count">{column.issues.length}</span>
             )}
+            {onCompose === undefined ? null : (
+              <Tooltip label={newIssueIn(column.status)}>
+                <button
+                  type="button"
+                  className="icon-button issue-column-new"
+                  aria-label={newIssueIn(column.status)}
+                  onClick={() => onCompose(column.status)}
+                >
+                  <PlusIcon className="icon-button-glyph" />
+                </button>
+              </Tooltip>
+            )}
           </h2>
           {column.issues.length === 0 ? (
             <p className="factory-idle">{NO_ISSUES}</p>
@@ -199,7 +255,9 @@ export function IssueBoard({
                   workspaceName={workspaceName}
                   now={now}
                   focused={issue.id === focused}
+                  shown={shown}
                   onOpen={() => onOpen(issue)}
+                  onChange={(change) => onChange(issue, change)}
                 />
               ))}
             </ul>

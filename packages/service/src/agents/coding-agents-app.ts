@@ -57,6 +57,7 @@ import {
 import { modelChoiceSchema } from "@luke/features/models-wire";
 import {
   PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_BOUNDS,
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
 } from "@luke/features/pull-request-write-wire";
@@ -80,6 +81,7 @@ import {
   pullRequestNodeId,
   setAutoMerge,
   setPullRequestDraft,
+  submitPullRequestReview,
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
@@ -221,7 +223,7 @@ import {
  * and where its reviewers stand (`GET /api/agents/{id}/overview/conversation`),
  * its words as GitHub renders them. A change to that pull request
  * (`POST /api/agents/{id}/pull-request/action`), such as marking it ready for
- * review, is made on GitHub as the member who asks, on their own GitHub
+ * review or submitting a review, is made on GitHub as the member who asks, on their own GitHub
  * sign-in and never the App's, through the one seam every such change takes
  * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
  * published answer is let go, so the next read asks GitHub afresh. An image
@@ -325,8 +327,13 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
 
-/** A change to a pull request names the change and its few fields, so a body past this is no change. */
-const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = 4_096;
+/**
+ * A change to a pull request names the change and its few fields, a
+ * review's words the longest of them, so a body past this is no change.
+ * Note that each of those words' characters may take six bytes as JSON,
+ * a control character escaped as `\u0000`.
+ */
+const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;

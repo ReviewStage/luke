@@ -34,6 +34,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
+  REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -43,7 +44,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -376,7 +377,7 @@ async function choose(tab: HTMLElement, name: string): Promise<void> {
 function waiting(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[aria-busy="true"]')]
     .filter((each) => each.closest("[hidden]") === null)
-    .map((each) => each.querySelector(".visually-hidden")?.textContent ?? "");
+    .map((each) => each.textContent ?? "");
 }
 
 /** The words of every element the selector names, in order. */
@@ -1453,6 +1454,7 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
 });
 
+<<<<<<< HEAD
 /** How the pull request may be merged where a test says nothing else: squash or rebase, nothing asked for yet, checks passing. */
 const MERGING: PullRequestMerging = {
   methods: [MERGE_METHOD.SQUASH, MERGE_METHOD.REBASE],
@@ -1641,4 +1643,147 @@ test("a merge asked about merges the head it was asked about, though a read land
       { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.SQUASH, headSha: "c0ffee1" },
     ],
   ]);
+=======
+/** The bar's Review press. */
+function reviewPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(".pull-request-review-button") ??
+    assert.fail("an open pull request's bar offers Review")
+  );
+}
+
+/** Opens the review panel from the bar. */
+function openReview(tab: HTMLElement): HTMLElement {
+  act(() => reviewPress(tab).click());
+  return (
+    tab.querySelector<HTMLElement>('[role="dialog"].pull-request-review-panel') ??
+    assert.fail("Review opens the panel")
+  );
+}
+
+/** Writes the review's words as the member would. */
+function writeReview(panel: HTMLElement, words: string): void {
+  const field =
+    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Review comment"]') ??
+    assert.fail("the panel has a field for the review's words");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Chooses what the review says by its label, and submits it. */
+async function submitReview(panel: HTMLElement, label: string): Promise<void> {
+  const choice =
+    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    assert.fail(`the panel offers ${label}`);
+  act(() => choice.querySelector("input")?.click());
+  const submit =
+    [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
+    assert.fail("the panel submits");
+  act(() => submit.click());
+  await settle();
+}
+
+test("Review opens a panel whose choice and words are submitted for the agent as one review, after which it closes, lets its words go, and the conversation is read again", async () => {
+  let conversationReads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        conversationReads += 1;
+        return Promise.resolve({ pullRequest: CONVERSATION });
+      },
+    }),
+  );
+  const panel = openReview(tab);
+  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
+    "Comment",
+    "Approve",
+    "Request changes",
+  ]);
+
+  writeReview(panel, "Ship it once **CI** is green.");
+  await submitReview(panel, "Approve");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.APPROVE,
+        body: "Ship it once **CI** is green.",
+      },
+    ],
+  ]);
+  assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
+  assert.equal(tab.querySelector(".pull-request-review-panel"), null, "the panel closes");
+  const reopened = openReview(tab);
+  assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
+  assert.equal(
+    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
+    REVIEW_EVENT.COMMENT,
+  );
+});
+
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never under the bar, and the words written stand for another try; a merged pull request offers no Review", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Review Can not approve your own pull request",
+  };
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "LGTM");
+  await submitReview(panel, "Approve");
+
+  assert.equal(
+    panel.querySelector(".pull-request-review-note .failure-note-words")?.textContent,
+    "GitHub said: Review Can not approve your own pull request",
+  );
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(panel.querySelector("textarea")?.value, "LGTM");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const merged = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
+    }),
+  );
+  assert.equal(merged.querySelector(".pull-request-review-button"), null);
+});
+
+test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
+  // Note that jsdom lays out nothing, so the press stands low in a 768px window and the panel is taller than either side.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("pull-request-review")) {
+      return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
+    }
+    if (this.classList.contains("anchored-popover")) {
+      return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
+    }
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  try {
+    const tab = await draw(controlAnswering());
+    const panel = openReview(tab);
+    const layer =
+      tab.querySelector<HTMLElement>(".anchored-popover") ??
+      assert.fail("the panel hangs from Review");
+    assert.equal(layer.dataset.side, "below");
+    assert.equal(layer.style.getPropertyValue("--popover-room"), `${768 - 328 - 4 - 8}px`);
+
+    writeReview(panel, "Half a thought");
+    act(() => {
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    assert.equal(tab.querySelector(".pull-request-review-panel"), null);
+    assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
+  } finally {
+    vi.restoreAllMocks();
+  }
+>>>>>>> origin/main
 });
