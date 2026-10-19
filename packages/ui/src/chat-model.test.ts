@@ -15,6 +15,7 @@ import {
   type ChatNames,
   channelLabel,
   channelThreads,
+  chatKeywords,
   chatRail,
   chatWho,
   FOR_YOU_REASON,
@@ -299,4 +300,24 @@ test("nothing in a direct message between two others waits on the reader, neithe
     forYou(chat).map((entry) => entry.message.seq),
     [3],
   );
+});
+
+test("a dictation in the chat listens for every handle still here, each agent's title, and each standing channel's name, once each", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: [
+      ...chatOf(0, []).members,
+      { id: "gone", kind: MEMBER_KIND.HUMAN, handle: "gone-person", left: true },
+    ],
+  };
+  const words = chatKeywords(chat, NAMES);
+  assert.deepEqual(
+    ["dean", "agent-2", "luke", "maria", "Invite emails", "general", "invites", "alpha"].filter(
+      (word) => !words.includes(word),
+    ),
+    [],
+  );
+  assert.equal(words.includes("gone-person"), false, "a member who left is not listened for");
+  assert.equal(words.includes("aardvark"), false, "an archived channel is not");
+  assert.equal(new Set(words).size, words.length, "each word once");
 });

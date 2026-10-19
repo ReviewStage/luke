@@ -9,6 +9,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { sideBundles } from "../bundle-loader.js";
 import { ChatComposer } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -17,8 +18,16 @@ import {
   stagedAnswer,
   stagedPost,
 } from "../tasks/chat-fixture.js";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopChat, TaskChatTab } from "./desktop-chat.js";
 
@@ -27,6 +36,9 @@ const AT = Date.parse("2026-10-14T10:00:00Z");
 
 // A message's words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+// The box is the agent box's editor, drawn at once where its bundle has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+beforeAll(installEditorLayout);
 
 let root: Root | undefined;
 
@@ -202,19 +214,6 @@ test("an ask posted in a direct message is listed among For you's asks as a dire
   ]);
 });
 
-/** Types the words into a box, as a person typing them would leave it, the caret at their end. */
-function typeInto(field: HTMLTextAreaElement, text: string): void {
-  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function press(field: HTMLElement, key: string): void {
-  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
-}
-
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -222,10 +221,18 @@ async function settle(): Promise<void> {
   });
 }
 
-function boxNamed(page: HTMLElement, label: string): HTMLTextAreaElement {
-  const box = page.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`);
+/** The chat box whose editor is named `label`: what words are typed into and keys pressed in. */
+function boxNamed(page: HTMLElement, label: string): HTMLElement {
+  const box = [...page.querySelectorAll<HTMLElement>(".chat-composer")].find(
+    (each) => each.querySelector(`.composer-editor[aria-label="${label}"]`) !== null,
+  );
   assert.ok(box, `no box ${label}`);
   return box;
+}
+
+/** The words a box holds, as its editor shows them. */
+function boxWords(box: HTMLElement): string {
+  return (composerEditor(box).textContent ?? "").replaceAll("\u00a0", " ");
 }
 
 /** The text of every message's words in the pane, in order, a reply's indented. */
@@ -241,17 +248,17 @@ test("a channel's composer offers its members as an @ is typed, writes the one c
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
+  typeInComposer(box, "@age");
   const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
   assert.deepEqual(options, ["@agent-1Add teammate invitations", "@agent-2Invite emails"]);
-  press(box, "ArrowDown");
-  press(box, "Enter");
-  assert.equal(box.value, "@agent-2 ");
+  pressInComposer(box, "ArrowDown");
+  pressInComposer(box, "Enter");
+  assert.equal(boxWords(box), "@agent-2 ");
   assert.equal(page.querySelector('[role="listbox"]'), null);
-  typeInto(box, "@agent-2 hold the template until #214 lands");
-  press(box, "Enter");
+  typeInComposer(box, "hold the template until #214 lands");
+  pressInComposer(box, "Enter");
   await settle();
-  assert.equal(box.value, "");
+  assert.equal(boxWords(box), "");
   assert.equal(words(page).at(-1), "@agent-2 hold the template until #214 lands");
   assert.equal(stream(page).at(-1), "Dean Stratakos");
 });
@@ -304,8 +311,8 @@ test("an approval is answered by its press, and a reply typed under an opened th
   );
   act(() => toggle?.click());
   const reply = boxNamed(page, "Reply in thread");
-  typeInto(reply, "Thanks, both.");
-  press(reply, "Enter");
+  typeInComposer(reply, "Thanks, both.");
+  pressInComposer(reply, "Enter");
   await settle();
   assert.deepEqual(
     words(page).filter((line) => line.startsWith("  ↳ ")),
@@ -378,27 +385,21 @@ test("an Enter that confirms what an input method composed leaves the mention li
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
-  act(() =>
-    box.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
-    ),
-  );
-  assert.equal(box.value, "@age");
-  assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
+  typeInComposer(box, "@age");
+  pressInComposer(box, "Enter", { isComposing: true, keyCode: 229 });
+  // Note that the editor reads its selection back from jsdom's DOM on a composing key, which jsdom does not keep, so only the words are asserted.
+  assert.equal(boxWords(box), "@age");
 });
 
 test("the arrows and Escape an input method composes with move its candidates, never the mention list", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
+  typeInComposer(box, "@age");
   const highlighted = () => page.querySelector('[role="option"][aria-selected="true"]')?.id;
   const before = highlighted();
   for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
-    act(() =>
-      box.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true })),
-    );
+    pressInComposer(box, key, { isComposing: true, keyCode: 229 });
   }
   assert.equal(highlighted(), before, "the highlight stays where it was");
   assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
@@ -439,23 +440,27 @@ test("a post still out names the composer's send Sending and busy, and the box e
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement(ChatComposer, {
-        label: "Message #general",
-        hints: [],
-        targets: [],
-        onSend: () => gate.promise,
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ChatComposer, {
+          label: "Message #general",
+          hints: [],
+          targets: [],
+          keywords: [],
+          onSend: () => gate.promise,
+        }),
+      ),
     ),
   );
   const box = boxNamed(container, "Message #general");
-  typeInto(box, "Shipping today.");
-  press(box, "Enter");
+  typeInComposer(box, "Shipping today.");
+  pressInComposer(box, "Enter");
   const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
   assert.equal(sending?.getAttribute("aria-busy"), "true");
   act(() => gate.resolve(undefined));
   await settle();
   assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
-  assert.equal(box.value, "");
+  assert.equal(boxWords(box), "");
 });
 
 test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
@@ -510,11 +515,66 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(rail(page)[0], "▸ For you (4)");
   act(() => railRow(page, "agent-1 ↔ agent-2").click());
   assert.equal(page.querySelector(".chat-head h2")?.textContent, "@agent-1 ↔ @agent-2");
-  assert.equal(page.querySelector("textarea"), null);
+  assert.equal(page.querySelector(".chat-composer"), null);
   assert.match(page.textContent ?? "", /Only @agent-1 and @agent-2 post in this conversation\./u);
   assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
   // Its open ask reads as waiting, with nothing to answer it by.
   const ask = page.querySelector('.chat-ask[data-status="open"]');
   assert.match(ask?.textContent ?? "", /Waiting on an answer/u);
   assert.equal(ask?.querySelector("button"), null);
+});
+
+test("a # at the start of a word offers the channels, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "see #bill");
+  const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+  assert.deepEqual(options, ["#billing-export"]);
+  pressInComposer(box, "Enter");
+  assert.equal(boxWords(box), "see #billing-export ");
+  assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
+});
+
+test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+  const sent: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const bundles = sideBundles({
+    planEditor: () => Promise.reject(new Error("The chunk could not be loaded.")),
+  });
+  await act(async () =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          bundles,
+          createElement(ChatComposer, {
+            label: "Message #general",
+            hints: [],
+            targets: [{ sigil: "@", name: "agent-1", detail: undefined }],
+            keywords: [],
+            onSend: (text) => {
+              sent.push(text);
+              return Promise.resolve(undefined);
+            },
+          }),
+        ),
+      ),
+    ),
+  );
+  const field = container.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Message #general"]',
+  );
+  assert.ok(field, "the plain field stands in");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "@agent-1 ship it");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await settle();
+  assert.deepEqual(sent, ["@agent-1 ship it"]);
+  assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
 });

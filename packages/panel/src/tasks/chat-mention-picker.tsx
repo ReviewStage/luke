@@ -1,0 +1,147 @@
+import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
+import { ComboboxList, comboboxOptionId } from "@luke/ui";
+import { type ChatMention, type ChatTarget, matchingTargets } from "@luke/ui/chat-mention";
+import { useId, useState } from "react";
+import type { ComposerTrigger } from "../plan-editor/contract.js";
+
+/**
+ * chat-mention-picker.tsx -- the list a chat box's `@` or `#` word opens over the box: the members or the channels it may name, narrowed as the word is typed, and the keys that move through it and write the one chosen.
+ *
+ * The editor reports the `@` word and the `#` word the caret ends, each on
+ * its own report (`composer-editor.ts`), and the list is the chat's own
+ * roster rather than the agent box's mentions (`mention-picker.tsx`), which
+ * stand on a task's page: one row per member or channel, its handle or name
+ * and a muted line of what it stands for (`chat-mention.ts`). ↑ and ↓ move
+ * the highlight, Enter or Tab writes the one highlighted as its plain word
+ * (`@agent-2`, `#general`), which is how the service reads who a message
+ * names, and Escape closes the list until the caret leaves the word. A key
+ * an input method is composing with is the method's.
+ */
+
+/** The list's own name, which its listbox is read by. */
+const MENU_LABEL = "Mention";
+
+type ChatSigil = (typeof CHAT_TARGET_SIGIL)[keyof typeof CHAT_TARGET_SIGIL];
+
+/** The word the editor last reported for a sigil, as the list reads it. */
+interface Reported {
+  readonly sigil: ChatSigil;
+  readonly trigger: ComposerTrigger;
+}
+
+/** The highlight as it was moved, held against the word it was moved in. */
+interface Highlight {
+  readonly start: number;
+  readonly query: string;
+  readonly at: number;
+}
+
+/** What a chat box hands its editor and draws over it: the list, its ties for assistive technology, the two words' reports, and the keys the list takes first. */
+export interface ChatMentionPicker {
+  readonly menu: React.ReactNode;
+  readonly aria: Readonly<Record<string, string | undefined>>;
+  readonly onMemberTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly onChannelTrigger: (trigger: ComposerTrigger | undefined) => void;
+  /** A key in the box, heard before the editor's; answers whether the list took it. */
+  readonly onKey: (event: KeyboardEvent) => boolean;
+}
+
+export function useChatMentionPicker({
+  targets,
+  onChoose,
+}: {
+  /** What an `@` or `#` word may name. */
+  targets: readonly ChatTarget[];
+  /** Writes the chosen one's word, `@handle` or `#name`, over the word typed. */
+  onChoose: (words: string) => void;
+}): ChatMentionPicker {
+  const id = useId();
+  const [reported, setReported] = useState<Reported | undefined>(undefined);
+  const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
+  const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  // Note that each word reports on its own, so a word leaving clears only a list its own sigil opened.
+  const reportFor = (sigil: ChatSigil) => (trigger: ComposerTrigger | undefined) =>
+    setReported((was) =>
+      trigger !== undefined ? { sigil, trigger } : was?.sigil === sigil ? undefined : was,
+    );
+  const mention: ChatMention | undefined =
+    reported === undefined
+      ? undefined
+      : { sigil: reported.sigil, start: reported.trigger.start, query: reported.trigger.query };
+  // A word closed with Escape stays closed only while the caret is in it.
+  if (closedAt !== undefined && mention?.start !== closedAt) setClosedAt(undefined);
+  const rows =
+    mention !== undefined && closedAt !== mention.start ? matchingTargets(targets, mention) : [];
+  const held =
+    highlight !== undefined &&
+    mention !== undefined &&
+    highlight.start === mention.start &&
+    highlight.query === mention.query
+      ? highlight.at
+      : 0;
+  const at = Math.min(held, Math.max(rows.length - 1, 0));
+  const listed = mention !== undefined && rows.length > 0;
+  const choose = (target: ChatTarget) => onChoose(`${target.sigil}${target.name}`);
+
+  const onKey = (event: KeyboardEvent): boolean => {
+    if (event.isComposing || !listed || mention === undefined) return false;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setClosedAt(mention.start);
+      return true;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
+      setHighlight({ start: mention.start, query: mention.query, at: (at + step) % rows.length });
+      return true;
+    }
+    const row = rows[at];
+    if (row !== undefined && ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab")) {
+      event.preventDefault();
+      choose(row);
+      return true;
+    }
+    return false;
+  };
+
+  const menu =
+    listed && mention !== undefined ? (
+      <div className="menu-surface searchable-menu chat-mention-menu">
+        <ComboboxList
+          id={id}
+          label={MENU_LABEL}
+          groups={[
+            {
+              options: rows.map((target) => ({
+                id: `${target.sigil}${target.name}`,
+                label: `${target.sigil}${target.name}`,
+                detail: target.detail,
+              })),
+            },
+          ]}
+          active={at}
+          onActiveChange={(index) =>
+            setHighlight({ start: mention.start, query: mention.query, at: index })
+          }
+          onChoose={(index) => {
+            const target = rows[index];
+            if (target !== undefined) choose(target);
+          }}
+        />
+      </div>
+    ) : null;
+  return {
+    menu,
+    aria: {
+      "aria-autocomplete": "list",
+      "aria-expanded": String(listed),
+      "aria-controls": listed ? id : undefined,
+      "aria-activedescendant": listed ? comboboxOptionId(id, at) : undefined,
+    },
+    onMemberTrigger: reportFor(CHAT_TARGET_SIGIL.MEMBER),
+    onChannelTrigger: reportFor(CHAT_TARGET_SIGIL.CHANNEL),
+    onKey,
+  };
+}
