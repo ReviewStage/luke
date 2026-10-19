@@ -6,6 +6,14 @@
  */
 
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
+import {
+  type WorkspaceGithubProcedureSeams,
+  workspaceGithubProcedures,
+} from "../accounts/workspace-github-procedures.js";
+import {
+  type WorkspaceInvitationsProcedureSeams,
+  workspaceInvitationsProcedures,
+} from "../accounts/workspace-invitations-procedures.js";
 import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
@@ -16,6 +24,10 @@ import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
+import {
+  type WorkspaceLinearProcedureSeams,
+  workspaceLinearProcedures,
+} from "../integrations/workspace-linear-procedures.js";
 import { type TasksProcedureSeams, tasksProcedures } from "../tasks/tasks-procedures.js";
 import { hosted } from "./base.js";
 
@@ -25,7 +37,10 @@ export type HostedRouterSeams = AutomationsProcedureSeams &
   IntegrationsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
-  TasksProcedureSeams;
+  TasksProcedureSeams &
+  WorkspaceGithubProcedureSeams &
+  WorkspaceInvitationsProcedureSeams &
+  WorkspaceLinearProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
@@ -36,5 +51,8 @@ export function hostedRouter(seams: HostedRouterSeams) {
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
     plans: tasksProcedures(seams),
+    workspaceGithub: workspaceGithubProcedures(seams),
+    workspaceInvitations: workspaceInvitationsProcedures(seams),
+    workspaceLinear: workspaceLinearProcedures(seams),
   });
 }

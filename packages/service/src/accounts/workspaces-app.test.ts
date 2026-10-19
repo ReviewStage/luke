@@ -41,13 +41,15 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { and, eq } from "drizzle-orm";
-import { Cause, Clock, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Cause, Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   type FakeGitHub,
@@ -56,6 +58,8 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
+import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
+import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
 import { type WorkspacesAppSeams, workspacesApp } from "./workspaces-app.js";
 
 /**
@@ -118,8 +122,23 @@ const NO_SESSION: SessionSeams = {
   resolveSessionUserId: () => Effect.succeed(Option.none()),
 };
 
+/** An OAuth bearer stands for the account it names. */
+const bearerUserId = (incoming: Request) =>
+  Effect.succeed(
+    Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
+  );
+
+/** The paths the hosted oRPC router answers, every other one the old groups. */
+const HOSTED_PATHS: ReadonlySet<string> = new Set([
+  HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT,
+  HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER,
+]);
+
 /**
- * One request answered by the workspaces group and the install group over
+ * One request answered by the hosted oRPC router, the workspaces group, and the install group over
  * the ambient database and the GitHub given, its response read by `read`
  * before the handler is let go; an OAuth bearer stands for the account it
  * names, and a session bearer is read by the plugin itself.
@@ -139,12 +158,21 @@ const answered = <A>(
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
     );
+    if (HOSTED_PATHS.has(new URL(request.url).pathname)) {
+      const context = yield* Effect.context<never>().pipe(Effect.provide(services));
+      const procedures = hostedFetch({
+        workspaceGithub: workspaceGithubProcedures({ resolveUserId: bearerUserId }),
+        workspaceInvitations: workspaceInvitationsProcedures(session),
+      });
+      // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
+      const response = yield* Effect.promise(() =>
+        procedures(request, context as Context.Context<WebServices>),
+      );
+      return yield* Effect.promise(() => read(response));
+    }
     const routes = Layer.mergeAll(
       workspacesApp({
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
-          ),
+        resolveUserId: bearerUserId,
         resolveSessionUserId: session.resolveSessionUserId,
         workspaces: seams,
         members: session.members,
@@ -183,6 +211,7 @@ function bearerRequest(path: string, userId: string | undefined, body?: WireBoun
   if (body !== undefined) {
     init.method = "POST";
     init.body = JSON.stringify(body);
+    headers.set("content-type", "application/json");
   }
   return new Request(new URL(path, ORIGIN), init);
 }
@@ -2251,7 +2280,7 @@ it.effect(
 );
 
 it.effect(
-  "invitations under the Mac's OAuth token rather than its session are unauthenticated",
+  "invitations under the Mac's OAuth token rather than its session are unauthenticated, whatever input they carry",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2276,12 +2305,34 @@ it.effect(
           plugin,
         );
 
+        // A malformed input is read only after the caller, so it is unauthenticated too, as it always was.
+        const malformed = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, ada, {
+            workspaceId: 7,
+            stray: true,
+          }),
+          plugin,
+        );
+        const malformedRead = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS, ada),
+          plugin,
+        );
+
         const unauthenticated = refusedAs(
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
           HOSTED_API_ERROR.INVALID_TOKEN,
         );
         assert.deepEqual({ status: read.status, body: read.body }, unauthenticated);
         assert.deepEqual({ status: made.status, body: made.body }, unauthenticated);
+        assert.deepEqual({ status: malformed.status, body: malformed.body }, unauthenticated);
+        assert.deepEqual(
+          { status: malformedRead.status, body: malformedRead.body },
+          unauthenticated,
+        );
       }).pipe(Effect.provide(plugin.database));
     }),
 );
