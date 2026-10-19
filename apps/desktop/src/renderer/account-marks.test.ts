@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { AccountSection } from "@luke/panel/settings/account-section";
 import { SignInGate } from "@luke/panel/sign-in-gate";
 import { ProviderMark } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { AccountSection } from "./settings/account-section";
 
 /**
  * Every surface that names a provider the account signs in with draws that

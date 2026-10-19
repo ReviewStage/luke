@@ -6,6 +6,7 @@ import type {
   ComposerTrigger,
 } from "@luke/panel/plan-editor/contract";
 import type { ComposerFieldMentions } from "@luke/panel/tasks/composer-field";
+import { MentionedServers, type MentionedServersPlace } from "@luke/panel/tasks/server-card";
 import { type SkillSource, useSkillPicker } from "@luke/panel/tasks/skill-picker";
 import {
   DICTATION_PHASE,
@@ -17,7 +18,6 @@ import { namedServers } from "@luke/ui/agent-servers-model";
 import type { ReactNode, RefObject } from "react";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { MentionedServers, type MentionedServersPlace } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
 import { useTaskMentions } from "./task-mentions";
 

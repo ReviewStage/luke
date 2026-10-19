@@ -19,11 +19,13 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { OWNER_MARK_SIZE, OwnerMark } from "@luke/panel/desktop/automation-owner";
 import {
   automationNextText,
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "@luke/panel/desktop/automation-words";
+import { useRunsPanel } from "@luke/panel/desktop/folded-groups";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
 import { FoldingButton } from "@luke/panel/folding-button";
@@ -65,9 +67,7 @@ import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-
 import { Fragment, useRef, useState } from "react";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { AutomationEditor } from "./automation-editor";
-import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
-import { useRunsPanel } from "./folded-groups";
 
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.

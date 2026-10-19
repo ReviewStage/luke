@@ -13,6 +13,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import type { AgentFork } from "@luke/panel/tasks/fork-model";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
@@ -21,8 +23,6 @@ import { afterEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
 import { agentForkDoors, ForkProvider } from "./fork-action";
-import type { AgentFork } from "./fork-model";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**
  * fork-action.test.ts -- Fork to new agent stands on an agent's own

@@ -18,6 +18,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
@@ -30,7 +31,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab, type TranscriptCards } from "./agent-tab";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**
  * replay-card.test.ts -- an agent started from another opens on the brief

@@ -10,6 +10,8 @@ import {
 } from "@luke/features/terminal-wire";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
+import { agentStillWriting } from "@luke/panel/tasks/coding-agent-model";
+import { AgentGlyph } from "@luke/panel/tasks/tab-look";
 import type { TerminalSession } from "@luke/panel/tasks/use-terminal-session";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
@@ -34,8 +36,6 @@ import {
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { AgentRef, type AgentSubject } from "./agent-ref";
-import { agentStillWriting } from "./coding-agent-model";
-import { AgentGlyph } from "./tab-look";
 
 /**
  * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one in the agent's sandbox, the one shown marked, and the agent's state at the foot.

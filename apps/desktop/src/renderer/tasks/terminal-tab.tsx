@@ -2,17 +2,17 @@ import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/featu
 import { TERMINAL_LOAD_FAILED } from "@luke/panel/bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "@luke/panel/find-in-tab";
 import { Shortcut } from "@luke/panel/shortcut";
+import { AgentGlyph } from "@luke/panel/tasks/tab-look";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { useTerminalSession } from "@luke/panel/tasks/use-terminal-session";
+import { WorkingTime } from "@luke/panel/tasks/working-time";
 import { TERMINAL_FIND, type TerminalFind } from "@luke/panel/terminal/contract";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { useMemo } from "react";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, usePaneRoom } from "./file-view";
-import { AgentGlyph } from "./tab-look";
 import { TerminalShells } from "./terminal-shells";
-import type { CodingAgentsControl } from "./use-coding-agents";
-import { WorkingTime } from "./working-time";
 
 /**
  * terminal-tab.tsx -- an agent's Terminal tab: a shell in the agent's own sandbox, under a bar naming the agent and where the connection stands.

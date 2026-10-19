@@ -15,6 +15,7 @@ import type {
   PlanEditorPictures,
 } from "@luke/panel/plan-editor/contract";
 import { Spinner } from "@luke/panel/spinner";
+import { documentScrollerOf } from "@luke/panel/tasks/document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "@luke/panel/tasks/plan-pictures";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
@@ -22,7 +23,6 @@ import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cac
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { documentScrollerOf } from "./document-frame";
 
 /**
  * editor-pictures.tsx -- a plan's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.

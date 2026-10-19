@@ -5,6 +5,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import type { SideBundles } from "@luke/panel/bundle-loader";
 import { MarkdownMessage } from "@luke/panel/markdown-message";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
@@ -24,7 +25,6 @@ import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { PlanBody } from "./tasks/plan-body";
-import { HISTORY_READ } from "./tasks/use-plan-history";
 import { VersionView } from "./tasks/version-view";
 
 /**

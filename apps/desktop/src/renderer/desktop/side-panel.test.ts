@@ -8,6 +8,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "@luke/panel/tasks/use-side-panel";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -17,7 +18,6 @@ import { test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import { ChangesCard } from "../tasks/agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { changesOffers, changesTabOf, showPullRequest } from "./side-panel";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

@@ -3,6 +3,7 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { ActorRef } from "@luke/panel/actor-ref";
 import { Message, MessageContent } from "@luke/panel/ai-elements/message";
 import {
   PLAN_BODY_LAYOUT,
@@ -14,7 +15,23 @@ import {
 import { TOOL_BLOCK } from "@luke/panel/ai-elements/tool";
 import { useFindOpen } from "@luke/panel/find-in-tab";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { lineSender, providerOf } from "@luke/panel/tasks/coding-agent-model";
+import {
+  earlierStepsLine,
+  leftOutLine,
+  REPLAY_PAGE,
+  replayCount,
+  replayLede,
+  replayPage,
+  replayVerb,
+  STEP_VIEW,
+  type StepView,
+  stepView,
+  summaryLine,
+} from "@luke/panel/tasks/replay-card-model";
 import { SentTime } from "@luke/panel/tasks/sent-time";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
@@ -38,26 +55,9 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ActorRef } from "../actor-ref";
-import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
-import {
-  earlierStepsLine,
-  leftOutLine,
-  REPLAY_PAGE,
-  replayCount,
-  replayLede,
-  replayPage,
-  replayVerb,
-  STEP_VIEW,
-  type StepView,
-  stepView,
-  summaryLine,
-} from "./replay-card-model";
 import { useMentionDoors } from "./task-mentions";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.

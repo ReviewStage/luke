@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { callHeading } from "@luke/panel/tasks/task-time";
+import { TurnCard } from "@luke/panel/tasks/turn-card";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
-import { TurnCard } from "./turn-card";
 
 /** The Mac's own region, read by a time asked for in no locale of its own: one that sets the clock on 24 hours. */
 const MAC_REGION = "en-GB";

@@ -23,18 +23,64 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "@luke/panel/actor-ref";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { useAutomation } from "@luke/panel/automation-directory";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { PictureBlock } from "@luke/panel/picture-block";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { ArchivedComposerNote } from "@luke/panel/tasks/archived-task";
 import { AttachedFileChips } from "@luke/panel/tasks/attached-file-chips";
 import { AttachmentViewer } from "@luke/panel/tasks/attachment-viewer";
+import {
+  archivedHolder,
+  CODE_READ,
+  CODE_READ_FAILED,
+  type CodeRead,
+  codeNotice,
+  codeReadOf,
+  codeWindow,
+  decidedOf,
+  decisionsOf,
+  fieldValueOf,
+  INBOX_HOLDER,
+  INBOX_MISSING,
+  type InboxDecided,
+  type InboxDraft,
+  type InboxHolder,
+  type InboxMissing,
+  inboxFileChips,
+  itemWorkspaceId,
+  NEEDS_YOU,
+  needsReader,
+  numberedPick,
+  proposedOptions,
+  readersItem,
+  SETTLED_BY,
+  sentenceCased,
+  settledAt,
+  settlementOf,
+  THREAD_ENTRY,
+  threadCut,
+  threadEntries,
+  withDecision,
+  withValue,
+} from "@luke/panel/tasks/inbox-model";
+import {
+  type InboxNext,
+  InboxNextUp,
+  type InboxPager,
+  InboxPagerControls,
+} from "@luke/panel/tasks/inbox-pager";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { REPLY_SCOPE } from "@luke/panel/tasks/reply-to-selection";
+import { TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { cardTitle } from "@luke/panel/tasks/tool-call-model";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { opensAsLink } from "@luke/panel/tasks/use-open-link";
+import type { InboxImage, TaskInboxControl } from "@luke/panel/tasks/use-task-inbox";
 import { TextLink } from "@luke/panel/text-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -72,7 +118,6 @@ import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
 import {
   AgentActorRef,
   AgentCard,
@@ -80,53 +125,13 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref";
-import { ArchivedComposerNote } from "./archived-task";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text";
-import {
-  archivedHolder,
-  CODE_READ,
-  CODE_READ_FAILED,
-  type CodeRead,
-  codeNotice,
-  codeReadOf,
-  codeWindow,
-  decidedOf,
-  decisionsOf,
-  fieldValueOf,
-  INBOX_HOLDER,
-  INBOX_MISSING,
-  type InboxDecided,
-  type InboxDraft,
-  type InboxHolder,
-  type InboxMissing,
-  inboxFileChips,
-  itemWorkspaceId,
-  NEEDS_YOU,
-  needsReader,
-  numberedPick,
-  proposedOptions,
-  readersItem,
-  SETTLED_BY,
-  sentenceCased,
-  settledAt,
-  settlementOf,
-  THREAD_ENTRY,
-  threadCut,
-  threadEntries,
-  withDecision,
-  withValue,
-} from "./inbox-model";
-import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { SentWords } from "./skill-chip";
-import { TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
-import type { CodingAgentsControl } from "./use-coding-agents";
-import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's question, everything it offered, and its answer, given in place or as it was given.

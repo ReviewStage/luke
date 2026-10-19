@@ -6,13 +6,13 @@ import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import type { CallCardInput } from "@luke/panel/call/call-card";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { revisionSummary } from "@luke/panel/tasks/plan-history-model";
+import { type PlanHistorySource, usePlanHistory } from "@luke/panel/tasks/use-plan-history";
 import { useToast } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useEffect, useMemo, useRef } from "react";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
 import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
-import { revisionSummary } from "../tasks/plan-history-model";
-import { type PlanHistorySource, usePlanHistory } from "../tasks/use-plan-history";
 import { sayRestored } from "../tasks/version-view";
 import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page";
 

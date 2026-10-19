@@ -21,6 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "@luke/panel/actor-ref";
 import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "@luke/panel/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@luke/panel/ai-elements/reasoning";
@@ -40,8 +41,12 @@ import {
   ToolStateMark,
 } from "@luke/panel/ai-elements/tool";
 import { GLYPH_STATE, StateGlyph } from "@luke/panel/state-glyph";
+import { ModelLabel } from "@luke/panel/tasks/model-label";
 import { usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
+import { SubagentMark } from "@luke/panel/tasks/tab-look";
+import { cardTitle } from "@luke/panel/tasks/tool-call-model";
 import { opensAsLink, useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { WorkingTime } from "@luke/panel/tasks/working-time";
 import { TextLink } from "@luke/panel/text-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
@@ -112,17 +117,12 @@ import {
   defaultRemarkPlugins,
   type ExtraProps,
 } from "streamdown";
-import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
 import { linkChip } from "./mention-chip";
-import { ModelLabel } from "./model-label";
-import { SubagentMark } from "./tab-look";
 import { useMentionDoors } from "./task-mentions";
-import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown";
-import { WorkingTime } from "./working-time";
 
 /**
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on the Call tab and a coding agent's tab alike.

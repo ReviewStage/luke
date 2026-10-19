@@ -4,11 +4,11 @@ import { useAppCommand } from "@luke/panel/app-commands";
 import { StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import { Tab, TabStrip } from "@luke/panel/desktop/tab-strip";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { DocumentScroll } from "@luke/panel/tasks/document-frame";
 import { SIDE_PANEL_WIDTH, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type React from "react";
 import { useState } from "react";
-import { DocumentScroll } from "../tasks/document-frame";
 import { IssueDocument, IssueMenu } from "./issue-detail";
 import { PANEL_LEAVING, PanelFrame, useSidePanelDrawing } from "./side-panel";
 

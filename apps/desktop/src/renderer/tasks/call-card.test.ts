@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { RUN_CARD } from "@luke/panel/tasks/turn-card";
 import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { CodePane } from "./code-pane";
 import { TaskCall } from "./task-call";
-import { RUN_CARD } from "./turn-card";
 
 /**
  * call-card.test.ts -- a call begins and ends the same in the Call tab's

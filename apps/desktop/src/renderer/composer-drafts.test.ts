@@ -10,8 +10,15 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Task } from "@luke/features/task-wire";
+import { useDraftsOwner } from "@luke/panel/composer-drafts";
 import { DRAFT_WORD } from "@luke/panel/draft-mark";
+import {
+  type AgentComposerControl,
+  type MessageSender,
+  useAgentComposer,
+} from "@luke/panel/tasks/use-agent-composer";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { type TaskInboxControl, useTaskInbox } from "@luke/panel/tasks/use-task-inbox";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
@@ -32,16 +39,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { useDraftsOwner } from "./composer-drafts";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { DesktopTasks } from "./desktop/desktop-tasks";
 import { SidebarTask } from "./desktop/task-actions";
-import {
-  type AgentComposerControl,
-  type MessageSender,
-  useAgentComposer,
-} from "./tasks/use-agent-composer";
-import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box

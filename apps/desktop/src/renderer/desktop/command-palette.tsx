@@ -47,6 +47,7 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "@luke/panel/actor-ref";
 import {
   appCommandOffered,
   runAppCommand,
@@ -65,6 +66,10 @@ import {
 } from "@luke/panel/settings-search";
 import { Shortcut } from "@luke/panel/shortcut";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { FileCard, fileLook, newestFileNote } from "@luke/panel/tasks/file-ref";
+import { refusalLine } from "@luke/panel/tasks/file-tab-model";
+import { agentEndMark, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "@luke/panel/tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
@@ -72,6 +77,7 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "@luke/panel/tasks/use-workspace-members";
+import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { Tooltip } from "@luke/panel/tooltip";
 import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
@@ -111,15 +117,9 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
-import { agentTabLabel } from "../tasks/coding-agent-model";
-import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
-import { refusalLine } from "../tasks/file-tab-model";
-import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { workRowsOf } from "../tasks/work-model";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";

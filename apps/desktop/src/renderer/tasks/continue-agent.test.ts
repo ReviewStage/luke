@@ -19,6 +19,25 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import {
+  DRAFT_PLACE,
+  type DraftWriter,
+  EMPTY_DRAFT,
+  useDraftWriter,
+} from "@luke/panel/composer-drafts";
+import {
+  continuationsOf,
+  continuedByIds,
+  endLineContinues,
+  endLineOffersContinue,
+  endLineParts,
+  endLineReason,
+  MESSAGE_RETIRED,
+  messageFailureWords,
+  startFailureNote,
+} from "@luke/panel/tasks/coding-agent-model";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import type { AgentContinuer } from "@luke/panel/tasks/use-coding-agents";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -34,22 +53,8 @@ import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { AgentTab } from "./agent-tab";
-import {
-  continuationsOf,
-  continuedByIds,
-  endLineContinues,
-  endLineOffersContinue,
-  endLineParts,
-  endLineReason,
-  MESSAGE_RETIRED,
-  messageFailureWords,
-  startFailureNote,
-} from "./coding-agent-model";
 import { ForkProvider } from "./fork-action";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import type { AgentContinuer } from "./use-coding-agents";
 
 /**
  * continue-agent.test.ts -- an agent whose turn failed, or whose session

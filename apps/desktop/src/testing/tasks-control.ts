@@ -2,7 +2,9 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -15,8 +17,6 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/task-summary";
-import type { CodingAgentsControl } from "../renderer/tasks/use-coding-agents";
-import { HISTORY_READ } from "../renderer/tasks/use-plan-history";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,

@@ -1,20 +1,15 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import { ActorMark, ActorRef } from "@luke/panel/actor-ref";
 import { InlineRef } from "@luke/panel/inline-ref";
-import { Tooltip } from "@luke/panel/tooltip";
-import { INLINE_REF_LOOK } from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { ActorMark, ActorRef } from "../actor-ref";
-import type { HeldTranscripts } from "../desktop/strip-tabs";
 import {
   AgentTabCard,
   type CardReading,
   cardCorner,
   heldLatest,
   lastFinished,
-} from "./agent-tab-card";
+} from "@luke/panel/tasks/agent-tab-card";
 import {
   agentActor,
   agentStateWords,
@@ -23,9 +18,14 @@ import {
   archivedByReading,
   providerOf,
   teammateRef,
-} from "./coding-agent-model";
-import { agentTranscript } from "./transcript-copy";
-import type { CodingAgentsControl } from "./use-coding-agents";
+} from "@luke/panel/tasks/coding-agent-model";
+import { agentTranscript } from "@luke/panel/tasks/transcript-copy";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
+import { Tooltip } from "@luke/panel/tooltip";
+import { INLINE_REF_LOOK } from "@luke/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import type { HeldTranscripts } from "../desktop/strip-tabs";
 
 /**
  * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows, and its mark and name as the one button that hangs that card and opens its tab.

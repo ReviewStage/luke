@@ -1,8 +1,19 @@
 import { MarkdownMessage } from "@luke/panel/markdown-message";
+import { DocumentScroll } from "@luke/panel/tasks/document-frame";
+import {
+  VERSION_CHANGE,
+  type VersionDiff,
+  versionDiff,
+} from "@luke/panel/tasks/plan-history-model";
 import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
 import { dayAndTimeText, momentText } from "@luke/panel/tasks/task-time";
 import { TaskTitle } from "@luke/panel/tasks/task-title";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import {
+  HISTORY_READ,
+  type PlanHistoryControl,
+  type ViewedVersion,
+} from "@luke/panel/tasks/use-plan-history";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "@luke/panel/toast";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
@@ -18,10 +29,7 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { DocumentScroll } from "./document-frame";
-import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
-import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**
  * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.

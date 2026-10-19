@@ -1,6 +1,7 @@
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { AutomationCard, actorCard } from "@luke/panel/actor-ref";
 import { AutomationDirectory, useAutomation } from "@luke/panel/automation-directory";
 import { MemberDirectory, useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
@@ -10,7 +11,6 @@ import { EXPERIMENT } from "@luke/settings";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { HashIcon, InboxIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
-import { AutomationCard, actorCard } from "../actor-ref";
 import { useMentionedReader } from "./mentioned-agent-card";
 import { PageCard } from "./page-card";
 import { useTaskMentions } from "./task-mentions";

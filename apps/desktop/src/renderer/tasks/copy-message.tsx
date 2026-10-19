@@ -6,10 +6,10 @@ import {
 } from "@luke/panel/ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "@luke/panel/copy-feedback";
 import { useCopyLink } from "@luke/panel/copy-link-item";
+import type { ForkCut } from "@luke/panel/tasks/fork-model";
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ForkMessageAction } from "./fork-action";
-import type { ForkCut } from "./fork-model";
 import { useMessagePlace } from "./message-links";
 
 /**

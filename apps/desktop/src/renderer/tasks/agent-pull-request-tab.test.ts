@@ -55,6 +55,12 @@ import {
 import { type GitHubConnectControl, GitHubConnectProvider } from "@luke/panel/github-connect";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
+import {
+  type PullRequestReader,
+  useTaskPullRequests,
+} from "@luke/panel/tasks/use-agent-pull-request";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -72,9 +78,6 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
-import { TAB_KIND, tabLook } from "./tab-look";
-import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * agent-pull-request-tab.test.ts -- an agent's Pull request tab draws its

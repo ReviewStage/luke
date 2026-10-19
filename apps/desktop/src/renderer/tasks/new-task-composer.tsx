@@ -12,6 +12,7 @@ import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { PICKER_ALIGN } from "@luke/panel/settings/picker-row";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
 import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
+import type { AgentComposerControl } from "@luke/panel/tasks/use-agent-composer";
 import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
@@ -32,7 +33,6 @@ import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks
 import { useEffect, useRef, useState } from "react";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
-import type { AgentComposerControl } from "./use-agent-composer";
 import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 
 /**

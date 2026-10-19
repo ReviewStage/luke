@@ -11,25 +11,15 @@ import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import {
+  type InboxViewChoices,
+  useInboxTaskFolds,
+  useInboxViewChoices,
+} from "@luke/panel/desktop/folded-groups";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { INBOX_COLUMNS, useInboxColumns } from "@luke/panel/tasks/inbox-columns";
-import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
-import { useMinute } from "@luke/panel/tasks/task-time";
-import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
-import { PULL_REQUEST_VIEW, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
-import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
-import { useExperiment } from "@luke/panel/use-app-state";
-import { EXPERIMENT } from "@luke/settings";
-import { EmptyState, ErrorState } from "@luke/ui";
-import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { TASK_MARK } from "@luke/ui/tasks-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
-import { InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
   anyUnread,
   EVERYONES,
@@ -50,8 +40,28 @@ import {
   type TasklessInboxAgent,
   taskHolder,
   tasklessGroups,
-} from "../tasks/inbox-model";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
+} from "@luke/panel/tasks/inbox-model";
+import { inboxNext, useInboxPager } from "@luke/panel/tasks/inbox-pager";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import { type CodingAgentsControl, useCodingAgents } from "@luke/panel/tasks/use-coding-agents";
+import { useInboxItems } from "@luke/panel/tasks/use-inbox-items";
+import { useInboxReadMarks, useReadOnOpen } from "@luke/panel/tasks/use-inbox-read-marks";
+import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
+import { useTaskInbox } from "@luke/panel/tasks/use-task-inbox";
+import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
+import { useExperiment } from "@luke/panel/use-app-state";
+import { EXPERIMENT } from "@luke/settings";
+import { EmptyState, ErrorState } from "@luke/ui";
+import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
+import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { TASK_MARK } from "@luke/ui/tasks-model";
+import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
+import { InboxIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
@@ -59,13 +69,7 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
-import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
-import { useInboxItems } from "../tasks/use-inbox-items";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
-import { useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
-import { type InboxViewChoices, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,

@@ -2,13 +2,16 @@ import { automationOwner, automationTriggerText } from "@luke/features/automatio
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "@luke/panel/actor-ref";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { useArchivedView, useTaskListView } from "@luke/panel/desktop/task-list-view";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { holderName, INBOX_HOLDER, type InboxListed } from "@luke/panel/tasks/inbox-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { Tooltip } from "@luke/panel/tooltip";
@@ -52,14 +55,11 @@ import {
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
-import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { RecentRow } from "./desktop-home";
-import { useArchivedView, useTaskListView } from "./task-list-view";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.

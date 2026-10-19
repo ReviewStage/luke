@@ -1,6 +1,17 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { ActorRef } from "@luke/panel/actor-ref";
 import { MessageAction } from "@luke/panel/ai-elements/message";
+import { agentActor, agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import {
+  type AgentFork,
+  FORK_WORDS,
+  type ForkCut,
+  forksOf,
+  messageOpening,
+} from "@luke/panel/tasks/fork-model";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import { IconButton, TextButton } from "@luke/ui";
@@ -8,12 +19,7 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
 import { createContext, Fragment, type ReactNode, useContext } from "react";
-import { ActorRef } from "../actor-ref";
 import type { TranscriptCards } from "./agent-tab";
-import { agentActor, agentTabLabel } from "./coding-agent-model";
-import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * fork-action.tsx -- a coding agent forked at one of its messages: the message's Fork to new agent, the draft's chip naming what it forks, and the line under a message saying which agents it was forked to.

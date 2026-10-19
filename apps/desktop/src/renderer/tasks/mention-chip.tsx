@@ -17,12 +17,20 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { ACTOR_SIZE, ActorMark } from "@luke/panel/actor-ref";
 import { InlineRef } from "@luke/panel/inline-ref";
 import type { LinkDrawer } from "@luke/panel/markdown-message";
 import { usePerson } from "@luke/panel/member-directory";
 import type { HeadingsChange, MentionNode } from "@luke/panel/plan-editor/contract";
+import { providerOf } from "@luke/panel/tasks/coding-agent-model";
+import { FileCard } from "@luke/panel/tasks/file-ref";
+import { shortCommit } from "@luke/panel/tasks/file-tab-model";
 import { FileTypeIcon } from "@luke/panel/tasks/file-type-icon";
 import { IssueMark } from "@luke/panel/tasks/issue-mark";
+import { OpenedNote, PullRequestCardNotes } from "@luke/panel/tasks/pull-request-card-notes";
+import { PullRequestMark } from "@luke/panel/tasks/pull-request-mark";
+import { ServerCard } from "@luke/panel/tasks/server-card";
+import { AgentMark } from "@luke/panel/tasks/tab-look";
 import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import {
   type ChipWhere,
@@ -58,7 +66,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -68,14 +75,7 @@ import {
   TaskChipCard,
   VersionChipCard,
 } from "./chip-cards";
-import { providerOf } from "./coding-agent-model";
-import { FileCard } from "./file-ref";
-import { shortCommit } from "./file-tab-model";
 import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card";
-import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
-import { PullRequestMark } from "./pull-request-mark";
-import { ServerCard } from "./server-card";
-import { AgentMark } from "./tab-look";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.

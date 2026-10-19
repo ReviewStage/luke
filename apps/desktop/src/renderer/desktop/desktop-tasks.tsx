@@ -7,16 +7,33 @@ import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import { useTaskInboxShow } from "@luke/panel/desktop/folded-groups";
 import { FIND_PAGE, FindScope, PageFind } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { ArchivedBanner } from "@luke/panel/tasks/archived-task";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { agentActor, agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "@luke/panel/tasks/inbox-columns";
+import {
+  firstChoice,
+  INBOX_GROUPING,
+  INBOX_SHOW,
+  type InboxListed,
+  inboxCounts,
+  inboxList,
+  listedItems,
+  NEEDS_YOU,
+  taskHolder,
+} from "@luke/panel/tasks/inbox-model";
+import { inboxNext, useInboxPager } from "@luke/panel/tasks/inbox-pager";
 import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
 import { taskLinkPlace } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { CallBar } from "@luke/panel/tasks/tasks-parts";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import { useInboxReadMarks, useReadOnOpen } from "@luke/panel/tasks/use-inbox-read-marks";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import {
   OpenHereProvider,
@@ -24,7 +41,9 @@ import {
   useOpenLink,
 } from "@luke/panel/tasks/use-open-link";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
+import { type TaskInboxControl, useTaskInbox } from "@luke/panel/tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
+import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -44,21 +63,7 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
-import { ArchivedBanner } from "../tasks/archived-task";
-import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
-import {
-  firstChoice,
-  INBOX_GROUPING,
-  INBOX_SHOW,
-  type InboxListed,
-  inboxCounts,
-  inboxList,
-  listedItems,
-  NEEDS_YOU,
-  taskHolder,
-} from "../tasks/inbox-model";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane";
 import { PlanBody, type SectionLinks } from "../tasks/plan-body";
 import { SkillFiles } from "../tasks/skill-chip";
@@ -69,14 +74,9 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
-import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { workRowsOf } from "../tasks/work-model";
 import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
-import { useTaskInboxShow } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import {
   COLUMN,
