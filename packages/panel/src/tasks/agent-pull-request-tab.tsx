@@ -103,11 +103,13 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
+  type ChangesReads,
   type ChangesReveal,
   type ChangesThreads,
   THREAD_PLACE,
   type ThreadPlace,
   useAgentRead,
+  useChangesReads,
 } from "./agent-changes-tab.js";
 import { threadPreview } from "./changes-model.js";
 import { centreWithin, scrollerOf } from "./code-pane.js";
@@ -260,6 +262,11 @@ const PULL_REQUEST_WORDS = {
   /** What the folded checks' control says while folded, by how many checks there are in all. */
   showAll: (count: number) => `Show all ${count}`,
   SHOW_LESS: "Show less",
+  /** What the Files changed tab's count says after the lines left to review. */
+  LEFT: "left",
+  /** What the Files changed tab's hint says of every line the pull request changes. */
+  total: (additions: number, deletions: number) =>
+    `+${additions.toLocaleString()} −${deletions.toLocaleString()} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -1426,6 +1433,45 @@ function checksCount(
   ];
 }
 
+/** What the Files changed tab counts: the lines left to review and, in its hint, the whole; or the whole alone. */
+interface FilesCount {
+  readonly count: readonly CountPart[];
+  readonly hint: string | undefined;
+}
+
+/**
+ * The lines the Files changed tab counts, as stage-cli counts them: those
+ * left to review, the whole less every file the member marked viewed, its
+ * whole in the hint, while some files are viewed and some are not; the whole
+ * alone where none or all are, or where the changes and the marks, read as
+ * Files changed is first opened, have not both landed. Note that it reads
+ * the marks Files changed draws, so a box ticked there counts at once, and
+ * one GitHub refuses counts again as it goes back.
+ */
+function filesCountOf(
+  published: CodingAgentPullRequest | undefined,
+  reads: ChangesReads,
+): FilesCount | undefined {
+  if (published === undefined) return undefined;
+  const { additions, deletions } = published;
+  const whole = { count: linesCount(additions, deletions), hint: undefined };
+  const files = reads.pullRequest?.files;
+  const marks = reads.viewedFiles.marks;
+  if (files === undefined || marks === undefined) return whole;
+  const viewed = files.filter((file) => marks.viewed(file.path));
+  if (viewed.length === 0 || viewed.length === files.length) return whole;
+  const seenAdditions = viewed.reduce((sum, file) => sum + file.additions, 0);
+  const seenDeletions = viewed.reduce((sum, file) => sum + file.deletions, 0);
+  const left = linesCount(
+    Math.max(0, additions - seenAdditions),
+    Math.max(0, deletions - seenDeletions),
+  );
+  return {
+    count: [...left, { text: PULL_REQUEST_WORDS.LEFT }],
+    hint: PULL_REQUEST_WORDS.total(additions, deletions),
+  };
+}
+
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
 function conversationCount(conversation: CodingAgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
@@ -1439,15 +1485,18 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
  * The three tabs under the header, each counting what Luke has read of it
  * so far: the conversation once read; the checks by how they went from the
  * first frame, as the pill's mark says it, and by how many once read; and
- * the files by the lines what was published adds and removes.
+ * the files by the lines left to review once some are marked viewed, else
+ * by the lines what was published adds and removes (`filesCountOf`).
  */
 function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   held: HeaderPullRequest | undefined,
+  changes: ChangesReads,
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
+  const files = filesCountOf(published, changes);
   return [
     {
       value: PULL_REQUEST_VIEW.CONVERSATION,
@@ -1472,8 +1521,8 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.FILES,
       icon: <FileDiffIcon />,
       label: "Files changed",
-      count:
-        published === undefined ? undefined : linesCount(published.additions, published.deletions),
+      count: files?.count,
+      hint: files?.hint,
     },
   ];
 }
@@ -1907,6 +1956,12 @@ function PullRequestTabBody({
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
+  // Files changed's reads, held here so its tab's count reads the same marks it draws; asked as it is first shown, as before.
+  const changes = useChangesReads(
+    agentId,
+    control,
+    shown && !none && view === PULL_REQUEST_VIEW.FILES,
+  );
   const overview = landed(parts.pullRequest);
   const title = overview ?? published;
   // Review stands at the end of the tabs while the pull request is open or a draft, as the pill says it stands.
@@ -1996,7 +2051,8 @@ function PullRequestTabBody({
                 <div className="pull-request-tabs">
                   <ChoiceBar<PullRequestView>
                     label="Pull request"
-                    items={tabsOf(parts, published, held)}
+                    items={tabsOf(parts, published, held, changes)}
+                    hint={Tooltip}
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
@@ -2059,6 +2115,7 @@ function PullRequestTabBody({
                 tree={tree}
                 threads={changesThreads}
                 lineComments={{ pending: pendingReview, onWritten: written }}
+                reads={changes}
                 reveal={threadJumps.filesReveal}
               />
             </div>

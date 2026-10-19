@@ -33,6 +33,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/luke-link";
 import {
+  FILE_VIEWED_STATE,
   MERGE_METHOD,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
@@ -4650,4 +4651,127 @@ test("a landing waits for the panel to be visible before it takes the focus, as 
     "the landing ends once the panel is seen",
   );
   assert.equal(document.activeElement, card.querySelector("summary"));
+});
+
+/** Three files of differing sizes, +60 −7 in all, as the changes read names them. */
+const SIZED = [
+  ["a.ts", 10, 2],
+  ["b.ts", 20, 5],
+  ["c.ts", 30, 0],
+] as const;
+
+/** The plan's agents, the pull request published at +60 −7, its changes those three files, and the member's marks as given; every read of the marks counted. */
+function viewing(marked: readonly string[]) {
+  const reads = { viewed: 0 };
+  const control: CodingAgentsControl = {
+    ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
+      Promise.resolve({
+        pullRequest: {
+          url: PAGE,
+          truncated: false,
+          files: SIZED.map(([path, additions, deletions]) => ({
+            path,
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions,
+            deletions,
+            patch: "@@ -1 +1 @@\n-a\n+b\n",
+            omitted: null,
+          })),
+        },
+      }),
+    ),
+    pullRequests: new Map([
+      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions: 60, deletions: 7 }],
+    ]),
+    readPullRequestViewed: () => {
+      reads.viewed += 1;
+      return Promise.resolve({
+        outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+        files: SIZED.map(([path]) => ({
+          path,
+          state: marked.includes(path) ? FILE_VIEWED_STATE.VIEWED : FILE_VIEWED_STATE.UNVIEWED,
+        })),
+      });
+    },
+  };
+  return { control, reads };
+}
+
+/** A file's Viewed box, in the header Files changed's list draws for it. */
+function viewedBoxOf(path: string): HTMLInputElement {
+  const list = lists.at(-1) ?? assert.fail("Files changed draws its list");
+  const head = list.renderHeader(path);
+  if (!head.isConnected) document.body.append(head);
+  return (
+    head.querySelector<HTMLInputElement>('.diff-list-viewed input[type="checkbox"]') ??
+    assert.fail(`${path} offers a Viewed box`)
+  );
+}
+
+/** What the Files changed tab's hint says, once the pointer rests on it. */
+async function filesHint(tab: HTMLElement): Promise<string | undefined> {
+  const files = option(tab, "Files changed");
+  act(() => files.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  await settle();
+  const hint = files.getAttribute("aria-describedby");
+  return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
+}
+
+test("Files changed counts what was published until it is first opened, reading no marks before; then it counts the lines left to review, the whole in its hint", async () => {
+  const { control, reads } = viewing(["a.ts"]);
+  const tab = await draw(control);
+  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+  assert.equal(reads.viewed, 0, "the marks are read with Files changed, as before");
+
+  await choose(tab, "Files changed");
+  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
+  assert.equal(await filesHint(tab), "+60 −7 total");
+  await choose(tab, "Conversation");
+  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left", "the count stands on another tab");
+});
+
+test("ticking a file's Viewed box counts it at once, before GitHub answers, and one GitHub refuses counts again as its mark goes back", async () => {
+  const { control } = viewing(["a.ts"]);
+  const tab = await draw(control, PULL_REQUEST_VIEW.FILES);
+  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
+
+  const { promise, resolve } = Promise.withResolvers<void>();
+  changeHeld = promise;
+  act(() => viewedBoxOf("c.ts").click());
+  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "the tick counts at once");
+  resolve();
+  await settle();
+  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left");
+
+  changeHeld = undefined;
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Pull request is locked." };
+  act(() => viewedBoxOf("b.ts").click());
+  await settle();
+  assert.equal(tabCount(tab, "Files changed"), "+20 −5 left", "a refused mark counts again");
+  assert.deepEqual(
+    changes.map(([, request]) => request),
+    [
+      { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
+      { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "b.ts" },
+    ],
+  );
+});
+
+test("with every file viewed, or none, Files changed counts the whole and hints nothing more", async () => {
+  for (const marked of [["a.ts", "b.ts", "c.ts"], []]) {
+    const tab = await draw(viewing(marked).control, PULL_REQUEST_VIEW.FILES);
+    assert.equal(tabCount(tab, "Files changed"), "+60 −7", `${marked.length} viewed`);
+    assert.equal(option(tab, "Files changed").getAttribute("aria-describedby"), null);
+    act(() => root?.unmount());
+    root = undefined;
+  }
+});
+
+test("ticking the last file left counts the whole again, every file viewed", async () => {
+  const tab = await draw(viewing(["a.ts", "b.ts"]).control, PULL_REQUEST_VIEW.FILES);
+  assert.equal(tabCount(tab, "Files changed"), "+30 −0 left");
+  act(() => viewedBoxOf("c.ts").click());
+  await settle();
+  assert.equal(tabCount(tab, "Files changed"), "+60 −7");
 });

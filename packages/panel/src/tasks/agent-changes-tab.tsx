@@ -123,13 +123,16 @@ import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
-import { useViewedFiles } from "./viewed-files.js";
+import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /**
  * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
  *
  * The files are read from GitHub afresh by the service on each ask, so
- * nothing here reads on a clock: the tab asks as it first comes on screen,
+ * nothing here reads on a clock. The Pull request tab holds the reads, the
+ * files and the member's viewed marks with them (`useChangesReads`), so its
+ * own Files changed tab counts the lines left to review by the marks drawn
+ * here; it asks as the view first comes on screen,
  * when the developer presses Retry or Refresh changes, and the moment the
  * agent ends, since that is when what it published has settled. A refresh
  * leaves the files drawn standing until its answer lands; a read that
@@ -1506,6 +1509,70 @@ export function ChangesCard({
   );
 }
 
+/** The pull request a changes answer names, with its files; none where it names none. */
+type ChangesPullRequest = Extract<
+  CodingAgentChangesAnswerView,
+  { pullRequest: unknown }
+>["pullRequest"];
+
+/**
+ * The Files changed view's reads, held by the Pull request tab rather than
+ * the view, so the tab's own row can count the lines left to review by the
+ * same marks the view draws: the changes as last answered, whether a read
+ * is out, the door that reads them again, how many answers have landed, and
+ * the member's viewed marks, read with each answer.
+ */
+export interface ChangesReads {
+  readonly answer: CodingAgentChangesAnswerView | undefined;
+  readonly out: boolean;
+  readonly ask: () => void;
+  /** How many answers have landed, which a changed image is drawn anew on. */
+  readonly count: number;
+  /** The pull request the latest answer names; none before one lands, where it failed, or where there is none. */
+  readonly pullRequest: ChangesPullRequest;
+  readonly viewedFiles: ViewedFiles;
+}
+
+/**
+ * The agent's changes and the member's viewed marks on them, read as the
+ * view first comes on screen (`shown`), and again as the agent ends, as
+ * `useAgentRead` reads; the marks with each answer of the changes, so the
+ * two describe the same push.
+ */
+export function useChangesReads(
+  agentId: string,
+  control: CodingAgentsControl,
+  shown: boolean,
+): ChangesReads {
+  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
+  const number = usePullRequestNumber();
+  const { answer, out, ask } = useAgentRead(
+    agentId,
+    shown,
+    ended,
+    (id: string) => control.readChanges(id, number),
+    UNANSWERED,
+  );
+  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
+    of: undefined,
+    count: 0,
+  });
+  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
+  const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
+  const readViewed = useCallback(
+    (id: string) => control.readPullRequestViewed(id, number),
+    [control.readPullRequestViewed, number],
+  );
+  const viewedFiles = useViewedFiles(
+    agentId,
+    readViewed,
+    pullRequest === null ? undefined : reads.current.count,
+  );
+  return { answer, out, ask, count: reads.current.count, pullRequest, viewedFiles };
+}
+
 export function AgentChangesTab({
   agentId,
   control,
@@ -1515,6 +1582,7 @@ export function AgentChangesTab({
   threads,
   lineComments,
   reveal,
+  reads,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -1530,29 +1598,14 @@ export function AgentChangesTab({
   lineComments?: LineComments | undefined;
   /** A review thread to bring into view on its file; told it is gone where its file is not among the changes. */
   reveal?: ChangesReveal | undefined;
+  /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
+  reads: ChangesReads;
 }): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
-  const number = usePullRequestNumber();
-  const { answer, out, ask } = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    (id: string) => control.readChanges(id, number),
-    UNANSWERED,
-  );
-  // How many answers have landed, which a changed image is drawn anew on.
-  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
-    of: undefined,
-    count: 0,
-  });
-  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
+  const { answer, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
-  const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
   // Note that the lists are kept while the answer is the same one, because
   // fresh ones would have the tree draw itself anew.
   const changed = useMemo(() => {
@@ -1560,16 +1613,6 @@ export function AgentChangesTab({
     const paths = files.map((file) => file.path);
     return { files, paths, ordered: treeOrder(files), folders: changedFolders(paths) };
   }, [pullRequest]);
-  // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
-  const readViewed = useCallback(
-    (id: string) => control.readPullRequestViewed(id, number),
-    [control.readPullRequestViewed, number],
-  );
-  const viewedFiles = useViewedFiles(
-    agentId,
-    readViewed,
-    pullRequest === null ? undefined : reads.current.count,
-  );
   const viewSettings = useFileViewSettings();
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
@@ -1578,7 +1621,7 @@ export function AgentChangesTab({
     () => changeMarks(changed.files, { threads: threads?.list, viewed: list.viewed }),
     [changed.files, threads?.list, list.viewed],
   );
-  const answered = reads.current.count;
+  const answered = reads.count;
   // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
   const images = useMemo(
     () => (pullRequest === null ? undefined : imagesOf(agentId, pullRequest, answered)),
