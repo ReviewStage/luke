@@ -1227,30 +1227,33 @@
   flex: none;
   flex-direction: column;
   align-items: center;
-  gap: var(--luke-space-2);
   padding-block: var(--luke-space-12);
   border-left: 1px solid var(--luke-color-border);
 }
 
+/* Each mark is a share of the strip's height, at most a line's mark, its
+   colour filling the top of its share so the gap between marks shrinks
+   with them: a pull request of thousands of files draws every mark, however
+   thin, and the file the bar names never thinner than a line. */
 .file-tree-strip-mark {
+  --strip-mark-colour: var(--luke-color-attention);
   width: var(--luke-space-6);
-  min-height: 1px;
-  max-height: var(--luke-space-4);
+  min-height: 0;
+  max-height: var(--luke-space-6);
   flex: 1 1 0;
-  border-radius: 1px;
-  background: var(--luke-color-attention);
+  background: linear-gradient(var(--strip-mark-colour) 0 66%, transparent 66%);
 }
 
 .file-tree-strip-mark[data-status="added"] {
-  background: var(--luke-color-complete);
+  --strip-mark-colour: var(--luke-color-complete);
 }
 
 .file-tree-strip-mark[data-status="deleted"] {
-  background: var(--luke-color-danger-text);
+  --strip-mark-colour: var(--luke-color-danger-text);
 }
 
 .file-tree-strip-mark[data-status="renamed"] {
-  background: var(--luke-color-working);
+  --strip-mark-colour: var(--luke-color-working);
 }
 
 .file-tree-strip-mark[data-viewed] {
@@ -1259,6 +1262,7 @@
 
 .file-tree-strip-mark[data-current] {
   width: var(--luke-space-12);
+  min-height: var(--luke-space-2);
   opacity: 1;
   box-shadow: 0 0 0 1px var(--luke-color-text);
 }
@@ -1356,6 +1360,15 @@
 
   .file-view[data-pane-beside] > .file-tree-foot {
     display: block;
+  }
+}
+
+/* A panel with no room for the tree's least width beside the tab's own
+   keeps the tree at its share of the panel, with no edge to drag, since
+   any width a drag asked for would be drawn no wider (`useTreeEdge`). */
+@container side-panel (max-width: 539px) {
+  .file-view .file-tree-pane > .side-panel-resize {
+    display: none;
   }
 }
 
