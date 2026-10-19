@@ -1,6 +1,4 @@
-import { providerKeysApp } from "@luke/service/accounts/provider-keys-app";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** The account's own provider API keys: read what they are (GET), save one (PUT), or remove one (DELETE). */
-export default routeFromHttpRouter(providerKeysApp({ resolveUserId: resolveHostedUserId }));
+/** The account's own provider API keys: read what they are (GET), save one (PUT), or remove one (DELETE), answered by the hosted oRPC router (`packages/service/src/accounts/provider-keys-procedures.ts`). */
+export default orpcRoute;

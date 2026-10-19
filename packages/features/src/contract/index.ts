@@ -5,6 +5,7 @@
  * reads the contract resolves no service code behind it.
  */
 
+import { accountContract } from "./account.js";
 import { automationsContract } from "./automations.js";
 import { githubContract } from "./github.js";
 import { integrationsContract } from "./integrations.js";
@@ -22,6 +23,7 @@ export { TASK_START_STATUS } from "./tasks.js";
 
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
+  account: accountContract,
   automations: automationsContract,
   github: githubContract,
   integrations: integrationsContract,

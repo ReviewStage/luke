@@ -1,6 +1,4 @@
-import { accountApp } from "@luke/service/accounts/account-app";
-import { accountAppSeams } from "@luke/service/accounts/account-seams";
-import { routeFromHttpRouter } from "../../../route-effect.js";
+import { orpcRoute } from "../../../orpc-route.js";
 
-/** One revision of the account's plan template put back as the template (POST). */
-export default routeFromHttpRouter(accountApp(accountAppSeams()));
+/** One revision of the account's plan template put back as the template (POST), answered by the hosted oRPC router (`packages/service/src/accounts/account-procedures.ts`). */
+export default orpcRoute;

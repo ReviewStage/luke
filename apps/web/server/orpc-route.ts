@@ -1,6 +1,7 @@
 /** orpc-route.ts -- the route every path moved onto the hosted oRPC router answers through. */
 
 import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
+import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
@@ -55,6 +56,7 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
 
 /** The deployment's resolvers, and what the resources ask of the deployment beside them. */
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
+  ...accountProcedureSeams(),
   ...integrationsAppSeams(),
   ...workspaceLinearProcedureSeams(),
   resolveUserId: resolveHostedUserId,

@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./accounts/account-app": "./src/accounts/account-app.js",
     "./accounts/account-person": "./src/accounts/account-person.js",
     "./accounts/account-seams": "./src/accounts/account-seams.js",
     "./accounts/models-procedures": "./src/accounts/models-procedures.js",

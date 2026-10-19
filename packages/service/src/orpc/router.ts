@@ -5,6 +5,7 @@
  * handed in by the route so a test can hand in its own.
  */
 
+import { type AccountProcedureSeams, accountProcedures } from "../accounts/account-procedures.js";
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
 import {
   type WorkspaceGithubProcedureSeams,
@@ -36,7 +37,8 @@ import { type TasksProcedureSeams, tasksProcedures } from "../tasks/tasks-proced
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
-export type HostedRouterSeams = AutomationsProcedureSeams &
+export type HostedRouterSeams = AccountProcedureSeams &
+  AutomationsProcedureSeams &
   GitHubProcedureSeams &
   IntegrationsProcedureSeams &
   MessagesProcedureSeams &
@@ -50,6 +52,7 @@ export type HostedRouterSeams = AutomationsProcedureSeams &
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
+    account: accountProcedures(seams),
     automations: automationsProcedures(seams),
     github: githubProcedures(seams),
     integrations: integrationsProcedures(seams),
