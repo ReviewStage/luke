@@ -428,6 +428,22 @@ test("the layers are one tab stop, and the arrows move the choice along it, draw
   );
 });
 
+test("an arrow moving the choice leaves the preview of the stage the pointer rests on standing", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => stage(page, "Shipped").focus());
+  pointTo(page, stage(page, "Planned"));
+  act(() => {
+    stage(page, "Shipped").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+  });
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2", "Defects0 (chosen)"]);
+  assert.deepEqual(drawn(page), ["planned"]);
+  pointTo(page, undefined);
+  assert.deepEqual(drawn(page), ["defects"]);
+});
+
 /** A registry whose runtime reads `clock`, so the page's minute moves on the test's own time. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({

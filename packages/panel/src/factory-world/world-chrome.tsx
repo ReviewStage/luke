@@ -147,13 +147,20 @@ export function PipelineBar({
   const focus = (event: FocusEvent<HTMLDivElement>, to: EventTarget | null) =>
     setFocused(layerAt(event.currentTarget, to));
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the box only hears where the pointer and the keyboard rest among its radios, to preview a layer; the press and the keys are the radios'.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the box only hears where the pointer and the keyboard rest among its radios, to preview a layer, and a press on one; the press and the keys are the radios'.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click it hears is a radio's, which the keyboard presses with Space.
     <div
       className="factory-world-pipeline"
       onPointerOver={(event) => point(event, event.target)}
       onPointerOut={(event) => point(event, event.relatedTarget)}
       onFocus={(event) => focus(event, event.target)}
       onBlur={(event) => focus(event, event.relatedTarget)}
+      onClick={(event) => {
+        // Note that a press settles the preview, so what is drawn is the press until the pointer or keyboard moves to another stage; an arrow, which chooses without a press, leaves a resting pointer's preview standing.
+        if (layerAt(event.currentTarget, event.target) === undefined) return;
+        setPointed(undefined);
+        setFocused(undefined);
+      }}
     >
       <ChoiceBar
         label="Layers"
@@ -168,12 +175,7 @@ export function PipelineBar({
           count: stageCount(layer, counts),
         }))}
         value={chosen}
-        onChange={(layer) => {
-          onChoose(layer);
-          // Note that a press settles the preview: what is drawn now is the press, until the pointer or keyboard moves to another stage.
-          setPointed(undefined);
-          setFocused(undefined);
-        }}
+        onChange={onChoose}
         look={CHOICE_BAR_LOOK.FILL}
         clearable
       />
