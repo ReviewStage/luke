@@ -192,15 +192,16 @@ function currentAppearance(): Appearance {
 /** What the popover's foot says, and where it goes. */
 const ALL_SETTINGS = "All diff and code settings\u2026";
 
-/** A group of the popover's rows under its name, set apart from the one before by a rule. */
+/** A group of the popover's rows under its name, set apart from the one before by a rule; a popover's one group stands unnamed. */
 function SettingsGroup({
   title,
   children,
 }: {
-  title: string;
+  title?: string | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const id = useId();
+  if (title === undefined) return <div className="view-settings-group">{children}</div>;
   return (
     <section className="view-settings-group" aria-labelledby={id}>
       <h3 className="view-settings-heading" id={id}>
@@ -399,7 +400,7 @@ function ViewSettingsPopover({
       {scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
         <DiffSettingsRows roomy={scope.roomy} />
       ) : (
-        <SettingsGroup title={GROUP_TITLE.LINES}>
+        <SettingsGroup>
           <LinesRows />
         </SettingsGroup>
       )}

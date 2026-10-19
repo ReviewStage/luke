@@ -124,6 +124,7 @@ test("over the source, View settings offers only the two settings its lines foll
     ),
     ["Word wrap", "Line numbers"],
   );
+  assert.equal(popover.querySelector("h3"), null, "its one group stands unnamed");
   await press("View settings");
 
   await press("Source actions");

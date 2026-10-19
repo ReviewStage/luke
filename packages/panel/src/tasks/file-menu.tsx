@@ -1,6 +1,6 @@
 import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
-import { ClipboardCopyIcon } from "lucide-react";
+import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -44,7 +44,7 @@ export function copyPathAction(
 ): MenuAction {
   return {
     label: PATH_COPY_WORDS.COPY_PATH,
-    icon: <CopyIcon />,
+    icon: <FolderTreeIcon aria-hidden="true" />,
     onSelect: () => copy(path, PATH_COPY_WORDS.PATH_COPIED),
   };
 }
