@@ -11,8 +11,9 @@ import { Calendar } from "./calendar.js";
  * and PageDown move the keyboard, across a month's edge and the shown month
  * with it; Enter, Space, and a press pick a day, alone or as a range's end,
  * and a neighbouring month's day is picked like any other; the keyboard
- * waits for a caller slow to show the month it stepped into; and paging stops
- * at the four-digit years. Synthetic days, with today handed in.
+ * waits for a caller slow to show the month it stepped into, unless it left
+ * the grid meanwhile; and paging stops at the four-digit years, its keys still
+ * the grid's there. Synthetic days, with today handed in.
  */
 
 declare global {
@@ -108,13 +109,15 @@ function gridName(container: HTMLElement): string {
   return label ? (document.getElementById(label)?.textContent ?? "") : "";
 }
 
-/** Presses `key` on whatever has the focus. */
-function press(key: string, init: KeyboardEventInit = {}): void {
+/** Presses `key` on whatever has the focus, and answers whether the page's own response to it was refused. */
+function press(key: string, init: KeyboardEventInit = {}): boolean {
   const target = document.activeElement;
   if (target === null) throw new Error("nothing has the focus");
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
   act(() => {
-    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
+    target.dispatchEvent(event);
   });
+  return event.defaultPrevented;
 }
 
 /** The name of the day with the focus. */
@@ -269,8 +272,8 @@ test("the calendar pages no further than the four-digit years", () => {
     container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
   enterGrid(container);
 
-  press("ArrowRight");
-  press("PageDown");
+  expect(press("ArrowRight")).toBe(true);
+  expect(press("PageDown")).toBe(true);
   expect(focused()).toBe("Friday, December 31, 9999");
   expect(step("Next month")?.disabled).toBe(true);
   expect(container.querySelectorAll('[role="grid"] td button')).toHaveLength(31 + 3);
@@ -280,4 +283,15 @@ test("the calendar pages no further than the four-digit years", () => {
       'button[aria-label="Previous month"]',
     )?.disabled,
   ).toBe(true);
+});
+
+test("a step still waiting on its month is dropped once the keyboard leaves the grid", () => {
+  const { container, heard } = draw("2026-10", { start: "2026-10-20", slow: true });
+  const elsewhere = document.body.appendChild(document.createElement("input"));
+  enterGrid(container);
+
+  press("PageDown");
+  act(() => elsewhere.focus());
+  act(() => heard.show?.("2026-11"));
+  expect(document.activeElement).toBe(elsewhere);
 });

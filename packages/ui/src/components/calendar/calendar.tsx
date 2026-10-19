@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { type FocusEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { DAYS_PER_WEEK } from "../../activity-calendar.js";
 import { BackIcon, ForwardIcon } from "../../face/glyphs.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
@@ -155,13 +155,7 @@ function placeOf(
   return day > low && day < high ? DAY_PLACE.BETWEEN : undefined;
 }
 
-/** The day a key moves the keyboard to from `day`, or none for a key that moves nothing or past the calendar's span. */
-function keyTarget(event: KeyboardEvent<HTMLElement>, day: string): string | undefined {
-  const target = keyStep(event, day);
-  return target !== undefined && onCalendar(target) ? target : undefined;
-}
-
-/** The day a key steps to from `day`, wherever it lands. */
+/** The day a key steps to from `day`, wherever it lands, or none for a key that moves nothing. */
 function keyStep(event: KeyboardEvent<HTMLElement>, day: string): string | undefined {
   const step = ARROW_STEPS.get(event.key);
   if (step !== undefined) return shiftedDay(day, step);
@@ -257,12 +251,22 @@ export function Calendar({
       pick(day);
       return;
     }
-    const target = keyTarget(event, day);
+    const target = keyStep(event, day);
     if (target === undefined) return;
+    // Note that a moving key is the grid's even where the span stops it, so it never scrolls the page.
     event.preventDefault();
+    if (!onCalendar(target)) return;
     following.current = target;
     setMoved(target);
     if (monthOf(target) !== month) onShowMonth(monthOf(target));
+  };
+
+  // Note that focus leaving the grid drops a step still waiting on its month,
+  // so a month shown later never pulls the keyboard back from elsewhere.
+  const onBlur = (event: FocusEvent<HTMLTableElement>) => {
+    const to = event.relatedTarget;
+    if (to instanceof Node && event.currentTarget.contains(to)) return;
+    following.current = undefined;
   };
 
   return (
@@ -296,6 +300,7 @@ export function Calendar({
         aria-labelledby={titleId}
         aria-multiselectable={ranged ? true : undefined}
         onKeyDown={onKeyDown}
+        onBlur={onBlur}
       >
         <thead>
           <tr>
