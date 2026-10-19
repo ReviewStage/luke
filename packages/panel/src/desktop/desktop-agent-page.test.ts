@@ -186,6 +186,13 @@ beforeEach(() => {
   gitHub = new Map();
   fakeActs({
     act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve(
+          members === undefined
+            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: members },
+        );
+      }
       told.push(request);
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const value = {
@@ -214,9 +221,6 @@ beforeEach(() => {
           ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
           : { agent: back };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
         // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.

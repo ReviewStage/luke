@@ -6,6 +6,7 @@
  */
 
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
+import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
   automationsProcedures,
@@ -13,12 +14,15 @@ import {
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment. */
-export type HostedRouterSeams = AutomationsProcedureSeams & ModelsProcedureSeams;
+export type HostedRouterSeams = AutomationsProcedureSeams &
+  MessagesProcedureSeams &
+  ModelsProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
     automations: automationsProcedures(seams),
+    messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
   });
 }

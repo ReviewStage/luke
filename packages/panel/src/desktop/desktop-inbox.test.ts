@@ -280,6 +280,12 @@ beforeEach(() => {
   members = [];
   fakeActs({
     act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
+      }
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
         Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
@@ -322,12 +328,6 @@ beforeEach(() => {
             },
           },
         });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
       }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({

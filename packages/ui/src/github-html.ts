@@ -22,10 +22,16 @@
  * `<source srcset>`) among them, because a browser draws a matching source
  * in place of its `<img>`: the window would ask GitHub's image proxy itself,
  * which its policy refuses, rather than draw the `<img>` the place reads
- * through the service, and the picture would stand broken. Everything else
- * GitHub writes, a heading's permalink included, the sanitizer already
+ * through the service, and the picture would stand broken. And it lets go
+ * of the link GitHub wraps every picture in, where it leads to the picture
+ * itself or to another of GitHub's own image addresses, so the picture is
+ * the place's to open (the Pull request tab's viewer) rather than a link out
+ * to the browser; a picture linked anywhere else keeps its link. Everything
+ * else GitHub writes, a heading's permalink included, the sanitizer already
  * leaves harmless.
  */
+
+import { githubImageOf } from "@luke/features/github-image";
 
 /** A property's value as the parsed tree holds it: HTML's own attribute values. */
 type PropertyValue = string | number | boolean | readonly (string | number)[] | null | undefined;
@@ -114,11 +120,39 @@ function suggestion(blob: HtmlNode): HtmlNode {
   return fenced(SUGGESTED_CHANGE_LANGUAGE, lines.join("\n"));
 }
 
+/** Whether a link around a picture leads to the picture itself or to another of GitHub's own image addresses, as GitHub links every picture it renders. */
+export function linksToPicture(href: string, src: string): boolean {
+  return href !== "" && (href === src || githubImageOf(href) !== undefined);
+}
+
+/** Whether a node is words of nothing but white space, which GitHub writes between its tags. */
+function blank(node: HtmlNode): boolean {
+  return node.type === "text" && (node.value ?? "").trim() === "";
+}
+
+/**
+ * The picture a link holds, where it holds one alone and leads to that
+ * picture or to another of GitHub's own image addresses, as GitHub wraps
+ * every picture it renders; none for any other link.
+ */
+function selfLinkedPicture(link: HtmlNode): HtmlNode | undefined {
+  const held = (link.children ?? []).filter((child) => !blank(child));
+  const picture = held[0];
+  if (held.length !== 1 || picture?.type !== "element" || picture.tagName !== "img") {
+    return undefined;
+  }
+  const href = String(link.properties?.href ?? "");
+  return linksToPicture(href, String(picture.properties?.src ?? "")) ? picture : undefined;
+}
+
 /** What one node of GitHub's rendering becomes: itself, nodes in its place, or nothing. */
 function reshaped(node: HtmlNode): readonly HtmlNode[] {
   if (node.type !== "element") return [node];
   // A source is an address the window would read itself; its picture's `<img>` stands alone.
   if (node.tagName === "source") return [];
+  // A picture GitHub links to itself stands alone, the place's to open.
+  const picture = node.tagName === "a" ? selfLinkedPicture(node) : undefined;
+  if (picture !== undefined) return [picture];
   const classes = classesOf(node);
   // A suggested change is GitHub's own diff table, whose looks are all its classes.
   if (node.tagName === "div" && classes.includes(SUGGESTION_BLOB)) return [suggestion(node)];

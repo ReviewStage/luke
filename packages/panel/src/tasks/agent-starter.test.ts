@@ -14,7 +14,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -22,7 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import {
@@ -89,13 +89,10 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
 });
 
 afterEach(() => {

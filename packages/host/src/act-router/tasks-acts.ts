@@ -1,4 +1,3 @@
-import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
 import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
   type CodeLines,
@@ -18,8 +17,6 @@ import {
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksIssueParams,
-  type TasksLinearIssuesAnswer,
-  type TasksLinearIssuesParams,
   type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
@@ -51,37 +48,10 @@ import {
   type TasksStartRequest,
   type TasksTreeAnswer,
   type TasksTreeParams,
-  type TasksWorkspaceAnswer,
-  type TasksWorkspaceCreateParams,
-  type TasksWorkspaceGitHubConnectAnswer,
-  type TasksWorkspaceInvitationAnswer,
-  type TasksWorkspaceInvitationCancelParams,
-  type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceInviteParams,
-  type TasksWorkspaceLeaveAnswer,
-  type TasksWorkspaceLeaveParams,
-  type TasksWorkspaceMemberRemoveParams,
-  type TasksWorkspaceMemberRoleParams,
-  type TasksWorkspaceMembersAnswer,
-  type TasksWorkspaceMembersParams,
-  type TasksWorkspaceParams,
-  type TasksWorkspacePhotoAnswer,
-  type TasksWorkspacePhotoParams,
-  type TasksWorkspacePhotoSetParams,
-  type TasksWorkspaceRenameParams,
-  type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import {
-  ACT,
-  ACT_KIND,
-  ALREADY_INVITED_REFUSAL,
-  GITHUB_LAST_SIGN_IN_REFUSAL,
-  isGitHubAddress,
-  LINEAR_UNAVAILABLE_REFUSAL,
-  WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "../acts.js";
+import { ACT, ACT_KIND, GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import { ActRefused, type ActRows, type ActSender } from "./router.js";
 
 /**
@@ -130,41 +100,6 @@ export interface TasksActsDependencies {
     tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
-    workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceGitHubConnect(
-      params: TasksWorkspaceParams,
-    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-    workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceLinearConnect(
-      params: TasksWorkspaceParams,
-    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-    workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
-    workspaceMembers(
-      params: TasksWorkspaceMembersParams,
-    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-    workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
-    workspaceMemberRemove(
-      params: TasksWorkspaceMemberRemoveParams,
-    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-    workspaceMemberRole(
-      params: TasksWorkspaceMemberRoleParams,
-    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-    workspaceTransfer(
-      params: TasksWorkspaceTransferParams,
-    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-    workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-    workspaceInvitations(
-      params: TasksWorkspaceParams,
-    ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
-    workspaceInvite(
-      params: TasksWorkspaceInviteParams,
-    ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
-    workspaceInvitationCancel(
-      params: TasksWorkspaceInvitationCancelParams,
-    ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
@@ -221,44 +156,7 @@ export type TasksActKind =
   | typeof ACT_KIND.TASKS_PICTURE_KEEP
   | typeof ACT_KIND.TASKS_COMMENTS
   | typeof ACT_KIND.TASKS_COMMENT_START
-  | typeof ACT_KIND.TASKS_COMMENT_ACT
-  | typeof ACT_KIND.WORKSPACE_CREATE
-  | typeof ACT_KIND.WORKSPACE_RENAME
-  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
-  | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
-  | typeof ACT_KIND.WORKSPACE_INVITE
-  | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
-  | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
-  | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
-  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
-  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
-  | typeof ACT_KIND.WORKSPACE_PHOTO_READ
-  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
-  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
-  | typeof ACT_KIND.WORKSPACE_TRANSFER
-  | typeof ACT_KIND.WORKSPACE_LEAVE;
-
-type WorkspaceActKind =
-  | typeof ACT_KIND.WORKSPACE_CREATE
-  | typeof ACT_KIND.WORKSPACE_RENAME
-  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
-  | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
-  | typeof ACT_KIND.WORKSPACE_INVITE
-  | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
-  | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
-  | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
-  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
-  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
-  | typeof ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
-  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
-  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
-  | typeof ACT_KIND.WORKSPACE_TRANSFER
-  | typeof ACT_KIND.WORKSPACE_LEAVE;
+  | typeof ACT_KIND.TASKS_COMMENT_ACT;
 
 /**
  * The longest page whose source the row colours. Note that a longer one is
@@ -282,28 +180,6 @@ function pageSourceLines(
 ): Effect.Effect<CodeLines> {
   if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
   return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
-}
-
-/**
- * A workspace act the host answered without its answer, refused: a write
- * the account's role does not allow in words that say so, and anything else
- * in its kind's own words.
- */
-function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure) {
-  const message =
-    failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
-      ? WORKSPACE_NOT_PERMITTED_REFUSAL
-      : failure === WORKSPACE_CALL_FAILURE.ALREADY_INVITED
-        ? ALREADY_INVITED_REFUSAL
-        : failure === WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE
-          ? LINEAR_UNAVAILABLE_REFUSAL
-          : ACT[kind].refusal;
-  return Effect.fail(new ActRefused({ message }));
-}
-
-/** Whether an address the host answered parses and is https, the one kind a browser is sent to unnamed. */
-function isBrowserAddress(url: string): boolean {
-  return URL.canParse(url) && new URL(url).protocol === "https:";
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -558,166 +434,6 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     [ACT_KIND.TASKS_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_BOARD_SAVE, sender);
       return host.tasksBoardSave(params);
-    },
-    [ACT_KIND.WORKSPACE_CREATE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_CREATE, sender);
-      return Effect.flatMap(host.workspaceCreate(params), (answer) =>
-        "workspace" in answer
-          ? Effect.succeed(answer.workspace)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_CREATE, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_RENAME]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_RENAME, sender);
-      return Effect.flatMap(host.workspaceRename(params), (answer) =>
-        "workspace" in answer
-          ? Effect.succeed(answer.workspace)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_RENAME, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_PHOTO_SET]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_SET, sender);
-      return Effect.flatMap(host.workspacePhotoSet(params), (answer) =>
-        "workspace" in answer
-          ? Effect.succeed(answer.workspace)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_PHOTO_SET, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_INVITATIONS_READ]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITATIONS_READ, sender);
-      return Effect.flatMap(host.workspaceInvitations(params), (answer) =>
-        "invitations" in answer
-          ? Effect.succeed(answer.invitations)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITATIONS_READ, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_INVITE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITE, sender);
-      return Effect.flatMap(host.workspaceInvite(params), (answer) =>
-        "invitation" in answer
-          ? Effect.succeed(answer.invitation)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITE, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITATION_CANCEL, sender);
-      return Effect.flatMap(host.workspaceInvitationCancel(params), (answer) =>
-        "invitations" in answer
-          ? Effect.succeed(answer.invitations)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_INVITATION_CANCEL, answer.failure),
-      );
-    },
-    // Note that the address the service answered opens only where it is
-    // GitHub's, because it is the one address here the panel did not name.
-    [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_GITHUB_CONNECT, sender);
-      return Effect.flatMap(host.workspaceGitHubConnect(params), (answer) => {
-        if ("failure" in answer) {
-          return refusedWorkspace(ACT_KIND.WORKSPACE_GITHUB_CONNECT, answer.failure);
-        }
-        if (!isGitHubAddress(answer.url)) {
-          return refusedWorkspace(
-            ACT_KIND.WORKSPACE_GITHUB_CONNECT,
-            WORKSPACE_CALL_FAILURE.UNANSWERED,
-          );
-        }
-        return Effect.promise(() => dependencies.openExternal(answer.url));
-      });
-    },
-    [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, sender);
-      return Effect.flatMap(host.workspaceGitHubDisconnect(params), (answer) =>
-        "workspace" in answer
-          ? Effect.void
-          : refusedWorkspace(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, answer.failure),
-      );
-    },
-    // Note that the address the service answered opens only where it is
-    // https, because it is Vercel Connect's and the panel did not name it.
-    [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_CONNECT, sender);
-      return Effect.flatMap(host.workspaceLinearConnect(params), (answer) => {
-        if ("failure" in answer) {
-          return refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_CONNECT, answer.failure);
-        }
-        if (!isBrowserAddress(answer.url)) {
-          return refusedWorkspace(
-            ACT_KIND.WORKSPACE_LINEAR_CONNECT,
-            WORKSPACE_CALL_FAILURE.UNANSWERED,
-          );
-        }
-        return Effect.promise(() => dependencies.openExternal(answer.url));
-      });
-    },
-    [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, sender);
-      return Effect.flatMap(host.workspaceLinearDisconnect(params), (answer) =>
-        "workspace" in answer
-          ? Effect.void
-          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_ISSUES, sender);
-      return Effect.flatMap(host.workspaceLinearIssues(params), (answer) =>
-        "issues" in answer
-          ? Effect.succeed(answer.issues)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_ISSUES, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBERS_READ, sender);
-      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
-        "members" in answer
-          ? Effect.succeed(answer.members)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
-      );
-    },
-    // Who left is read on the same read as the members, so a service that names nobody answers none.
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, sender);
-      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
-        "members" in answer
-          ? Effect.succeed(answer.former ?? [])
-          : refusedWorkspace(ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, answer.failure),
-      );
-    },
-    // Note that the photo's answer, a failure among them, is the panel's to
-    // read, as an inbox image's is, because a tile that hears none draws its
-    // letter rather than a refusal.
-    [ACT_KIND.WORKSPACE_PHOTO_READ]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_READ, sender);
-      return host.workspacePhoto(params);
-    },
-    [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_REMOVE, sender);
-      return Effect.flatMap(host.workspaceMemberRemove(params), (answer) =>
-        "members" in answer
-          ? Effect.succeed(answer.members)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_REMOVE, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_MEMBER_ROLE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_ROLE, sender);
-      return Effect.flatMap(host.workspaceMemberRole(params), (answer) =>
-        "members" in answer
-          ? Effect.succeed(answer.members)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_ROLE, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_TRANSFER]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_TRANSFER, sender);
-      return Effect.flatMap(host.workspaceTransfer(params), (answer) =>
-        "members" in answer
-          ? Effect.succeed(answer.members)
-          : refusedWorkspace(ACT_KIND.WORKSPACE_TRANSFER, answer.failure),
-      );
-    },
-    [ACT_KIND.WORKSPACE_LEAVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.WORKSPACE_LEAVE, sender);
-      return Effect.flatMap(host.workspaceLeave(params), (answer) =>
-        "left" in answer ? Effect.void : refusedWorkspace(ACT_KIND.WORKSPACE_LEAVE, answer.failure),
-      );
     },
   };
 }

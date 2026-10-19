@@ -63,7 +63,10 @@ import {
 } from "@luke/service/auth/bearer";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { hostedFetch } from "@luke/service/orpc/handler";
+import { hostedRouter } from "@luke/service/orpc/router";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import type { WebServices } from "@luke/service/runtime";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
@@ -89,6 +92,7 @@ import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import {
   Clock,
+  type Context,
   DateTime,
   Duration,
   Effect,
@@ -263,21 +267,43 @@ const answer = (
       modelCatalogOf([]),
       integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" }),
     );
+    const seams = {
+      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
+      resolveUserId: (incoming: Request) =>
+        requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
+      eveOrigin: () => ORIGIN,
+      ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
+    };
     const { handler, dispose } = HttpRouter.toWebHandler(
-      tasksApp({
-        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
-        resolveUserId: (incoming) =>
-          requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
-        workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => ORIGIN,
-        ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
-      }).pipe(HttpRouter.provideRequest(services)),
+      tasksApp({ ...seams, workspaces: yield* fakeWorkspaceSeams }).pipe(
+        HttpRouter.provideRequest(services),
+      ),
       { disableLogger: true },
     );
+    // SAFETY: the transcript procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    const webServices = (yield* Effect.context<never>().pipe(
+      Effect.provide(services),
+    )) as Context.Context<WebServices>;
+    const messages = hostedFetch(hostedRouter(seams));
+    /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry. */
+    const routed = (each: Request): Promise<Response> => {
+      const url = new URL(each.url);
+      const id = url.searchParams.get("id") ?? "";
+      const call = url.searchParams.get("call") ?? "";
+      if (url.pathname === MESSAGES) {
+        url.pathname = `/api/plans/${encodeURIComponent(id)}/messages`;
+        return messages(new Request(url, each), webServices);
+      }
+      if (url.pathname === SUBAGENT_MESSAGES) {
+        url.pathname = `/api/plans/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
+        return messages(new Request(url, each), webServices);
+      }
+      return handler(each);
+    };
     const response = yield* Effect.promise(() =>
       landedAs === undefined
-        ? handler(request)
-        : dispatched(request, new Map([[landedAs, { fetch: (each) => handler(each) }]])),
+        ? routed(request)
+        : dispatched(request, new Map([[landedAs, { fetch: (each) => routed(each) }]])),
     );
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
@@ -305,6 +331,8 @@ function request(
   const headers = new Headers();
   if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,

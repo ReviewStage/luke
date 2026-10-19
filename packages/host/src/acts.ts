@@ -100,7 +100,7 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
-import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
+import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
   type MacRepositoriesAnswer,
   macRepositoriesAnswerSchema,
@@ -130,7 +130,6 @@ import {
   type TasksSkillsAnswer,
   type TasksStartAnswer,
   type TasksTreeAnswer,
-  type TasksWorkspacePhotoAnswer,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksCommentActParamsSchema,
@@ -144,7 +143,6 @@ import {
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
-  tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
@@ -175,19 +173,6 @@ import {
   tasksStartRequestSchema,
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
-  tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceInvitationCancelParamsSchema,
-  tasksWorkspaceInviteParamsSchema,
-  tasksWorkspaceLeaveParamsSchema,
-  tasksWorkspaceMemberRemoveParamsSchema,
-  tasksWorkspaceMemberRoleParamsSchema,
-  tasksWorkspaceMembersParamsSchema,
-  tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoAnswerSchema,
-  tasksWorkspacePhotoParamsSchema,
-  tasksWorkspacePhotoSetParamsSchema,
-  tasksWorkspaceRenameParamsSchema,
-  tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import {
@@ -203,18 +188,8 @@ import {
   terminalShellParamsSchema,
   terminalsActAnswerSchema,
 } from "@luke/features/terminal-acts";
-import {
-  type WorkspaceInvitation,
-  workspaceInvitationSchema,
-} from "@luke/features/workspace-invitation-wire";
-import {
-  type FormerMember,
-  formerMemberSchema,
-  type Workspace,
-  type WorkspaceMember,
-  workspaceMemberSchema,
-  workspaceSchema,
-} from "@luke/features/workspace-wire";
+import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
+import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
 import {
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
@@ -380,42 +355,6 @@ export const ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
-  /**
-   * The account's workspaces: one made under a name, answered as made, which
-   * the account owns; one renamed by its owners and admins, answered under
-   * its new name; one's photo set as a `data:` URL or removed with null by
-   * its owners and admins, answered with the photo's new version or none;
-   * one's pending invitations read, one made, answered
-   * with its accept link, and one canceled, for its owners and admins; a GitHub
-   * organization connected to one, the Luke GitHub App's install address the
-   * service answers opened in the browser, or disconnected from it; one
-   * workspace's members read; one member removed, answered with the members
-   * who remain; another member given a role, or the workspace handed to one
-   * of its admins, by its owner, each answered with the members as they then
-   * stand; and one workspace left. Every write reads the workspaces
-   * again, so they arrive on the document; a write the account's role does
-   * not allow is refused in words that say so. A workspace's photo is read
-   * apart, answered with its bytes in base64 under its media type or why
-   * there are none, since the document never carries them.
-   */
-  WORKSPACE_CREATE: "workspace.create",
-  WORKSPACE_RENAME: "workspace.rename",
-  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
-  WORKSPACE_INVITE: "workspace.invite",
-  WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
-  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
-  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
-  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
-  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
-  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
-  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
-  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
-  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
-  WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
-  WORKSPACE_TRANSFER: "workspace.transfer",
-  WORKSPACE_LEAVE: "workspace.leave",
-  WORKSPACE_PHOTO_READ: "workspace.photoRead",
-  WORKSPACE_PHOTO_SET: "workspace.photoSet",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -640,12 +579,12 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
-const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
-const formerMembersSchema = EffectSchema.Array(formerMemberSchema);
+const _workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+const _formerMembersSchema = EffectSchema.Array(formerMemberSchema);
 
-const linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
+const _linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
 
-const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
+const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
@@ -943,96 +882,6 @@ export const ACT = {
   [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
   [ACT_KIND.TASKS_TALK]: press("Could not talk about that task on this system."),
-  [ACT_KIND.WORKSPACE_CREATE]: {
-    payload: actSchema(tasksWorkspaceCreateParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not make that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_RENAME]: {
-    payload: actSchema(tasksWorkspaceRenameParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not rename that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITATIONS_READ]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
-    refusal: "Could not read invitations on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITE]: {
-    payload: actSchema(tasksWorkspaceInviteParamsSchema),
-    result: wireResult<WorkspaceInvitation>(isReadable(workspaceInvitationSchema)),
-    refusal: "Could not invite that address on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: {
-    payload: actSchema(tasksWorkspaceInvitationCancelParamsSchema),
-    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
-    refusal: "Could not cancel that invitation on this system.",
-  },
-  [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not connect GitHub to that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not disconnect GitHub from that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not connect Linear to that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not disconnect Linear from that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: {
-    payload: actSchema(tasksLinearIssuesParamsSchema),
-    result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
-    refusal: "Could not read that workspace's Linear issues on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
-    payload: actSchema(tasksWorkspaceMembersParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not read that workspace's members on this system.",
-  },
-  [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: {
-    payload: actSchema(tasksWorkspaceMembersParamsSchema),
-    result: wireResult<readonly FormerMember[]>(isReadable(formerMembersSchema)),
-    refusal: "Could not read who left that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
-    payload: actSchema(tasksWorkspaceMemberRemoveParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not remove that member on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBER_ROLE]: {
-    payload: actSchema(tasksWorkspaceMemberRoleParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not change that member's role on this system.",
-  },
-  [ACT_KIND.WORKSPACE_TRANSFER]: {
-    payload: actSchema(tasksWorkspaceTransferParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not transfer that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LEAVE]: {
-    payload: actSchema(tasksWorkspaceLeaveParamsSchema),
-    result: answersNothing,
-    refusal: "Could not leave that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_PHOTO_READ]: {
-    payload: actSchema(tasksWorkspacePhotoParamsSchema),
-    result: wireResult<TasksWorkspacePhotoAnswer>(isReadable(tasksWorkspacePhotoAnswerSchema)),
-    refusal: "Could not read that workspace's photo on this system.",
-  },
-  [ACT_KIND.WORKSPACE_PHOTO_SET]: {
-    payload: actSchema(tasksWorkspacePhotoSetParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not change that workspace's photo on this system.",
-  },
   [ACT_KIND.TASKS_BOARD_SAVE]: {
     payload: actSchema(tasksBoardSaveParamsSchema),
     result: answersNothing,

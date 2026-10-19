@@ -1,8 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type Cause, type Effect, Layer } from "effect";
+import { type Cause, Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, ANY_PATH, type WebRoutes } from "../route.js";
 import type { AdminViewer } from "./admin-access.js";
+import { type AdminCostOptions, handleAdminCost } from "./admin-cost.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin-favorite.js";
 import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js";
@@ -35,6 +37,8 @@ export interface AdminSeams {
   /** The browser session the request rides in on; a refusal is an outage, never a sign-out. */
   resolveViewer: (request: Request) => Effect.Effect<AdminViewer | undefined, Cause.UnknownError>;
   readMetrics: AdminMetricsOptions["readMetrics"];
+  /** The Cost screen's read, which prices at the model catalog the instance holds. */
+  readCost: AdminCostOptions<DatabaseServices | ModelCatalog>["readCost"];
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];
   readDay: AdminDayOptions["readDay"];
@@ -63,6 +67,21 @@ function gate(
 }
 
 /**
+ * The cost read behind the same gate. It prices at the model catalog the
+ * instance holds, which is read from the route's own services before the
+ * gate and handed to the read, so the gate stays the database's alone.
+ */
+const costRoute = (seams: AdminSeams) =>
+  Effect.gen(function* () {
+    const catalog = yield* ModelCatalog;
+    return yield* gate(seams, READ_METHOD, (_viewer, request) =>
+      handleAdminCost({ request, readCost: seams.readCost }).pipe(
+        Effect.provideService(ModelCatalog, catalog),
+      ),
+    );
+  });
+
+/**
  * The admin vocabulary's own `not-found`, on the wildcard the router reaches
  * only once every address of the group has failed to match.
  */
@@ -73,7 +92,7 @@ const adminNotFoundRoute = HttpRouter.add(
 );
 
 /** The group, which is the dashboard's addresses and the refusal anywhere else. */
-export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
+export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices | ModelCatalog> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,
@@ -82,6 +101,7 @@ export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
         handleAdminMetrics({ request, readMetrics: seams.readMetrics }),
       ),
     ),
+    HttpRouter.add(ANY_METHOD, ADMIN_ROUTE_PATH.COST, costRoute(seams)),
     HttpRouter.add(
       ANY_METHOD,
       ADMIN_ROUTE_PATH.USERS,

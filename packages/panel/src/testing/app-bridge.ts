@@ -45,15 +45,15 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
   installActPortClient(procedures as ActPortClient);
 }
 
+/** A procedure's refusal as the act port answers it: the declared error, carrying `sentence`. */
+export function refusedOnPort(sentence: string): ORPCError<string, unknown> {
+  return new ORPCError(ACT_ERROR.REFUSED, { message: sentence });
+}
+
 /** Each port kind's procedure as a test answers it: its payload in, its answer or a rejection out. */
 type FakeActPort = {
   readonly [Kind in PortActKind]: (payload: PortActPayload<Kind>) => Promise<PortActResult<Kind>>;
 };
-
-/** A port kind's refusal in `sentence`, as the port rejects a call it refuses. */
-function refusedOnPort(sentence: string): Promise<never> {
-  return Promise.reject(new ORPCError(ACT_ERROR.REFUSED, { message: sentence }));
-}
 
 /** One act a window sent on its act port, its payload typed by its kind, and absent where the kind carries none. */
 type PortAct = {
@@ -108,7 +108,7 @@ export function fakeActs(
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
         const outcome = await answer(request);
         if (outcome.status === ACT_OUTCOME_STATUS.DONE) return outcome.value;
-        if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) return refusedOnPort(outcome.reason);
+        if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) throw refusedOnPort(outcome.reason);
         throw new Error(`Luke does not know the act ${kind}.`);
       },
     });

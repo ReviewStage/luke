@@ -18,10 +18,12 @@ import { chatMessage } from "./chat.js";
  *
  * The owners move here one at a time from the tables they kept their own
  * in (`chat_attachment`, `inbox_attachment`, `plan_attachment`,
- * `conversation_attachment`), each expanded, migrated, and contracted as the
- * `db-migrations` skill says, so no deployment's runs read a table the next
- * build dropped. A chat message's pictures are the first: written here
- * beside `chat_attachment` under the same id, which is still read.
+ * `conversation_attachment`). Each move copies the old table's rows here
+ * under their ids, drops the table, and leaves a view over this one under
+ * its name and its columns' names, so a run still on a deployment from
+ * before the move reads and writes the rows it always did; a later
+ * migration drops the view once those runs have drained. A chat message's
+ * pictures moved first, and `chat_attachment` is that view.
  *
  * The bytes stand in the row itself, as every owner's did: this deployment
  * keeps no blob store, and each owner holds its bytes to its own bound, a

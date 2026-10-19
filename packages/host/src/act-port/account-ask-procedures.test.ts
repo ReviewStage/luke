@@ -19,6 +19,7 @@ import {
   type AgentProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type WorkspaceProceduresDependencies,
 } from "./index.js";
 
 /**
@@ -128,7 +129,9 @@ function windowPort(
   const issues = { host: {} } as IssueProceduresDependencies;
   // SAFETY: no agent act is called here, so the agents' host and notices are never reached.
   const agents = { host: {}, notices: {} } as AgentProceduresDependencies;
-  const handler = createActPortHandler({ accountAsks: { host }, agents, issues });
+  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
+  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
+  const handler = createActPortHandler({ accountAsks: { host }, agents, issues, workspaces });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Conductor workspace or a Luke coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Conductor workspace or a Luke coding agent) on a model and effort the orchestrator picks for that PR, runs independent PRs in parallel, has each worker babysit its PR and merge it on green unless the PR needs the user's attention, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives each worker once its PR is merged. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
+description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Conductor workspace or a Luke coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Conductor workspace or a Luke coding agent) on a model and effort the orchestrator picks for that PR, runs independent PRs in parallel, has each worker babysit its PR and merge it on green unless the PR needs the user's attention, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives every worker it started (and in Luke its task) once that worker's work is done, so the user never has to clean up after a rollout. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
 ---
 
 # Orchestrate
@@ -28,7 +28,7 @@ for the host you are in:
 | Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
 | Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
-| Archive a worker | `conductor workspace archive <workspaceId>` | `update_agent` with `archived: true` and a short `reason`, once the agent is idle |
+| Archive a worker | `conductor workspace archive <workspaceId>` | `update_agent` with `archived: true` and a short `reason`, once the agent is idle, then `update_task` with its task's `taskId` and `archived: true` |
 | Keep the rollout together | The workspaces' own list | `create_section` named for the rollout before the first worker starts, and `update_task` with each worker's task and the section's `sectionId` as it starts (below) |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
@@ -62,6 +62,16 @@ report. What the user named in the arguments or the conversation wins.
   held PR in its brief and tell the user which PRs are held and why, through
   the table's "Ask the user" row with an approval for each (in Luke, one
   inbox item per held PR, mentioning it, once it is open and green).
+
+**Archiving is your job.** Every worker you start, and in Luke every task
+you make for one, is yours to archive once its work is done: a PR worker once
+its PR has merged (or been closed because the PR was cut from the plan), a
+restack worker once it reports the restack done, and a stopped or dead worker
+once a continuation has taken its PR over. Archive each as soon as it is
+done, not in a batch at the end, and never leave one for the user to clean
+up. The table's "Archive a worker" row says how; in Luke, archive the agent
+first and then its task, except a worker replaced by a continuation, whose
+task the continuation keeps working on, so archive only the old agent.
 
 Split the plan into small PRs and draw the dependency graph. Every PR gets
 its own worker, which builds, opens, and babysits that one PR, so review
@@ -184,7 +194,8 @@ and each message arrives as a new turn. On each report:
   green (`gh pr checks <number>`), ask the user for the go now, since no
   later green report will come to prompt it; otherwise ask on its next one.
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
-  retargets the PR above to `main`. Archive the merged PR's worker.
+  retargets the PR above to `main`. Archive the merged PR's worker (in
+  Luke, its agent and then its task) now, as the table says.
 
 If a worker has gone quiet far longer than its work plausibly takes, send it
 one message asking for status, and check on it as the table says. If the
@@ -249,12 +260,17 @@ replayed; on a conflict, resolve and stage it, then `git rebase --continue`
 `--force-with-lease`. It restacks each branch-off stack the same way onto its
 parent's new head (or onto `main`, past the parent's last head, once the
 parent has merged), asks you when a conflict needs a judgment call, opens no
-PR of its own, and reports when done. Then archive it and tell every held
-worker to reset and resume.
+PR of its own, and reports when done. Then archive it (in Luke, its agent
+and its task) and tell every held worker to reset and resume.
 
 ## Step 4: Finish
 
-When every PR is merged and every worker is archived, report to the user,
+Before you report, check that nothing you started is left standing: in
+Luke, `list_tasks` and `list_agents` show none of the rollout's tasks or
+workers unarchived, restack workers and replaced workers among them; in
+Conductor, none of the rollout's workspaces is left in the workspaces' list. Archive
+whatever is left. When every PR has merged, or been closed because it was
+cut, and every worker is archived, report to the user,
 naming the rollout's section in Luke, which you leave standing for the user
 to keep or delete:
 the merged PRs with links, anything that was cut or changed from the plan,
@@ -270,8 +286,10 @@ issue, update the issue with the merged PRs.
 - A PR that builds on another gets its worker only after that PR is open.
 - Workers never restack; a restack runs only in a restack worker, while
   every affected worker holds.
+- You archive what you started: every worker, and in Luke its task, as
+  soon as its work is done. The user never cleans up after a rollout.
 - Do not archive a worker while its PR is unmerged, unless a continuation
-  has taken the PR over.
+  has taken the PR over or the PR was closed because it was cut.
 - Stop a worker only when it goes the wrong way, is stuck, or will not hold
   for a restack. Continue a dead or stopped worker; never start a fresh one
   to replace it.

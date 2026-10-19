@@ -313,6 +313,7 @@ const servedActPort = (
         accountAsks: { host: operator.host },
         agents: { host: operator.host, notices },
         issues: { host: operator.host },
+        workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
       }).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },

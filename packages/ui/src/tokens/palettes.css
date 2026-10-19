@@ -141,8 +141,13 @@
   --luke-color-identity-6: light-dark(#3f7434, #477a3a);
   --luke-color-on-identity: #fff;
 
-  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  /* A chart's series, in the order a chart takes them: each mark holds 3:1
+     on either ground, so a stack of them reads apart by hue alone. */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
@@ -230,8 +235,13 @@
   --luke-color-identity-6: #3f7434;
   --luke-color-on-identity: #fff;
 
-  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  /* A chart's series, in the order a chart takes them: each mark holds 3:1
+     on either ground, so a stack of them reads apart by hue alone. */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }
 
 /* The admin dashboard's and the OAuth cards' dark ground, the product's state
@@ -315,6 +325,11 @@
 
   /* The admin dashboard's chart series. The accent cyan sits too light for a
      mark on the dark card, so the slot is a darker step of the same hue
-     family, validated against the card at #101114 (6.1:1, ≥ 3:1). */
+     family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
+     after it hold the same bound there (4.7:1 to 5.7:1). */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }

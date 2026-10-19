@@ -17,6 +17,7 @@
  * call windows.
  */
 
+import path from "node:path";
 import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalOpenParams,
@@ -54,7 +55,9 @@ interface MainMacTerminalPort {
 
 export interface MacTerminalActsDependencies {
   host: Pick<HostOperator, "macRepositories" | "setMacRepository">;
-  /** Where Luke keeps its application data, which every worktree lives under. */
+  /** Where every Luke install keeps its clones and worktrees (`worktreesRoot`). */
+  worktreesRoot: string;
+  /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under. */
   stateRoot: string;
   ports: {
     /** A fresh channel: main's end, with the other end already posted to the panel under the agent's id. */
@@ -96,7 +99,7 @@ function refuseUnlessPanel(kind: MacTerminalActKind, sender: ActSender): void {
 export function macTerminalActRows(
   dependencies: MacTerminalActsDependencies,
 ): Pick<ActRows<WebContents>, MacTerminalActKind> {
-  const { host, stateRoot, ports, start } = dependencies;
+  const { host, worktreesRoot, stateRoot, ports, start } = dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the
    * newest open asked for each agent while it reads the settings, which a
@@ -173,9 +176,13 @@ export function macTerminalActRows(
         build: (ttyFile) =>
           openOnMacScript({
             repository: params.repository,
-            clone: cloneFolder(stateRoot, params.repository),
-            worktree: worktreeFolder(stateRoot, params.repository, params.branch),
+            clone: cloneFolder(worktreesRoot, params.repository),
+            worktree: worktreeFolder(worktreesRoot, params.repository, params.branch),
+            earlier: {
+              worktrees: path.dirname(worktreeFolder(stateRoot, params.repository, params.branch)),
+            },
             branch: params.branch,
+            pullRequest: params.pullRequest,
             command,
             ttyFile,
             size: { cols: params.cols, rows: params.rows },

@@ -23,6 +23,9 @@ const HOSTED_REFUSAL_SLUGS = Object.values(HOSTED_REFUSAL).map((refusal) => refu
 /** oRPC's own code for an input that failed its schema, which the hosted vocabulary calls an invalid request. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
 
+/** oRPC's own code for a body past the handler's request limit, which the hosted vocabulary calls a request too large. */
+const ORPC_PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE";
+
 /** The status each error code is answered with: oRPC's own codes as oRPC answers them, and every refusal as the hosted vocabulary does. */
 export const HOSTED_ERROR_STATUS = { ...COMMON_ERROR_STATUS_MAP, ...HOSTED_REFUSAL_STATUS };
 
@@ -72,5 +75,6 @@ export function encodeHostedError(error: ORPCError<string, unknown>): object | n
       : { error: error.code };
   }
   if (error.code === ORPC_BAD_REQUEST) return HOSTED_REFUSAL.INVALID_REQUEST;
+  if (error.code === ORPC_PAYLOAD_TOO_LARGE) return HOSTED_REFUSAL.REQUEST_TOO_LARGE;
   return null;
 }
