@@ -364,3 +364,26 @@ test("a channel the window wrote stands through a read that was asked before the
   await settle();
   assert.equal(tab.control().chat?.channels[0]?.name, "invites-v3");
 });
+
+test("a channel the last account wrote, answered after another account signed in, is laid over nothing of the new account's reads", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.reads[0]?.settle(answered([message(1)], "1"));
+  await settle();
+  act(() => {
+    void tab.control().onChannel({ edit: { channelId: CHANNEL, name: "alpha" } });
+  });
+  tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
+  await settle();
+  const ada = service.reads.at(-1);
+  service.writes[0]?.settle({
+    channel: { id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "alpha", archived: false },
+  });
+  await settle();
+  ada?.settle({
+    ...answered([message(1)], "1"),
+    channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "beta", archived: false }],
+  });
+  await settle();
+  assert.equal(tab.control().chat?.channels[0]?.name, "beta");
+});

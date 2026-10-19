@@ -49,19 +49,24 @@ function answered(refused: string | undefined): ActionResult {
     : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
 }
 
-/** The change an answer writes: the channel opened, or only what was changed of the one edited. */
+/** A purpose as typed, written as the one line it is: each line break a space, nothing around it. */
+function oneLine(purpose: string): string {
+  return purpose.replace(/[\r\n]+/gu, " ").trim();
+}
+
+/** The change an answer writes: the channel opened, or only what was changed of the one edited, a purpose left as it stood untouched. */
 function changeOf(ask: ChannelAsk, name: string, purpose: string): ChatChannelChange {
-  // Note that a purpose is one line, so whatever breaks it is written as a space.
-  const said = purpose.replace(/\s+/gu, " ").trim();
+  const said = oneLine(purpose);
   if (ask.kind === CHANNEL_ASK.NEW) {
     return { open: { name, ...(said === "" ? undefined : { purpose: said }) } };
   }
   const { channel } = ask;
+  const untouched = purpose === (channel.purpose ?? "");
   return {
     edit: {
       channelId: channel.id,
       ...(name === channel.name ? undefined : { name }),
-      ...(said === (channel.purpose ?? "") ? undefined : { purpose: said === "" ? null : said }),
+      ...(untouched ? undefined : { purpose: said === "" ? null : said }),
     },
   };
 }

@@ -71,3 +71,45 @@ test("a question asked in one workspace goes away once another is listed, and an
   view.show("acme", { ...CHAT, channels: [] });
   assert.equal(open(), null, "a channel gone from the chat takes its question with it");
 });
+
+test("a rename leaves a purpose it did not touch as it stood, its spaces and all", async () => {
+  const changes: unknown[] = [];
+  const channel = {
+    id: TOPIC,
+    kind: CHANNEL_KIND.TOPIC,
+    name: "release",
+    archived: false,
+    purpose: "Build  and ship",
+  };
+  const chat = { ...CHAT, channels: [channel] };
+  let latest: ChannelDialogs | undefined;
+  function Questions() {
+    latest = useChannelDialogs(
+      "acme",
+      chat,
+      (change) => {
+        changes.push(change);
+        return Promise.resolve(undefined);
+      },
+      true,
+    );
+    return createElement(Fragment, null, latest.dialog);
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(createElement(Questions)));
+  act(() => latest?.askEdit(channel));
+  const [name] = [...(open()?.querySelectorAll<HTMLInputElement>("input") ?? [])];
+  assert.ok(name);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(name, "shipping");
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const save = [...(open()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (button) => button.textContent === "Save",
+  );
+  await act(async () => save?.click());
+  assert.deepEqual(changes, [{ edit: { channelId: TOPIC, name: "shipping" } }]);
+});

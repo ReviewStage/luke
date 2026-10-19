@@ -139,9 +139,10 @@ function withRead(
   };
 }
 
-/** A channel the window wrote: what the write answered, the workspace it went to, and the count of channel writes it was. */
+/** A channel the window wrote: what the write answered, the account and workspace it went as and to, and the count of channel writes it was. */
 interface WrittenChannel {
   readonly channel: ChatChannel;
+  readonly account: string | undefined;
   readonly workspaceId: string;
   readonly generation: number;
 }
@@ -251,7 +252,7 @@ export function useWorkspaceChat(input: {
           if (each.generation <= asked) written.current.delete(id);
         }
         const since = [...written.current.values()].flatMap((each) =>
-          each.workspaceId === workspaceId ? [each.channel] : [],
+          each.account === account && each.workspaceId === workspaceId ? [each.channel] : [],
         );
         setHeld((was) =>
           heldFor(was, account, workspaceId)
@@ -284,6 +285,7 @@ export function useWorkspaceChat(input: {
         channelWrites.current += 1;
         written.current.set(answer.channel.id, {
           channel: answer.channel,
+          account,
           workspaceId,
           generation: channelWrites.current,
         });
