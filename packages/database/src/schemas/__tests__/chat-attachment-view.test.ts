@@ -99,29 +99,46 @@ const keptFor = (messageId: string) =>
 
 it.layer(getTestDB())("chat_attachment as a view over attachment", (it) => {
   it.effect(
-    "a database from before the migration keeps every picture, under its id, readable through both names, and running it again changes nothing",
+    "a database from before the migration ends with attachment holding exactly chat_attachment's pictures, under their ids and workspaces, readable through both names, and running it again changes nothing",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
         const sql = yield* SqlClient.SqlClient;
-        const id = randomUUID();
-        const { userId, organizationId, messageId } = yield* openMessage([id]);
+        const uncopied = { id: randomUUID(), bytes: new Uint8Array([137, 80, 78, 71, 1]) };
+        const moved = { id: randomUUID(), bytes: new Uint8Array([137, 80, 78, 71, 2]) };
+        const dropped = { id: randomUUID(), bytes: new Uint8Array([137, 80, 78, 71, 3]) };
+        const { userId, organizationId, messageId } = yield* openMessage([
+          uncopied.id,
+          moved.id,
+          dropped.id,
+        ]);
+        const now = yield* DateTime.nowAsDate;
+        const row = (picture: typeof uncopied, organization = organizationId) => ({
+          id: picture.id,
+          organizationId: organization,
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          byteCount: picture.bytes.byteLength,
+          bytes: picture.bytes,
+          createdAt: now,
+        });
+        const earlier = randomUUID();
+        yield* db
+          .insert(organization)
+          .values({ id: earlier, name: "Earlier", slug: `earlier-${earlier}`, createdAt: now });
 
-        // The database as it stood before the migration: chat_attachment a table, holding a picture.
+        // The database as it stood before the migration: chat_attachment a table, and attachment
+        // behind it by a picture never copied, one moved since its copy, and one dropped since.
         yield* sql.unsafe(`DROP VIEW "chat_attachment"`);
         for (const statement of yield* migrationStatements(TABLE_MIGRATION)) {
           yield* sql.unsafe(statement);
         }
-        const bytes = new Uint8Array([137, 80, 78, 71, 7]);
-        yield* db.insert(chatAttachment).values({
-          id,
-          organizationId,
-          messageId,
-          contentType: CHAT_IMAGE_TYPE.PNG,
-          byteCount: bytes.byteLength,
-          bytes,
-          createdAt: yield* DateTime.nowAsDate,
-        });
+        yield* db
+          .insert(chatAttachment)
+          .values([uncopied, moved].map((picture) => ({ ...row(picture), messageId })));
+        yield* db.insert(attachment).values([
+          { ...row(moved, earlier), chatMessageId: messageId },
+          { ...row(dropped), chatMessageId: messageId },
+        ]);
 
         const migration = yield* migrationStatements(MIGRATION);
         for (const statement of migration) yield* sql.unsafe(statement);
@@ -131,13 +148,19 @@ it.layer(getTestDB())("chat_attachment as a view over attachment", (it) => {
           SELECT relkind FROM pg_class WHERE oid = to_regclass('public.chat_attachment')
         `;
         assert.equal(kind?.relkind, "v");
-        assert.deepEqual(yield* keptFor(messageId), [{ id, organizationId, bytes: [...bytes] }]);
+        assert.deepEqual(
+          yield* keptFor(messageId),
+          [uncopied, moved]
+            .map((picture) => ({ id: picture.id, organizationId, bytes: [...picture.bytes] }))
+            .toSorted((a, b) => a.id.localeCompare(b.id)),
+        );
         assert.deepEqual(
           [
-            ...Option.getOrThrow(yield* readAttachment(userId, organizationId, messageId, id))
-              .bytes,
+            ...Option.getOrThrow(
+              yield* readAttachment(userId, organizationId, messageId, uncopied.id),
+            ).bytes,
           ],
-          [...bytes],
+          [...uncopied.bytes],
         );
       }),
   );
