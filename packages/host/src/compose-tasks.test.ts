@@ -857,6 +857,24 @@ function journal(id: string, text: string): CodingAgentMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
 }
 
+/** A turn of Luke's that called his plan edit, its call settled with the task's receipt as eve settles it. */
+function planEditing(id: string): CodingAgentMessage {
+  return {
+    id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "text", text: "Writing it down." },
+      {
+        type: `tool-${AGENT_TOOL.EDIT_PLAN}`,
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { notes: [] },
+        output: "Started task edit_plan-1.",
+      },
+    ],
+  };
+}
+
 /** A page of a task's conversation as the service answers it. */
 function conversationPage(
   messages: readonly CodingAgentMessage[],
@@ -2659,20 +2677,7 @@ it.effect(
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
-      const editing: CodingAgentMessage = {
-        id: "turn-1",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          { type: "text", text: "Writing it down." },
-          {
-            type: `tool-${AGENT_TOOL.EDIT_PLAN}`,
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { notes: [] },
-            output: "Started task edit_plan-1.",
-          },
-        ],
-      };
+      const editing = planEditing("turn-1");
       // The save lands behind the call's receipt, and the next page of the turn carries the call again.
       service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Invites expire.", 20)];
       const saved = yield* viewLands(
@@ -2698,6 +2703,52 @@ it.effect(
         conversationPage([journal("turn-1", "Done.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
       );
       yield* after;
+    }),
+);
+
+it.effect(
+  "a plan edit whose save lands after Luke's turn stops writing, as one cut off by a stop does, reaches the open plan once the save has had time to unwind",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Writing.", 15)];
+      const writing = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Writing.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-1")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* writing;
+      yield* conversations.nextAsk;
+      // The turn is stopped with its save still in its step, so the plan reads unsaved as the turn ends.
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Stopped.", 20)];
+      const stopped = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Stopped.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Stopped.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* stopped;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Invites expire.", 30)];
+      const saved = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Invites expire.") === true,
+      );
+      yield* TestClock.adjust(Duration.seconds(30));
+
+      yield* saved;
     }),
 );
 

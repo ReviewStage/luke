@@ -206,6 +206,15 @@ const TRANSCRIPT_SETTLE = Duration.seconds(5);
 const NAME_SETTLE = Duration.seconds(5);
 
 /**
+ * How long after a turn that wrote the plan stops writing the plan is read
+ * once more. Note that a turn holds open until its saves settle, except one
+ * stopped or failed with a save under way: eve then gives the save's task
+ * up to thirty seconds to unwind, and a save already in its step lands
+ * meanwhile with nothing on the conversation to say so.
+ */
+const PLAN_EDIT_UNWIND = Duration.seconds(30);
+
+/**
  * How long the conversation's read waits after one the service did not
  * answer: the first wait, doubling on each read that fails again, up to the
  * longest.
@@ -236,7 +245,8 @@ const PLAN_EDIT_PART_TYPE = `tool-${AGENT_TOOL.EDIT_PLAN}`;
  * Whether a page carries a turn that wrote the plan. Note that the call's
  * part is journaled with its receipt and the save lands as a task after it,
  * so the document is read again on every page that carries the call, which
- * the turn's later steps amend, and once more when the turn stops writing.
+ * the turn's later steps amend, once more when the turn stops writing, and
+ * again once a save cut off with the turn has had time to land.
  */
 function pageWritesDocument(page: CodingAgentMessagesAnswer): boolean {
   return page.messages.some((message) =>
@@ -507,6 +517,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The tasks whose plan one of Luke's plan edits may have moved, read one at a time by the loop below. */
   const documentReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose turn stopped writing after a plan edit, whose plan the loop below reads again once a save cut off with it has had time to land. */
+  const editUnwindReads = yield* Queue.sliding<string>(1);
 
   /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
@@ -941,6 +954,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (pageWritesDocument(page.value) || (edited && !writing)) {
           Queue.offerUnsafe(documentReads, taskId);
         }
+        if (edited && !writing) Queue.offerUnsafe(editUnwindReads, taskId);
         if (!writing && !conversationWoken) return;
         after = page.value.cursor;
       }
@@ -2076,7 +2090,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
     }),
     // The board and page reads a settled draw or page asks for, the document
-    // read one of Luke's plan edits asks for, the
+    // reads one of Luke's plan edits asks for, now and once a save cut off
+    // with its turn has had time to land, the
     // transcript and work reads a call's end asks for, the list read a
     // settled turn asks for, for the name it may have given, and the wake of a
     // parked conversation read the call's words ask for; every other read of
@@ -2093,6 +2108,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(documentReads), (taskId) =>
             gate() && view.activeTaskId === taskId ? serial(readDocument(taskId)) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(editUnwindReads), (taskId) =>
+            Effect.andThen(
+              Effect.sleep(PLAN_EDIT_UNWIND),
+              Effect.sync(() => Queue.offerUnsafe(documentReads, taskId)),
+            ),
           ),
         ),
       );
