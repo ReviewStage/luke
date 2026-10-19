@@ -73,3 +73,33 @@ test("an address naming no width, or one out of range, draws no frame", () => {
     page.remove();
   }
 });
+
+test("a width typed and applied submits it with the rest of the view", () => {
+  const page = open("?example=badges&profile=web&theme=light&width=390");
+  const field = page.querySelector<HTMLInputElement>("input[name=width]");
+  assert.ok(field);
+  // React tracks a field's value through the element's own setter, so a typed value goes in through it, as a keystroke's would.
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "414");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const apply = [...page.querySelectorAll("button")].find(
+    (button) => button.textContent === "Apply",
+  );
+  assert.ok(apply);
+  // jsdom cannot navigate, so the submission is read where the browser would send it, from the form's own data.
+  let submitted: URLSearchParams | undefined;
+  apply.form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.target as HTMLFormElement;
+    submitted = new URLSearchParams(
+      [...new FormData(form)].map(([name, value]) => [name, String(value)]),
+    );
+  });
+  act(() => apply.click());
+  assert.equal(submitted?.get("width"), "414");
+  assert.equal(submitted?.get("example"), "badges");
+  assert.equal(submitted?.get("profile"), "web");
+  assert.equal(submitted?.get("theme"), "light");
+  assert.equal(apply.form?.method, "get");
+});
