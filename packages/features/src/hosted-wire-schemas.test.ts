@@ -120,6 +120,8 @@ const EFFECT_MODULE_SCHEMAS = {
     chatOpenRequestSchema: chatWire.chatOpenRequestSchema,
     chatEditRequestSchema: chatWire.chatEditRequestSchema,
     chatWriteRequestSchema: chatWire.chatWriteRequestSchema,
+    chatJoinRequestSchema: chatWire.chatJoinRequestSchema,
+    chatJoinAnswerSchema: chatWire.chatJoinAnswerSchema,
     chatReceiptSchema: chatWire.chatReceiptSchema,
     chatWriteAnswerSchema: chatWire.chatWriteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof chatWire>,

@@ -872,6 +872,19 @@ export const chatWriteRequestSchema = EffectSchema.Union([
 /** @public */
 export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
 
+/**
+ * A person joining a workspace's chat from the window (POST): their own
+ * member of it and its `#general` made where they are not yet, the one
+ * write a reader makes before it reads, so no read writes.
+ */
+export const chatJoinRequestSchema = EffectSchema.Struct({ join: EffectSchema.Literal(true) });
+
+/** What a join answers: the person's own member of the workspace's chat. */
+export const chatJoinAnswerSchema = EffectSchema.Struct({ self: wireUuidSchema });
+
+/** @public */
+export type ChatJoinAnswer = typeof chatJoinAnswerSchema.Type;
+
 /** Who a post came to, each member by its mention link or a plain name where none can be written: told now, held for their next read, left, and the labels of the links its words write that name no member. */
 export const chatReceiptSchema = EffectSchema.Struct({
   told: EffectSchema.Array(EffectSchema.String),
