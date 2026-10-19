@@ -3897,12 +3897,12 @@ ul.actor-stack {
   }
 }
 
-/* Factory worlds ------------------------------------------------------------- */
+/* Factory campus ------------------------------------------------------------- */
 
-/* A world stands in the board's place, filling the room under the toolbar
+/* The campus stands in the board's place, filling the room under the toolbar
    to the window's edges, and draws its chrome over the scene the way the
    mockup's floating panels do: on the overlay's ground inside a hairline,
-   each one at a corner or an edge, so the middle of the world stays clear.
+   each one at a corner or an edge, so the middle of the campus stays clear.
    A signal's colour arrives as `--world-signal`, set from the view model's
    palette (`SIGNAL_COLOR`), so the bar, the label, and the card say a
    signal in the same colour the scene draws it in. */
@@ -3928,19 +3928,6 @@ ul.actor-stack {
   flex: 1;
   flex-direction: column;
   overflow: clip;
-}
-
-.factory-world-scene,
-.factory-world-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.factory-world-canvas {
-  display: block;
-  touch-action: none;
 }
 
 .factory-world-pipeline,

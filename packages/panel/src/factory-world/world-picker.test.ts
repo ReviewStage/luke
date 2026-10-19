@@ -14,14 +14,13 @@ import { DesktopFactory } from "../desktop/desktop-factory.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 
 /**
- * world-picker.test.ts -- the Factory toolbar's picker: the board first and what the page opens on, each world the build offers after it, a world chosen standing in the board's place until the board is chosen again, the choice kept while Factory closes and opens in the same session, the development build's test pattern offered in no packaged app, and nothing of it standing where Factory's experiment is off.
+ * world-picker.test.ts -- the Factory toolbar's picker: the board first and what the page opens on, the campus after it and nothing else, the campus chosen standing in the board's place until the board is chosen again, the choice kept while Factory closes and opens in the same session, and nothing of it standing where Factory's experiment is off.
  *
- * The worlds' scene is never landed here (`unlandedBundles`), so a world
- * chosen stands at its wait; what it draws is `world-page.test.ts`'s.
+ * What the campus draws is `campus/campus-scene.test.ts`'s and the page's
+ * chrome `world-page.test.ts`'s.
  */
 
 const WORKSPACE: Workspace = {
@@ -35,13 +34,13 @@ let root: Root | undefined;
 /** Every workspace whose world was read, in order. */
 let asked: string[] = [];
 
-/** Main's document with Factory's experiment as given, in a packaged app or a development build. */
-function launch({ factory, packaged }: { factory: boolean; packaged: boolean }): void {
+/** Main's document with Factory's experiment as given. */
+function launch({ factory }: { factory: boolean }): void {
   const snapshot = stateWith(factory ? experimentsOn(EXPERIMENT.FACTORY) : {}, {});
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve({ ...snapshot, run: { ...snapshot.run, packaged } }),
+    requestAppState: () => Promise.resolve(snapshot),
   });
 }
 
@@ -80,14 +79,7 @@ function mount(registry = AtomRegistry.make()): HTMLElement {
     workspace: WORKSPACE,
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
   });
-  act(() =>
-    root?.render(
-      onRegistry(
-        registry,
-        onSideBundles(unlandedBundles(), createElement(DesktopFactory, { tasks })),
-      ),
-    ),
-  );
+  act(() => root?.render(onRegistry(registry, createElement(DesktopFactory, { tasks }))));
   return container;
 }
 
@@ -122,7 +114,7 @@ function choose(page: HTMLElement, name: string): void {
   act(() => item?.click());
 }
 
-/** Whether the board's stations stand, rather than a world. */
+/** Whether the board's stations stand, rather than the campus. */
 function boardStands(page: HTMLElement): boolean {
   return (
     page.querySelector('section[aria-label="Factory"]') !== null &&
@@ -130,37 +122,18 @@ function boardStands(page: HTMLElement): boolean {
   );
 }
 
-test("Factory opens on the board, its picker offering the board first, then the campus, then the worlds, and the development build's test pattern last", async () => {
-  launch({ factory: true, packaged: false });
+test("Factory opens on the board, its picker offering the board, then the campus, and nothing else", async () => {
+  launch({ factory: true });
   const page = mount();
   await settle();
   assert.equal(picker(page)?.getAttribute("aria-label"), "View: Board");
   assert.ok(boardStands(page));
-  const offered = entries(page);
-  assert.equal(offered[0], "Board");
-  assert.equal(offered[1], "Campus");
-  assert.equal(offered.at(-1), "Test pattern");
+  assert.deepEqual(entries(page), ["Board", "Campus"]);
   assert.deepEqual(asked, [], "no world is read while the board stands");
 });
 
-test("a world chosen stands in the board's place and reads the listed workspace's world; the board chosen again puts the board back", async () => {
-  launch({ factory: true, packaged: false });
-  const page = mount();
-  await settle();
-  choose(page, "Test pattern");
-  await settle();
-  assert.equal(picker(page)?.getAttribute("aria-label"), "View: Test pattern");
-  assert.ok(!boardStands(page));
-  assert.deepEqual(asked, [WORKSPACE.id]);
-
-  choose(page, "Board");
-  await settle();
-  assert.ok(boardStands(page));
-  assert.equal(picker(page)?.getAttribute("aria-label"), "View: Board");
-});
-
-test("the campus chosen stands in the board's place over the listed workspace's world, drawn without the worlds' scene", async () => {
-  launch({ factory: true, packaged: true });
+test("the campus chosen stands in the board's place over the listed workspace's world; the board chosen again puts the board back", async () => {
+  launch({ factory: true });
   const page = mount();
   await settle();
   choose(page, "Campus");
@@ -168,23 +141,25 @@ test("the campus chosen stands in the board's place over the listed workspace's 
   assert.equal(picker(page)?.getAttribute("aria-label"), "View: Campus");
   assert.ok(!boardStands(page));
   assert.deepEqual(asked, [WORKSPACE.id]);
-  assert.ok(
-    page.querySelector(".factory-campus-scene"),
-    "the campus is drawn though no scene bundle has landed",
-  );
+  assert.ok(page.querySelector(".factory-campus-scene"), "the campus is drawn");
+
+  choose(page, "Board");
+  await settle();
+  assert.ok(boardStands(page));
+  assert.equal(picker(page)?.getAttribute("aria-label"), "View: Board");
 });
 
-test("the world chosen stands when Factory is opened again in the same session, and a new session opens on the board", async () => {
-  launch({ factory: true, packaged: false });
+test("the campus chosen stands when Factory is opened again in the same session, and a new session opens on the board", async () => {
+  launch({ factory: true });
   const session = AtomRegistry.make();
   const first = mount(session);
   await settle();
-  choose(first, "Test pattern");
+  choose(first, "Campus");
   await settle();
 
   const again = mount(session);
   await settle();
-  assert.equal(picker(again)?.getAttribute("aria-label"), "View: Test pattern");
+  assert.equal(picker(again)?.getAttribute("aria-label"), "View: Campus");
   assert.ok(!boardStands(again));
 
   const next = mount(AtomRegistry.make());
@@ -192,19 +167,8 @@ test("the world chosen stands when Factory is opened again in the same session, 
   assert.ok(boardStands(next));
 });
 
-test("a packaged app opens on the board and offers its worlds, but not the development build's test pattern", async () => {
-  launch({ factory: true, packaged: true });
-  const page = mount();
-  await settle();
-  assert.ok(boardStands(page));
-  const offered = entries(page);
-  assert.equal(offered[0], "Board");
-  assert.ok(offered.length > 1, "a world is offered");
-  assert.ok(!offered.includes("Test pattern"));
-});
-
-test("with Factory's experiment off, no world is offered", async () => {
-  launch({ factory: false, packaged: false });
+test("with Factory's experiment off, the picker does not stand and the board does", async () => {
+  launch({ factory: false });
   const page = mount();
   await settle();
   assert.equal(picker(page), null);

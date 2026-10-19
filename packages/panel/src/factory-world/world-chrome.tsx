@@ -45,12 +45,11 @@ import type { SceneHover } from "./contract.js";
 import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "./world.js";
 
 /**
- * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, and the way home.
+ * world-chrome.tsx -- what the page draws over the campus, in its DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, and the way home.
  *
  * Every word here is DOM text, so session replay masks it as it masks the
- * rest of the panel; the scene beneath draws shapes alone. The colours a
- * signal is drawn in are the view model's (`SIGNAL_COLOR`), the same in the
- * bar, the card, and every world. A card only opens places that already
+ * rest of the panel. The colours a signal is drawn in are the view model's
+ * (`SIGNAL_COLOR`), the same in the bar, the card, and the campus. A card only opens places that already
  * exist: an agent's page, a pull request on GitHub, a task.
  */
 

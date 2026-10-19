@@ -222,7 +222,7 @@ const NOT_THE_CONCEPT = new Set([
   "planProbes",
 ]);
 
-/** Where names are not read: the factory worlds' blueprints, the migrations, and the vendored skills. */
+/** Where names are not read: the Factory's blueprints, the migrations, and the vendored skills. */
 const SKIPPED = [/\/factory-world\//, /^packages\/database\/migrations\//, /^\.agents\//];
 
 /** The schemas, where a plan-spelled SQL name is refused unless the document owns it. */
