@@ -67,75 +67,32 @@ const CODE_EXCERPT_LINES = {
 /** The themes the code is coloured in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
-/**
- * Shiki, its two themes, and the grammars of every language coloured here,
- * each reached through a dynamic `import()`, so a bundle that carries the
- * host carries none of them until code is first coloured, and a build that
- * splits chunks (the web client's) loads them only then.
- */
-const loadHighlighter = Effect.all(
-  {
-    core: Effect.promise(() => import("shiki/core")),
-    engine: Effect.promise(() => import("shiki/engine/javascript")),
-    themes: Effect.all(
-      [
-        Effect.promise(() => import("@shikijs/themes/github-dark-default")),
-        Effect.promise(() => import("@shikijs/themes/github-light-default")),
-      ],
-      { concurrency: "unbounded" },
-    ),
-    langs: Effect.all(
-      [
-        Effect.promise(() => import("@shikijs/langs/bash")),
-        Effect.promise(() => import("@shikijs/langs/c")),
-        Effect.promise(() => import("@shikijs/langs/cpp")),
-        Effect.promise(() => import("@shikijs/langs/css")),
-        Effect.promise(() => import("@shikijs/langs/go")),
-        Effect.promise(() => import("@shikijs/langs/html")),
-        Effect.promise(() => import("@shikijs/langs/java")),
-        Effect.promise(() => import("@shikijs/langs/javascript")),
-        Effect.promise(() => import("@shikijs/langs/json")),
-        Effect.promise(() => import("@shikijs/langs/jsx")),
-        Effect.promise(() => import("@shikijs/langs/kotlin")),
-        Effect.promise(() => import("@shikijs/langs/markdown")),
-        Effect.promise(() => import("@shikijs/langs/python")),
-        Effect.promise(() => import("@shikijs/langs/ruby")),
-        Effect.promise(() => import("@shikijs/langs/rust")),
-        Effect.promise(() => import("@shikijs/langs/sql")),
-        Effect.promise(() => import("@shikijs/langs/swift")),
-        Effect.promise(() => import("@shikijs/langs/toml")),
-        Effect.promise(() => import("@shikijs/langs/tsx")),
-        Effect.promise(() => import("@shikijs/langs/typescript")),
-        Effect.promise(() => import("@shikijs/langs/yaml")),
-      ],
-      { concurrency: "unbounded" },
-    ),
-  },
-  { concurrency: "unbounded" },
-).pipe(
-  Effect.map(({ core, engine, themes, langs }) =>
-    core.createHighlighterCoreSync({
-      themes: themes.map((theme) => theme.default),
-      langs: langs.map((lang) => lang.default),
-      engine: engine.createJavaScriptRegexEngine(),
-    }),
-  ),
-);
-
 let highlighter: HighlighterCore | undefined;
 
 /**
  * The one highlighter, loaded and built the first time code is coloured,
- * since most launches show none, and kept for the life of the process. Note
- * that two colourings racing the first load may each build one, which is
- * harmless: the modules load once, and the later build is the one kept.
+ * since most launches show none, and kept for the life of the process; or
+ * none where its module could not be loaded or built, as where a browser's
+ * chunk fails to download, so the code is drawn plain rather than not at
+ * all. Note that a failure is not kept, so the next colouring tries again,
+ * and that two colourings racing the first load may each build one, which
+ * is harmless: the module loads once, and the later build is the one kept.
  */
-const sharedHighlighter: Effect.Effect<HighlighterCore> = Effect.suspend(() =>
+const sharedHighlighter: Effect.Effect<HighlighterCore | undefined> = Effect.suspend(() =>
   highlighter === undefined
-    ? Effect.tap(loadHighlighter, (built) =>
-        Effect.sync(() => {
-          highlighter = built;
-        }),
+    ? Effect.tryPromise(() => import("./task-code-highlighter.js")).pipe(
+        Effect.map((module) => module.createTaskCodeHighlighter()),
+        Effect.tap((built) =>
+          Effect.sync(() => {
+            highlighter = built;
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logWarning("Code is drawn plain: the highlighter could not be loaded", cause),
+            undefined,
+          ),
+        ),
       )
     : Effect.succeed(highlighter),
 );
@@ -168,7 +125,7 @@ function compactLine(
 
 /**
  * Lines coloured as `language`, one of the highlighter's own, or drawn plain
- * for none. Note that the colouring starts at the first line given, which is
+ * for none and where the highlighter could not be loaded. Note that the colouring starts at the first line given, which is
  * what the service sent: a window opened inside a comment or a string is
  * coloured from there.
  */
@@ -176,10 +133,10 @@ function colouredLines(
   language: string | undefined,
   lines: readonly string[],
 ): Effect.Effect<CodeToken[][]> {
-  if (language === undefined) {
-    return Effect.succeed(lines.map((text) => (text === "" ? [] : [{ text }])));
-  }
+  const plain = () => lines.map((text) => (text === "" ? [] : [{ text }]));
+  if (language === undefined) return Effect.succeed(plain());
   return Effect.map(sharedHighlighter, (core) => {
+    if (core === undefined) return plain();
     const foreground = {
       dark: core.getTheme(THEME.DARK).fg.toLowerCase(),
       light: core.getTheme(THEME.LIGHT).fg.toLowerCase(),
@@ -212,7 +169,7 @@ function languageOfPath(path: string): string | undefined {
 function languageOfFence(name: string): Effect.Effect<string | undefined> {
   const lower = name.toLowerCase();
   return Effect.map(sharedHighlighter, (core) =>
-    core.getLoadedLanguages().includes(lower) ? lower : undefined,
+    core?.getLoadedLanguages().includes(lower) === true ? lower : undefined,
   );
 }
 
