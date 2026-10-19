@@ -2752,6 +2752,53 @@ it.effect(
     }),
 );
 
+it.effect(
+  "each of two plan-editing turns that stop a second apart has its own plan read once its save has had time to unwind",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const documentLands = (ending: string) =>
+        viewLands(
+          (view) =>
+            view.document?.status === TASKS_READ.READY &&
+            view.document.task?.document.body.endsWith(ending) === true,
+        );
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- First.", 20)];
+      const first = yield* documentLands("First.");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-1")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* first;
+
+      // A second turn, heard a second later on the next follow, stops writing too.
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Second.", 30)];
+      const second = yield* documentLands("Second.");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-2")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* second;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- First unwound.", 40)];
+      const firstUnwound = yield* documentLands("First unwound.");
+      yield* TestClock.adjust(Duration.seconds(29));
+      yield* firstUnwound;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Second unwound.", 50)];
+      const secondUnwound = yield* documentLands("Second unwound.");
+      yield* TestClock.adjust(Duration.seconds(1));
+
+      yield* secondUnwound;
+    }),
+);
+
 it.effect("stopping Luke reaches the service for the task named", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);

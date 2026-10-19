@@ -2111,12 +2111,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           ),
         ),
       );
+      // Each read waits from its own turn's end, so a turn settling while another's wait stands is not held behind it.
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(editUnwindReads), (taskId) =>
-            Effect.andThen(
-              Effect.sleep(PLAN_EDIT_UNWIND),
-              Effect.sync(() => Queue.offerUnsafe(documentReads, taskId)),
+            Effect.forkScoped(
+              Effect.andThen(
+                Effect.sleep(PLAN_EDIT_UNWIND),
+                Effect.sync(() => Queue.offerUnsafe(documentReads, taskId)),
+              ),
             ),
           ),
         ),
