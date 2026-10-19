@@ -795,7 +795,12 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
  * name names no grammar Pierre carries, or the colouring failed.
  */
 async function colourLines(request: ColourRequest): Promise<ColouredLines | undefined> {
-  const file = { name: request.name, contents: request.lines.join("\n"), cacheKey: request.key };
+  colouringsAsked += 1;
+  const file = {
+    name: request.name,
+    contents: request.lines.join("\n"),
+    cacheKey: String(colouringsAsked),
+  };
   if (getFiletypeFromFileName(file.name) === PLAIN_TEXT) return undefined;
   const highlighting = listHighlighting(request.look);
   const { pool } = highlighting;
@@ -822,6 +827,9 @@ async function colourLines(request: ColourRequest): Promise<ColouredLines | unde
     return undefined;
   }
 }
+
+/** How many colourings were asked for, which names each in the pool's cache, as `patchesRead` names a list's reads. */
+let colouringsAsked = 0;
 
 /** The name Pierre gives a file whose name names no grammar. */
 const PLAIN_TEXT = "text";

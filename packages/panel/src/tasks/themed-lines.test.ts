@@ -17,7 +17,7 @@ import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { useFileViewSettings } from "./file-view-settings.js";
-import { ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
+import { type RunRead, ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 
 const roots: Root[] = [];
 
@@ -29,10 +29,10 @@ let landing: Promise<void> = Promise.resolve();
 /** How many runs were drawn, which names each its own unless a test names one. */
 let runs = 0;
 
-/** A run's key no other drawn run has. */
-function nextRun(): string {
+/** A read no other drawn run came from. */
+function nextRun(): RunRead {
   runs += 1;
-  return `src/seats.ts@${runs}`;
+  return { source: "src/seats.ts", revision: String(runs) };
 }
 
 /** What the bundle answers a colouring with unless a test says otherwise: each line in one run of Dracula's pink. */
@@ -41,7 +41,6 @@ const PINK = (request: ColourRequest): ColouredLines | undefined => ({
     text === "" ? [] : [{ text, color: "#ff79c6", lightColor: "#859900" }],
   ),
   ground: { dark: "#282a36", light: "#fdf6e3" },
-  ink: { dark: "#f8f8f2", light: "#657b83" },
 });
 
 /** What the bundle answers a colouring with. */
@@ -93,8 +92,8 @@ async function flush(): Promise<void> {
   });
 }
 
-/** Draws `lines` from line 1 in the themes the settings hold, under `runKey` or a run of its own, and lets what it asks for land. */
-async function draw(lines: CodeLines, { runKey }: { runKey?: string } = {}): Promise<HTMLElement> {
+/** Draws `lines` from line 1 in the themes the settings hold, from `read` or a read of its own, and lets what it asks for land. */
+async function draw(lines: CodeLines, { read }: { read?: RunRead } = {}): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -116,7 +115,7 @@ async function draw(lines: CodeLines, { runKey }: { runKey?: string } = {}): Pro
             createElement(Settings),
             createElement(ThemedCodeLinesView, {
               name: "src/seats.ts",
-              runKey: runKey ?? nextRun(),
+              read: read ?? nextRun(),
               look: { lineNumbers: true, wrap: true },
               firstLine: 1,
               lines,
@@ -144,7 +143,7 @@ test("in the default themes the host's colours are drawn and the diff bundle is 
 
   assert.equal(imported, 0);
   assert.deepEqual(drawnColours(container), ["#ff7b72", "#ff7b72", "#ff7b72"]);
-  assert.equal(container.querySelector(".code-lines-palette"), null);
+  assert.equal(container.querySelector(".code-lines-ground"), null);
 });
 
 test("in another pair each window held is coloured again, its words the same, on the theme's ground", async () => {
@@ -161,9 +160,9 @@ test("in another pair each window held is coloured again, its words the same, on
     "one colouring per window, each its own lines' words",
   );
   assert.ok(drawnColours(container).every((colour) => colour === "#ff79c6"));
-  const frame =
-    container.querySelector<HTMLElement>(".code-lines-palette") ?? assert.fail("a palette");
-  assert.equal(frame.style.getPropertyValue("--palette-ground-dark"), "#282a36");
+  const ground =
+    container.querySelector<HTMLElement>(".code-lines-ground") ?? assert.fail("a ground");
+  assert.equal(ground.style.getPropertyValue("--theme-ground-dark"), "#282a36");
 });
 
 test("a window given no colours, or other words, or drawn plain by the host, keeps the host's", async () => {
@@ -174,7 +173,6 @@ test("a window given no colours, or other words, or drawn plain by the host, kee
       : {
           lines: request.lines.map(() => [{ text: "other words", color: "#ff79c6" }]),
           ground: { dark: "#282a36", light: "#fdf6e3" },
-          ink: { dark: "#f8f8f2", light: "#657b83" },
         };
   const plain = Array.from({ length: 3 }, (_, index) => [{ text: `plain ${index}` }]);
   const container = await draw([...hostLines(500), ...hostLines(2, 501), ...plain]);
@@ -194,7 +192,6 @@ test("changing the themes colours the lines again in the pair chosen", async () 
       { text, color: request.look.themes.dark === "nord" ? "#88c0d0" : "#ff79c6" },
     ]),
     ground: { dark: "#282a36", light: "#fdf6e3" },
-    ink: { dark: "#f8f8f2", light: "#657b83" },
   });
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   const container = await draw(hostLines(2));
@@ -231,13 +228,16 @@ test("the window in view is asked for first, and no more than two are out at onc
   assert.equal(asked.length, 4, "every window, two at a time");
 });
 
+/** The read a kept run comes from. */
+const KEPT_READ: RunRead = { source: "src/kept.ts", revision: "abc" };
+
 test("a run drawn again, as a File tab opened again, takes its kept colours at once without asking", async () => {
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
-  await draw(hostLines(3), { runKey: "src/kept.ts@abc" });
+  await draw(hostLines(3), { read: KEPT_READ });
   const before = asked.length;
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const container = await draw(hostLines(3), { runKey: "src/kept.ts@abc" });
+  const container = await draw(hostLines(3), { read: KEPT_READ });
 
   assert.equal(asked.length, before, "nothing is asked again");
   assert.deepEqual(drawnColours(container), ["#ff79c6", "#ff79c6", "#ff79c6"]);
@@ -276,4 +276,54 @@ test("a file opened in a chosen pair warms its colouring before its lines land, 
     asked.map((request) => [request.name, request.lines]),
     [["src/seats.ts", [""]]],
   );
+});
+
+test("kept colours over words the read no longer holds are not drawn, and the window is coloured again", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  const reloaded: RunRead = { source: "page-1", revision: "3" };
+  await draw([[{ text: "hello", color: "#ff7b72" }]], { read: reloaded });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  asked = [];
+
+  const container = await draw([[{ text: "goodbye", color: "#ff7b72" }]], { read: reloaded });
+
+  assert.deepEqual(
+    [...container.querySelectorAll(".code-line-text")].map((line) => line.textContent),
+    ["goodbye"],
+  );
+  assert.deepEqual(
+    asked.map((request) => request.lines),
+    [["goodbye"]],
+  );
+});
+
+test("a window left in the host's colours keeps the host's ink beside one coloured in the theme", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  answer = (request) => (request.lines[0]?.startsWith("plain") ? undefined : PINK(request));
+  const container = await draw([
+    ...hostLines(500),
+    [{ text: "plain run" }, { text: "x", color: "#ff7b72" }],
+  ]);
+
+  const ground =
+    container.querySelector<HTMLElement>(".code-lines-ground") ?? assert.fail("a ground");
+  assert.equal(ground.style.getPropertyValue("--code-text"), "", "the theme's ink is not taken");
+  assert.equal(drawnColours(container)[500], undefined, "the host's own-ink run names none");
+});
+
+test("a run's own colours outlast their being let go from the kept windows, so it never asks for a window twice", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  const container = await draw(hostLines(1000));
+  assert.equal(asked.length, 2);
+  // Sixty-four other runs of a line each, as many windows as are kept, let the first run's go.
+  for (let other = 0; other < 64; other += 1) await draw(hostLines(1));
+  const before = asked.length;
+
+  const scroller =
+    container.querySelector<HTMLElement>(".luke-scroll-area") ?? assert.fail("a scroller");
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  await flush();
+
+  assert.equal(asked.length, before, "nothing is asked again");
+  assert.equal(drawnColours(container)[0], "#ff79c6");
 });

@@ -17,7 +17,7 @@ import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { useLinesLook } from "./code-lines.js";
 import { BarMenu } from "./file-menu.js";
-import { ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
+import { type RunRead, ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
@@ -147,13 +147,13 @@ const PAGE_SOURCE_NAME = "page.html";
 /** The version's source in the frame's place: its lines as a File tab draws them, or why they are not. */
 function PageSource({
   title,
-  runKey,
+  version,
   read,
   onRetry,
 }: {
   title: string;
-  /** Names the version whose source this is, which its colouring is kept under. */
-  runKey: string;
+  /** The page and the version whose source this is, which its colouring is kept under. */
+  version: RunRead;
   read: SourceRead;
   onRetry: () => void;
 }): React.JSX.Element {
@@ -170,7 +170,7 @@ function PageSource({
     <section className="file-tab" aria-label={`${title} source`}>
       <ThemedCodeLinesView
         name={PAGE_SOURCE_NAME}
-        runKey={runKey}
+        read={version}
         look={look}
         fade={SCROLL_FADE.START}
         firstLine={1}
@@ -305,7 +305,7 @@ export function PagePane({
         {showingSource ? (
           <PageSource
             title={page.title}
-            runKey={`${page.id}:${version}`}
+            version={{ source: page.id, revision: String(version) }}
             read={source ?? { kind: SOURCE_READ.READING }}
             onRetry={() => ask(version)}
           />

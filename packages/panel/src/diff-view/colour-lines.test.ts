@@ -1,5 +1,5 @@
 /**
- * colour-lines.test.ts -- Pierre's colouring of a file read back as a File tab's runs: one run per colour, each in both appearances, the line's break left off, and each theme's ground and ink; and no result where the lines or the themes are not all there. Synthetic markup only.
+ * colour-lines.test.ts -- Pierre's colouring of a file read back as a File tab's runs: one run per colour, each in both appearances, the line's break left off, and each theme's ground; and no result where the lines or the grounds are not all there. Synthetic markup only.
  */
 
 import assert from "node:assert/strict";
@@ -54,11 +54,10 @@ test("each line's tokens are read back as runs, one per colour in both appearanc
     ],
   ]);
   assert.deepEqual(coloured?.ground, { dark: "#282A36", light: "#FDF6E3" });
-  assert.deepEqual(coloured?.ink, { dark: "#F8F8F2", light: "#657B83" });
 });
 
-test("lines coloured other than the run's, or themes left unnamed, give no result", () => {
+test("lines coloured other than the run's, or grounds left unnamed, give no result", () => {
   const code = [line(token("a", "#111111", "#222222"))];
   assert.equal(colouredFrom({ code, themeStyles: THEMES }, 2), undefined);
-  assert.equal(colouredFrom({ code, themeStyles: "--diffs-dark:#fff" }, 1), undefined);
+  assert.equal(colouredFrom({ code, themeStyles: "--diffs-dark-bg:#000" }, 1), undefined);
 });

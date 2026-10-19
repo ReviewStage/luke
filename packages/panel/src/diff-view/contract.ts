@@ -190,19 +190,17 @@ export interface DiffFileTexts {
   readonly after: string;
 }
 
-/** A run of a file's lines to colour in a look's syntax themes: the file's name, which its grammar is read from, a key naming the run, and its lines. */
+/** A run of a file's lines to colour in a look's syntax themes: the file's name, which its grammar is read from, and its lines. */
 export interface ColourRequest {
   readonly name: string;
-  readonly key: string;
   readonly lines: readonly string[];
   readonly look: DiffLook;
 }
 
-/** A run of lines coloured, each run of one colour carrying it in both appearances, and each theme's own ground and ink. */
+/** A run of lines coloured, each run of one colour carrying it in both appearances, and each theme's own ground. */
 export interface ColouredLines {
   readonly lines: CodeLines;
   readonly ground: { readonly dark: string; readonly light: string };
-  readonly ink: { readonly dark: string; readonly light: string };
 }
 
 /** Whether two lists light the same lines of the same file, or both none. */

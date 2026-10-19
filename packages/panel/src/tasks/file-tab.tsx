@@ -187,7 +187,7 @@ function FileLinesView({
   return (
     <ThemedCodeLinesView
       name={file.path}
-      runKey={`${file.path}@${held.commit ?? held.branch}`}
+      read={{ source: file.path, revision: held.commit ?? held.branch }}
       look={look}
       fade={SCROLL_FADE.START}
       scrollerRef={scroller}

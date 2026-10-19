@@ -172,16 +172,11 @@ interface Appearances {
   readonly light: string;
 }
 
-/** A theme's ground and ink as the frame's custom properties, which the stylesheet reads in each appearance (`.code-lines-palette`). */
-function paletteStyle(
-  palette: { readonly ground: Appearances; readonly ink: Appearances } | undefined,
-): CSSProperties | undefined {
-  if (palette === undefined) return undefined;
+/** A theme's ground in each appearance as custom properties, which the stylesheet reads (`.code-lines-ground`). */
+function groundStyle(ground: Appearances): CSSProperties {
   return cssCustomProperties({
-    "--palette-ground-dark": palette.ground.dark,
-    "--palette-ground-light": palette.ground.light,
-    "--palette-ink-dark": palette.ink.dark,
-    "--palette-ink-light": palette.ink.light,
+    "--theme-ground-dark": ground.dark,
+    "--theme-ground-light": ground.light,
   });
 }
 
@@ -196,7 +191,7 @@ export function CodeLinesView({
   below,
   fade = SCROLL_FADE.NONE,
   scrollerRef,
-  palette,
+  ground,
 }: {
   look: LinesLook;
   firstLine: number;
@@ -212,8 +207,13 @@ export function CodeLinesView({
   fade?: ScrollFade | undefined;
   /** Handed the box that scrolls, which a caller centres a line within. */
   scrollerRef?: Ref<HTMLDivElement> | undefined;
-  /** The syntax theme's ground and ink in each appearance, where the lines are coloured in one other than the window's own (`themed-lines.tsx`). */
-  palette?: { readonly ground: Appearances; readonly ink: Appearances } | undefined;
+  /**
+   * The syntax theme's ground in each appearance, where the lines are
+   * coloured in one other than the window's own (`themed-lines.tsx`). Note
+   * that its ink is not taken: every run coloured in the theme names its own
+   * colour, and a run the host coloured keeps the host's ink.
+   */
+  ground?: Appearances | undefined;
 }): React.JSX.Element {
   const scroll = (
     <ScrollArea
@@ -235,10 +235,10 @@ export function CodeLinesView({
       </div>
     </ScrollArea>
   );
-  if (palette === undefined) return scroll;
+  if (ground === undefined) return scroll;
   // Note that the theme's ground stands under the scroll area whole, its bar's gutter among it, so it wraps the area rather than the lines.
   return (
-    <div className="code-lines-palette" style={paletteStyle(palette)}>
+    <div className="code-lines-ground" style={groundStyle(ground)}>
       {scroll}
     </div>
   );

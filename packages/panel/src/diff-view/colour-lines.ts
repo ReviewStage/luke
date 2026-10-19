@@ -7,7 +7,7 @@
  * theme styles. A File tab draws runs of text with a colour for each
  * appearance (`@luke/features/tasks-view`'s `CodeToken`), so the lines are
  * read back into those: tokens of one colour joined, and the theme styles
- * read for the ground and the ink. A result whose lines are not the run's,
+ * read for each theme's ground. A result whose lines are not the run's,
  * one per line given, is no result.
  */
 
@@ -18,11 +18,9 @@ import type { ColouredLines } from "./contract.js";
 /** The custom properties Pierre names a token's colour in, one per appearance. */
 const TOKEN_COLOUR = { DARK: "--diffs-token-dark", LIGHT: "--diffs-token-light" } as const;
 
-/** The custom properties Pierre names each theme's ground and ink in. */
+/** The custom properties Pierre names each theme's ground in. */
 const THEME_COLOUR = {
-  DARK_INK: "--diffs-dark",
   DARK_GROUND: "--diffs-dark-bg",
-  LIGHT_INK: "--diffs-light",
   LIGHT_GROUND: "--diffs-light-bg",
 } as const;
 
@@ -76,9 +74,9 @@ function withoutBreak(runs: CodeToken[]): CodeToken[] {
 }
 
 /**
- * The lines Pierre coloured, read back as runs, with each theme's ground and
- * ink; none where it coloured some other number of lines than `count`, or
- * named no theme's colours.
+ * The lines Pierre coloured, read back as runs, with each theme's ground;
+ * none where it coloured some other number of lines than `count`, or named
+ * no theme's ground.
  */
 export function colouredFrom(
   result: { readonly code: readonly ElementContent[]; readonly themeStyles: string },
@@ -88,16 +86,8 @@ export function colouredFrom(
     .filter((line) => line.type === "element")
     .map((line) => withoutBreak(runsOf(line)));
   const theme = declared(result.themeStyles);
-  const darkInk = theme.get(THEME_COLOUR.DARK_INK);
-  const darkGround = theme.get(THEME_COLOUR.DARK_GROUND);
-  const lightInk = theme.get(THEME_COLOUR.LIGHT_INK);
-  const lightGround = theme.get(THEME_COLOUR.LIGHT_GROUND);
-  if (lines.length !== count) return undefined;
-  if (darkInk === undefined || darkGround === undefined) return undefined;
-  if (lightInk === undefined || lightGround === undefined) return undefined;
-  return {
-    lines,
-    ground: { dark: darkGround, light: lightGround },
-    ink: { dark: darkInk, light: lightInk },
-  };
+  const dark = theme.get(THEME_COLOUR.DARK_GROUND);
+  const light = theme.get(THEME_COLOUR.LIGHT_GROUND);
+  if (lines.length !== count || dark === undefined || light === undefined) return undefined;
+  return { lines, ground: { dark, light } };
 }

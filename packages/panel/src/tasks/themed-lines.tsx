@@ -9,10 +9,12 @@
  * `windowAt`) as a diff's lines are, in its pool's workers
  * (`diff-view/index.ts`'s `colourLines`), and the window's lines take its
  * colours once they land, the same words in the same boxes, so nothing
- * moves; the run's ground and ink are the theme's. A window the host drew
+ * moves; the run stands on the theme's ground. A window the host drew
  * plain, or the bundle names no grammar for, or whose words came back
  * otherwise, keeps the host's colours: a window is never left plainer than
- * the host drew it.
+ * the host drew it. Colours are kept per window under the read and the
+ * themes they were made for, so a run drawn again takes them at once, each
+ * checked against the window's own words before it is drawn.
  */
 
 import { useAtomValue } from "@effect/atom-react";
@@ -38,10 +40,16 @@ type CodeLinesViewProps = Omit<ComponentProps<typeof CodeLinesView>, "scrollerRe
   readonly scrollerRef?: RefObject<HTMLDivElement | null> | undefined;
 };
 
-/** What names a run of lines for its colouring: its file's name, which its grammar is read from, and a key naming the read it came from. */
+/** The read a run of lines came from: what was read, a file's path or a page's id, and at which revision, a commit or a version. */
+export interface RunRead {
+  readonly source: string;
+  readonly revision: string;
+}
+
+/** What names a run of lines for its colouring: its file's name, which its grammar is read from, and the read it came from. */
 interface RunName {
   readonly name: string;
-  readonly runKey: string;
+  readonly read: RunRead;
 }
 
 /** A window of the lines held: where it starts, and its lines as the host coloured them. */
@@ -84,31 +92,61 @@ function sameWords(window: HeldWindow, coloured: ColouredLines): boolean {
   );
 }
 
-/** The themes a look colours in, as one key. */
-function themesKey(look: DiffLook): string {
-  return `${look.themes.dark}/${look.themes.light}`;
-}
-
-/** How many windows' colours are kept, newest last, across every File tab and page source, so one opened again is drawn in its theme at once. */
+/** How many windows' colours are kept across every File tab and page source, the oldest let go first, so one opened again is drawn in its theme at once. */
 const KEPT_WINDOWS = 64;
 
-/** Each window's colours, under its run, its place, its length, and the themes it was coloured in; none where it keeps the host's. */
-const keptColours = new Map<string, ColouredLines | null>();
+/** Colours by the first line of their window; none where a window keeps the host's. */
+type WindowColours = Map<number, ColouredLines | null>;
 
-/** Keeps a window's colours, the oldest let go past `KEPT_WINDOWS`. */
-function keep(key: string, coloured: ColouredLines | null): void {
-  keptColours.delete(key);
-  keptColours.set(key, coloured);
-  for (const oldest of keptColours.keys()) {
-    if (keptColours.size <= KEPT_WINDOWS) break;
-    keptColours.delete(oldest);
+/** Each window's colours, by read, then revision, then dark and light theme, then the window's first line. */
+const keptColours = new Map<string, Map<string, Map<string, Map<string, WindowColours>>>>();
+
+/** Each window kept, oldest first, by the identifiers it is kept under. */
+const keptOrder: {
+  readonly read: RunRead;
+  readonly themes: DiffLook["themes"];
+  readonly firstLine: number;
+}[] = [];
+
+/** The windows kept for a read in a pair of themes, made where `make` asks and none stands. */
+function keptWindows(
+  read: RunRead,
+  themes: DiffLook["themes"],
+  make: boolean,
+): WindowColours | undefined {
+  const step = <Value,>(map: Map<string, Value>, key: string, fresh: () => Value) => {
+    const found = map.get(key);
+    if (found !== undefined || !make) return found;
+    const made = fresh();
+    map.set(key, made);
+    return made;
+  };
+  const revisions = step(keptColours, read.source, () => new Map());
+  const darks = revisions && step(revisions, read.revision, () => new Map());
+  const lights = darks && step(darks, themes.dark, () => new Map());
+  return lights && step(lights, themes.light, (): WindowColours => new Map());
+}
+
+/** Keeps a window's colours, the oldest window kept let go past `KEPT_WINDOWS`. */
+function keep(
+  read: RunRead,
+  themes: DiffLook["themes"],
+  firstLine: number,
+  coloured: ColouredLines | null,
+): void {
+  keptWindows(read, themes, true)?.set(firstLine, coloured);
+  keptOrder.push({ read, themes, firstLine });
+  while (keptOrder.length > KEPT_WINDOWS) {
+    const oldest = keptOrder.shift();
+    if (oldest !== undefined)
+      keptWindows(oldest.read, oldest.themes, false)?.delete(oldest.firstLine);
   }
 }
 
 /** How many windows are out to the bundle at once, one per worker, so the window scrolled to next is asked for before those far from it. */
 const OUT_AT_ONCE = 2;
 
-/** The line at the top of the scroller's view, read off its scroll by the lines' mean height; the run's first where it has not scrolled. */
+/** The line in the middle of the scroller's view, read off its scroll by the lines' mean height; the run's first where it has not scrolled. */
 function lineInView(scroller: HTMLElement | null, firstLine: number, count: number): number {
   if (scroller === null || scroller.scrollHeight === 0 || count === 0) return firstLine;
   const middle = scroller.scrollTop + scroller.clientHeight / 2;
@@ -122,16 +160,36 @@ function distance(window: HeldWindow, line: number): number {
   return line > last ? line - last : 0;
 }
 
+/** What a mounted run asked for, under the read and themes it asked in: each window's colours as they landed, and those out. */
+interface Asked {
+  readonly read: RunRead;
+  readonly themes: DiffLook["themes"];
+  readonly landed: WindowColours;
+  readonly out: Set<number>;
+}
+
+/** Whether two reads, or two pairs of themes, are one. */
+function sameRead(a: RunRead, b: RunRead): boolean {
+  return a.source === b.source && a.revision === b.revision;
+}
+
+function sameThemes(a: DiffLook["themes"], b: DiffLook["themes"]): boolean {
+  return a.dark === b.dark && a.light === b.light;
+}
+
 /**
  * The lines in the themes chosen: each window's colours as they land from
  * the diff bundle, the window in view asked for first and the rest by how
- * near they stand to it, asked again as the view scrolls; kept colours
- * drawn at once; the host's until then and wherever the bundle gives none;
- * and the theme's ground and ink once a window has its colours.
+ * near they stand to it, asked again as the view scrolls; colours kept from
+ * an earlier drawing taken at once; the host's until then, wherever the
+ * bundle gives none, and wherever kept colours are not over the window's
+ * words; and the theme's ground once a window has its colours. Note that
+ * what the mounted run asked for is its own, never let go while it stands,
+ * so a run of more windows than are kept asks for each once.
  */
 function RecolouredLinesView({
   name,
-  runKey,
+  read,
   firstLine,
   lines,
   scrollerRef,
@@ -140,42 +198,57 @@ function RecolouredLinesView({
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const look = useDiffLook(false);
-  const themes = themesKey(look);
-  // Note that a landing only redraws: what is drawn is read from the kept colours.
   const [, setLandings] = useState(0);
-  const out = useRef(new Set<string>());
+  const asked = useRef<Asked | undefined>(undefined);
+  if (
+    asked.current === undefined ||
+    !sameRead(asked.current.read, read) ||
+    !sameThemes(asked.current.themes, look.themes)
+  ) {
+    asked.current = { read, themes: look.themes, landed: new Map(), out: new Set() };
+  }
   const own = useRef<HTMLDivElement | null>(null);
   const scroller = scrollerRef ?? own;
   const windows = windowsOf(firstLine, lines);
-  const keyOf = (window: HeldWindow) =>
-    `${runKey}:${window.firstLine}:${window.lines.length}@${themes}`;
 
-  const latest = useRef({ windows, keyOf, module, look });
-  latest.current = { windows, keyOf, module, look };
+  /** A window's colours, its own or kept, where they stand over its words; none otherwise. */
+  const colouredOf = (window: HeldWindow, run: Asked): ColouredLines | null | undefined => {
+    const found =
+      run.landed.get(window.firstLine) ??
+      keptWindows(run.read, run.themes, false)?.get(window.firstLine);
+    if (found === null) return run.landed.has(window.firstLine) ? null : undefined;
+    return found !== undefined && sameWords(window, found) ? found : undefined;
+  };
+
+  const latest = useRef({ windows, module, look, colouredOf });
+  latest.current = { windows, module, look, colouredOf };
   // Asks for the windows nearest the view not yet coloured, as many as may be out at once.
   const askNext = useCallback(() => {
-    const { windows, keyOf, module, look } = latest.current;
-    if (module === undefined) return;
+    const { windows, module, look, colouredOf } = latest.current;
+    const run = asked.current;
+    if (module === undefined || run === undefined) return;
     const line = lineInView(scroller.current, windows[0]?.firstLine ?? 1, lines.length);
     const waiting = windows
-      .filter((window) => {
-        const key = keyOf(window);
-        return !keptColours.has(key) && !out.current.has(key) && hostColoured(window);
-      })
+      .filter(
+        (window) =>
+          colouredOf(window, run) === undefined &&
+          !run.out.has(window.firstLine) &&
+          hostColoured(window),
+      )
       .sort((a, b) => distance(a, line) - distance(b, line));
     for (const window of waiting) {
-      if (out.current.size >= OUT_AT_ONCE) return;
-      const key = keyOf(window);
-      out.current.add(key);
+      if (run.out.size >= OUT_AT_ONCE) return;
+      run.out.add(window.firstLine);
       module
-        .colourLines({ name, key, lines: window.lines.map(wordsOf), look })
+        .colourLines({ name, lines: window.lines.map(wordsOf), look })
         .then(
           (coloured) => (coloured !== undefined && sameWords(window, coloured) ? coloured : null),
           () => null,
         )
         .then((kept) => {
-          keep(key, kept);
-          out.current.delete(key);
+          run.out.delete(window.firstLine);
+          run.landed.set(window.firstLine, kept);
+          keep(run.read, run.themes, window.firstLine, kept);
           setLandings((landings) => landings + 1);
           askNext();
         });
@@ -191,13 +264,13 @@ function RecolouredLinesView({
   }, [askNext, scroller]);
 
   const drawn: CodeLines[number][] = [];
-  let palette: Pick<ColouredLines, "ground" | "ink"> | undefined;
+  let ground: ColouredLines["ground"] | undefined;
   for (const window of windows) {
-    const coloured = keptColours.get(keyOf(window));
+    const coloured = colouredOf(window, asked.current);
     if (coloured === undefined || coloured === null) drawn.push(...window.lines);
     else {
       drawn.push(...coloured.lines);
-      palette ??= coloured;
+      ground ??= coloured.ground;
     }
   }
   return (
@@ -206,7 +279,7 @@ function RecolouredLinesView({
       scrollerRef={scroller}
       firstLine={firstLine}
       lines={drawn}
-      palette={palette}
+      ground={ground}
     />
   );
 }
@@ -225,14 +298,14 @@ function WarmColours({ name }: { name: string }): null {
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const look = useDiffLook(false);
-  const themes = themesKey(look);
+  const { dark, light } = look.themes;
+  const latest = useRef(look);
+  latest.current = look;
   useEffect(() => {
     if (module === undefined) return;
-    module
-      .colourLines({ name, key: `warm:${name}@${themes}`, lines: [""], look })
-      .catch(() => undefined);
-    // Note that the look is read once per pair: a change of type alone warms nothing new.
-  }, [module, name, themes]);
+    module.colourLines({ name, lines: [""], look: latest.current }).catch(() => undefined);
+    // Note that each pair warms once: a change of type alone warms nothing new.
+  }, [module, name, dark, light]);
   return null;
 }
 
@@ -252,7 +325,7 @@ export function ThemeWarmer({ name }: { name: string }): React.JSX.Element | nul
  */
 export function ThemedCodeLinesView(props: CodeLinesViewProps & RunName): React.JSX.Element {
   if (!useChosenThemes()) {
-    const { name: _name, runKey: _runKey, ...plain } = props;
+    const { name: _name, read: _read, ...plain } = props;
     return <CodeLinesView {...plain} />;
   }
   return <RecolouredLinesView {...props} />;
