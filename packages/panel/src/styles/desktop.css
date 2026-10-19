@@ -3369,9 +3369,8 @@ ul.actor-stack {
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
-   as a plan leads with its title: the title at a document heading's size,
-   then a muted line of its agent, when it asked, and where it stands, over a
-   hairline that parts it from the comments. */
+   as a plan leads with its title: the title alone at a document heading's
+   size, over a hairline that parts it from the comments. */
 .inbox-subject {
   display: flex;
   flex-direction: column;
@@ -3387,37 +3386,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;
-}
-
-.inbox-subject-line {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-6);
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.inbox-subject-agent {
-  display: flex;
-  min-width: 0;
-  color: var(--luke-color-text);
-}
-
-/* An item that needs the reader wears the attention mark beside its
-   words, in the primary ink, since it is the one standing that asks for
-   their hand; a teammate's open item names whom it waits on, and a settled
-   one says where it stands, in the line's muted ink. */
-.inbox-standing {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-.inbox-standing[data-status="open"]:not([data-waiting]) {
-  color: var(--luke-color-text);
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
