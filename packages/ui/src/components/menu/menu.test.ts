@@ -556,3 +556,33 @@ test("a row taken away while a touch is held on it leaves no hold behind to open
   wait(HELD_MS);
   expect(openMenu()).toBeNull();
 });
+
+test("a touch a list captures to drag its row opens nothing, dragged, lifted, or resting within the slop; the browser's own capture on the row is no drag", () => {
+  const { row } = heldRow();
+  const list = row.parentElement ?? expect.fail("the row stands in its list");
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("pointermove", "touch", 46, 20));
+    list.dispatchEvent(pointer("pointerup", "touch", 46, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("pointermove", "touch", 80, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("gotpointercapture", "touch", 44, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    row.dispatchEvent(pointer("gotpointercapture", "touch", 40, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).not.toBeNull();
+});

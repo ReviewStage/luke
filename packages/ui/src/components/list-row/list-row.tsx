@@ -431,18 +431,14 @@ export function ListRow({
       data-armed={view.armed ? "true" : undefined}
       {...withContextMenu(
         contextMenu,
-        swipe === undefined
-          ? {}
-          : {
-              onPointerDown: item.onPointerDown,
-              onPointerMove: item.onPointerMove,
-              onPointerUp: item.onPointerUp,
-              onPointerCancel: item.onPointerCancel,
-            },
+        swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
       )}
       {...(swipe === undefined
         ? undefined
         : {
+            onPointerMove: item.onPointerMove,
+            onPointerUp: item.onPointerUp,
+            onPointerCancel: item.onPointerCancel,
             onClickCapture: item.onClickCapture,
             style: cssCustomProperties({
               "--luke-list-row-swipe": `${view.offset}px`,

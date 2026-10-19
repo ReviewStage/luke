@@ -293,9 +293,6 @@ test("a key pressed on a row reaches its handler, and a right-click anywhere on 
         contextMenu: {
           onContextMenu: () => heard.push("menu"),
           onPointerDown: ignore,
-          onPointerMove: ignore,
-          onPointerUp: ignore,
-          onPointerCancel: ignore,
           onTouchEnd: ignore,
           "data-long-press": "",
         },

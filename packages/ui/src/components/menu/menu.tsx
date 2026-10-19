@@ -203,12 +203,13 @@ const LONG_PRESS_MS = 500;
 /** How far a held touch may drift, in CSS pixels, before it is a scroll or a drag rather than a long press. */
 const LONG_PRESS_SLOP = 8;
 
-/** A touch held on a context menu's element, counting toward a long press: where it went down, and the hold's timer. */
+/** A touch down on a context menu's element: the element, which pointer, where it went down, and the hold's timer while it still counts toward a long press. */
 interface TouchPress {
+  element: HTMLElement;
   pointerId: number;
   x: number;
   y: number;
-  timer: number;
+  timer: number | undefined;
 }
 
 /**
@@ -220,9 +221,6 @@ interface TouchPress {
 export interface ContextMenuProps {
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: React.PointerEvent<HTMLElement>) => void;
   onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
   "data-long-press": "";
 }
@@ -231,9 +229,6 @@ export interface ContextMenuProps {
 export interface ContextMenuCarrier<T extends HTMLElement> {
   onContextMenu?: React.MouseEventHandler<T> | undefined;
   onPointerDown?: React.PointerEventHandler<T> | undefined;
-  onPointerMove?: React.PointerEventHandler<T> | undefined;
-  onPointerUp?: React.PointerEventHandler<T> | undefined;
-  onPointerCancel?: React.PointerEventHandler<T> | undefined;
   onTouchEnd?: React.TouchEventHandler<T> | undefined;
 }
 
@@ -264,9 +259,6 @@ export function withContextMenu<T extends HTMLElement>(
     "data-long-press": contextMenu["data-long-press"],
     onContextMenu: heardBoth(own.onContextMenu, contextMenu.onContextMenu),
     onPointerDown: heardBoth(own.onPointerDown, contextMenu.onPointerDown),
-    onPointerMove: heardBoth(own.onPointerMove, contextMenu.onPointerMove),
-    onPointerUp: heardBoth(own.onPointerUp, contextMenu.onPointerUp),
-    onPointerCancel: heardBoth(own.onPointerCancel, contextMenu.onPointerCancel),
     onTouchEnd: heardBoth(own.onTouchEnd, contextMenu.onTouchEnd),
   };
 }
@@ -274,6 +266,96 @@ export function withContextMenu<T extends HTMLElement>(
 /** Whether a key opens what holds the keyboard's own menu, as a right-click would: the menu key, or ⇧F10. */
 export function opensMenu(event: React.KeyboardEvent): boolean {
   return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
+/**
+ * A touch's long press on a context menu's element, `useMenu`'s alone.
+ *
+ * Note that the touch is followed at the window's capture phase rather than
+ * on the element, because a list or a tab strip that drags its rows
+ * captures the pointer on itself once it moves, and the element would hear
+ * neither the drag nor the release that should let the hold go. Such a
+ * capture is a drag begun, which lets the hold go of itself, though the
+ * finger then rests within the slop.
+ */
+function useTouchHold() {
+  const press = useRef<TouchPress | undefined>(undefined);
+  // Whether the touch still down opened the menu by its hold.
+  const held = useRef(false);
+  // Note that the handlers are made once, so the window's listeners are the same ones to remove.
+  const [touch] = useState(() => {
+    const stopCounting = () => {
+      const pending = press.current;
+      if (pending === undefined) return;
+      window.clearTimeout(pending.timer);
+      pending.timer = undefined;
+    };
+    const letGo = () => {
+      stopCounting();
+      press.current = undefined;
+      window.removeEventListener("pointermove", moved, true);
+      window.removeEventListener("pointerup", ended, true);
+      window.removeEventListener("pointercancel", ended, true);
+      window.removeEventListener("scroll", stopCounting, true);
+      window.removeEventListener("gotpointercapture", captured, true);
+    };
+    function moved(event: PointerEvent) {
+      const pending = press.current;
+      if (pending === undefined || event.pointerId !== pending.pointerId) return;
+      const drift = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
+      if (drift > LONG_PRESS_SLOP) stopCounting();
+    }
+    // Note that the touch's own capture, a browser's on what it went down on, is no drag.
+    function captured(event: PointerEvent) {
+      const pending = press.current;
+      if (pending === undefined || event.pointerId !== pending.pointerId) return;
+      if (event.target instanceof Node && pending.element.contains(event.target)) return;
+      stopCounting();
+    }
+    // Note that a cancelled touch makes no touchend, so the hold is over with it.
+    function ended(event: PointerEvent) {
+      if (event.pointerId !== press.current?.pointerId) return;
+      if (event.type === "pointercancel") held.current = false;
+      letGo();
+    }
+    return {
+      letGo,
+      /** Whether a touch is down and still counting toward its long press. */
+      counting: () => press.current?.timer !== undefined,
+      /** The touch down opened the menu some other way, so its hold is spent. */
+      claim: () => {
+        stopCounting();
+        held.current = true;
+      },
+      /** A press going down: a touch starts counting, toward `open` at the point it went down. */
+      start: (event: React.PointerEvent<HTMLElement>, open: (placement: MenuPlacement) => void) => {
+        letGo();
+        held.current = false;
+        if (event.pointerType !== "touch" || !event.isPrimary) return;
+        const { currentTarget: element, pointerId, clientX: x, clientY: y } = event;
+        const timer = window.setTimeout(() => {
+          stopCounting();
+          held.current = true;
+          open({ x, y, align: MENU_ALIGN.START });
+        }, LONG_PRESS_MS);
+        press.current = { element, pointerId, x, y, timer };
+        window.addEventListener("pointermove", moved, true);
+        window.addEventListener("pointerup", ended, true);
+        window.addEventListener("pointercancel", ended, true);
+        window.addEventListener("scroll", stopCounting, true);
+        window.addEventListener("gotpointercapture", captured, true);
+      },
+      // Note that a touch's end comes after its pointerup, and refusing it is
+      // what keeps the browser from making a mousedown and a click of it.
+      touchEnd: (event: React.TouchEvent<HTMLElement>) => {
+        if (!held.current) return;
+        held.current = false;
+        event.preventDefault();
+      },
+    };
+  });
+  useEffect(() => touch.letGo, [touch]);
+  return { ...touch, held };
 }
 
 /**
@@ -331,17 +413,7 @@ export function useMenu(shown: boolean) {
       else show(place(event.currentTarget), event.currentTarget);
     },
   });
-  const press = useRef<TouchPress | undefined>(undefined);
-  // Whether the touch still down opened the menu by its hold.
-  const held = useRef(false);
-  const letGo: () => void = useCallback(() => {
-    const pending = press.current;
-    if (pending === undefined) return;
-    window.clearTimeout(pending.timer);
-    press.current = undefined;
-    window.removeEventListener("scroll", letGo, true);
-  }, []);
-  useEffect(() => letGo, [letGo]);
+  const hold = useTouchHold();
   const contextMenu = (
     opener?: React.RefObject<HTMLElement | null>,
     place: (element: HTMLElement) => MenuPlacement = dropBelowStart,
@@ -349,47 +421,17 @@ export function useMenu(shown: boolean) {
     "data-long-press": "",
     onContextMenu: (event) => {
       event.preventDefault();
-      if (held.current) return;
+      if (hold.held.current) return;
       // Note that Android's own contextmenu may come before the hold's
       // timer, and opens the menu in its place.
-      if (press.current !== undefined) {
-        letGo();
-        held.current = true;
-      }
+      if (hold.counting()) hold.claim();
       show(atPointer(event, place), opener?.current ?? event.currentTarget);
     },
     onPointerDown: (event) => {
-      letGo();
-      held.current = false;
-      if (event.pointerType !== "touch" || !event.isPrimary) return;
       const element = event.currentTarget;
-      const { pointerId, clientX: x, clientY: y } = event;
-      const timer = window.setTimeout(() => {
-        letGo();
-        held.current = true;
-        show({ x, y, align: MENU_ALIGN.START }, opener?.current ?? element);
-      }, LONG_PRESS_MS);
-      press.current = { pointerId, x, y, timer };
-      window.addEventListener("scroll", letGo, true);
+      hold.start(event, (placement) => show(placement, opener?.current ?? element));
     },
-    onPointerMove: (event) => {
-      const pending = press.current;
-      if (pending === undefined || event.pointerId !== pending.pointerId) return;
-      const drift = Math.hypot(event.clientX - pending.x, event.clientY - pending.y);
-      if (drift > LONG_PRESS_SLOP) letGo();
-    },
-    onPointerUp: letGo,
-    onPointerCancel: () => {
-      letGo();
-      held.current = false;
-    },
-    // Note that a touch's end comes after its pointerup, and refusing it is
-    // what keeps the browser from making a mousedown and a click of it.
-    onTouchEnd: (event) => {
-      if (!held.current) return;
-      held.current = false;
-      event.preventDefault();
-    },
+    onTouchEnd: hold.touchEnd,
   });
   const keyMenu = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!opensMenu(event)) return;
