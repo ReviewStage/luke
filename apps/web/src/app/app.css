@@ -38,8 +38,6 @@
 @import "@luke/panel/styles/issues.css";
 @import "@luke/panel/styles/call.css";
 
-/* Where else the utilities are gathered from: this app's own modules, and the
-   markdown renderer the components draw a reply with, which is the panel's
-   dependency and so stands in the panel's own `node_modules`. */
+/* Where else the utilities are gathered from: this app's own modules. The
+   panel's and the markdown renderer's are `@luke/panel/sources.css`'s. */
 @source "./";
-@source "../../../../packages/panel/node_modules/streamdown/dist/*.js";
