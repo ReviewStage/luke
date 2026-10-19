@@ -3,6 +3,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@luke/gateway";
+import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { THEME } from "@luke/settings";
 import { isRecord, type WireValue } from "@luke/wire";
@@ -81,47 +82,65 @@ it.effect(
   },
 );
 
+/** One browser tab's settings concern over the shared state root: what it sent its panel, and each voice it handed the live source. */
+const tabOver = Effect.fnUntraced(function* (
+  stateRoot: string,
+  changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
+) {
+  const sent = yield* Queue.unbounded<{ kind: GatewayEventKind; payload: WireValue }>();
+  const voices = yield* Queue.unbounded<string | undefined>();
+  const machine = Layer.mergeAll(
+    Layer.succeed(
+      HostKernelTag,
+      hostKernelOver({
+        stateRoot,
+        // A run that sends nothing, so no count leaves for the service.
+        runMode: runModeFor({ capture: false, fixture: true }),
+        accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: (kind, payload) => {
+          Queue.offerUnsafe(sent, { kind, payload });
+        },
+      }),
+    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+    fixedAccountSource(),
+    changedElsewhere,
+    NodeFileSystem.layer,
+    NodePath.layer,
+  );
+  const settings = yield* Effect.provide(composeSettings(), machine);
+  yield* settings.link({
+    credential: NO_CREDENTIAL,
+    readAccountKey: () => Effect.succeed(undefined),
+    confirmAccount: () => Effect.void,
+    setVoice: (voice) => Queue.offer(voices, voice),
+    endLiveSession: Effect.void,
+  });
+  yield* settings.lifetime;
+  return { settings, sent, voices };
+});
+
+/** A writing tab, and a reading tab whose shell says the file changed each time `signal` is offered. */
+const twoTabs = Effect.fnUntraced(function* () {
+  const stateRoot = yield* temporaryDirectoryScoped("luke-settings-elsewhere-");
+  const signal = yield* Queue.unbounded<void>();
+  const writer = yield* tabOver(stateRoot, Layer.empty);
+  const reader = yield* tabOver(
+    stateRoot,
+    Layer.succeed(SettingsChangedElsewhere, Stream.fromQueue(signal)),
+  );
+  return { writer, reader, signal };
+});
+
 it.effect(
   "another tab's settings write reaches this tab's panel when the shell says the file changed",
   () =>
     Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-elsewhere-");
-      /** One tab's settings concern over the shared file, and every event it sent its panel. */
-      const tab = Effect.fnUntraced(function* (
-        changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
-      ) {
-        const sent = yield* Queue.unbounded<{ kind: GatewayEventKind; payload: WireValue }>();
-        const machine = Layer.mergeAll(
-          Layer.succeed(
-            HostKernelTag,
-            hostKernelOver({
-              stateRoot,
-              // A run that sends nothing, so no count leaves for the service.
-              runMode: runModeFor({ capture: false, fixture: true }),
-              accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
-              now: () => 0,
-              createId: () => "id",
-              report: () => undefined,
-              emit: (kind, payload) => {
-                Queue.offerUnsafe(sent, { kind, payload });
-              },
-            }),
-          ),
-          Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-          Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
-          fixedAccountSource(),
-          changedElsewhere,
-          NodeFileSystem.layer,
-          NodePath.layer,
-        );
-        const settings = yield* Effect.provide(composeSettings(), machine);
-        yield* settings.lifetime;
-        return { settings, sent };
-      });
-
-      const signal = yield* Queue.unbounded<void>();
-      const writer = yield* tab(Layer.empty);
-      const reader = yield* tab(Layer.succeed(SettingsChangedElsewhere, Stream.fromQueue(signal)));
+      const { writer, reader, signal } = yield* twoTabs();
       // The reader has read the file before the writer changes it.
       assert.equal((yield* reader.settings.store.snapshot()).stored.theme, undefined);
 
@@ -141,4 +160,19 @@ it.effect(
       Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),
     ),
+);
+
+it.effect("a voice another tab chose reaches this tab's live source", () =>
+  Effect.gen(function* () {
+    const { writer, reader, signal } = yield* twoTabs();
+    yield* reader.settings.store.snapshot();
+
+    yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
+    Queue.offerUnsafe(signal, undefined);
+
+    assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
+  }).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+    Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+  ),
 );

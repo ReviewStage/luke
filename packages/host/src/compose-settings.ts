@@ -422,6 +422,24 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       emitSettingsSnapshot(result.settings);
     });
 
+    /**
+     * The file as another writer left it, read again: each setting it moved
+     * has its host side effect here, as a write of this host's own has (a
+     * voice another tab chose reaches this tab's live source), and the panel
+     * is sent the settings as they now stand.
+     */
+    const applyChangedElsewhere = Effect.gen(function* () {
+      const before = (yield* store.snapshot()).stored;
+      yield* store.reload();
+      const after = yield* store.snapshot();
+      for (const field of APP_SETTING_FIELDS) {
+        if (JSON.stringify(before[field]) !== JSON.stringify(after.stored[field])) {
+          yield* applyHostSettingSideEffect(field, after);
+        }
+      }
+      emitSettingsSnapshot(after);
+    });
+
     const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
       Effect.map(Effect.orDie(store.snapshot()), (settings) => ({
         status: ACTION_RESULT_STATUS.REJECTED,
@@ -600,12 +618,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         // above gives back what the start took.
         yield* Effect.forkScoped(drainAccountPreferencesSync);
         // Another writer's change to the file, where the shell can hear one:
-        // read again and sent to the panel as any update is. A read that
-        // fails is written down and the next change is still heard.
+        // read again, and carried as any update is. A read that fails is
+        // written down and the next change is still heard.
         if (Option.isSome(changedElsewhere)) {
           yield* Effect.forkScoped(
             Stream.runForEach(changedElsewhere.value, () =>
-              catchAllButInterrupt(Effect.andThen(store.reload(), emitSettings()), (cause) =>
+              catchAllButInterrupt(applyChangedElsewhere, (cause) =>
                 Effect.sync(() => {
                   report(`Reading settings another tab changed failed: ${Cause.pretty(cause)}`);
                 }),
