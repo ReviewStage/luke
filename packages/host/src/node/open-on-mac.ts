@@ -9,15 +9,17 @@ import path from "node:path";
  * developer's login shell with their own Git login, so their credentials
  * and tools are the ones used: it clones over HTTPS, and over SSH where
  * that fails, without checking anything out; fetches the branch; makes the
- * branch's worktree the first time, detached at its head, and after that
- * checks the head just fetched out over it, so a branch the agent
+ * branch's worktree the first time, on a local branch of the same name
+ * tracking GitHub's, and after that resets that branch to the head just
+ * fetched, so a branch the agent
  * force-pushed or rebased opens as readily as one it pushed more to; a
  * branch GitHub deleted once its pull request merged opens at that pull
  * request's last head, which GitHub keeps; while
  * what Git ignores there, installed dependencies and build output among it,
  * is kept for the next run. A worktree with changes of the developer's own,
  * a tracked file edited or a file Git does not ignore added, is left as it
- * stands and said, rather than overwritten. The first step that fails
+ * stands and said, rather than overwritten, and so is one with commits of
+ * the developer's own that the fetched head does not hold. The first step that fails
  * ends the bringing there, and is the only failure said. The script runs the repository's
  * run command in the worktree where this Mac has one for it and the branch
  * was brought in, and then opens a login shell there for the developer to
@@ -116,6 +118,8 @@ export function openOnMacScript(input: {
     '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
     "  fi",
     '  cd "$clone" || return 1',
+    // Note that the clone, which checks nothing out, holds no branch, so a worktree may hold any, its default branch among them.
+    "  if git symbolic-ref --quiet HEAD >/dev/null; then git update-ref --no-deref HEAD HEAD || return 1; fi",
     '  echo "▸ Fetching $branch"',
     '  if ! git fetch origin "$branch"; then',
     // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
@@ -139,14 +143,26 @@ export function openOnMacScript(input: {
     '      echo "▸ The worktree has changes of its own; left as it stands rather than overwritten."',
     "      return 1",
     "    fi",
-    // Note that a checkout of the fetched head takes the branch as it now stands, a force-push or a rebase among it; with nothing changed there it has nothing to overwrite, and it leaves ignored files alone.
-    '    git checkout --quiet --detach "$head" || return 1',
+    // Note that the head Luke last checked out is kept as a ref of the worktree's own; one moved on from it to a commit the fetched head does not hold is a commit of the developer's.
+    '    current="$(git rev-parse --verify --quiet HEAD)" || return 1',
+    '    opened="$(git rev-parse --verify --quiet refs/worktree/luke-opened)"',
+    '    if [ -n "$opened" ] && [ "$current" != "$opened" ] && ! git merge-base --is-ancestor "$current" "$head"; then',
+    '      echo "▸ The worktree has commits of its own not on GitHub; left as it stands rather than overwritten."',
+    "      return 1",
+    "    fi",
+    // Note that the branch is reset to the fetched head, which takes it as it now stands, a force-push or a rebase among it; with nothing changed there it has nothing to overwrite, and it leaves ignored files alone.
+    '    git checkout --quiet -B "$branch" "$head" || return 1',
     "  else",
     '    mkdir -p "$(dirname "$worktree")" || return 1',
     // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
     "    git worktree prune --expire now || return 1",
-    '    git worktree add --detach "$worktree" "$head" || return 1',
+    '    git worktree add --quiet -B "$branch" "$worktree" "$head" || return 1',
+    '    cd "$worktree" || return 1',
     "  fi",
+    // Note that the worktree is on the branch itself, never a detached head, so a script that names its run by the branch, as `run.sh --preview` names its instance, names the same one each time, and a commit made there pushes back to it.
+    '  git config "branch.$branch.remote" origin || return 1',
+    '  git config "branch.$branch.merge" "refs/heads/$branch" || return 1',
+    '  git update-ref refs/worktree/luke-opened "$head" || return 1',
     "}",
     // Note that a failed step is said and the shell still opens, in the worktree where it stands and the clone or home where not.
     "brought=",
