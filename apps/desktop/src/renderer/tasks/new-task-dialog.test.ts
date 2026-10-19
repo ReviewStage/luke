@@ -285,9 +285,13 @@ test("Agent mode: Return starts the task without planning, Untitled, on the repo
 
   assert.deepEqual(card.starts, [["", "acme/web"]]);
   assert.deepEqual(card.planned, [false]);
-  assert.deepEqual(card.agents, [
-    { prompt: "Make the sidebar keep its folds.", attachments: [], choice: DEFAULT_CHOICE },
-  ]);
+  const [{ idempotencyKey, ...agent } = { idempotencyKey: "" }] = card.agents;
+  assert.deepEqual(agent, {
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: DEFAULT_CHOICE,
+  });
+  assert.ok(idempotencyKey, "the agent's start carries the card's key");
 });
 
 test("a model picked on the chip runs this agent alone, and the account's default is not written", async () => {
@@ -472,6 +476,21 @@ test("a refusal keeps the card and the words, says why under it, and Retry start
   act(() => card.button("Retry").click());
   await settle();
   assert.equal(card.starts.length, 2);
+});
+
+test("Retry after an agent's start that did not land carries the same key, and other words carry another", async () => {
+  const card = await mount("The service did not answer.");
+  card.type("Dark mode toggle");
+  await card.key("Enter");
+  act(() => card.button("Retry").click());
+  await settle();
+  card.type(" for the sidebar");
+  await card.key("Enter");
+  const keys = card.agents.map((agent) => agent?.idempotencyKey);
+
+  assert.equal(keys.length, 3);
+  assert.equal(keys[1], keys[0], "a press asking the same again is the same start");
+  assert.notEqual(keys[2], keys[1], "other words are another start");
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {

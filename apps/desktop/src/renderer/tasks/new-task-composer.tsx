@@ -36,7 +36,7 @@ import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { AgentComposerControl } from "./use-agent-composer";
-import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
+import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, or Luke plans with, and the chips that say where and how the task starts.
@@ -59,12 +59,13 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   stands once there are words, files, or a Linear issue, and a
  *   repository, without which it is held and the card says so under it. It
  *   starts the task with an empty plan and no call, named by the issue where
- *   one was picked and else Untitled until the agent names it, then opens
- *   it on a draft agent's tab holding the words, the files, and the model on
- *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
- *   agent refused leaves the words there with why and Retry. The model chip
- *   starts on the account's default, and a pick here runs this one agent
- *   alone: only Settings changes the default.
+ *   one was picked and else Untitled until the agent names it, and the agent
+ *   on the words, the files, and the model on the chip, in the one start
+ *   (`use-tasks-tab.ts`), then opens the task on the agent's tab; an agent
+ *   refused opens it on a draft agent's tab holding the words, why under
+ *   the box, and Retry (`draft-agent-tab.tsx`). The model chip starts on the
+ *   account's default, and a pick here runs this one agent alone: only
+ *   Settings changes the default.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the
@@ -84,6 +85,12 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  * starts an agent on the task's plan at once, the issue's, rather than on
  * words. Opened from that issue's Start agent…, the card stands in Agent mode
  * and offers no Plan toggle.
+ *
+ * An agent's start carries a key the card mints, and a press asking the
+ * same again, as Retry after a start the service never answered does,
+ * carries the same key, so a service that made the task and its agent
+ * answers them rather than a second pair; a press asking anything else
+ * mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
  * box with neither words nor files starts a bare task: an empty plan, no
@@ -126,6 +133,33 @@ const COMPOSER_WORDS = {
   DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
 } as const;
+
+/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
+interface AgentAsk {
+  readonly name: string;
+  readonly repository: string | null;
+  readonly workspaceId: string | undefined;
+  readonly linearIssueId: string | undefined;
+  readonly issueId: string | undefined;
+  readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
+}
+
+/** Whether two presses ask the same: the same task, words, files in the same order, and model. */
+function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
+  return (
+    a.name === b.name &&
+    a.repository === b.repository &&
+    a.workspaceId === b.workspaceId &&
+    a.linearIssueId === b.linearIssueId &&
+    a.issueId === b.issueId &&
+    a.agent.prompt === b.agent.prompt &&
+    a.agent.attachments.length === b.agent.attachments.length &&
+    a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
+    a.agent.choice?.model === b.agent.choice?.model &&
+    a.agent.choice?.effort === b.agent.choice?.effort &&
+    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
+  );
+}
 
 /** Whether a key press is Shift+Tab alone, which turns the mode from the field. */
 function turnsMode(event: KeyboardEvent): boolean {
@@ -216,6 +250,8 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
+  // The last agent press's key and what it asked, until a start lands.
+  const pressed = useRef<{ ask: AgentAsk; key: string } | undefined>(undefined);
   // How many times ⌘L asked the Linear chip to open its menu.
   const [linearAsks, setLinearAsks] = useState(0);
   // Note that a task from one of the workspace's issues starts from that issue alone, so it offers no Linear chip.
@@ -267,6 +303,7 @@ export function NewTaskComposer({
         ...agent,
       })
       .then((refused) => {
+        if (refused === undefined) pressed.current = undefined;
         setNote(
           refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused },
         );
@@ -283,8 +320,19 @@ export function NewTaskComposer({
     if (planning) begin(issueName ?? taskNameOfWords(said), true);
     else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
     else {
-      const handed = { prompt: agentPromptOf(issue, said), attachments, choice };
-      begin(issueName ?? "", false, { handed });
+      const name = issueName ?? "";
+      const ask: AgentAsk = {
+        name,
+        repository,
+        workspaceId,
+        linearIssueId: issue?.id,
+        issueId: from?.id,
+        agent: { prompt: agentPromptOf(issue, said), attachments, choice },
+      };
+      const held = pressed.current;
+      const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
+      pressed.current = { ask, key };
+      begin(name, false, { handed: { idempotencyKey: key, ...ask.agent } });
     }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
