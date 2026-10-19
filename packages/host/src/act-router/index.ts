@@ -11,7 +11,6 @@ export {
   type ActSender,
   createActRouter,
 } from "./router.js";
-export type { ClientSettingSideEffects } from "./settings-acts.js";
 
 /**
  * The rows a platform answers itself: every kind the host's rows leave, and
@@ -51,7 +50,7 @@ export function refusedRows<const Kind extends ActKind>(kinds: readonly Kind[]):
  * kind has its row on exactly one side.
  */
 export function createHostActRouter<Sender>(
-  dependencies: HostActDependencies<Sender>,
+  dependencies: HostActDependencies,
   platformRows: PlatformActRows<Sender>,
 ): ActRouter<Sender> {
   const rows: ActRows<Sender> = { ...platformRows, ...hostActRows(dependencies) };

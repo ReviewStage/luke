@@ -23,6 +23,7 @@ import {
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
@@ -32,19 +33,19 @@ import {
   type ShortcutChord,
 } from "@luke/settings/shortcuts";
 import { DisclosureFind } from "@luke/ui";
+import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { appBridge } from "../app-bridge.js";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -953,16 +954,15 @@ test("a setting is drawn as written while its write is out, so a press reads the
   assert.equal(lastDrawn().look.ligatures, true);
 });
 
-/** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
-function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
-  const held: Array<(outcome: ActOutcome) => void> = [];
-  const before = appBridge().act;
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) =>
-      request.kind === ACT_KIND.SETTING_UPDATE
-        ? new Promise((resolve) => held.push(resolve))
-        : before(request),
+/** Holds every settings write unanswered, and the window's document unchanged, until a test refuses one with its sentence. */
+function holdSettingWrites(): Array<(sentence: string) => void> {
+  const held: Array<(sentence: string) => void> = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: () =>
+      new Promise((_resolve, reject) =>
+        held.push((sentence) => reject(new ORPCError(ACT_ERROR.REFUSED, { message: sentence }))),
+      ),
   });
   return held;
 }
@@ -975,7 +975,7 @@ test("a write answered while a later one to the same setting is out leaves the l
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
   act(() => settingControl(popover, '[role="radio"]', "Unified").click());
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
-  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+  held[0]?.("Not in this test.");
   await flush();
 
   assert.equal(lastDrawn().look.layout, "split");
@@ -987,7 +987,7 @@ test("a refused write is said under its row, and the row can be pressed again", 
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
-  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
+  held[0]?.("Could not save that setting.");
   await flush();
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");

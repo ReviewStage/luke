@@ -1,7 +1,9 @@
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
 import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
+import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 
 /**
  * index.ts -- the act port's server: every procedure of `@luke/host/contract`, served over a window's `MessagePort`.
@@ -11,14 +13,21 @@ import { type IssueProceduresDependencies, issueProcedures } from "./issue-proce
  * context `ActPortContext` names.
  */
 
+export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
+export type {
+  ClientSettingSideEffects,
+  SettingsProceduresDependencies,
+} from "./settings-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler = RPCHandler<ActPortContext>;
 
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
+  readonly account: AccountProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
+  readonly settings: SettingsProceduresDependencies;
 }
 
 /**
@@ -30,7 +39,11 @@ export interface ActPortDependencies {
  * does not draw. That failure is logged here, in main, before it is replaced.
  */
 export function createActPortHandler(dependencies: ActPortDependencies): ActPortHandler {
-  const router = { ...issueProcedures(dependencies.issues) };
+  const router = {
+    ...accountProcedures(dependencies.account),
+    ...issueProcedures(dependencies.issues),
+    ...settingsProcedures(dependencies.settings),
+  };
   return new RPCHandler<ActPortContext>(router, {
     interceptors: [
       async ({ next, procedure }) => {

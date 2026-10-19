@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { LINK_OPEN } from "@luke/features/link-open";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
@@ -109,15 +109,11 @@ function draw(account: AccountSnapshot): HTMLElement {
 
 beforeEach(() => {
   written = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      }
-      written.push(request.payload);
+  fakeActPort({
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: (payload) => {
+      written.push(payload);
       const settings = appSettingsWire(settingsView({ linkOpen: LINK_OPEN.MAC_APP }));
-      const value = { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED, settings });
     },
   });
 });

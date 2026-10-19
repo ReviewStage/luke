@@ -13,7 +13,11 @@ import {
   type PortActPayload,
   type PortActResult,
 } from "../contract/index.js";
-import { createActPortHandler, type IssueProceduresDependencies } from "./index.js";
+import {
+  type ActPortDependencies,
+  createActPortHandler,
+  type IssueProceduresDependencies,
+} from "./index.js";
 
 /**
  * The Issues page's acts, through the act port as a window calls them: only
@@ -51,6 +55,9 @@ const ACTS = [
 
 type HostAsk = IssueProceduresDependencies["host"];
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { account: {}, settings: {} } as unknown as Omit<ActPortDependencies, "issues">;
+
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
@@ -83,7 +90,7 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  const handler = createActPortHandler({ issues: { host } });
+  const handler = createActPortHandler({ ...UNREACHED, issues: { host } });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

@@ -7,6 +7,15 @@
  * `actContract`, so the panel's act door calls a kind by its own name.
  */
 
+/** The account's asks: a sign-in begun, begun again, or cancelled, a sign-out, and the account deleted. */
+export const ACCOUNT_ACT_KIND = {
+  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
+  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  ACCOUNT_SIGN_OUT: "account.signOut",
+  ACCOUNT_DELETE: "account.delete",
+} as const;
+
 /** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
 export const ISSUE_ACT_KIND = {
   ISSUES_LIST: "issues.list",
@@ -15,9 +24,18 @@ export const ISSUE_ACT_KIND = {
   ISSUES_CHANGE: "issues.change",
 } as const;
 
+/** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
+export const SETTINGS_ACT_KIND = {
+  SETTING_UPDATE: "setting.update",
+  SETTINGS_RESET: "settings.reset",
+  EXPERIMENT_SET: "experiment.set",
+} as const;
+
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
+  ...ACCOUNT_ACT_KIND,
   ...ISSUE_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
 } as const;
 
 export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];

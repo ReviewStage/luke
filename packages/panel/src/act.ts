@@ -7,7 +7,6 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
-  type SettingUpdatePayload,
 } from "@luke/host/acts";
 import {
   ACT_ERROR,
@@ -15,6 +14,7 @@ import {
   type PortActKind,
   type PortActPayload,
   type PortActResult,
+  type SettingUpdatePayload,
 } from "@luke/host/contract";
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";

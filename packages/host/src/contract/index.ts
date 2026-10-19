@@ -4,8 +4,10 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
+import { accountActsContract } from "./account.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
+import { settingsActsContract } from "./settings.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -18,11 +20,19 @@ import type { PortActKind } from "./kinds.js";
  */
 
 export { ACT_ERROR } from "./base.js";
-export { ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
+export {
+  ACCOUNT_ACT_KIND,
+  ISSUE_ACT_KIND,
+  type PortActKind,
+  SETTINGS_ACT_KIND,
+} from "./kinds.js";
+export type { SettingUpdatePayload } from "./settings.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
+  ...accountActsContract,
   ...issueActsContract,
+  ...settingsActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
 /** The window's typed client of the act port. */

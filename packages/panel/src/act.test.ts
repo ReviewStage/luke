@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createActPortHandler } from "@luke/host/act-port";
+import { type ActPortDependencies, createActPortHandler } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -18,6 +18,9 @@ import { installActPort } from "./app-bridge.js";
 const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { account: {}, settings: {} } as unknown as Omit<ActPortDependencies, "issues">;
+
 const opened: MessagePort[] = [];
 
 afterEach(() => {
@@ -28,6 +31,7 @@ afterEach(() => {
 function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const handler = createActPortHandler({
+    ...UNREACHED,
     issues: {
       host: {
         issueList: unanswered,

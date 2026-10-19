@@ -1,17 +1,19 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { Effect } from "effect";
-import { ACT_KIND } from "../acts.js";
+import { ACCOUNT_ACT_KIND } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
-import type { ActRows } from "./router.js";
+import { actPort } from "./base.js";
 
 /**
- * The account rows, proxied to the host that owns the account: the sign-in
- * flow, the refresh, the sign-out, and the deletion all run there, and the
- * counts of them are recorded there, ahead of the action they count. What stays
- * here is what only the client can do about them — stopping the recording
- * its renderers run before the account they file under is gone.
+ * account-procedures.ts -- the account's asks, proxied to the host that owns the account.
+ *
+ * The sign-in flow, the refresh, the sign-out, and the deletion all run
+ * there, and the counts of them are recorded there, ahead of the action they
+ * count. What stays here is what only the client can do about them —
+ * stopping the recording its renderers run before the account they file
+ * under is gone.
  */
-export interface AccountActsDependencies {
+export interface AccountProceduresDependencies {
   host: Pick<
     HostOperator,
     "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount"
@@ -33,16 +35,7 @@ export interface AccountActsDependencies {
   resumeSessionReplay: () => void;
 }
 
-export type AccountActKind =
-  | typeof ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
-  | typeof ACT_KIND.ACCOUNT_SIGN_IN_AGAIN
-  | typeof ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
-  | typeof ACT_KIND.ACCOUNT_SIGN_OUT
-  | typeof ACT_KIND.ACCOUNT_DELETE;
-
-export function accountActRows(
-  dependencies: AccountActsDependencies,
-): Pick<ActRows, AccountActKind> {
+export function accountProcedures(dependencies: AccountProceduresDependencies) {
   const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
   /** The halt, the host's answer, and the resume an answer that never came owes. */
   const halted = (action: Effect.Effect<AccountSnapshot>): Effect.Effect<AccountSnapshot> =>
@@ -52,12 +45,32 @@ export function accountActRows(
     });
 
   return {
-    [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: ({ provider }) => host.beginSignIn(provider),
-    [ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: ({ provider }) => host.signInAgain(provider),
-    [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: () => host.cancelSignIn(),
-    [ACT_KIND.ACCOUNT_SIGN_OUT]: () => halted(host.signOut()),
+    [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: actPort[
+      ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
+    ].effect(function* ({ input }) {
+      return yield* host.beginSignIn(input.provider);
+    }),
+    [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: actPort[
+      ACCOUNT_ACT_KIND.ACCOUNT_SIGN_IN_AGAIN
+    ].effect(function* ({ input }) {
+      return yield* host.signInAgain(input.provider);
+    }),
+    [ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: actPort[
+      ACCOUNT_ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
+    ].effect(function* () {
+      yield* host.cancelSignIn();
+    }),
+    [ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_SIGN_OUT].effect(
+      function* () {
+        return yield* halted(host.signOut());
+      },
+    ),
     // A deletion that landed stands recording down for the run; the host says
     // so on its replay event, which follows this answer.
-    [ACT_KIND.ACCOUNT_DELETE]: () => halted(host.deleteAccount()),
+    [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: actPort[ACCOUNT_ACT_KIND.ACCOUNT_DELETE].effect(
+      function* () {
+        return yield* halted(host.deleteAccount());
+      },
+    ),
   };
 }
