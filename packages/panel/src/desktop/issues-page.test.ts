@@ -978,6 +978,21 @@ test("an issue's description is drawn a section at a time, as a plan's text is, 
   assert.ok(descriptionOf(page).classList.contains("document-sections"));
 });
 
+test("the description's editor wears every class its drawn words wear, so a list keeps its gutter and nothing moves as it opens or closes", async () => {
+  standing = [issue(1, { description: "- reproduce\n  - twice\n- fix" })];
+  const page = await openIssue(issue(1).id);
+  const worn = [...(descriptionOf(page).querySelector(":scope > .plan-unit")?.classList ?? [])];
+  assert.ok(worn.includes("plan-unit"), "the description's words are drawn");
+
+  const editor = openDescription(page);
+
+  const wears = new Set(editor.props.className.split(" "));
+  assert.deepEqual(
+    worn.filter((name) => !wears.has(name)),
+    [],
+  );
+});
+
 test("an issue's document stands in a plan's own scrolling column and body, its title, byline, and description together, as a plan's do", async () => {
   standing = [issue(1, { title: "Fix login", description: "Fails on CI." })];
   const page = await openIssue(issue(1).id);
