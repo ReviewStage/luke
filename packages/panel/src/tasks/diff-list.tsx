@@ -22,6 +22,7 @@ import {
   type DiffListProps,
   type DiffListSelection,
   type DiffLook,
+  type DiffSelection,
   type DiffTextSelection,
   GAP_LINES,
   sameListSelection,
@@ -71,6 +72,17 @@ export interface DiffListEntry {
 /** What the view does to the list once it is drawn: scrolls it to a file's header. */
 export interface DiffListDoor {
   readonly reveal: (path: string) => void;
+}
+
+/**
+ * An ask to scroll the list to a file, a review thread's: to the line its
+ * thread stands under, on the side it counts on, or to the file's header,
+ * where its threads stand above its lines; counted, so each ask is its own.
+ */
+export interface DiffListReveal {
+  readonly ask: number;
+  readonly path: string;
+  readonly at?: { readonly side: DiffSelection["side"]; readonly line: number } | undefined;
 }
 
 /** What a gap's arrow says it does: the next lines of a long gap, the whole of a short one, or every line of the gap. */
@@ -223,6 +235,7 @@ export function PierreDiffList({
   commentOn,
   selected,
   readTexts,
+  reveal,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -240,6 +253,8 @@ export function PierreDiffList({
   selected?: DiffListSelection | undefined;
   /** Reads a file whole, the first time the lines between its hunks are asked for; none offers none. */
   readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+  /** The file, and the line of it, to scroll to once the list draws it open; each ask once. */
+  reveal?: DiffListReveal | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   // The hint over the gap arrow under the pointer, which Pierre draws in a shadow root no hint of the window's own reaches.
@@ -339,6 +354,18 @@ export function PierreDiffList({
       return;
     drawn.current = latest.current;
     handle.current.update(latest.current);
+  });
+
+  // Note that a reveal waits for the list to hold its file open, and runs after the draw above handed Pierre that file, so Pierre lays out what the view asked for before it scrolls.
+  const revealed = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const mounted = handle.current;
+    if (mounted === undefined || reveal === undefined || revealed.current === reveal.ask) return;
+    const file = drawn.current.files.find((each) => each.path === reveal.path);
+    if (file === undefined || file.collapsed) return;
+    revealed.current = reveal.ask;
+    if (reveal.at === undefined) mounted.reveal(reveal.path);
+    else mounted.revealLine(reveal.path, reveal.at.side, reveal.at.line);
   });
 
   // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.

@@ -9,6 +9,7 @@ import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
+  INBOX_FIELD,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
@@ -182,6 +183,43 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         assert.equal(items[0]?.status, INBOX_STATUS.OPEN);
         assert.equal(items[0]?.answer, undefined);
         assert.equal(items[0]?.title, "Which queue, now that Redis is gone?");
+      }),
+  );
+
+  it.effect(
+    "a form's select names the option it recommends, kept as posted; a recommendation naming none of its options, or on a field that is not a select, is refused",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const form = (fields: readonly WireBoundaryInput[]) =>
+          input({
+            key: "invite-channel",
+            title: "How are invitations sent?",
+            response: { type: INBOX_RESPONSE.FORM, fields },
+          });
+        const channel = {
+          type: INBOX_FIELD.SELECT,
+          label: "Channel",
+          options: ["Email", "Slack"],
+          recommended: "Slack",
+        };
+
+        const refusals = [
+          [{ ...channel, recommended: "SMS" }],
+          [channel, { type: INBOX_FIELD.BOOLEAN, label: "Remind", recommended: "Slack" }],
+        ];
+        for (const fields of refusals) {
+          assert.deepEqual(yield* post(agent, form(fields)), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: INBOX_REFUSAL.SELECT_RECOMMENDATION,
+          });
+        }
+        assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
+
+        const posted = yield* post(agent, form([channel]));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const [item] = yield* taskInboxItems(agent.userId, agent.taskId);
+        assert.deepEqual(item?.response, { type: INBOX_RESPONSE.FORM, fields: [channel] });
       }),
   );
 

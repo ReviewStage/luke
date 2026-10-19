@@ -702,6 +702,8 @@ function PlaceGlyph({
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
       return <FileDiffIcon aria-hidden="true" />;
+    case LINK_PLACE.PULL_REQUEST_THREAD:
+      return <CommentsIcon />;
     case LINK_PLACE.MESSAGE:
       return <MessageSquareIcon aria-hidden="true" />;
     case LINK_PLACE.INBOX:
