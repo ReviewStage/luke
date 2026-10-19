@@ -1,3 +1,15 @@
+/**
+ * agents-procedures.test.ts -- the Tasks tab's core agent acts through the act port.
+ *
+ * The Tasks tab's core asks about a task's coding agents, through the act
+ * port as a window calls them: only a panel of this build's own renderer
+ * asks; the voice and call windows, and a frame this build does not trust,
+ * are refused in each kind's own words before the host is asked or anything
+ * noted; a panel's ask reaches the host with its payload as the panel sent
+ * it, and what the host answers is noted on its way, as it was on `app:act`;
+ * and a host that fails answers the kind's own sentence.
+ */
+
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import {
@@ -25,16 +37,6 @@ import {
   type IssueProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
-
-/**
- * The Tasks tab's core asks about a task's coding agents, through the act
- * port as a window calls them: only a panel of this build's own renderer
- * asks; the voice and call windows, and a frame this build does not trust,
- * are refused in each kind's own words before the host is asked or anything
- * noted; a panel's ask reaches the host with its payload as the panel sent
- * it, and what the host answers is noted on its way, as it was on `app:act`;
- * and a host that fails answers the kind's own sentence.
- */
 
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");

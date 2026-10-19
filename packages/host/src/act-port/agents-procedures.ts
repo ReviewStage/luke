@@ -1,3 +1,16 @@
+/**
+ * agents-procedures.ts -- the Tasks tab's core asks of the host about a task's coding agents.
+ *
+ * The one check these procedures make is who asked, as for every task act:
+ * only a panel draws a task's agents, so every one refuses the takeover and
+ * the hidden voice window, in its own sentence. What the service answers
+ * comes back as the panel's own answer; on its way it is noted by the
+ * notices (`@luke/host/agent-notices`), which hold where each agent stands
+ * so an end the panel is not looking at is still announced, and which
+ * agent's tab, task's Inbox, and Chat the panel shows, so an item it is
+ * looking at is not. Nothing else is held here.
+ */
+
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -26,18 +39,7 @@ import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 
-/**
- * agents-procedures.ts -- the Tasks tab's core asks of the host about a task's coding agents.
- *
- * The one check these procedures make is who asked, as for every task act:
- * only a panel draws a task's agents, so every one refuses the takeover and
- * the hidden voice window, in its own sentence. What the service answers
- * comes back as the panel's own answer; on its way it is noted by the
- * notices (`@luke/host/agent-notices`), which hold where each agent stands
- * so an end the panel is not looking at is still announced, and which
- * agent's tab, task's Inbox, and Chat the panel shows, so an item it is
- * looking at is not. Nothing else is held here.
- */
+/** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
   host: {
     codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
