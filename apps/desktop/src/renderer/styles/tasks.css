@@ -6086,6 +6086,7 @@ button.picture-frame {
 
 .comment-quote-link:hover {
   color: var(--luke-color-text);
+}
 
 /* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
    the line that opens the agent, a toggle at its end, and the words whole
