@@ -16,6 +16,7 @@ import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
@@ -38,9 +39,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -1705,4 +1706,65 @@ test("Issues says the issues are being read until they answer, and a refused rea
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   assert.equal(asked.length, 2, "Retry reads the issues again");
+});
+
+test("an issue chosen over a peek filling the Issues list puts the peek away before opening the issue's page, so going back shows the list", async () => {
+  issuesAnswer(() =>
+    Promise.resolve({
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
+    }),
+  );
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const done: string[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    workspace: ACME,
+    sidePanel: {
+      ...base.sidePanel,
+      open: true,
+      fullScreen: true,
+      onToggleFullScreen: () => done.push("full screen left"),
+    },
+    issuesView: {
+      ...base.issuesView,
+      open: true,
+      peeked: acmeIssue(7, "", ISSUE_STATUS.TODO).id,
+      onPeek: (issueId) => done.push(`peek ${issueId ?? "put away"}`),
+      onOpen: () => done.push("issue opened"),
+    },
+  });
+  await paletteUnderState(tasks);
+  await settle();
+  type("login redirect");
+  key({ key: "Enter", code: "Enter" });
+  await settle();
+
+  assert.deepEqual(done, ["full screen left", "peek put away", "issue opened"]);
+});
+
+test("with the Issues filter chosen, Issues turning off shows All again, which finds the rest", async () => {
+  issuesAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [] } }));
+  let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.ISSUES), {})),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      deliver = listener;
+      return () => undefined;
+    },
+  });
+  await paletteUnderState(tasksControl({ workspace: ACME }));
+  chooseFilter("Issues");
+  assert.equal(chosenFilter(), "Issues");
+
+  act(() => deliver(stateWith({}, {})));
+  await settle();
+  type("toggle sidebar");
+
+  assert.equal(chosenFilter(), "All");
+  assert.ok(
+    rows().some((row) => row.startsWith("Toggle sidebar")),
+    "All finds the command",
+  );
 });

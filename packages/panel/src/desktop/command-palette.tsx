@@ -1096,7 +1096,9 @@ export function CommandPalette({
     ? PALETTE_FILTERS
     : PALETTE_FILTERS.filter((each) => each !== PALETTE_FILTER.ISSUES);
   if (open && !available) setOpen(false);
-  const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
+  const [chosenFilter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
+  // The filter shown: the one chosen, or All where its chip is gone, as Issues' is once their experiment turns off.
+  const filter = filters.includes(chosenFilter) ? chosenFilter : PALETTE_FILTER.ALL;
   const [query, setQuery] = useState("");
   // The row chosen, by its place in the list, which a new filter puts back on the first.
   const [selected, setSelected] = useState(FIRST_ROW);
@@ -1272,11 +1274,7 @@ export function CommandPalette({
       tasks.signedIn ? taskRows(tasks, members, (id) => onTasks(() => tasks.onSelect(id))) : [],
     ],
     [PALETTE_FILTER.ISSUES]: () => [
-      issuesAsked
-        ? issueRows(issues.read, tasks.workspace?.name ?? "", (issueId) =>
-            onTasks(() => tasks.issuesView.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId })),
-          )
-        : [],
+      issuesAsked ? issueRows(issues.read, tasks.workspace?.name ?? "", openIssue) : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
@@ -1298,6 +1296,18 @@ export function CommandPalette({
       settingRows(settings.rows, land),
     ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
+  // Note that an issue opens on its page as the Issues page's own openPage
+  // does it: a peek standing beside the list is put away, filling the window
+  // or not, so going back shows the list rather than the old peek.
+  const openIssue = (issueId: string) =>
+    onTasks(() => {
+      const { issuesView, sidePanel } = tasks;
+      if (issuesView.open) {
+        if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+        issuesView.onPeek(undefined);
+      }
+      issuesView.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId });
+    });
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
