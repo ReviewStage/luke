@@ -9,6 +9,7 @@ import signIn from "@luke/panel/styles/sign-in.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
 import tooltip from "@luke/panel/styles/tooltip.css?raw";
 import ui from "@luke/ui/styles.css?inline";
+import tokens from "@luke/ui/tokens.css?inline";
 
 /**
  * container-width.ts -- the panel's stylesheets as containers of given widths, on a given kind of device, read them, for jsdom, which lays nothing out and answers no container, media, or layer rule.
@@ -29,8 +30,11 @@ import ui from "@luke/ui/styles.css?inline";
  * pointer) where it does not. Every other media query is left for jsdom to
  * drop.
  *
- * The shared components' sheet (`@luke/ui/styles.css`) is laid where the
- * desktop's `index.css` imports it, and each `@layer` block's rules, which
+ * The shared tokens (`@luke/ui/tokens.css`) are laid first, so a root
+ * wearing a profile and a density reads its roles, and a query that rules
+ * a coarse pointer out (`not all and (pointer: coarse)`) is resolved as its
+ * opposite. The shared components' sheet (`@luke/ui/styles.css`) is laid
+ * where the desktop's `index.css` imports it, and each `@layer` block's rules, which
  * jsdom would drop, are laid ahead of every unlayered rule, layer by layer
  * in the order the layers first appear, as the cascade orders them. Note
  * that jsdom still weighs a selector's specificity across layers, which the
@@ -39,8 +43,9 @@ import ui from "@luke/ui/styles.css?inline";
  * `shown` reads up the element's ancestors.
  */
 
-/** The panel's stylesheets and the shared components' beneath them, in the order the desktop's `index.css` imports them. */
+/** The shared tokens, the panel's stylesheets, and the shared components' beneath them, in the order the desktop's `index.css` imports them. */
 const SHEETS = [
+  tokens,
   settings,
   base,
   ui,
@@ -60,7 +65,7 @@ const SHEETS = [
  * an input-type media query, or a named layer.
  */
 const AT_RULE =
-  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media \((hover|pointer): ([a-z]+)\) \{|@layer ([a-z-]+) \{/g;
+  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media (not all and )?\((hover|pointer): ([a-z]+)\) \{|@layer ([a-z-]+) \{/g;
 
 /** What each device answers the input-type features: on a touch screen nothing hovers and the pointer is a finger; a mouse hovers, finely. */
 const DEVICE = {
@@ -106,11 +111,12 @@ function widthHolds(width: number, comparison: string, length: number): boolean 
 
 /** Whether a container or media query matched by `AT_RULE` holds for the layout given. */
 function holds(query: RegExpExecArray, resolution: Resolution): boolean {
-  const [, name, word, wordLength, sign, signLength, feature, value] = query;
+  const [, name, word, wordLength, sign, signLength, negated, feature, value] = query;
   const { widths, layout } = resolution;
   if (feature !== undefined) {
     const answers = Object.entries(layout.touch === true ? DEVICE.TOUCH : DEVICE.MOUSE);
-    return answers.some(([asked, answer]) => asked === feature && answer === value);
+    const answered = answers.some(([asked, answer]) => asked === feature && answer === value);
+    return negated === undefined ? answered : !answered;
   }
   const width = name === undefined ? layout.unnamed : widths[name];
   return (
@@ -126,7 +132,7 @@ function resolvedAt(css: string, resolution: Resolution): string {
   for (let rule = rules.exec(css); rule !== null; rule = rules.exec(css)) {
     const open = rule.index + rule[0].length;
     const end = blockEnd(css, open);
-    const layer = rule[8];
+    const layer = rule[9];
     resolved += css.slice(from, rule.index);
     if (layer !== undefined) {
       const gathered = resolution.layers.get(layer) ?? [];

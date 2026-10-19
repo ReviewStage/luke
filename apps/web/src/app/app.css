@@ -3,8 +3,10 @@
    cascade the panel was written against is the same in a tab. The site's own
    `styles.css` is not imported: it brings Tailwind's preflight, a second reset
    over base.css's that would restyle every element the panel draws. */
-/* The shared tokens first, keyed on the root's `data-luke-profile` and
-   `data-luke-theme` (app.html), so every sheet below reads them. */
+/* The shared tokens first, keyed on the root's `data-luke-profile`,
+   `data-luke-theme`, and `data-luke-density` (app.html), so every sheet below
+   reads them. The root asks for compact, a mouse's density; on a coarse
+   pointer the site's full roles stand instead (`profiles.css`). */
 @import "@luke/ui/tokens.css";
 /* The web profile's three faces (`@luke/ui`'s `tokens/profiles.css`), as the
    site's `styles.css` declares them. */

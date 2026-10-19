@@ -77,7 +77,8 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * the ring that shows, once a step has ended, how full the agent's model's
  * context is and opens what fills it (`agent-context.tsx`), the
  * microphone, and the round button. The box takes a message to the agent:
- * Enter sends it, Shift+Enter is a new line, and Escape leaves the box; the
+ * Enter sends it, Shift+Enter is a new line (on a coarse pointer Enter is,
+ * and the round Send sends: `composer-editor.ts`), and Escape leaves the box; the
  * box is an editor (`composer-field.tsx`) that holds plain words and a
  * chosen skill's chip, and the message is its words as a string. A
  * message sent while a turn runs steers it, so the agent sees it at its

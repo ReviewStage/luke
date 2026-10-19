@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ChatComposer } from "../tasks/chat-composer.js";
@@ -56,6 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -545,7 +546,8 @@ test("a # at the start of a word offers the channels, and the one chosen is writ
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
 });
 
-test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+/** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */
+async function plainChat() {
   const sent: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -577,15 +579,47 @@ test("where the editor's bundle could not be loaded, the box is a plain field th
     'textarea[aria-label="Message #general"]',
   );
   assert.ok(field, "the plain field stands in");
+  return { container, field, sent };
+}
+
+/** Words written into the plain field, as typing them would leave it. */
+function writeInto(field: HTMLTextAreaElement, words: string): void {
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
-    setValue?.call(field, "@agent-1 ship it");
+    setValue?.call(field, words);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+}
+
+/** A key pressed in the plain field, answering whether its own action was let through. */
+function pressInField(field: HTMLTextAreaElement, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => field.dispatchEvent(event));
+  return !event.defaultPrevented;
+}
+
+test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+  const { container, field, sent } = await plainChat();
+  writeInto(field, "@agent-1 ship it");
+  pressInField(field, { key: "Enter" });
   await settle();
   assert.deepEqual(sent, ["@agent-1 ship it"]);
+  assert.equal(field.getAttribute("enterkeyhint"), "send");
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+});
+
+test("on a coarse pointer the plain field's Enter is a new line, its return key says so, and ⌘+Enter posts", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const { field, sent } = await plainChat();
+  assert.equal(field.getAttribute("enterkeyhint"), "enter");
+  writeInto(field, "ship it");
+  assert.equal(pressInField(field, { key: "Enter" }), true, "the field types its new line");
+  await settle();
+  assert.deepEqual(sent, []);
+
+  pressInField(field, { key: "Enter", metaKey: true });
+  await settle();
+  assert.deepEqual(sent, ["ship it"]);
 });
 
 test("in a listed workspace, an agent chosen from the @ list is written as its chip, sent as its link, and the message names it", async () => {

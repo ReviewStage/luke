@@ -5947,6 +5947,24 @@ polygon.factory-campus-edge[data-edge="selected"] {
   background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
 }
 
+/* A finger takes an edge across both columns' gutters, centred on the strip
+   it draws, which keeps its width and its place. Note that the edge stops at
+   the gutters rather than reaching a finger's full width, because past them
+   it would stand over the rows and controls either column holds there, and
+   a press on one would start a drag instead. */
+@media (pointer: coarse) {
+  .side-panel-resize::before,
+  .sidebar-resize::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: calc(2 * var(--column-inset));
+    transform: translateX(-50%);
+    content: "";
+  }
+}
+
 /* The panel's top row, level with the plan's toolbar and, like it, the
    window's drag handle wherever no control stands. It runs to the window's
    right edge, so its full-screen button stops short of the toggle there. */
@@ -6527,6 +6545,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .tab:hover .tab-close,
 .tab[data-selected="true"] .tab-close {
   opacity: 1;
+}
+
+/* A close takes a finger's press up and down alone on a coarse pointer,
+   never sideways, because beside it stand the words it would close, and a
+   tap meant for a tab's label that lands near its end must not close it:
+   the tab's ×, and a toast's (`.toast-dismiss`). Every other glyph button
+   keeps its press a finger's width across (`@luke/ui`'s `button.css`). */
+@media (pointer: coarse) {
+  .tab-close .luke-button::before,
+  .toast-dismiss .luke-button::before {
+    width: 100%;
+  }
 }
 
 /* A screen with no hover shows every tab's × at rest, over its label's

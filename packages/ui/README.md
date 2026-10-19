@@ -14,7 +14,7 @@ the tokens every component reads (`src/tokens/surface.ts`):
 | --- | --- | --- |
 | `data-luke-profile` | `PROFILE.DESKTOP`, `PROFILE.WEB` | Which app's role values: the window's density or the site's |
 | `data-luke-theme` | `THEME.DARK`, `THEME.LIGHT`, `THEME.SYSTEM` | Which palette; `system` follows the Mac and is the desktop's alone |
-| `data-luke-density` | `DENSITY.COMPACT` | The site's dashboard size, a step under a public page's; web only |
+| `data-luke-density` | `DENSITY.COMPACT` | The site's dashboard size, a step under a public page's; web only, and only with a fine pointer: on a coarse one the site's full roles stand |
 
 The desktop's window pages (`index.html`, `call.html`) and each web entry's
 `.html` set them on `<html>`,
@@ -54,8 +54,17 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-control-gap`, `--luke-icon-gap` | 8px | 8px | 8px |
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |
+  | `--luke-touch-target` | 44px | 44px | 44px |
   | `--luke-scroll-fade` | 26px | 24px | 24px |
   | `--luke-scroll-band` | 32px | 32px | 32px |
+
+  A compact site's roles hold only with a fine pointer: on a coarse one
+  (`@media not all and (pointer: coarse)` in `profiles.css`) the site's full
+  roles stand, so a finger meets 44px controls and fields never under 16px,
+  which iOS would zoom into. `--luke-touch-target` is the least a press is
+  taken across on a coarse pointer: a `Button` or `IconButton` drawn smaller
+  takes the press in a box that size centred on it (`button.css`), its glyph
+  and its place unchanged.
 
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`

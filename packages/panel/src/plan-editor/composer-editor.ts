@@ -24,6 +24,7 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
+import { enterKeyHint, enterSends } from "../enter-sends.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -76,7 +77,12 @@ import {
  * The bound is a transaction filter, so no keystroke, pick, or command
  * carries the words past it; a paste past it is cut to the room left, as a
  * textarea cuts one. Enter with no Shift is the owner's send, unless an
- * input method is composing, when the key is the input method's.
+ * input method is composing, when the key is the input method's. On a
+ * coarse pointer, a phone's or a tablet's, Enter is a new line, since its
+ * keyboard has no Shift+Enter to type one, and the visible Send beside the
+ * box sends; ⌘ or Ctrl with Enter, from a keyboard attached to it, still
+ * sends. The return key's label (`enterkeyhint`) says which Enter does
+ * (`../enter-sends.ts`).
  */
 
 /** The element class the editor wears beside the owner's. */
@@ -679,17 +685,19 @@ function pasted(
 /** How the box's editor hears keys, input, focus, a paste, a drop, and the clipboard. */
 function composerProps(state: ComposerState, props: ComposerEditorProps): EditorProps {
   return {
-    attributes: {
+    // Note that the attributes are read again on every update, so the return key's label follows a pointer that changes.
+    attributes: () => ({
       class: `${props.className} ${EDITOR_CLASS}`,
       role: "textbox",
       "aria-multiline": "true",
       "aria-label": props.label,
-    },
+      enterkeyhint: enterKeyHint(),
+    }),
     // Note that a key an input method is composing is the input method's alone, the owner's included.
     handleKeyDown: (view, event) => {
       if (composing(view, event)) return false;
       if (props.onKey(event) || removedChip(view, event.key)) return true;
-      if (event.key !== "Enter" || event.shiftKey) return false;
+      if (!enterSends(event)) return false;
       props.onEnter();
       return true;
     },

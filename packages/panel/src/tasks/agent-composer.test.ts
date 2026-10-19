@@ -256,6 +256,25 @@ test("an Enter an input method is composing sends nothing, and Shift+Enter is a 
   assert.deepEqual(box.sent, []);
 });
 
+test("on a coarse pointer Enter is a new line in the box, and Send sends the lines", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const box = await mounted();
+  typeInComposer(box.container, "Fix the bug");
+  pressInComposer(box.container, "Enter");
+  typeInComposer(box.container, "then ship it");
+  await settle();
+  assert.equal(box.sent.length, 0, "Enter sent nothing");
+
+  const send = box.button("Send");
+  assert.ok(send);
+  act(() => send.click());
+  await settle();
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Fix the bug\nthen ship it"],
+  );
+});
+
 test("the box leaves the caret where the developer is typing elsewhere, and Escape gives the caret up", async () => {
   const elsewhere = document.createElement("input");
   document.body.append(elsewhere);
@@ -379,10 +398,11 @@ function microphoneAnswer(request: Act): ActOutcome {
 test("a dictation's words land where the caret stood as it began, spaced from the words around them", async () => {
   stubMicrophone();
   // The strip draws still under reduced motion, which jsdom has no answer to.
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
-  });
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
   });
