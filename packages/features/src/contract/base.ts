@@ -1,7 +1,3 @@
-import "@orpc/experimental-effect/extensions/input-output";
-import { oc } from "@orpc/contract";
-import { HOSTED_ERRORS } from "./errors.js";
-
 /**
  * base.ts -- the builder every hosted procedure contract starts from.
  *
@@ -12,4 +8,9 @@ import { HOSTED_ERRORS } from "./errors.js";
  * is its handler's to say, and a refusal it answers is then always a
  * declared error rather than an unknown one.
  */
+
+import "@orpc/experimental-effect/extensions/input-output";
+import { oc } from "@orpc/contract";
+import { HOSTED_ERRORS } from "./errors.js";
+
 export const hostedProcedure = oc.errors(HOSTED_ERRORS);

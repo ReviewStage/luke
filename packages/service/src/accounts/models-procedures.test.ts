@@ -1,3 +1,15 @@
+/**
+ * models-procedures.test.ts -- the models route, byte for byte, over a real dialect.
+ *
+ * The models route, answered by the hosted oRPC router the way the web
+ * route answers it, over a real dialect: the signed-in desktop reads the offered models as
+ * the catalog holds them, but for Anthropic's fast versions where the key
+ * its agents run on, its own or Luke's, belongs to an organization never
+ * granted fast mode, and nobody else reads anything.
+ *
+ * Synthetic accounts, bearers, and sealed keys throughout.
+ */
+
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
@@ -19,16 +31,6 @@ import { hostedFetch } from "../orpc/handler.js";
 import { hostedRouter } from "../orpc/router.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
-
-/**
- * The models route, answered by the hosted oRPC router the way the web
- * route answers it, over a real dialect: the signed-in desktop reads the offered models as
- * the catalog holds them, but for Anthropic's fast versions where the key
- * its agents run on, its own or Luke's, belongs to an organization never
- * granted fast mode, and nobody else reads anything.
- *
- * Synthetic accounts, bearers, and sealed keys throughout.
- */
 
 const ORIGIN = "https://luke.test";
 const MODELS = "/api/models";

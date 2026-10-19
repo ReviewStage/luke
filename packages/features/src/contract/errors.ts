@@ -1,8 +1,3 @@
-import type { ErrorMapItem } from "@orpc/contract";
-import { Schema as EffectSchema } from "effect";
-import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
-import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
-
 /**
  * errors.ts -- the one map of refusals every hosted procedure declares, keyed by the slug the wire spells.
  *
@@ -17,6 +12,11 @@ import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
  * schema's encode, so what is written is the wire's own encoded value
  * (`packages/service/src/orpc/base.ts` says the same of outputs).
  */
+
+import type { ErrorMapItem } from "@orpc/contract";
+import { Schema as EffectSchema } from "effect";
+import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
+import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 
 /** A repository out of reach carries why, which the desktop reads for the failure's remedy. */
 const repositoryNotReachableData = EffectSchema.toStandardSchemaV1(

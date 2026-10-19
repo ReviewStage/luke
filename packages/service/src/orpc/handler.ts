@@ -1,14 +1,3 @@
-import { HTTP_METHOD } from "@luke/wire";
-import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { OpenAPIMatcher } from "@orpc/openapi/standard";
-import type { Router } from "@orpc/server";
-import type { Context } from "effect";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
-import type { WebServices } from "../runtime.js";
-import type { HostedContext } from "./base.js";
-import { encodeHostedError, HOSTED_ERROR_STATUS, hostedRefusalWrap } from "./errors.js";
-
 /**
  * handler.ts -- the hosted router behind oRPC's `OpenAPIHandler`, answering the bytes the old route groups answered.
  *
@@ -21,6 +10,17 @@ import { encodeHostedError, HOSTED_ERROR_STATUS, hostedRefusalWrap } from "./err
  * would answer it unmatched; and a defect is a bare 500 with no body, as the
  * platform's web handler answered one, where oRPC would describe it.
  */
+
+import { HTTP_METHOD } from "@luke/wire";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import { OpenAPIMatcher } from "@orpc/openapi/standard";
+import type { Router } from "@orpc/server";
+import type { Context } from "effect";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
+import type { WebServices } from "../runtime.js";
+import type { HostedContext } from "./base.js";
+import { encodeHostedError, HOSTED_ERROR_STATUS, hostedRefusalWrap } from "./errors.js";
 
 /** A hosted router, whatever its contract: every procedure taking the hosted context. */
 type HostedRouter = Router<HostedContext>;

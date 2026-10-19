@@ -1,10 +1,3 @@
-import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";
-import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
-import { ORPCError } from "@orpc/server";
-import { Effect, Schema } from "effect";
-import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS, type HostedRefusal } from "../http/http-effect.js";
-import type { HostedContext } from "./base.js";
-
 /**
  * errors.ts -- a hosted refusal as an oRPC error, and that error as the bytes the old groups answered.
  *
@@ -16,6 +9,13 @@ import type { HostedContext } from "./base.js";
  * `HOSTED_REFUSAL_STATUS` gives it, so a refusal answers exactly what
  * `hostedRefusalResponse` answered.
  */
+
+import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";
+import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
+import { ORPCError } from "@orpc/server";
+import { Effect, Schema } from "effect";
+import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS, type HostedRefusal } from "../http/http-effect.js";
+import type { HostedContext } from "./base.js";
 
 /** Every slug a refusal may carry, which is every slug that has a status. */
 const HOSTED_REFUSAL_SLUGS = Object.values(HOSTED_REFUSAL).map((refusal) => refusal.error);

@@ -1,3 +1,5 @@
+/** orpc-route.ts -- the route every path moved onto the hosted oRPC router answers through. */
+
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";

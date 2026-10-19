@@ -1,3 +1,15 @@
+/**
+ * orpc-route.test.ts -- the oRPC route as the platform reaches it, through rewrite and dispatcher.
+ *
+ * The oRPC route as the platform reaches it: a client's URL rewritten by a
+ * table the generator wrote, dispatched by the grouped function, and
+ * answered by the hosted router behind it. A parameterized path reaches its
+ * procedure only through a row marked oRPC, whose rewrite carries the whole
+ * public path; `/api/models` answers its refusals through the committed
+ * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
+ * holds the signed-in read, which needs a catalog and a database).
+ */
+
 import assert from "node:assert/strict";
 import { HOSTED_ERRORS } from "@luke/features/contract";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -13,16 +25,6 @@ import { apiRewrites, type SegmentRewrite } from "../server/function-rewrites.js
 import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
-
-/**
- * The oRPC route as the platform reaches it: a client's URL rewritten by a
- * table the generator wrote, dispatched by the grouped function, and
- * answered by the hosted router behind it. A parameterized path reaches its
- * procedure only through a row marked oRPC, whose rewrite carries the whole
- * public path; `/api/models` answers its refusals through the committed
- * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
- * holds the signed-in read, which needs a catalog and a database).
- */
 
 /** The web runtime's layer names a database; nothing here queries it, so it is never dialled (`route-effect.test.ts`). */
 const PLACEHOLDER_DATABASE_URL = "postgresql://orpc:route@127.0.0.1:5432/luke";
@@ -62,9 +64,10 @@ const partRoute = routeFromHostedFetch(
 
 /** The generated rewrite of one segment row, landed and dispatched to the test procedure. */
 async function partAnswer(row: SegmentRewrite): Promise<Response> {
+  const path = "/api/widgets/W1/parts/p2?view=full";
   return dispatchedBy(
     apiRewrites([GROUPED], [row]),
-    new Request(`${ORIGIN}/api/widgets/W1/parts/p2?view=full`),
+    new Request(`${ORIGIN}${path}`),
     new Map([[PART_ROUTE, partRoute]]),
   );
 }

@@ -1,3 +1,13 @@
+/**
+ * base.test.ts -- the caller middlewares, as a route answers through them.
+ *
+ * The caller middlewares as a route answers through them: the bearer-only
+ * caller is refused when only a cookie could name it, whatever the resolver
+ * would have said, and the session caller is answered with the headers that
+ * carry its session on, refused as unauthenticated where the auth service
+ * names nobody, and as unavailable where it could not answer.
+ */
+
 import "@orpc/experimental-effect/extensions/effect";
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
@@ -12,14 +22,6 @@ import type { SessionUserIdResolver, UserIdResolver } from "../http/http-effect.
 import type { WebServices } from "../runtime.js";
 import { bearerOnlyMiddleware, type HostedContext, sessionMiddleware } from "./base.js";
 import { hostedFetch } from "./handler.js";
-
-/**
- * The caller middlewares as a route answers through them: the bearer-only
- * caller is refused when only a cookie could name it, whatever the resolver
- * would have said, and the session caller is answered with the headers that
- * carry its session on, refused as unauthenticated where the auth service
- * names nobody, and as unavailable where it could not answer.
- */
 
 const ORIGIN = "https://luke.test";
 const BEARER_PATH = "/api/test/bearer";

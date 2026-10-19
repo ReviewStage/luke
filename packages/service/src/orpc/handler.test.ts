@@ -1,3 +1,16 @@
+/**
+ * handler.test.ts -- an oRPC procedure answers the bytes an old route group answered.
+ *
+ * The handler's proof that an oRPC procedure answers the bytes an old route
+ * group answered: the same request is put to a test-only router behind
+ * `hostedFetch` and to an `HttpRouter` group answering the same value the
+ * way the old groups did, and the two answers are compared whole: status,
+ * the two headers a caller reads, and the body's bytes. The cases are the
+ * ones a later resource copies: an answer whose wire schema transforms (a
+ * date the wire carries as text, an id folded to lower case), a refusal
+ * carrying more than its slug, an input its schema refuses, and a defect.
+ */
+
 import assert from "node:assert/strict";
 import "@orpc/experimental-effect/extensions/effect";
 import { it } from "@effect/vitest";
@@ -19,17 +32,6 @@ import {
 import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
 import { hostedFetch } from "./handler.js";
-
-/**
- * The handler's proof that an oRPC procedure answers the bytes an old route
- * group answered: the same request is put to a test-only router behind
- * `hostedFetch` and to an `HttpRouter` group answering the same value the
- * way the old groups did, and the two answers are compared whole: status,
- * the two headers a caller reads, and the body's bytes. The cases are the
- * ones a later resource copies: an answer whose wire schema transforms (a
- * date the wire carries as text, an id folded to lower case), a refusal
- * carrying more than its slug, an input its schema refuses, and a defect.
- */
 
 const ORIGIN = "https://luke.test";
 const WHEN_PATH = "/api/test/{id}/when";

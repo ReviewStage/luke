@@ -1,16 +1,3 @@
-import "@orpc/experimental-effect/extensions/effect";
-import { hostedContract } from "@luke/features/contract";
-import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
-import { implement } from "@orpc/server";
-import { Effect, Option } from "effect";
-import {
-  HOSTED_REFUSAL,
-  hostedCarriesBearer,
-  type SessionUserIdResolver,
-  type UserIdResolver,
-} from "../http/http-effect.js";
-import type { WebServices } from "../runtime.js";
-
 /**
  * base.ts -- the implementer every hosted procedure is built from, and the three ways a caller is resolved.
  *
@@ -35,6 +22,19 @@ import type { WebServices } from "../runtime.js";
  * string) and answers a 500. A refusal's extra fields follow the same
  * convention (`@luke/features/contract`'s `errors.ts`).
  */
+
+import "@orpc/experimental-effect/extensions/effect";
+import { hostedContract } from "@luke/features/contract";
+import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
+import { implement } from "@orpc/server";
+import { Effect, Option } from "effect";
+import {
+  HOSTED_REFUSAL,
+  hostedCarriesBearer,
+  type SessionUserIdResolver,
+  type UserIdResolver,
+} from "../http/http-effect.js";
+import type { WebServices } from "../runtime.js";
 
 /** What every hosted procedure is called with: the request, and the web runtime's services. */
 export interface HostedContext extends WithEffectContext<WebServices> {

@@ -34,7 +34,11 @@ export interface Rewrite {
  * rather than the flattened route key: its rewrite also carries that whole
  * path in `route-path`, which the dispatcher restores, as the auth
  * catch-all's does. Its query parameters are still written, and the router
- * reads a path parameter over a query parameter of the same name.
+ * reads a path parameter over a query parameter of the same name. Note that
+ * the path travels as a query value, so a segment the client escaped (`%2F`,
+ * `+`) reaches the router as the platform's query decoding leaves it, which
+ * is why an oRPC row's segments are ids and slugs, until one oRPC route
+ * matches the public paths itself and the rows go.
  */
 export interface SegmentRewrite {
   readonly src: string;
