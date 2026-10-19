@@ -14,6 +14,7 @@ import {
 import {
   INTEGRATION_ADD_ACCOUNT,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_QUERY,
   INTEGRATION_STATUS,
   type IntegrationAccount,
   type IntegrationConnectAnswer,
@@ -131,8 +132,10 @@ export interface IntegrationAccountTarget {
 /** The query a provider's procedure names the account in; nothing for the provider's first account. */
 function accountQuery(target: IntegrationAccountTarget = {}) {
   return {
-    ...(target.connection !== undefined ? { connection: target.connection } : undefined),
-    ...(target.add === true ? { add: INTEGRATION_ADD_ACCOUNT } : undefined),
+    ...(target.connection !== undefined
+      ? { [INTEGRATION_QUERY.CONNECTION]: target.connection }
+      : undefined),
+    ...(target.add === true ? { [INTEGRATION_QUERY.ADD]: INTEGRATION_ADD_ACCOUNT } : undefined),
   };
 }
 
@@ -206,7 +209,9 @@ export class HostedIntegrationsClient {
     return answerOf(
       askHosted(this.#hosted.integrations.tools, {
         provider,
-        ...(target?.connection !== undefined ? { connection: target.connection } : undefined),
+        ...(target?.connection !== undefined
+          ? { [INTEGRATION_QUERY.CONNECTION]: target.connection }
+          : undefined),
       }),
     );
   }
