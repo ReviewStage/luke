@@ -5,7 +5,6 @@ import {
   type DialogConfirm,
   FormField,
   Stack,
-  TextArea,
   TextField,
   useConfirmDialog,
 } from "@luke/ui";
@@ -52,7 +51,8 @@ function answered(refused: string | undefined): ActionResult {
 
 /** The change an answer writes: the channel opened, or only what was changed of the one edited. */
 function changeOf(ask: ChannelAsk, name: string, purpose: string): ChatChannelChange {
-  const said = purpose.trim();
+  // Note that a purpose is one line, so whatever breaks it is written as a space.
+  const said = purpose.replace(/\s+/gu, " ").trim();
   if (ask.kind === CHANNEL_ASK.NEW) {
     return { open: { name, ...(said === "" ? undefined : { purpose: said }) } };
   }
@@ -67,17 +67,28 @@ function changeOf(ask: ChannelAsk, name: string, purpose: string): ChatChannelCh
 }
 
 export function useChannelDialogs(
+  workspaceId: string | undefined,
   chat: ChatAnswer | undefined,
   onChannel: (change: ChatChannelChange) => Promise<string | undefined>,
   surfaceOpen: boolean,
 ): ChannelDialogs {
   const [ask, setAsk] = useState<ChannelAsk | undefined>(undefined);
+  // The workspace a question was asked in, which it goes with: another workspace listed puts it away.
+  const [askedIn, setAskedIn] = useState<string | undefined>(undefined);
+  /** Whether a question still stands: asked in the workspace shown, its channel still one of that chat's. */
+  const standing = (channel: ChatChannel | undefined) =>
+    askedIn === workspaceId &&
+    (channel === undefined || (chat?.channels.some((each) => each.id === channel.id) ?? false));
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [doomed, setDoomed] = useState<ChatChannel | undefined>(undefined);
   const field = useRef<HTMLInputElement | null>(null);
   const confirm: DialogConfirm = useConfirmDialog(
-    { subject: ask !== undefined, surfaceOpen },
+    {
+      subject:
+        ask !== undefined && standing(ask.kind === CHANNEL_ASK.EDIT ? ask.channel : undefined),
+      surfaceOpen,
+    },
     () => {
       if (ask === undefined || chat === undefined) {
         return Promise.resolve(answered(undefined));
@@ -89,10 +100,12 @@ export function useChannelDialogs(
       return onChannel(changeOf(ask, written, purpose)).then(answered);
     },
   );
-  const archive = useConfirmDialog({ subject: doomed !== undefined, surfaceOpen }, () =>
-    doomed === undefined
-      ? Promise.resolve(answered(undefined))
-      : onChannel({ edit: { channelId: doomed.id, archived: true } }).then(answered),
+  const archive = useConfirmDialog(
+    { subject: doomed !== undefined && standing(doomed), surfaceOpen },
+    () =>
+      doomed === undefined
+        ? Promise.resolve(answered(undefined))
+        : onChannel({ edit: { channelId: doomed.id, archived: true } }).then(answered),
   );
   // Note that a refused answer stands in the card until what was asked changes, which asks again.
   const typed = (set: (words: string) => void) => (words: string) => {
@@ -133,10 +146,9 @@ export function useChannelDialogs(
             description="Shown under its name, and to every agent that reads it."
           >
             {(control) => (
-              <TextArea
+              <TextField
                 field={control}
                 placeholder="What the channel is for, in a line"
-                rows={2}
                 maxLength={CHAT_BOUNDS.MAX_PURPOSE_CHARS}
                 value={purpose}
                 disabled={confirm.busy}
@@ -159,18 +171,21 @@ export function useChannelDialogs(
   );
   return {
     askNew: () => {
+      setAskedIn(workspaceId);
       setAsk({ kind: CHANNEL_ASK.NEW });
       setName("");
       setPurpose("");
       confirm.ask();
     },
     askEdit: (channel) => {
+      setAskedIn(workspaceId);
       setAsk({ kind: CHANNEL_ASK.EDIT, channel });
       setName(channel.name ?? "");
       setPurpose(channel.purpose ?? "");
       confirm.ask();
     },
     askArchive: (channel) => {
+      setAskedIn(workspaceId);
       setDoomed(channel);
       archive.ask();
     },

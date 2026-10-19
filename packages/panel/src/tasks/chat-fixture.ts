@@ -4,6 +4,7 @@ import {
   CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
+  CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
@@ -378,6 +379,7 @@ export type Staged = { readonly chat: FixtureChat } | { readonly refused: string
 const STAGED_REFUSAL = {
   NO_PLACE: "There is no such channel or member.",
   NAME_TAKEN: "Another channel already has that name.",
+  TOO_MANY_TOPICS: "The workspace keeps as many topic channels open as it may. Archive one first.",
   NO_MESSAGE: "That message is not in this chat.",
   STALE: "The ask changed since you read it.",
 } as const;
@@ -520,9 +522,14 @@ export function stagedChannel(read: FixtureChat, change: ChatChannelChange): Sta
   const taken = (name: string, except: string | undefined) =>
     name === GENERAL_CHANNEL ||
     chat.channels.some((channel) => channel.name === name && channel.id !== except);
+  // An archived topic frees its place under the bound, as the service counts them.
+  const full =
+    chat.channels.filter((channel) => channel.kind === CHANNEL_KIND.TOPIC && !channel.archived)
+      .length >= CHAT_BOUNDS.MAX_TOPIC_CHANNELS;
   if ("open" in change) {
     const { name, purpose } = change.open;
     if (taken(name, undefined)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+    if (full) return { refused: STAGED_REFUSAL.TOO_MANY_TOPICS };
     const opened: ChatChannel = {
       id: crypto.randomUUID(),
       kind: CHANNEL_KIND.TOPIC,
@@ -536,6 +543,9 @@ export function stagedChannel(read: FixtureChat, change: ChatChannelChange): Sta
   const standing = chat.channels.find((channel) => channel.id === channelId);
   if (standing?.kind !== CHANNEL_KIND.TOPIC) return { refused: STAGED_REFUSAL.NO_PLACE };
   if (name !== undefined && taken(name, channelId)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+  if (archived === false && standing.archived && full) {
+    return { refused: STAGED_REFUSAL.TOO_MANY_TOPICS };
+  }
   const { purpose: was, ...rest } = standing;
   const said = purpose === undefined ? was : (purpose ?? undefined);
   const edited: ChatChannel = {

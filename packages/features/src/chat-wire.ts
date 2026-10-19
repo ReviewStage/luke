@@ -305,8 +305,10 @@ const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
-/** What a topic channel says it is for: one line of words. */
-const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS);
+/** What a topic channel says it is for: one line of words, with no line break in it. */
+const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
+  EffectSchema.isPattern(/^[^\r\n]*$/u),
+);
 
 /** A member's handle, without its `@`. */
 export const chatHandleSchema = EffectSchema.String.check(

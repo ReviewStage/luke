@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
+import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK, CHAT_BOUNDS } from "@luke/features/chat-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -679,8 +679,7 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   const create = page.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
   assert.ok(create, "the rail offers a new channel");
   act(() => create.click());
-  const name = openDialog()?.querySelector<HTMLInputElement>("input");
-  const purpose = openDialog()?.querySelector<HTMLTextAreaElement>("textarea");
+  const [name, purpose] = [...(openDialog()?.querySelectorAll<HTMLInputElement>("input") ?? [])];
   assert.ok(name && purpose);
   fill(name, "general");
   act(() => dialogButton("Create channel").click());
@@ -712,4 +711,27 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
     ),
     false,
   );
+});
+
+test("a fixture chat opens no topic past the bound, and an archive frees a place for one", () => {
+  const staged = fixtureChat({ fixtureMode: true }, AT);
+  assert.ok(staged);
+  let held: FixtureChat = staged;
+  const open = (name: string) => {
+    const landed = stagedChannel(held, { open: { name } });
+    if ("chat" in landed) held = landed.chat;
+    return landed;
+  };
+  const topics = () =>
+    held.answer.channels.filter(
+      (channel) => channel.kind === CHANNEL_KIND.TOPIC && !channel.archived,
+    );
+  while (topics().length < CHAT_BOUNDS.MAX_TOPIC_CHANNELS) open(`topic-${topics().length}`);
+  assert.ok("refused" in open("one-too-many"));
+  const [first] = topics();
+  assert.ok(first);
+  const archived = stagedChannel(held, { edit: { channelId: first.id, archived: true } });
+  assert.ok("chat" in archived);
+  held = archived.chat;
+  assert.ok("chat" in open("one-more"));
 });

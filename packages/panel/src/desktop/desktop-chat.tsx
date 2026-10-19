@@ -134,7 +134,7 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  const dialogs = useChannelDialogs(read?.answer, view.onChannel, view.open);
+  const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
