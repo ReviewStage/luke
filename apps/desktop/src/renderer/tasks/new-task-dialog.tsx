@@ -1,8 +1,8 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { PICKER_ALIGN, Picker } from "@luke/panel/settings/picker-row";
 import { CHIP_WIDTH, DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { NewTaskComposer } from "./new-task-composer";
 import type { TasksControl } from "./use-tasks-tab";
 

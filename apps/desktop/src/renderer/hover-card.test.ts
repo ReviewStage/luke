@@ -9,6 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON } from "@luke/live";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
@@ -20,7 +21,6 @@ import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card";
 import { CallEnded } from "./tasks/call-card";
 import { SentWords, SkillFiles } from "./tasks/skill-chip";
-import type { SkillSource } from "./tasks/skill-picker";
 import { TurnCard } from "./tasks/turn-card";
 
 /**

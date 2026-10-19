@@ -2,6 +2,7 @@ import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/featu
 import { TERMINAL_LOAD_FAILED } from "@luke/panel/bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "@luke/panel/find-in-tab";
 import { Shortcut } from "@luke/panel/shortcut";
+import { useTerminalSession } from "@luke/panel/tasks/use-terminal-session";
 import { TERMINAL_FIND, type TerminalFind } from "@luke/panel/terminal/contract";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
@@ -11,7 +12,6 @@ import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";
 import { TerminalShells } from "./terminal-shells";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useTerminalSession } from "./use-terminal-session";
 import { WorkingTime } from "./working-time";
 
 /**

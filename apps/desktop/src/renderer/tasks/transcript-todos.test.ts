@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
+import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool";
 import { TranscriptTodos } from "./transcript-blocks";
 
 /**

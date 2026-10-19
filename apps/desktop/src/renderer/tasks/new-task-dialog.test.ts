@@ -12,6 +12,7 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -29,7 +30,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import { NewTaskDialog } from "./new-task-dialog";
-import type { RepositoryChooser } from "./repository-chip";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab";
 
 /**

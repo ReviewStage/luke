@@ -30,6 +30,7 @@ import {
   MessageContent,
 } from "@luke/panel/ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "@luke/panel/ai-elements/plan";
+import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useAutomation } from "@luke/panel/automation-directory";
 import { useCopyToast } from "@luke/panel/copy-feedback";
@@ -37,9 +38,13 @@ import { InlineRef } from "@luke/panel/inline-ref";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
+import { AttachedFileChips, messageFileChips } from "@luke/panel/tasks/attached-file-chips";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { PlanPictures } from "@luke/panel/tasks/plan-pictures";
 import { REPLY_SCOPE, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import { SentTime } from "@luke/panel/tasks/sent-time";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import { SkillCard } from "@luke/panel/tasks/skill-ref";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   UndeliveredLines,
@@ -76,7 +81,6 @@ import {
   AutomationCard,
   automationActor,
 } from "../actor-ref";
-import { TOOL_STATE } from "../ai-elements/tool";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -88,7 +92,6 @@ import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-task";
-import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
@@ -138,13 +141,10 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
-import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
-import type { SkillSource } from "./skill-picker";
-import { SkillCard } from "./skill-ref";
 import { useMentionDoors } from "./task-mentions";
 import {
   calledAgent,

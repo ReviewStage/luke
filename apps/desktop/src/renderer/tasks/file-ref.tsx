@@ -1,6 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { InlineRef } from "@luke/panel/inline-ref";
+import { FileTypeIcon } from "@luke/panel/tasks/file-type-icon";
 import {
   HoverCard,
   HoverCardHead,
@@ -10,7 +11,6 @@ import {
 } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
 import { shownWhereRead } from "./file-tab-model";
-import { FileTypeIcon } from "./file-type-icon";
 
 /**
  * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.

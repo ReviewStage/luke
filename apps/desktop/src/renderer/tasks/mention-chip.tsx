@@ -18,8 +18,10 @@ import {
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
 import { InlineRef } from "@luke/panel/inline-ref";
+import type { LinkDrawer } from "@luke/panel/markdown-message";
 import { usePerson } from "@luke/panel/member-directory";
 import type { HeadingsChange, MentionNode } from "@luke/panel/plan-editor/contract";
+import { FileTypeIcon } from "@luke/panel/tasks/file-type-icon";
 import { IssueMark } from "@luke/panel/tasks/issue-mark";
 import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import {
@@ -57,7 +59,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import type { LinkDrawer } from "../markdown-message";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -70,7 +71,6 @@ import {
 import { providerOf } from "./coding-agent-model";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
-import { FileTypeIcon } from "./file-type-icon";
 import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
 import { PullRequestMark } from "./pull-request-mark";

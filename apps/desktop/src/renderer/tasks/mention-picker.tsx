@@ -16,6 +16,7 @@ import { useAct } from "@luke/panel/act";
 import { type IntegrationToolsReads, useIntegrationTools } from "@luke/panel/integration-tools";
 import { useMemberDirectory } from "@luke/panel/member-directory";
 import type { ComposerTrigger, MentionNode } from "@luke/panel/plan-editor/contract";
+import { FileTypeIcon } from "@luke/panel/tasks/file-type-icon";
 import {
   ArrowLeftIcon,
   type ComboboxGroup,
@@ -45,7 +46,6 @@ import {
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { FileTypeIcon } from "./file-type-icon";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 import { NO_TASK } from "./task-mentions";

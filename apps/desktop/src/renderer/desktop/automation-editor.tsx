@@ -73,11 +73,19 @@ import {
   type RunChoices,
   useRunChoices,
 } from "@luke/panel/desktop/use-run-choices";
+import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
 import { FoldingButton } from "@luke/panel/folding-button";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { Picker, PickerRow } from "@luke/panel/settings/picker-row";
+import { SelectRow } from "@luke/panel/settings/select-row";
 import { SwitchRow } from "@luke/panel/settings/switch-row";
 import { Spinner } from "@luke/panel/spinner";
+import {
+  CHIP_PLACE,
+  RepositoryChip,
+  type RepositoryChooser,
+} from "@luke/panel/tasks/repository-chip";
 import { dayAndTimeText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import { Tooltip } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
@@ -126,13 +134,9 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { Picker, PickerRow } from "../settings/picker-row";
-import { SelectRow } from "../settings/select-row";
 import { AgentModelChip } from "../tasks/agent-model-chip";
 import { AgentServersButton } from "../tasks/agent-servers";
 import { ModelMenu } from "../tasks/model-menu";
-import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";

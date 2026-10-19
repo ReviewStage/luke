@@ -24,6 +24,8 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import type { ActHandle } from "@luke/panel/act";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { keptSkills } from "@luke/panel/tasks/repository-skills";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,8 +53,6 @@ import {
   withAgentRun,
 } from "./coding-agent-model";
 import { type AgentFork, continueFork, forkStart } from "./fork-model";
-import { keptSkills } from "./repository-skills";
-import type { SkillSource } from "./skill-picker";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";

@@ -200,8 +200,8 @@ const WIRE_NAME = {
     "packages/service/src/voice/live-exchange.ts",
     "packages/ui/src/tasks-model.ts",
     "packages/ui/src/call-card-model.test.ts",
-    "apps/desktop/src/renderer/tasks/task-board.tsx",
-    "apps/desktop/src/renderer/tasks/tasks-fixture.ts",
+    "packages/panel/src/tasks/task-board.tsx",
+    "packages/panel/src/tasks/tasks-fixture.ts",
   ],
   // The main tabs' kept choice, under the key it was first stored as.
   planClosed: ["packages/panel/src/tasks/use-main-tabs.ts"],

@@ -1,6 +1,8 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
+import { CaptionStrip, type CaptionStripProps } from "@luke/panel/caption-strip";
 import { READING_AUTOMATIONS } from "@luke/panel/desktop/automation-words";
 import { useColumnDock } from "@luke/panel/desktop/column-dock";
 import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
@@ -8,6 +10,7 @@ import { OfflineMark, useOffline } from "@luke/panel/desktop/offline-mark";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { useWindowTitle } from "@luke/panel/desktop/window-title";
+import { ExperimentTag } from "@luke/panel/experiment-marks";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { SignInGate } from "@luke/panel/sign-in-gate";
@@ -34,9 +37,6 @@ import {
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
-import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
-import { ExperimentTag } from "../experiment-marks";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";

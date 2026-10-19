@@ -17,13 +17,13 @@ import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { conversationOf, worker, workerCall, workTurn } from "@luke/panel/testing/task-work";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { conversationOf, worker, workerCall, workTurn } from "#testing/task-work";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopTasks } from "./desktop-tasks";
 
