@@ -754,7 +754,7 @@ button.att-x, button.use { appearance: none; border: 0; background: none; font: 
               <figure style="max-width:300px"><div class="shot dark"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Subject: ▁▁▁▁▁</h5><div class="rowx"><span class="ln"></span></div><span class="btn">Accept invite</span></div></div><figcaption>The reminder in Gmail</figcaption></figure>
               <div class="ask"><div class="ask-h"><span class="aq">Reminder settings</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div>
                 <div class="ask-fields">
-                  <div class="field"><span class="nm">Subject line</span><div class="tf sug" data-sug="Your invite to {workspace} expires soon"><span class="sug-v">Your invite to {workspace} expires soon</span><button type="button" class="use">Use <span class="kbd">⇥</span></button></div></div>
+                  <div class="field"><span class="nm">Subject line</span><div class="tf sug" data-required data-sug="Your invite to {workspace} expires soon"><span class="sug-v">Your invite to {workspace} expires soon</span><button type="button" class="use">Use <span class="kbd">⇥</span></button></div></div>
                   <div class="row"><div class="field"><span class="nm">Hours before expiry</span><div class="tf short sug" data-sug="24"><span class="sug-v">24</span><button type="button" class="use">Use <span class="kbd">⇥</span></button></div></div><div class="field"><span class="nm">Send from<span class="optl">optional</span></span><div class="pills" data-pills><span class="pill">team@<span class="rec">recommended</span></span><span class="pill">noreply@</span></div></div></div>
                   <div class="cbx" data-cbx><span class="ctl"></span>Also send to admins<span class="rec">recommended: no</span></div>
                 </div><div class="ask-btns" style="padding-top:0"><span class="btn sm sec" data-answer="Submit" data-tone="ok" data-verb="Submit" aria-disabled="true">Submit</span><span class="hint" style="color:var(--subtle);font-size:12px;align-self:center">Subject line is required</span></div></div></div>
@@ -1204,7 +1204,13 @@ for (const ask of all(".ask[data-steps]")) {
     const steps = all("li", ask).length;
     const done = all("li.on", ask).length;
     ask.querySelector("[data-count]").textContent = `${done} of ${steps}`;
-    ask.querySelector("[data-done]")?.setAttribute("aria-disabled", done === steps ? "false" : "true");
+    const markDone = ask.querySelector("[data-done]");
+    markDone?.setAttribute("aria-disabled", done === steps ? "false" : "true");
+    // Unticking a step takes back a Mark done already attached; Couldn't do it stands.
+    if (done !== steps && markDone?.classList.contains("picked")) {
+      markDone.classList.remove("picked");
+      attach(holderOf(ask), null);
+    }
   };
   for (const step of all("li", ask)) {
     step.addEventListener("click", () => {
@@ -1220,6 +1226,9 @@ for (const use of all(".tf.sug .use")) {
   use.addEventListener("click", () => {
     use.closest(".tf").classList.add("filled");
     const ask = use.closest(".ask");
+    // Submit waits on every required field, never on an optional one taken.
+    const missing = all(".tf.sug[data-required]:not(.filled)", ask).length > 0;
+    if (missing) return;
     ask.querySelector('[data-answer="Submit"]').setAttribute("aria-disabled", "false");
     const hint = ask.querySelector(".ask-btns .hint");
     if (hint) hint.textContent = "";
