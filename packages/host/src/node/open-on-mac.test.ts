@@ -741,6 +741,8 @@ test(
       worktreeFolder(earlierRoot, "acme/app", "luke/fix-relay"),
     ]);
     writeFileSync(path.join(earlierClone, "notes.txt"), "mine\n");
+    // Note that a name ending in a newline, beside the `.git` it imitates, is kept too.
+    writeFileSync(path.join(earlierClone, ".git\n"), "mine\n");
     const root = path.join(state, ".luke");
 
     run(
@@ -761,6 +763,7 @@ test(
     );
 
     assert.equal(readFileSync(path.join(earlierClone, "notes.txt"), "utf8"), "mine\n");
+    assert.equal(readFileSync(path.join(earlierClone, ".git\n"), "utf8"), "mine\n");
   },
   GIT_DEADLINE,
 );
