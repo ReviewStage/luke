@@ -1959,6 +1959,32 @@
   gap: var(--luke-space-8);
 }
 
+/* Write and Preview at the start of the field's head, and the formatting
+   presses at its end while the words are written, as GitHub's own box
+   draws them; a narrow field wraps the presses under the choice. */
+.markdown-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: stretch;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+}
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* The hairline between groups of presses. */
+.markdown-toolbar-rule {
+  width: 1px;
+  height: var(--luke-control-icon);
+  margin: 0 var(--luke-space-4);
+  background: var(--luke-color-border);
+}
+
 /* The box is the preview's frame, its words scrolling inside it in
    `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
    as the box that scrolled itself did. */
@@ -3294,6 +3320,13 @@ ol.transcript-list {
   white-space: nowrap;
 }
 
+/* A suggested change's header names it in words rather than as a language,
+   and its lines stand on the added lines' tint. */
+.transcript-code-suggestion {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+}
+
 .transcript-code-body {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
@@ -3310,6 +3343,10 @@ ol.transcript-list {
 
 .transcript-code-body > code {
   font: inherit;
+}
+
+.transcript-code[data-suggestion] .transcript-code-body {
+  background: var(--luke-color-complete-tint);
 }
 
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */

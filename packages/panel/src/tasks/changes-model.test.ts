@@ -12,6 +12,7 @@ import {
   commentLinesLabel,
   filterFiles,
   startsCollapsed,
+  suggestedLines,
   threadPreview,
   threadsOn,
   treeOrder,
@@ -335,4 +336,28 @@ test("no comment is offered where GitHub takes none: a line no row stands for, a
     commentLines(changed("logo.png", { patch: null, omitted: PATCH_OMITTED.BINARY }), picked(1, 1)),
     undefined,
   );
+});
+
+test("a suggestion starts from the head's own words of the lines a comment is on, and none is offered where either end counts on the old side", () => {
+  assert.equal(
+    suggestedLines(FILE_A, {
+      line: 5,
+      side: DIFF_SIDE.RIGHT,
+      startLine: 3,
+      startSide: DIFF_SIDE.RIGHT,
+    }),
+    "const c = 3;\nconst d = 5;\nconst e = 6;",
+  );
+  assert.equal(suggestedLines(FILE_A, { line: 6, side: DIFF_SIDE.RIGHT }), "const f = 7;");
+  assert.equal(suggestedLines(FILE_A, { line: 4, side: DIFF_SIDE.LEFT }), undefined);
+  assert.equal(
+    suggestedLines(FILE_A, {
+      line: 5,
+      side: DIFF_SIDE.RIGHT,
+      startLine: 4,
+      startSide: DIFF_SIDE.LEFT,
+    }),
+    undefined,
+  );
+  assert.equal(suggestedLines(FILE_A, { line: 9, side: DIFF_SIDE.RIGHT }), undefined);
 });

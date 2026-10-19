@@ -70,6 +70,7 @@ import {
   listPatch,
   STATUS_LETTER,
   STATUS_WORDS,
+  suggestedLines,
   threadsOn,
 } from "./changes-model.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
@@ -530,7 +531,9 @@ function useListCommenting(
   const file = picked === undefined ? undefined : files.find((each) => each.path === picked.path);
   const lines =
     file === undefined || picked === undefined ? undefined : commentLines(file, picked.selection);
-  if (picked === undefined || lines === undefined) return { open, note: undefined };
+  if (file === undefined || picked === undefined || lines === undefined) {
+    return { open, note: undefined };
+  }
   const { path } = picked;
   const content: DiffNote = {
     key: COMMENT_KEY,
@@ -545,6 +548,7 @@ function useListCommenting(
         pending={comments.pending}
         body={words.get(path) ?? ""}
         onBody={(body) => setWords((was) => new Map(was).set(path, body))}
+        suggestion={suggestedLines(file, lines)}
         onClose={() => setPicked(undefined)}
         onWritten={comments.onWritten}
         onRefresh={onRefresh}

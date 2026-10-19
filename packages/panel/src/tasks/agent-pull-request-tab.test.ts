@@ -3259,6 +3259,92 @@ test("the gutter's + opens a comment under the last line picked, however the pic
   assert.equal(again.querySelector(".line-comment-head")?.textContent, "Comment on line 12");
 });
 
+/** The comment's formatting press named `label`, where its toolbar offers one. */
+function formatPress(comment: HTMLElement, label: string): HTMLButtonElement | null {
+  return comment.querySelector<HTMLButtonElement>(`[role="toolbar"] button[aria-label="${label}"]`);
+}
+
+test("a comment on the head's lines offers a suggestion, which writes them as they read now for the member to change, previewed as a suggested change and sent as GitHub's suggestion block; one on the old side offers none", async () => {
+  await drawCommentable();
+  const comment = await pickLines({
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  writeLineComment(comment, "Say it once:");
+  const field =
+    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
+  field.setSelectionRange(field.value.length, field.value.length);
+
+  act(() =>
+    (formatPress(comment, "Add a suggestion") ?? assert.fail("a suggestion is offered")).click(),
+  );
+
+  const block = "```suggestion\n  once();\n  done();\n```";
+  assert.equal(field.value, `Say it once:\n${block}`);
+  assert.equal(
+    field.value.slice(field.selectionStart, field.selectionEnd),
+    "  once();\n  done();",
+    "the lines stand selected to be changed",
+  );
+  act(() =>
+    (
+      [...comment.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+        (each) => each.textContent === "Preview",
+      ) ?? assert.fail("the comment offers Preview")
+    ).click(),
+  );
+  assert.equal(comment.querySelector(".transcript-code-header")?.textContent, "Suggested change");
+  act(() => commentOffer(comment, "Add single comment").click());
+  await settle();
+  const sent = changes.at(-1)?.[1];
+  assert.ok(sent?.action === PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT, "the comment is sent");
+  assert.equal(sent.body, `Say it once:\n${block}`);
+
+  const old = await pickLines({
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  });
+  assert.equal(
+    formatPress(old, "Add a suggestion"),
+    null,
+    "the old side's lines take no suggestion",
+  );
+  assert.notEqual(formatPress(old, "Bold"), null, "it still formats its words");
+});
+
+test("the toolbar wraps the comment's selection, and ⌘B in its words does the same without the window's keymap hearing it", async () => {
+  await drawCommentable();
+  const comment = await pickLines({
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  writeLineComment(comment, "Why twice?");
+  const field =
+    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
+  const heard: string[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event.key);
+  window.addEventListener("keydown", hear);
+  try {
+    field.setSelectionRange(4, 9);
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "b", metaKey: true, bubbles: true }));
+    });
+    assert.equal(field.value, "Why **twice**?");
+    assert.deepEqual(heard, [], "the chord is the field's");
+
+    act(() => (formatPress(comment, "Italic") ?? assert.fail("italic is offered")).click());
+    assert.equal(field.value, "Why **_twice_**?");
+  } finally {
+    window.removeEventListener("keydown", hear);
+  }
+});
+
 test("a member holding a pending review adds a comment to it and nothing else, and Review counts its comments and offers to discard it, asking first", async () => {
   const { tab } = await drawCommentable({ comments: 2 });
 
