@@ -772,3 +772,29 @@ body {
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
+
+/* The width field sits with the toolbar's links, as narrow as its numbers. */
+.catalog-width label {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+}
+
+.catalog-width input {
+  inline-size: 10ch; /* four digits and the spinner, at either profile's size */
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  background: transparent;
+  color: var(--luke-color-text);
+  font: inherit;
+}
+
+/* An example framed at a chosen width: its edge drawn just outside the
+   frame, so what overflows the width shows past the line rather than
+   being clipped. */
+.catalog-frame {
+  outline: 1px dashed var(--luke-color-border);
+  outline-offset: var(--luke-space-4);
+}
