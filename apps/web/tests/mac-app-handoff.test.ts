@@ -19,7 +19,7 @@ import { type FakeService, fakeService } from "./support/fake-service";
 
 const ORIGIN = "http://localhost:3000";
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
-const PLAN_ADDRESS = `${ORIGIN}/acme/plan/${TASK_ID}`;
+const TASK_ADDRESS = `${ORIGIN}/acme/plan/${TASK_ID}`;
 
 /** What the browser was asked to open, after one load at the address given. */
 const loaded = (
@@ -44,7 +44,7 @@ const askedPreferences = (service: FakeService) =>
 
 it.effect("an account that chose the Mac app hands a plan's link to the app, on a Mac", () =>
   Effect.gen(function* () {
-    const opened = yield* loaded(choosing(LINK_OPEN.MAC_APP), PLAN_ADDRESS, LINK_PLATFORM.MAC);
+    const opened = yield* loaded(choosing(LINK_OPEN.MAC_APP), TASK_ADDRESS, LINK_PLATFORM.MAC);
     assert.equal(opened.length, 1);
     assert.match(opened[0] ?? "", /^tryluke:/u);
     assert.match(opened[0] ?? "", new RegExp(`/acme/plan/${TASK_ID}$`, "u"));
@@ -54,7 +54,7 @@ it.effect("an account that chose the Mac app hands a plan's link to the app, on 
 it.effect("an account that chose the browser stays on the web", () =>
   Effect.gen(function* () {
     assert.deepEqual(
-      yield* loaded(choosing(LINK_OPEN.BROWSER), PLAN_ADDRESS, LINK_PLATFORM.MAC),
+      yield* loaded(choosing(LINK_OPEN.BROWSER), TASK_ADDRESS, LINK_PLATFORM.MAC),
       [],
     );
   }),
@@ -63,7 +63,7 @@ it.effect("an account that chose the browser stays on the web", () =>
 it.effect("an account that never chose stays on the web", () =>
   Effect.gen(function* () {
     assert.deepEqual(
-      yield* loaded(fakeService({ signedIn: true }), PLAN_ADDRESS, LINK_PLATFORM.MAC),
+      yield* loaded(fakeService({ signedIn: true }), TASK_ADDRESS, LINK_PLATFORM.MAC),
       [],
     );
   }),
@@ -72,7 +72,7 @@ it.effect("an account that never chose stays on the web", () =>
 it.effect("a visitor signed out stays on the web", () =>
   Effect.gen(function* () {
     const service = fakeService({ signedIn: false, linkOpen: LINK_OPEN.MAC_APP });
-    assert.deepEqual(yield* loaded(service, PLAN_ADDRESS, LINK_PLATFORM.MAC), []);
+    assert.deepEqual(yield* loaded(service, TASK_ADDRESS, LINK_PLATFORM.MAC), []);
   }),
 );
 
@@ -81,7 +81,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       for (const [address, platform] of [
-        [PLAN_ADDRESS, LINK_PLATFORM.OTHER],
+        [TASK_ADDRESS, LINK_PLATFORM.OTHER],
         [`${ORIGIN}/app`, LINK_PLATFORM.MAC],
       ] as const) {
         const service = choosing(LINK_OPEN.MAC_APP);
