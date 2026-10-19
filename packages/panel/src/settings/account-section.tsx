@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -15,12 +16,58 @@ import {
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useGitHubConnection } from "../github-connect.js";
+import { useIntegrationStatuses } from "../integration-statuses.js";
 import { wholeWordsHint } from "../tooltip.js";
+import { GitHubDialog } from "./github-dialog.js";
 
 /**
- * Who is signed in, and the two ways out of that, at the head of the Account
- * page Settings opens on, and the one place either is offered. Both ways out ask
+ * The account's GitHub: the login where the connection names one, and
+ * Manage, which opens the dialog that picks the Luke GitHub App or the
+ * member's own personal access token (`github-dialog.tsx`) while GitHub is
+ * connected. Whether it is connected is the integrations' own read, which
+ * the dialog's Refresh reads again at once.
+ */
+function GitHubRow(): React.JSX.Element {
+  const statuses = useIntegrationStatuses();
+  const { connection } = useGitHubConnection();
+  const [managing, setManaging] = useState(false);
+  const connected = statuses.statusOf(INTEGRATION_PROVIDER.GITHUB) === INTEGRATION_STATUS.CONNECTED;
+  const login = connected ? (connection?.login ?? null) : null;
+  return (
+    <>
+      <SettingsRow
+        leading={
+          <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
+        }
+        label="GitHub"
+        description={login ?? (connected ? "Connected" : "Not connected")}
+      >
+        {() =>
+          connected ? (
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setManaging(true)}>
+              Manage
+            </Button>
+          ) : null
+        }
+      </SettingsRow>
+      {managing ? (
+        <GitHubDialog
+          connected={connected}
+          onRefresh={statuses.read}
+          onClose={() => setManaging(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Who is signed in, the GitHub the account reaches GitHub through, and the
+ * two ways out of being signed in, at the head of the Account page Settings
+ * opens on, and the one place either way out is offered. Both ways out ask
  * first in the confirm dialog: getting back in
  * takes the browser, and deleting erases the account at the service for
  * good. The dialog is modal, so only one
@@ -81,6 +128,7 @@ export function AccountSection({
           )}
         </SettingsRow>
       </div>
+      <GitHubRow />
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <SettingsRow label="Delete account">
           {() => (
