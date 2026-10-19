@@ -16,6 +16,8 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settin
 import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   IconButton,
   POPOVER_ALIGN,
   SETTINGS_ROW_DENSITY,
@@ -27,7 +29,6 @@ import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useOpenSettings } from "../open-settings.js";
 import { PopoverPanel } from "../popover-panel.js";
-import { Segmented } from "../segmented.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
@@ -124,7 +125,15 @@ function SegmentedRow<Value extends string>({
       adornment={changed ? <ChangedMark /> : null}
       description={detail}
     >
-      {() => <Segmented legend={label} options={options} value={value} onChange={onChange} />}
+      {() => (
+        <ChoiceBar
+          label={label}
+          items={options}
+          value={value}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          onChange={onChange}
+        />
+      )}
     </SettingsRow>
   );
 }

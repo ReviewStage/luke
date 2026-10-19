@@ -5,8 +5,13 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   CHIP_LOOK,
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
   Chip,
   ChipName,
+  ChoiceBar,
+  COUNT_TONE,
   DocumentIcon,
   EmptyState,
   IconButton,
@@ -20,11 +25,6 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
-  TAB_COUNT_TONE,
-  TABS_DENSITY,
-  TABS_INSET,
-  TabCount,
-  Tabs,
   useMenu,
 } from "@luke/ui";
 import {
@@ -934,34 +934,33 @@ function ShowTabs({
 }): React.JSX.Element {
   return (
     <div className="inbox-show-tabs">
-      <Tabs<InboxShow>
+      <ChoiceBar<InboxShow>
         label={SHOW_TABS}
-        tabs={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
+        items={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
           const count = counts[value];
           if (count === undefined) return [];
           return [
             {
               value,
               label,
-              count: (
-                <TabCount
-                  tone={
+              count: [
+                {
+                  text: String(count),
+                  tone:
                     value === INBOX_SHOW.NEEDS_YOU && count > 0
-                      ? TAB_COUNT_TONE.ATTENTION
-                      : TAB_COUNT_TONE.QUIET
-                  }
-                >
-                  {String(count)}
-                </TabCount>
-              ),
+                      ? COUNT_TONE.ATTENTION
+                      : COUNT_TONE.QUIET,
+                },
+              ],
             },
           ];
         })}
         value={show.show}
         onChange={show.onShow}
-        ids={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
-        inset={TABS_INSET.COLUMN}
-        density={TABS_DENSITY.COMPACT}
+        look={CHOICE_BAR_LOOK.FILL}
+        panels={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
+        inset={CHOICE_BAR_INSET.COLUMN}
+        size={CHOICE_BAR_SIZE.COMPACT}
       />
     </div>
   );
