@@ -8,11 +8,14 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
@@ -23,6 +26,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -484,6 +488,87 @@ test("once a repository is chosen, an @ offers its files, read through the works
   assert.equal(
     started[0]?.prompt,
     `Follow ${mentionMarkdown(file, "rollout-store.ts", { workspace: "workspace-acme", repository: "acme/web" })}`,
+  );
+});
+
+test("with Issues on, an @ offers the workspace's issues, and the one chosen is drawn as its chip and handed to the agent as its link", async () => {
+  const issue = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000007",
+    workspaceId: "workspace-acme",
+    number: 7,
+    title: "Token refresh fails",
+    description: "",
+    status: ISSUE_STATUS.TODO,
+    priority: ISSUE_PRIORITY.NONE,
+    creator: null,
+    archivedAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  fakeAppBridge({
+    act: (request: Act) =>
+      Promise.resolve(
+        request.kind === ACT_KIND.ISSUES_LIST
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: { issues: [issue] } }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      ),
+  });
+  handState({ [EXPERIMENT.ISSUES]: true });
+  const started: (NewTaskAgent | undefined)[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control = tasksControl();
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(NewTaskDialog, {
+          newTask: {
+            ...control.newTask,
+            open: true,
+            workspaceId: "workspace-acme",
+            workspaces: [
+              {
+                id: "workspace-acme",
+                name: "Acme",
+                slug: "acme",
+                role: WORKSPACE_ROLE.OWNER,
+                github: null,
+              },
+            ],
+            repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+            start: (...asked) => {
+              started.push(asked[4]?.handed);
+              return Promise.resolve(undefined);
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  await settle();
+
+  typeInComposer(document, "Fix @issues:refresh");
+  await settle();
+  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+    (row) => row.textContent,
+  );
+  pressInComposer(document, "Enter");
+  await settle();
+  const chips = [...composerEditor(document).querySelectorAll("[data-mention-ref]")];
+  pressInComposer(document, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["ACME-7 Token refresh fails"]);
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["ACME-7 Token refresh fails"],
+  );
+  assert.equal(
+    started[0]?.prompt,
+    `Fix [@ACME-7 Token refresh fails](https://tryluke.dev/acme/issue/${issue.id})`,
   );
 });
 
