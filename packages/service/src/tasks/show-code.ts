@@ -5,6 +5,7 @@ import {
   codeRefSchema,
   codeWindow,
   commitShaSchema,
+  isSecretFile,
   SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
@@ -29,7 +30,6 @@ import {
   type WireRecord,
 } from "../core.js";
 import {
-  isSecretFile,
   SHOWN_FILE_BOUNDS,
   SHOWN_FILE_REFUSAL,
   type ShownFileFacts,

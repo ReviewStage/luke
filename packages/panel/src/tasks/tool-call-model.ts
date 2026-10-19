@@ -764,6 +764,8 @@ function tasksToolView(
       return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
     case AGENT_TOOL.UPDATE_AGENT:
       return answeredAgentCall(CALL_KIND.UPDATE_AGENT, input, output);
+    case AGENT_TOOL.READ_TASK:
+      return answeredCall(CALL_KIND.READ_TASK, input, output, "task", "name");
     case AGENT_TOOL.CREATE_SECTION:
       return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
     case AGENT_TOOL.DELETE_SECTION:

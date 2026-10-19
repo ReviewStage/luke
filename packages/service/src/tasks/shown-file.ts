@@ -1,4 +1,4 @@
-import { SHOWN_CODE_BOUNDS } from "@luke/features/task-wire";
+import { isSecretFile, SHOWN_CODE_BOUNDS } from "@luke/features/task-wire";
 
 /**
  * shown-file.ts -- the one rule a file of the task's repository is put on the developer's screen by, whichever reader read it.
@@ -32,9 +32,6 @@ export const SHOWN_FILE_BOUNDS = {
   TEXT_PROBE_BYTES: 8192,
 } as const;
 
-/** A file kept secret, refused wherever it sits in the repository. */
-const SECRET_FILE = /(^|\/)\.env[^/]*$/u;
-
 /** What a reader found out about a file before any of its lines leaves. */
 export interface ShownFileFacts {
   readonly path: string;
@@ -43,11 +40,6 @@ export interface ShownFileFacts {
   readonly bytes: number;
   /** Whether a NUL stands among the file's first `TEXT_PROBE_BYTES` bytes. */
   readonly binary: boolean;
-}
-
-/** Whether a path names a secret file, which no reader reads. */
-export function isSecretFile(path: string): boolean {
-  return SECRET_FILE.test(path);
 }
 
 /** Whether bytes hold a NUL among the first the text probe looks at. */

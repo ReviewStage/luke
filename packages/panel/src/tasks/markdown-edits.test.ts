@@ -20,10 +20,17 @@ import {
 /** A field written as its words with `[` and `]` around what is selected, or `|` at a caret. */
 function field(written: string): FieldSelection {
   const caret = written.indexOf("|");
-  if (caret !== -1) return { value: written.replace("|", ""), start: caret, end: caret };
+  if (caret !== -1) {
+    return {
+      value: `${written.slice(0, caret)}${written.slice(caret + 1)}`,
+      start: caret,
+      end: caret,
+    };
+  }
   const start = written.indexOf("[");
-  const end = written.indexOf("]") - 1;
-  return { value: written.replace("[", "").replace("]", ""), start, end };
+  const close = written.indexOf("]", start);
+  const value = `${written.slice(0, start)}${written.slice(start + 1, close)}${written.slice(close + 1)}`;
+  return { value, start, end: close - 1 };
 }
 
 /** The field an edit leaves, written the same way. */
