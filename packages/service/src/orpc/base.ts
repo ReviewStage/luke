@@ -5,7 +5,7 @@ import { implement } from "@orpc/server";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
-  hostedBearerOnly,
+  hostedCarriesBearer,
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -63,10 +63,11 @@ export function accountMiddleware(resolveUserId: UserIdResolver) {
   });
 }
 
-/** The caller by its bearer alone: a request with no `Authorization`, one only a cookie could name, is refused (`hostedBearerOnly`). */
+/** The caller by its bearer alone: a request with no `Authorization`, one only a cookie could name, is refused (`hostedCarriesBearer`). */
 export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
   return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
-    yield* hostedBearerOnly(context.request);
+    if (!hostedCarriesBearer(context.request))
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     const account = yield* resolveUserId(context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return yield* next({ context: { userId: account.value } });
