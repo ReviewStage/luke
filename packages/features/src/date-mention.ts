@@ -81,12 +81,15 @@ const MONTHS = [
 /** How much of a weekday's or a month's name must be typed to be read as it. */
 const LEAST_NAME = 3;
 
-/** The words that join a range's two ends. */
-const RANGE_JOIN = /\s+(?:to|until|-|–|→)\s+|\s*→\s*/u;
+/** The most characters of words read for a date; an `@` word is six words at most, so any longer is no date. */
+const MAX_WORDS_CHARS = 80;
 
-/** A time of day, perhaps after `at`, at the end of the words: `3pm`, `9:30 am`, `15:00`, `noon`, `midnight`. */
+/** The words that join a range's two ends, in words whose spaces are single. */
+const RANGE_JOIN = / (?:to|until|-|–|→) | ?→ ?/u;
+
+/** A time of day, perhaps after `at`, ending words whose spaces are single: `3pm`, `9:30 am`, `15:00`, `noon`, `midnight`. */
 const TRAILING_TIME =
-  /^(.*?)\s*(?:\bat\s+)?\b(?:(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)|(\d{1,2}):(\d{2})|(noon|midnight))$/u;
+  /(?:^| )(?:at )?(?:(\d{1,2})(?::(\d{2}))? ?(am|pm|a|p)|(\d{1,2}):(\d{2})|(noon|midnight))$/u;
 
 /** What the chip and the label say between a range's ends. */
 const RANGE_ARROW = " → ";
@@ -296,7 +299,8 @@ function clockOf(hour: number, minute: number, half: string | undefined): Clock 
 function splitTime(words: string): { readonly rest: string; readonly clock: Clock } | undefined {
   const match = TRAILING_TIME.exec(words);
   if (match === null) return undefined;
-  const [, rest = "", hour12, minute12, half, hour24, minute24, named] = match;
+  const [, hour12, minute12, half, hour24, minute24, named] = match;
+  const rest = words.slice(0, match.index);
   const clock =
     named !== undefined
       ? { hour: named === "noon" ? 12 : 0, minute: 0 }
@@ -387,6 +391,7 @@ export function isDateRange(start: string, end: string): boolean {
  * days or both times, or whose end is not after its start.
  */
 export function dateOfWords(words: string, now: number, zone: string): DateSpan | undefined {
+  if (words.length > MAX_WORDS_CHARS) return undefined;
   const typed = words.trim().toLowerCase().replace(/,/gu, " ").replace(/\s+/gu, " ");
   const today = todayIn(now, zone);
   if (typed === "" || today === undefined) return undefined;

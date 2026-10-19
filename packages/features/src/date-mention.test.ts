@@ -199,3 +199,8 @@ test("a list narrowed to dates offers today, tomorrow, and next Monday", () => {
     { start: "2026-10-26" },
   ]);
 });
+
+test("words far longer than an @ word, spaces among them, name no date", () => {
+  assert.equal(dateOfWords(`fri${" ".repeat(10_000)}3pm`, NOW, LOS_ANGELES), undefined);
+  assert.equal(dateOfWords(`oct 20${" to".repeat(40)}`, NOW, LOS_ANGELES), undefined);
+});
