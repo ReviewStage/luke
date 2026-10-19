@@ -48,6 +48,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
 } from "@luke/host/client";
+import type { ActPortClient } from "@luke/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -76,6 +77,7 @@ import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
+import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
 import {
   notificationsOffered,
@@ -130,6 +132,8 @@ export interface WebHost {
   readonly bridge: AppBridge;
   /** The panel's end of its act port, for the acts that ride oRPC (`@luke/host/contract`). */
   readonly actPort: MessagePort;
+  /** What the panel's client of its act port is installed through: a workspace connect's press opens its tab. */
+  readonly actPortClient: (client: ActPortClient) => ActPortClient;
   readonly platform: AppPlatform;
 }
 
@@ -262,18 +266,19 @@ function platformRows(
   };
 }
 
-/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own. */
+/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
 function hostRowDependencies(
   operator: OperatorClient,
   state: AppStateStore,
   notices: HostActDependencies["codingAgents"]["notices"],
+  tabs: ConnectTabs,
 ): HostActDependencies {
   const host = operator.host;
   const nothing = () => undefined;
   return {
     tasks: {
       host,
-      openExternal: async (url) => openTab(url),
+      openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
       talkAboutTask: nothing,
@@ -294,6 +299,7 @@ function portDependencies(
   operator: OperatorClient,
   notices: AgentProceduresDependencies["notices"],
   reporter: string,
+  tabs: ConnectTabs,
 ): ActPortDependencies {
   const host = operator.host;
   const nothing = () => undefined;
@@ -324,7 +330,7 @@ function portDependencies(
       // A tab claims no global key, so no chord is ever held.
       stopChordHolder: () => undefined,
     },
-    workspaces: { host, openExternal: async (url) => openTab(url) },
+    workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
 }
 
@@ -391,11 +397,14 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       if (notificationsOffered()) {
         state.update({ notifications: { status: notificationsStatusNow() } });
       }
+      // An address the host opens goes to a connect's waiting tab, or opens as a link.
+      const tabs = connectTabs(tabBrowser(openTab));
+      yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
         nodes: assembly.nodes,
-        node: { openExternal: async (url) => openTab(url) },
+        node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
       // No voice window and no talk key stand beside the panel.
@@ -427,7 +436,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         sender: window,
         routerFor: () =>
           createHostActRouter(
-            hostRowDependencies(operator, state, notices),
+            hostRowDependencies(operator, state, notices, tabs),
             platformRows(http, doors),
           ),
         run,
@@ -439,12 +448,13 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, notices, crypto.randomUUID()),
+        portDependencies(operator, notices, crypto.randomUUID(), tabs),
         services,
       );
       return {
-        bridge: made.bridge,
+        bridge: tabs.bridge(made.bridge),
         actPort,
+        actPortClient: tabs.portClient,
         platform: webPlatform({ recordSurfaceEvent: count }),
         operator,
       };
@@ -478,6 +488,7 @@ export function composeWeb(
         Layer.succeed(WebHostTag, {
           bridge: web.bridge,
           actPort: web.actPort,
+          actPortClient: web.actPortClient,
           platform: web.platform,
         }),
         effectServiceLayer(web.operator, report),
