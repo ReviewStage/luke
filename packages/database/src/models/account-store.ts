@@ -1,4 +1,5 @@
 import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
+import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
@@ -40,6 +41,7 @@ type AccountSeamFailure = QueryError | Schema.SchemaError;
 
 /** One account's stored snapshot: the preferences every device shares, the coding agents' default, and when the preferences were last written. */
 export interface AccountPreferencesRow {
+  /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
   codingAgent: ModelChoice;
@@ -59,9 +61,12 @@ export interface AccountPreferencesRow {
  * menu's choice each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
+ * `preferences` is the shared part, whose `voice` it replaces; the link
+ * choice is a part of its own, which a build that predates it never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
+  linkOpen?: LinkOpen;
   codingAgent?: ModelChoice;
   experiments?: ExperimentChoices;
 }
@@ -131,6 +136,7 @@ export function deleteAccount(
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
   voice: accountPreference.voice,
+  linkOpen: accountPreference.linkOpen,
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
   codingAgentContextWindow: accountPreference.codingAgentContextWindow,
@@ -140,6 +146,7 @@ const PREFERENCE_COLUMNS = {
 
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
+  linkOpen: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
   codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
@@ -166,7 +173,11 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         }
       : CODING_AGENT_DEFAULT_CHOICE;
   return {
-    preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
+    preferences:
+      accountPreferencesFromStored({
+        ...(row.voice ? { voice: row.voice } : undefined),
+        ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
+      }) ?? {},
     codingAgent,
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
     experiments: experimentChoicesFrom(row.experiments ?? undefined) ?? NO_EXPERIMENTS,
@@ -227,6 +238,7 @@ export function chatEnabledFor(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
   codingAgent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
@@ -240,10 +252,11 @@ const PreferenceWriteSchema = Schema.Struct({
 
 type PreferenceWrite = typeof PreferenceWriteSchema.Type;
 
-/** The columns a write replaces: each part the write carries, the instant with the preferences part. */
+/** The columns a write replaces: each part the write carries, the instant with the shared preferences part alone. */
 function writtenColumns(write: PreferenceWrite) {
   return {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
+    ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
@@ -287,9 +300,9 @@ const upsertPreference = SqlSchema.findOne({
 /**
  * Writes each part the write carries over what stood — the preferences
  * whole, the coding-agent default whole, the experiments key by key — and answers the snapshot as it
- * now stands. The instant moves with the preferences part alone, so a
- * coding-agent choice never reads to a Mac as a settings snapshot it has
- * to take.
+ * now stands. The instant moves with the shared preferences part alone,
+ * so a coding-agent choice or a link choice never reads to a Mac as a
+ * settings snapshot it has to take.
  */
 export function writeAccountPreferences(
   userId: string,
@@ -301,6 +314,7 @@ export function writeAccountPreferences(
       userId,
       updatedAt,
       ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
+      ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
       ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { LINK_OPEN } from "@luke/features/link-open";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
@@ -13,6 +14,8 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  accountPreferencesFromParts,
+  accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
   THEME,
@@ -239,6 +242,7 @@ const SAMPLE_VALUE = {
   diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
   diffLigatures: true,
   diffMinimizeComments: true,
+  linkOpen: LINK_OPEN.MAC_APP,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -459,6 +463,36 @@ test("refuses to store an account when encrypted storage is unavailable", async 
   );
   assert.deepEqual(await store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
+});
+
+/** Preferences as they cross the wire: split into the snapshot's parts, through JSON, and joined again. */
+function throughSnapshot(preferences: AccountPreferences): AccountPreferences | undefined {
+  const wire = unparsedWire(JSON.parse(JSON.stringify(accountPreferencesParts(preferences))));
+  return isRecord(wire) ? accountPreferencesFromParts(wire) : undefined;
+}
+
+test("a link choice made on one Mac reaches another through the snapshot, beside the voice", async (t) => {
+  const chooser = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await chooser.setAccount(TEST_ACCOUNT);
+  await chooser.set("voice", LIVE_VOICE.MARIN);
+  await chooser.set("linkOpen", LINK_OPEN.MAC_APP);
+
+  const other = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await other.setAccount(TEST_ACCOUNT);
+  const baseline = await other.accountPreferences();
+  await other.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  const remote = throughSnapshot(await chooser.accountPreferences());
+  assert.ok(remote, "the snapshot's parts did not read back");
+  const applied = await other.applyAccountPreferences(remote, {
+    accountEmail: TEST_ACCOUNT.email,
+    preferences: baseline,
+  });
+
+  assert.ok(applied.changed.includes("linkOpen"));
+  assert.equal(await other.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await other.get("voice"), LIVE_VOICE.MARIN);
+  assert.equal(appSettingsView(await other.snapshot()).linkOpen, LINK_OPEN.MAC_APP);
 });
 
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {

@@ -20,7 +20,13 @@ import {
 import type { FastAccess } from "@luke/features/provider-key-wire";
 import { planRevisionSeqSchema } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
+import {
+  accountPreferencesFromWire,
+  accountPreferencesParts,
+  experimentChoicesFrom,
+  linkOpenFromWire,
+  NO_EXPERIMENTS,
+} from "@luke/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -63,10 +69,13 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * what each endpoint answers is a boolean or the caller's own stored value,
  * never a token or a session id.
  *
- * The preferences snapshot is three parts: the settings preferences the
- * desktop syncs, the coding agents' default model, effort, and context
- * window beside them, which Settings and the Start menu both write, and the
- * experiments the account turned on in Settings › Experimental. A write
+ * The preferences snapshot is four parts: the settings preferences the
+ * desktop syncs, where the account's Luke links open, a synced setting of
+ * its own part so a build that predates it neither refuses the snapshot nor
+ * clears the choice by writing the shared part back whole, the coding
+ * agents' default model, effort, and context window, which Settings and the
+ * Start menu both write, and the experiments the account turned on in
+ * Settings › Experimental. A write
  * carries any of them, a coding-agent choice is accepted only as the
  * catalog accepts it (`packages/service/src/providers/model-catalog.ts`), so what is stored is
  * always a choice a Start could run, and the experiments are a patch read
@@ -157,11 +166,15 @@ const ModelChoiceSchema = Schema.Struct({
 
 const readModelChoice = readEither(ModelChoiceSchema);
 
-/** The snapshot as the group answers it, the preferences' instant beside it where the preferences were ever written. */
+/**
+ * The snapshot as the group answers it, the preferences' instant beside it
+ * where the preferences were ever written, and the link choice as a part of
+ * its own where the account made one.
+ */
 function snapshotAnswer(row: AccountPreferencesRow | undefined) {
   const updatedAt = row?.updatedAt;
   return {
-    preferences: row?.preferences ?? {},
+    ...accountPreferencesParts(row?.preferences ?? {}),
     codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
@@ -288,9 +301,10 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * PUT: writes each part the body carries — `preferences`, a validated
- * settings snapshot that replaces the stored one whole, `codingAgent`, a
- * choice the catalog accepts, and `experiments`, each experiment's on or
- * off merged over what stood — and answers the snapshot as it then stands.
+ * settings snapshot that replaces the stored one whole, `linkOpen`, where
+ * the account's links open, `codingAgent`, a choice the catalog accepts,
+ * and `experiments`, each experiment's on or off merged over what stood —
+ * and answers the snapshot as it then stands.
  * A body carrying none of them asks for nothing and is refused.
  */
 const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWriteEndpoint")(
@@ -309,6 +323,7 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
     if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     if (
       body.preferences === undefined &&
+      body.linkOpen === undefined &&
       body.codingAgent === undefined &&
       body.experiments === undefined
     ) {
@@ -320,6 +335,11 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
       const preferences = accountPreferencesFromWire(body.preferences);
       if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       write.preferences = preferences;
+    }
+    if (body.linkOpen !== undefined) {
+      const linkOpen = linkOpenFromWire(body.linkOpen);
+      if (linkOpen === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      write.linkOpen = linkOpen;
     }
     if (body.codingAgent !== undefined) {
       write.codingAgent = yield* acceptedCodingAgent(seams, userId, body.codingAgent);

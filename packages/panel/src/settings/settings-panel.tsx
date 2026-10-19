@@ -18,6 +18,7 @@ import { AppearanceSection } from "./appearance-page.js";
 import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
+import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
 import { NotificationsSection } from "./notifications-section.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
@@ -135,11 +136,14 @@ export function SettingsPanel({
     <>
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
-          <AccountSection
-            account={account}
-            onSignOut={onSignOut}
-            onDeleteAccount={onDeleteAccount}
-          />
+          <>
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
+            />
+            {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+          </>
         ) : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
             Not signed in.
