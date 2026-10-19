@@ -5439,6 +5439,35 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       }),
   );
 
+  /**
+   * Held reads driven to their answers a poll at a time, each step taken
+   * only after a round trip to the test's database (`drivenWhileStarting`
+   * says why), with how long each was held on the test's clock when it was
+   * first seen answered. The bound is past any hold, so a read that never
+   * lets go fails the test rather than hanging it.
+   */
+  const drivenToAnswers = (fibers: readonly Fiber.Fiber<unknown, unknown>[]) =>
+    Effect.gen(function* () {
+      const startedAt = yield* Clock.currentTimeMillis;
+      const heldFor: (number | undefined)[] = fibers.map(() => undefined);
+      const bound =
+        2 * (Duration.toMillis(CODER.MESSAGES_HOLD) / Duration.toMillis(CODER.MESSAGES_POLL));
+      for (let step = 0; step < bound && heldFor.includes(undefined); step += 1) {
+        yield* Effect.orDie(
+          Database.use((db) => db.select({ id: conversations.id }).from(conversations).limit(1)),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        yield* Effect.yieldNow;
+        const now = yield* Clock.currentTimeMillis;
+        fibers.forEach((fiber, index) => {
+          if (heldFor[index] === undefined && fiber.pollUnsafe() !== undefined) {
+            heldFor[index] = now - startedAt;
+          }
+        });
+      }
+      return { heldFor };
+    });
+
   it.effect(
     "a held inbox read answers the moment an item lands past its cursor, a task's and the account's alike",
     () =>
@@ -5448,12 +5477,10 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const account = yield* waiting();
         const heldTask = yield* Effect.forkChild(read(task.cursor));
         const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
-        yield* TestClock.adjust(CODER.MESSAGES_POLL);
-        assert.equal(heldTask.pollUnsafe(), undefined, "nothing changed, so the read is held");
 
         const posted = yield* post(QUESTION);
         assert.ok(Result.isSuccess(posted));
-        yield* TestClock.adjust(CODER.ACCOUNT_INBOX_POLL);
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
         const movedTask = yield* Fiber.join(heldTask);
         const movedAccount = yield* Fiber.join(heldAccount);
 
@@ -5467,6 +5494,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [posted.success.id],
         );
         assert.notEqual(movedAccount.cursor, account.cursor);
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held < Duration.toMillis(CODER.MESSAGES_HOLD),
+            `answered on the change, before the hold ends (held ${held} ms)`,
+          );
+        }
       }),
   );
 
@@ -5480,12 +5513,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const account = yield* waiting();
         const heldTask = yield* Effect.forkChild(read(task.cursor));
         const heldAccount = yield* Effect.forkChild(waiting(account.cursor));
-        yield* TestClock.adjust(Duration.subtract(CODER.MESSAGES_HOLD, CODER.ACCOUNT_INBOX_POLL));
-        yield* Effect.yieldNow;
-        assert.equal(heldTask.pollUnsafe(), undefined, "held until the hold ends");
-        assert.equal(heldAccount.pollUnsafe(), undefined, "held until the hold ends");
 
-        yield* TestClock.adjust(CODER.ACCOUNT_INBOX_POLL);
+        const { heldFor } = yield* drivenToAnswers([heldTask, heldAccount]);
         const lapsedTask = yield* Fiber.join(heldTask);
         const lapsedAccount = yield* Fiber.join(heldAccount);
 
@@ -5494,6 +5523,12 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           [lapsedAccount.items, lapsedAccount.cursor],
           [account.items, account.cursor],
         );
+        for (const held of heldFor) {
+          assert.ok(
+            held !== undefined && held >= Duration.toMillis(CODER.MESSAGES_HOLD),
+            `held until the hold ends (held ${held} ms)`,
+          );
+        }
       }),
   );
 
