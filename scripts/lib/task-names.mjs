@@ -190,6 +190,13 @@ const WIRE_NAME = {
     "packages/host/src/agent-notices.test.ts",
     "packages/service/src/agents/coder-host/inbox-page.ts",
     "packages/service/src/agents/coder-host/inbox-store.test.ts",
+    // The same part followed over Neon Realtime: sealed, delivered, and decoded under its wire key.
+    "packages/features/src/live-wire.ts",
+    "packages/features/src/live-wire.test.ts",
+    "packages/host/src/account-inbox-follow.ts",
+    "packages/host/src/compose-coding-agents.test.ts",
+    "packages/service/src/inbox/inbox-store.ts",
+    "packages/service/src/live/live-app.ts",
   ],
   // The tasks list's agents with no task (`task-wire.ts`).
   planlessAgents: [

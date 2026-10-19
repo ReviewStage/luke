@@ -65,6 +65,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   INBOX_READ: "/api/inbox/read",
   /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime (GET): the address and one sealed statement per part
+   * of the account inbox, or `unavailable` where the deployment has no
+   * Realtime. `live-wire.ts` declares the answer.
+   */
+  LIVE_INBOX: "/api/live/inbox",
+  /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's

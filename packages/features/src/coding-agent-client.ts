@@ -15,11 +15,6 @@ import {
   callAnswered,
 } from "./account-call.js";
 import {
-  ACCOUNT_INBOX_ARCHIVED,
-  ACCOUNT_INBOX_QUERY,
-  accountInboxAnswerSchema,
-} from "./account-inbox-wire.js";
-import {
   CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
   type ChatWriteRequest,
@@ -27,7 +22,6 @@ import {
 } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
@@ -115,6 +109,7 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
+import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
@@ -859,22 +854,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
-  accountInbox(
-    after: string,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
-          [ACCOUNT_INBOX_QUERY.AFTER]: after,
-          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
-        })}`,
-      }),
-      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
@@ -917,6 +896,18 @@ export class HostedCodingAgentClient {
         }
         return readImage(answer.response);
       },
+    );
+  }
+
+  /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime: answered at once, never held. Unanswered for
+   * anything that went wrong, which the caller answers by asking again.
+   */
+  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
+      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
     );
   }
 
