@@ -103,6 +103,7 @@ import {
   useConversationFilters,
 } from "./conversation-filters.js";
 import { PierreDiff, useDiffLook } from "./file-diff.js";
+import type { TreeShown } from "./file-view.js";
 import type { PendingReview } from "./line-comment.js";
 import { blockedWords, MergeActions } from "./merge-box.js";
 import {
@@ -1641,7 +1642,7 @@ export function AgentPullRequestTab({
   /** The plan's repository, which the files' breadcrumbs name; none names the path plain. */
   repository: string | null;
   /** Whether the tree beside File tabs and the files is open, and its toggle. */
-  tree: { readonly open: boolean; readonly onToggle: () => void };
+  tree: TreeShown;
   view: PullRequestView;
   onView: (view: PullRequestView) => void;
 }): React.JSX.Element {

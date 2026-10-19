@@ -1,11 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { IconButton, SearchField } from "@luke/ui";
+import { cssCustomProperties, IconButton, SearchField } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
+import type { ResizableEdgeProps } from "../desktop/use-resizable-edge.js";
 import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract.js";
 import { Tooltip } from "../tooltip.js";
 import { entriesOf } from "./folder-listings.js";
@@ -99,6 +100,8 @@ export function FileTreePane({
   pane,
   float,
   leaving = false,
+  width,
+  edge,
 }: {
   /** The File tab's file, revealed in the tree. */
   file: string;
@@ -127,6 +130,10 @@ export function FileTreePane({
   float?: FloatingBox | undefined;
   /** Whether it is on its way out: drawn over the file's edge rather than beside it, and out of reach. */
   leaving?: boolean;
+  /** How wide it stands, as the panel keeps it for every tree; none stands at its default width. */
+  width?: number | undefined;
+  /** The edge on its left it is dragged wider or narrower by; none draws none. */
+  edge?: ResizableEdgeProps | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().fileTree);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -216,6 +223,9 @@ export function FileTreePane({
       aria-label={label}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
+      style={
+        width === undefined ? undefined : cssCustomProperties({ "--file-tree-width": `${width}px` })
+      }
       onPointerDown={float?.onPointerDown}
       onPointerLeave={float?.onPointerLeave}
       onKeyDown={(event) => {
@@ -229,6 +239,7 @@ export function FileTreePane({
         field.current?.select();
       }}
     >
+      {edge === undefined ? null : <div className="side-panel-resize" {...edge} />}
       <search className="file-tree-search">
         <TreeSearch
           field={field}

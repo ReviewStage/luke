@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   EVERYONES,
   INBOX_GROUPING,
@@ -36,7 +36,8 @@ import {
  * Everything where it was not, which is what that list then held; a fixture run draws no inbox, so it has nothing staged to
  * keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
- * keeps one for every plan.
+ * keeps one for every plan, and so does the tree beside every File and
+ * Changes tab, one width for them all.
  */
 
 /** Where the folds are kept in the renderer's storage. */
@@ -59,9 +60,21 @@ const STORAGE_KEY = {
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
+  FILE_TREE_WIDTH: "luke.fileTreeWidth",
 } as const;
 
 /** How wide an automation's Runs panel may stand, as the side panel is bounded. */
+/**
+ * How wide the tree beside a File or Changes tab may be dragged, in CSS
+ * pixels, and where it starts, as stage-cli's file picker is: wide enough
+ * for a nested name, never so wide that it takes the diff's room.
+ */
+export const FILE_TREE_WIDTH = {
+  MIN: 220,
+  MAX: 480,
+  DEFAULT: 264,
+} as const;
+
 export const RUNS_PANEL_WIDTH = {
   MIN: 280,
   MAX: 560,
@@ -404,6 +417,33 @@ export function useInboxListWidth(): InboxListWidth {
       writeKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, next);
     },
   };
+}
+
+/** How wide the tree beside File and Changes tabs stands, and the drag that asks for another width. */
+export interface FileTreeWidth {
+  /** Always within {@link FILE_TREE_WIDTH}. */
+  width: number;
+  /** Asks for a width; it is clamped to the bounds before it is kept. */
+  onResize: (width: number) => void;
+}
+
+/** A tree width held within its bounds, in whole pixels. */
+function clampTreeWidth(width: number): number {
+  return Math.min(FILE_TREE_WIDTH.MAX, Math.max(FILE_TREE_WIDTH.MIN, Math.round(width)));
+}
+
+/** The tree's width, the default until first dragged, and kept as it is. */
+export function useFileTreeWidth(): FileTreeWidth {
+  const [width, setWidth] = useState(() =>
+    clampTreeWidth(readKept(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth, FILE_TREE_WIDTH.DEFAULT)),
+  );
+  // Note that the drag's door is the same door across draws, so the tree the panel hands every tab is the same tree while nothing changed.
+  const onResize = useCallback((asked: number) => {
+    const next = clampTreeWidth(asked);
+    setWidth(next);
+    writeKept(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth, next);
+  }, []);
+  return { width, onResize };
 }
 
 /** A Runs panel width held within its bounds, in whole pixels. */
