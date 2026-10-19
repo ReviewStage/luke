@@ -88,10 +88,11 @@ test("a width typed and applied submits it with the rest of the view", () => {
   );
   assert.ok(apply);
   // jsdom cannot navigate, so the submission is read where the browser would send it, from the form's own data.
+  const form = apply.form;
+  assert.ok(form);
   let submitted: URLSearchParams | undefined;
-  apply.form?.addEventListener("submit", (event) => {
+  form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const form = event.target as HTMLFormElement;
     submitted = new URLSearchParams(
       [...new FormData(form)].map(([name, value]) => [name, String(value)]),
     );
@@ -101,5 +102,5 @@ test("a width typed and applied submits it with the rest of the view", () => {
   assert.equal(submitted?.get("example"), "badges");
   assert.equal(submitted?.get("profile"), "web");
   assert.equal(submitted?.get("theme"), "light");
-  assert.equal(apply.form?.method, "get");
+  assert.equal(form.method, "get");
 });
