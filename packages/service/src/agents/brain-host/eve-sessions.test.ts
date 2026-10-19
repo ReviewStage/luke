@@ -116,7 +116,27 @@ it.effect(
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
+      assert.equal(request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE), null);
       assert.deepEqual(request.body, { message: "hello", capabilities: { requestInput: false } });
+    }),
+);
+
+it.effect(
+  "a message naming its sender's time zone carries it as the header the door reads, opening and following up alike",
+  () =>
+    Effect.gen(function* () {
+      const accepted = { ok: true, sessionId: SESSION, status: "accepted" } as const;
+      const { seen, sessions } = answeringEach([
+        { status: 202, body: accepted },
+        { status: 202, body: { ...accepted, deliveryId: "delivery-1" } },
+      ]);
+      const zoned = { ...MESSAGE, timeZone: "Asia/Tokyo" };
+      yield* Effect.flatMap(sessions, (eve) => eve.open(zoned));
+      yield* Effect.flatMap(sessions, (eve) => eve.send(SESSION, zoned));
+      assert.deepEqual(
+        seen.map((request) => request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE)),
+        ["Asia/Tokyo", "Asia/Tokyo"],
+      );
     }),
 );
 

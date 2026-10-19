@@ -196,6 +196,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 36
+        },
+        "timeZone": {
+          "type": "string",
+          "maxLength": 64
         }
       },
       "required": [
@@ -220,6 +224,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "timeZone": {
+          "type": "string",
+          "maxLength": 64
         }
       },
       "required": [

@@ -77,6 +77,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         accountId: session.accountId,
         liveSessionId: session.sessionId,
         conversation: { userId: opened.ownerId, conversationId: opened.conversationId },
+        timeZone: session.timeZone,
         writer: deps.writer,
         eve: deps.eve(session.accountId),
         createId: deps.createId,
