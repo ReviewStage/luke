@@ -15,7 +15,9 @@
  * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
  * narrowed keeps the item it shows, as Material's list-detail layout does,
  * and one that splits again forgets that the list was asked for, so it
- * narrows onto its item again.
+ * narrows onto its item again. Whether the list was asked for is the
+ * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
+ * keeps its Inbox's, so its history can go back to the list.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -114,6 +116,18 @@ export function listHeadControl(list: ParentNode | null): HTMLElement | null {
   return list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null;
 }
 
+/** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */
+export interface InboxListing {
+  readonly asked: boolean;
+  readonly onAsk: (asked: boolean) => void;
+}
+
+/** Whether the list was asked for, held by the Inbox itself where its holder keeps none. */
+function useListing(kept: InboxListing | undefined): InboxListing {
+  const [asked, setAsked] = useState(false);
+  return kept ?? { asked, onAsk: setAsked };
+}
+
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
 function oneColumn(width: number, was: boolean): boolean {
   return width < (was ? INBOX_SPLIT.LEAVE : INBOX_SPLIT.ENTER);
@@ -140,11 +154,17 @@ function shownColumns(
  * row of the item a press opened from outside the list; a resize does so
  * only where it hid the column holding the keyboard, so the keyboard is
  * never left in what cannot be seen. Note that the keyboard is moved before
- * the window paints, while the hidden control still holds it.
+ * the window paints, while the hidden control still holds it. `kept` is
+ * whether the list was asked for where the holder keeps it.
  */
-export function useInboxColumns(chosen: string | undefined, backable: boolean): InboxColumns {
+export function useInboxColumns(
+  chosen: string | undefined,
+  backable: boolean,
+  kept?: InboxListing,
+): InboxColumns {
   const [single, setSingle] = useState(false);
-  const [listAsked, setListAsked] = useState(false);
+  const { asked: listAsked, onAsk: setListAsked } = useListing(kept);
+  const wasSingle = useRef(single);
   // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
@@ -162,8 +182,13 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // Note that an Inbox split again forgets the list was asked for, so narrowing it lands on its item.
-  if (!single && listAsked) setListAsked(false);
+  // Note that an Inbox split again forgets the list was asked for, so narrowing it lands on its
+  // item; only a split counts, since an Inbox not yet measured has never been one column.
+  useLayoutEffect(() => {
+    const split = wasSingle.current && !single;
+    wasSingle.current = single;
+    if (split && listAsked) setListAsked(false);
+  }, [single, listAsked, setListAsked]);
   const shown = shownColumns(single, chosen, listAsked, backable);
 
   useLayoutEffect(() => {
@@ -208,7 +233,8 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     onBack: back,
     onList: () => {
       pressed.current = true;
-      setListAsked(true);
+      // Note that a split Inbox shows its list already, so only one column asks for it.
+      if (single) setListAsked(true);
       setShowAlls((count) => count + 1);
     },
     rows,

@@ -452,7 +452,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     if (standIn !== undefined) choose(standIn);
   }, [standIn, choose]);
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
-  const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true);
+  // Note that the window keeps whether the list was asked for, so its history can go back to it.
+  const { listed, onListed } = view;
+  const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true, {
+    asked: listed,
+    onAsk: onListed,
+  });
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     choose(listed);

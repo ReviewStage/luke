@@ -59,7 +59,7 @@ import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { prefetchMarkdownHtmlParser } from "./markdown-html-parser.js";
-import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
+import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
@@ -335,9 +335,11 @@ export function App(): React.JSX.Element {
       ? {
           view: shownView,
           workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
+          listed: settingsPlace.listed,
         }
       : undefined,
     !accountGated,
+    room,
   );
   // A coding agent's notification clicked: the Tasks tab, on that agent,
   // its task's tab or its own page where it has no task. Read through refs,
@@ -508,8 +510,13 @@ export function App(): React.JSX.Element {
     onTabChange: changeTab,
     settingsView: shownView,
     onSettingsViewChange: chooseSettingsView,
+    settingsListed: settingsPlace.listed,
+    onSettingsList: settingsPlace.onList,
+    room,
     tasks,
   });
+  // The narrow screens' ways back to their lists go through the history, so the two never disagree.
+  const shellTasks = throughHistory(tasks, history.lists);
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
@@ -742,11 +749,14 @@ export function App(): React.JSX.Element {
                               }}
                               tab={tab}
                               onTabChange={changeTab}
-                              tasks={tasks}
+                              tasks={shellTasks}
                               history={history}
                               sidebar={sidebar}
                               room={room}
-                              settingsStep={settingsPlace}
+                              settingsStep={{
+                                listed: settingsPlace.listed,
+                                onList: history.lists.settings,
+                              }}
                               call={call}
                               captions={{
                                 caption,

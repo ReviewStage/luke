@@ -83,6 +83,12 @@ export interface OpenedSections {
 export interface HistorySpot {
   readonly revision: number | undefined;
   readonly opened: OpenedSections | undefined;
+  /**
+   * Whether its list stands rather than the version, which only a narrow
+   * room draws apart and only the window's history there records; a spot
+   * that says nothing opens on the version.
+   */
+  readonly listed?: boolean;
 }
 
 /** What the version history draws, and its presses. */
@@ -110,6 +116,8 @@ export interface PlanHistoryControl {
   listed: boolean;
   /** Goes back from the version chosen to the list. */
   onList: () => void;
+  /** Stands the history open where `spot` says, as the window's history goes back or forward within it. */
+  onStand: (spot: HistorySpot) => void;
   onRetry: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
@@ -163,7 +171,29 @@ function openedOn(
     read: { kind: HISTORY_READ.READING },
     readOf: undefined,
     asked: 1,
-    listed: seek === undefined && returnTo === undefined,
+    listed: returnTo?.listed ?? (seek === undefined && returnTo === undefined),
+  };
+}
+
+/**
+ * The version history standing open on `held` moved to `spot`: its list kept
+ * as it was where the spot is the list, and the version and sections the spot
+ * names otherwise, read again only where the version is another.
+ */
+function stoodAt(held: HeldVersion, spot: HistorySpot): HeldVersion {
+  if (spot.listed === true) return { ...held, listed: true };
+  if (held.seeking === undefined && held.seq === spot.revision) {
+    return { ...held, opened: spot.opened, listed: false };
+  }
+  return {
+    ...held,
+    seq: spot.revision,
+    seeking: undefined,
+    opened: spot.opened,
+    read: { kind: HISTORY_READ.READING },
+    readOf: undefined,
+    asked: held.asked + 1,
+    listed: false,
   };
 }
 
@@ -373,6 +403,7 @@ export function usePlanHistory(input: {
   const onCloseSections = () =>
     setVersion((held) => held && { ...held, opened: undefined, listed: true });
   const onList = () => setVersion((held) => held && { ...held, listed: true });
+  const onStand = (spot: HistorySpot) => setVersion((held) => held && stoodAt(held, spot));
 
   const onLoadEarlier = async (): Promise<boolean> => {
     if (taskId === undefined || held?.kind !== HISTORY_READ.READY || held.earlier === undefined) {
@@ -460,6 +491,7 @@ export function usePlanHistory(input: {
     onCloseSections,
     listed: chosen?.listed ?? true,
     onList,
+    onStand,
     onRetry,
     onLoadEarlier,
     onRestore,

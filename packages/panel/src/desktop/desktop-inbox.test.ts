@@ -425,6 +425,8 @@ function mount(
   };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    // Whether the list was asked for, which the window keeps as the Tasks tab does.
+    const [listAsked, setListAsked] = useState(false);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
@@ -455,6 +457,8 @@ function mount(
             asked.closed += 1;
           },
           onChoose: setChosen,
+          listed: listAsked,
+          onListed: setListAsked,
           pages: undefined,
           onRereadPages: () => undefined,
           onTaskAgents: () => undefined,

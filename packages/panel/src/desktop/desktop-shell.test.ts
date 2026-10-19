@@ -189,6 +189,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        listed: false,
+        onListed: ignore,
         pages: undefined,
         onRereadPages: () => undefined,
         onTaskAgents: () => undefined,

@@ -7,6 +7,7 @@ import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
+import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -34,7 +35,10 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * automation or the list, Factory, an issue, or a page of Settings. The
  * history writes that link as the step's address, so the address and Copy
  * link never disagree. Chat, the Issues list, a new automation's page, and
- * the home page have none.
+ * the home page have none. A narrow room, which shows one pane at a time,
+ * names the pane it shows as the step: the side panel's tab over the plan,
+ * where the tab has a link, the Inbox's item standing alone, and Settings'
+ * page list, whose link names no page.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -79,10 +83,17 @@ interface PageWorkspace {
 /** Where the window stands beyond the Plans tab: Settings on a page, whether the keyboard is in the side panel, and an agent's page's workspace. */
 export interface WindowAt {
   readonly settings:
-    | { readonly view: SettingsView; readonly workspace: Workspace | undefined }
+    | {
+        readonly view: SettingsView;
+        readonly workspace: Workspace | undefined;
+        /** Whether its page list stands rather than the page, which only a narrow room draws apart. */
+        readonly listed?: boolean;
+      }
     | undefined;
   readonly sidePanelFocused: boolean;
   readonly pageWorkspace?: PageWorkspace | undefined;
+  /** Whether the room is narrow, showing one pane at a time. */
+  readonly narrow?: boolean;
 }
 
 const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => void>(
@@ -172,6 +183,12 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       : { link: { workspace, place: held }, thing };
   // A panel filling the window hides the work column, so its tab is at hand whatever holds the keyboard.
   const panelFirst = at.sidePanelFocused || tasks.sidePanel.fullScreen;
+  // A narrow room's panel is a step of its own, which its tab's link names where it has one.
+  if (at.narrow === true && panel !== undefined) {
+    return [{ ...panel, step: true }, agent, task].filter(
+      (each): each is LinkAtHand => each !== undefined,
+    );
+  }
   const standing: LinkAtHand = { ...task, step: true };
   const order = panelFirst ? [panel, agent, standing] : [agent, panel, standing];
   return order.filter((each): each is LinkAtHand => each !== undefined);
@@ -193,7 +210,12 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   if (at.settings !== undefined) {
     const { view, workspace } = at.settings;
     const slug = workspace === undefined ? listed : slugOf(tasks.workspaces, workspace.id);
-    return [at_({ kind: LINK_PLACE.SETTINGS, page: view }, LINK_THING.SETTINGS, slug)];
+    // A narrow room's page list stands alone, so its link names no page.
+    const place: LinkPlace =
+      at.narrow === true && at.settings.listed === true
+        ? { kind: LINK_PLACE.SETTINGS }
+        : { kind: LINK_PLACE.SETTINGS, page: view };
+    return [at_(place, LINK_THING.SETTINGS, slug)];
   }
   const { agentId } = tasks.agentView;
   if (agentId !== undefined) {
@@ -215,6 +237,13 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       "taskId" in chosen
         ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+    // A narrow room's item standing alone is a step of its own.
+    if (at.narrow === true && !tasks.inboxView.listed) {
+      return [
+        at_(item, LINK_THING.INBOX_ITEM),
+        within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),
+      ];
+    }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
   if (tasks.automationsView.open) {
@@ -284,13 +313,19 @@ export function useCopyLink(
   tasks: TasksControl,
   settings: WindowAt["settings"],
   enabled: boolean,
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ): CopyLink {
   const copyWords = useCopyToast();
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
   const linksAt = (sidePanelFocused: boolean) =>
-    linksAtHand(tasks, { settings, sidePanelFocused, pageWorkspace });
+    linksAtHand(tasks, {
+      settings,
+      sidePanelFocused,
+      pageWorkspace,
+      narrow: room === SHELL_ROOM.NARROW,
+    });
   useAppCommand(
     APP_COMMAND.COPY_LINK,
     enabled && linksAt(false).length > 0
