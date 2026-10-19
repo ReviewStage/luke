@@ -166,7 +166,7 @@ const GROUP_TITLE = {
   TEXT: "Text",
 } as const;
 
-/** The appearance whose syntax theme the Text group shows. */
+/** The appearance whose syntax theme the Text group shows, which picks the theme to set and never the window's appearance. */
 const APPEARANCE = {
   LIGHT: "light",
   DARK: "dark",
@@ -284,7 +284,7 @@ function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </SettingsGroup>
       <SettingsGroup title={GROUP_TITLE.TEXT}>
         <SegmentedRow
-          label="Theme"
+          label="Syntax theme"
           value={appearance}
           options={APPEARANCE_OPTIONS}
           changed={false}
@@ -292,7 +292,7 @@ function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         />
         {appearance === APPEARANCE.DARK ? (
           <ThemeRow
-            label="Dark theme"
+            label="For dark mode"
             themes={DIFF_THEMES.DARK}
             value={settings.diffDarkTheme}
             changed={changed("diffDarkTheme")}
@@ -300,7 +300,7 @@ function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           />
         ) : (
           <ThemeRow
-            label="Light theme"
+            label="For light mode"
             themes={DIFF_THEMES.LIGHT}
             value={settings.diffLightTheme}
             changed={changed("diffLightTheme")}

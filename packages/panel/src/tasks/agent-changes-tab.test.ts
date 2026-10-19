@@ -759,14 +759,14 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
   assert.deepEqual(groups, [
     ["Diff", ["Layout", "Changed words", "Indicators", "Backgrounds"]],
     ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
-    ["Text", ["Theme", "Dark theme", "Font", "Font size", "Line height", "Ligatures"]],
+    ["Text", ["Syntax theme", "For dark mode", "Font", "Font size", "Line height", "Ligatures"]],
   ]);
   assert.match(popover.textContent ?? "", /Or press I in the list/u, "Minimize names its key");
 
   act(() => settingControl(popover, '[role="radio"]', "Light").click());
   assert.ok(
-    popover.querySelector('[aria-label^="Light theme"]') !== null &&
-      popover.querySelector('[aria-label^="Dark theme"]') === null,
+    popover.querySelector('[aria-label^="For light mode"]') !== null &&
+      popover.querySelector('[aria-label^="For dark mode"]') === null,
     "the other appearance's theme is a press away",
   );
 

@@ -320,6 +320,7 @@ export const APP_SETTING_SCHEMA = {
     field: "inlineDiff",
     id: APP_SETTING_ID.DIFF_INLINE,
     label: "Changed words",
+    detail: "What a changed line marks within itself; Off tints the line alone.",
     values: INLINE_DIFF_LIST,
     token: (inline) => inline,
     optionLabel: (inline) => INLINE_DIFF_LABEL[inline],
