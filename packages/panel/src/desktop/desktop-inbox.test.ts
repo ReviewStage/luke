@@ -1443,6 +1443,38 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   );
 });
 
+test("a form's select wears the Recommended badge on the option the agent recommends and on no other, and picks nothing for the developer", async () => {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      response: {
+        type: INBOX_RESPONSE.FORM,
+        fields: [
+          {
+            type: INBOX_FIELD.SELECT,
+            label: "Channel",
+            options: ["Email", "Slack"],
+            recommended: "Slack",
+          },
+          { type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] },
+        ],
+      },
+    },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const pane = itemPane(page);
+
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Channel")), {
+    options: ["Email", "SlackRecommended"],
+    checked: [],
+    tabStops: ["Email"],
+  });
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
+});
+
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
   const { page, asked } = mount();
   await settle();

@@ -46,6 +46,7 @@ const DECLARED_TABLES = [
   "admin_favorite",
   "agent_pin",
   "asks",
+  "attachment",
   "automation",
   "automation_run",
   "chat_attachment",

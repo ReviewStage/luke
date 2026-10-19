@@ -155,6 +155,9 @@
                     },
                     "minItems": 2,
                     "maxItems": 6
+                  },
+                  "recommended": {
+                    "type": "string"
                   }
                 },
                 "required": [
