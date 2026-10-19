@@ -25,11 +25,11 @@ import { exactBodyInput, hostedProcedure } from "./base.js";
 
 const COMMENTS_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}/comments` as const;
 
-/** The plan a path names; the service reads an id that is no UUID as naming no plan, as it always has. */
-const planIdField = { id: EffectSchema.String };
+/** The task a path names; the service reads an id that is no UUID as naming no task, as it always has. */
+const taskIdField = { id: EffectSchema.String };
 
 /** The plan and the thread a thread's path names, read as the plan's id is. */
-const threadParamsSchema = EffectSchema.Struct({ ...planIdField, thread: EffectSchema.String });
+const threadParamsSchema = EffectSchema.Struct({ ...taskIdField, thread: EffectSchema.String });
 
 /** The statuses a start answers with: a thread posted (201), or an answer in band (200). */
 const START_STATUSES = [201, 200] as const;
@@ -46,7 +46,7 @@ export const planCommentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: COMMENTS_PATH }))
     .input(
       EffectSchema.Struct({
-        ...planIdField,
+        ...taskIdField,
         after: EffectSchema.optionalKey(planCommentsCursorSchema),
       }),
     )
@@ -61,7 +61,7 @@ export const planCommentsContract = {
         outputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(EffectSchema.Struct(planIdField), planCommentStartRequestSchema))
+    .input(exactBodyInput(EffectSchema.Struct(taskIdField), planCommentStartRequestSchema))
     .output(EffectSchema.flip(planCommentStartAnswerSchema)),
   /** One thing done to one thread of the plan. */
   act: hostedProcedure
