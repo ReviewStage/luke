@@ -38,7 +38,7 @@ const ORIGIN = "https://luke.example.test";
 const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 /** A hosted route the account reaches, which refuses a request with no session behind it. */
-const HOSTED_ROUTE = "/api/tasks";
+const HOSTED_ROUTE = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE;
 const CONTEXT = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const USER = {
@@ -84,7 +84,9 @@ function respond(
       }
       return jsonResponse({ preferences: {}, experiments: state.experiments });
     case HOSTED_ROUTE:
-      return state.user ? jsonResponse({ tasks: [] }) : jsonResponse({}, HTTP_STATUS.UNAUTHORIZED);
+      return state.user
+        ? jsonResponse({ template: null })
+        : jsonResponse({}, HTTP_STATUS.UNAUTHORIZED);
     default:
       return new Response(null, { status: 204 });
   }
