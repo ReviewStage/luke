@@ -17,7 +17,7 @@ import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { useLinesLook } from "./code-lines.js";
 import { BarMenu } from "./file-menu.js";
-import { ThemedCodeLinesView } from "./themed-lines.js";
+import { ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
@@ -301,6 +301,7 @@ export function PagePane({
             ) : null}
           </div>
         </header>
+        {showingSource ? <ThemeWarmer name={PAGE_SOURCE_NAME} /> : null}
         {showingSource ? (
           <PageSource
             title={page.title}

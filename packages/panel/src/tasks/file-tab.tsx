@@ -33,7 +33,7 @@ import {
   withWindow,
 } from "./file-tab-model.js";
 import { useMentionDrop, useTaskMentions } from "./task-mentions.js";
-import { ThemedCodeLinesView } from "./themed-lines.js";
+import { ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -415,6 +415,7 @@ export function FileTab({
 
   return (
     <section className="file-tab ph-no-capture" aria-label={file.path} ref={tab}>
+      <ThemeWarmer name={file.path} />
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} notes={notes} readWindow={readWindow} />
       ) : read.kind === FILE_READ.READING ? (

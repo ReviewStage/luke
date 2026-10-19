@@ -17,13 +17,23 @@ import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { useFileViewSettings } from "./file-view-settings.js";
-import { ThemedCodeLinesView } from "./themed-lines.js";
+import { ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 
 const roots: Root[] = [];
 
-/** Each colouring the bundle was asked for, and how many times the bundle was imported. */
+/** Each colouring the bundle was asked for, how many times the bundle was imported, and what its import waits on. */
 let asked: ColourRequest[] = [];
 let imported = 0;
+let landing: Promise<void> = Promise.resolve();
+
+/** How many runs were drawn, which names each its own unless a test names one. */
+let runs = 0;
+
+/** A run's key no other drawn run has. */
+function nextRun(): string {
+  runs += 1;
+  return `src/seats.ts@${runs}`;
+}
 
 /** What the bundle answers a colouring with unless a test says otherwise: each line in one run of Dracula's pink. */
 const PINK = (request: ColourRequest): ColouredLines | undefined => ({
@@ -62,6 +72,9 @@ function Settings(): null {
 }
 
 beforeEach(() => {
+  // Note that act settles a render only where the window says it runs under act.
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  landing = Promise.resolve();
   answer = PINK;
   asked = [];
   imported = 0;
@@ -80,15 +93,15 @@ async function flush(): Promise<void> {
   });
 }
 
-/** Draws `lines` from line 1 in the themes the settings hold. */
-async function draw(lines: CodeLines): Promise<HTMLElement> {
+/** Draws `lines` from line 1 in the themes the settings hold, under `runKey` or a run of its own, and lets what it asks for land. */
+async function draw(lines: CodeLines, { runKey }: { runKey?: string } = {}): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   const bundles = sideBundles({
     diffView: () => {
       imported += 1;
-      return Promise.resolve(STAND_IN);
+      return landing.then(() => STAND_IN);
     },
   });
   act(() =>
@@ -103,7 +116,7 @@ async function draw(lines: CodeLines): Promise<HTMLElement> {
             createElement(Settings),
             createElement(ThemedCodeLinesView, {
               name: "src/seats.ts",
-              runKey: "src/seats.ts@abc",
+              runKey: runKey ?? nextRun(),
               look: { lineNumbers: true, wrap: true },
               firstLine: 1,
               lines,
@@ -187,9 +200,80 @@ test("changing the themes colours the lines again in the pair chosen", async () 
   const container = await draw(hostLines(2));
   assert.equal(drawnColours(container)[0], "#ff79c6");
 
-  act(() => settingsDoor?.change("diffDarkTheme", "nord"));
+  await act(async () => {
+    await settingsDoor?.change("diffDarkTheme", "nord");
+  });
   await flush();
 
   assert.equal(asked.at(-1)?.look.themes.dark, "nord");
   assert.equal(drawnColours(container)[0], "#88c0d0");
+});
+
+test("the window in view is asked for first, and no more than two are out at once", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  const landed = Promise.withResolvers<void>();
+  landing = landed.promise;
+  const container = await draw(hostLines(2000));
+  const scroller =
+    container.querySelector<HTMLElement>(".luke-scroll-area") ?? assert.fail("a scroller");
+  // Scrolled to about line 1,600 of 2,000, which the fourth window holds.
+  Object.defineProperty(scroller, "scrollHeight", { value: 20000 });
+  Object.defineProperty(scroller, "clientHeight", { value: 600 });
+  scroller.scrollTop = 15700;
+  landed.resolve();
+  await flush();
+
+  assert.deepEqual(
+    asked.slice(0, 2).map((request) => request.lines[0]),
+    ["line 1501", "line 1001"],
+    "the window in view, then the nearest",
+  );
+  assert.equal(asked.length, 4, "every window, two at a time");
+});
+
+test("a run drawn again, as a File tab opened again, takes its kept colours at once without asking", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  await draw(hostLines(3), { runKey: "src/kept.ts@abc" });
+  const before = asked.length;
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const container = await draw(hostLines(3), { runKey: "src/kept.ts@abc" });
+
+  assert.equal(asked.length, before, "nothing is asked again");
+  assert.deepEqual(drawnColours(container), ["#ff79c6", "#ff79c6", "#ff79c6"]);
+});
+
+test("a file opened in a chosen pair warms its colouring before its lines land, and in the default pair loads nothing", async () => {
+  /** Draws the warmer alone, as a File tab does before its read lands. */
+  const warm = async () => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    roots.push(root);
+    const bundles = sideBundles({
+      diffView: () => {
+        imported += 1;
+        return Promise.resolve(STAND_IN);
+      },
+    });
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          onSideBundles(bundles, createElement(ThemeWarmer, { name: "src/seats.ts" })),
+        ),
+      ),
+    );
+    await flush();
+  };
+  handSettings();
+  await warm();
+  assert.equal(imported, 0);
+
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  await warm();
+  assert.equal(imported, 1);
+  assert.deepEqual(
+    asked.map((request) => [request.name, request.lines]),
+    [["src/seats.ts", [""]]],
+  );
 });
