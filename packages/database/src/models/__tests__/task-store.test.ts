@@ -664,6 +664,27 @@ it.layer(getTestDB())("a task's number", (it) => {
   );
 });
 
+it.layer(getTestDB())("a task moved by the build before numbering", (it) => {
+  it.effect("takes the next number of the workspace it lands in, never one standing there", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const acme = yield* openWorkspace(dean);
+      const initech = yield* openWorkspace(dean);
+      const moving = yield* createTask(dean, { organizationId: acme });
+      yield* createTask(dean, { organizationId: initech });
+
+      // The build before numbering moves a task by its workspace alone.
+      yield* Database.use((db) =>
+        db.execute(sql`update task set organization_id = ${initech} where id = ${moving.id}`),
+      );
+      const after = yield* createTask(dean, { organizationId: initech });
+
+      assert.equal((yield* standingOf(dean, moving.id)).number, 2);
+      assert.equal(after.number, 3);
+    }),
+  );
+});
+
 it.layer(getTestDB())("a task's status and priority", (it) => {
   it.effect("start to do and unweighed, or as the start names them", () =>
     Effect.gen(function* () {

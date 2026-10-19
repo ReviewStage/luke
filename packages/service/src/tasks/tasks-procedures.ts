@@ -103,6 +103,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { logStoreFailure } from "../http/store-failure.js";
 import {
   linearIssue,
   linearOrRefused,
@@ -321,6 +322,17 @@ const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
  * A Start that failed after its agent was made answers that agent, since it
  * works all the same.
  */
+/**
+ * The task as it stands once an agent started on it, which moved it into
+ * progress (`beginTaskWork`), so the open document says what the list says;
+ * the task as it was made where it cannot be read again just now.
+ */
+const taskAfterStart = (userId: string, task: Task) =>
+  readTask(userId, task.id).pipe(
+    Effect.map((read) => Option.match(read, { onNone: () => task, onSome: (now) => now.task })),
+    Effect.catch((failure) => Effect.as(logStoreFailure(failure), task)),
+  );
+
 const startedAgentOn = (
   seams: TasksProcedureSeams,
   request: Request,
@@ -329,11 +341,19 @@ const startedAgentOn = (
   agent: TaskAgentStart,
 ) =>
   startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
-    Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
+    Effect.flatMap((started) =>
+      Effect.map(
+        taskAfterStart(userId, task),
+        (plan): TaskStartAnswer => ({ plan, agent: started.agent }),
+      ),
+    ),
     Effect.catch((refusal) =>
       Effect.gen(function* () {
         const made = yield* agentMadeOn(userId, task.id, agent.idempotencyKey);
-        if (Option.isSome(made)) return { plan: task, agent: made.value } satisfies TaskStartAnswer;
+        if (Option.isSome(made)) {
+          const plan = yield* taskAfterStart(userId, task);
+          return { plan, agent: made.value } satisfies TaskStartAnswer;
+        }
         yield* Effect.logWarning(
           `the agent a task's start asked for was refused: ${refusal.error}`,
         );
