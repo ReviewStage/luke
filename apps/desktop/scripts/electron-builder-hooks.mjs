@@ -12,7 +12,10 @@ import {
   releaseDmgFileName,
   releaseZipFileName,
   resolveNotaryCredentials,
+  STAPLE_ATTEMPTS,
+  STAPLE_RETRY_INTERVAL_MS,
   stapleArguments,
+  stapleWithRetry,
 } from "./release-config.mjs";
 
 const ELECTRON_BUILDER_NOTARIZE_ENV = "LUKE_ELECTRON_BUILDER_NOTARIZE";
@@ -75,6 +78,15 @@ async function submitForNotarization(artifactPath, credentials) {
   }
 }
 
+function staple(artifactPath) {
+  return stapleWithRetry({
+    staple: () => execFileSync("xcrun", stapleArguments(artifactPath), { stdio: "inherit" }),
+    wait: sleep,
+    attempts: STAPLE_ATTEMPTS,
+    intervalMs: STAPLE_RETRY_INTERVAL_MS,
+  });
+}
+
 function shouldNotarize(env = process.env) {
   return env[ELECTRON_BUILDER_NOTARIZE_ENV] === "1";
 }
@@ -90,7 +102,7 @@ export async function notarizeElectronBuilderApp(context) {
       stdio: "inherit",
     });
     await submitForNotarization(submissionPath, credentials);
-    execFileSync("xcrun", stapleArguments(appPath), { stdio: "inherit" });
+    await staple(appPath);
   } finally {
     fs.rmSync(submissionDirectory, { recursive: true, force: true });
   }
@@ -126,7 +138,7 @@ export async function finalizeElectronBuilderArtifacts(buildResult) {
   if (shouldNotarize()) {
     const credentials = resolveNotaryCredentials(process.env);
     await submitForNotarization(dmgPath, credentials);
-    execFileSync("xcrun", stapleArguments(dmgPath), { stdio: "inherit" });
+    await staple(dmgPath);
   }
 
   const latestDmgPath = path.join(outputDirectory, "Luke.dmg");
