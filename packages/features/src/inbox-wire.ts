@@ -94,9 +94,14 @@ import {
  * with how they answered; the words under it are the message's own. The
  * item still carries its title, blocks, response, and status, as a view of
  * its open ask for a desktop before version 5, which reads the messages'
- * new keys as nothing; the functions at the end of this file map an ask to
- * the version 4 response nearest it, a stored response to the ask it
- * stands for, and an older desktop's answer to the answer of the open ask.
+ * new keys as nothing, and its `messages` leave out every message that
+ * asks or answers, which those fields stand for, so such a desktop draws
+ * neither twice; its `thread` carries every message, for a desktop from
+ * version 5. A thread whose agent asks nothing waits on nobody, and stands
+ * to an older desktop as a note already settled. The functions at the end
+ * of this file map an ask to the version 4 response nearest it, a stored
+ * response to the ask it stands for, and an older desktop's answer to the
+ * answer of the open ask.
  */
 
 /**
@@ -645,7 +650,7 @@ export const inboxAskSchema = EffectSchema.Union([
   EffectSchema.Struct(ANSWER_FIELDS),
 ]);
 
-type InboxAsk = typeof inboxAskSchema.Type;
+export type InboxAsk = typeof inboxAskSchema.Type;
 
 /** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
 const ASK_STANDING_FIELDS = {
@@ -781,8 +786,21 @@ export const inboxItemSchema = EffectSchema.Struct({
    * account is gone. Absent from a service before members closed items.
    */
   closedBy: EffectSchema.optionalKey(memberRefSchema),
-  /** The item's thread, oldest first, the latest `MAX_MESSAGES_READ` of it; absent where nobody wrote one. */
+  /**
+   * The item's thread as a desktop before version 5 draws it under the
+   * item's blocks and answer, oldest first, the latest `MAX_MESSAGES_READ`
+   * of its messages that carry neither an ask nor answers, since the item's
+   * blocks, response, and answer stand for those; absent where it has none.
+   */
   messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
+  /**
+   * The item's whole thread, from version 5, oldest first: the latest
+   * `MAX_MESSAGES_READ` of every message, asks and answers included, and
+   * the first message and the one whose ask is open however long ago they
+   * were written; absent where nobody wrote one, and from a service before
+   * version 5.
+   */
+  thread: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
   postedAt: countedNumber,
   /**
