@@ -17,7 +17,13 @@ import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { actedForAccount, DEPLOYMENT_PRESENCE, deploymentActor, sessionAuthFor } from "./auth.js";
+import {
+  actedForAccount,
+  DEPLOYMENT_PRESENCE,
+  deploymentActor,
+  lukeAccount,
+  sessionAuthFor,
+} from "./auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -286,17 +292,28 @@ test("the account a principal acts for is its own for a person and the named one
   assert.equal(actedForAccount(laidOver), "user-a");
 });
 
-test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's", async () => {
+test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's; its spoken ask, its Stop, and its stream read present the deployment itself", async () => {
   const auth = ownedAuth(
     [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
     ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
   );
+  const deploymentItself = [
+    BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  ];
+  const presented = (admitted: SessionAuthContext | null | undefined) => [
+    admitted?.authenticator,
+    admitted?.principalType,
+    admitted?.principalId,
+  ];
   const opened = await auth(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
-  assert.equal(opened?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(presented(opened), deploymentItself);
   assert.equal(actedForAccount(opened ?? null), "user-a");
   const followed = await auth(
     scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
   );
+  assert.deepEqual(presented(followed), deploymentItself);
   assert.equal(actedForAccount(followed ?? null), "user-a");
   assert.equal(
     await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.SPOKEN))),
@@ -304,7 +321,7 @@ test("at the door the deployment is admitted for the named account's own convers
   );
   // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
   assert.equal(
-    await refusal(() => auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
+    await refusal(() => auth(scheduled("user-a", undefined))),
     BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
   );
   assert.equal(
@@ -318,6 +335,7 @@ test("at the door the deployment is admitted for the named account's own convers
   const cancelled = await auth(
     scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`),
   );
+  assert.deepEqual(presented(cancelled), deploymentItself);
   assert.equal(actedForAccount(cancelled ?? null), "user-a");
   assert.equal(
     await refusal(() =>
@@ -336,6 +354,7 @@ test("at the door the deployment is admitted for the named account's own convers
   const streamed = await auth(
     scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
   );
+  assert.deepEqual(presented(streamed), deploymentItself);
   assert.equal(actedForAccount(streamed ?? null), "user-a");
   assert.equal(
     await refusal(() =>
@@ -354,6 +373,82 @@ test("at the door the deployment is admitted for the named account's own convers
       auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "POST")),
     ),
     BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
+});
+
+test("at the door the deployment's typed ask of Luke, which a comment sent from a browser hands over, is minted as the named account's own principal, the identity that account's bearer is admitted as, with the deployment named only as its carrier, on a conversation and a session that account reaches alone: a teammate's as the teammate's, never the owner's; another account named, or none, is refused", async () => {
+  const bearers = new Map([
+    ["Bearer token-a", "user-a"],
+    ["Bearer token-c", "user-c"],
+  ]);
+  // The owner's conversation and session, which their teammate reaches too, and a stranger does not.
+  const members = new Set(["user-a", "user-c"]);
+  const auth = ownedAuth(
+    [
+      deploymentActor(DEPLOYMENT),
+      lukeAccount(async (incoming) => bearers.get(incoming.headers.get("authorization") ?? "")),
+    ],
+    {
+      reachesSession: async (userId, sessionId) => members.has(userId) && sessionId === SESSION_A,
+      reachesConversation: async (userId, conversationId) =>
+        members.has(userId) && conversationId === CONVERSATION_ID,
+    },
+  );
+  const typedHeaders = {
+    [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
+    [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+  };
+
+  for (const [account, token] of [
+    ["user-a", "token-a"],
+    ["user-c", "token-c"],
+  ] as const) {
+    // The member's own typed ask over their bearer, as the desktop sends it.
+    const overBearer = await auth(request("/eve/v1/session", token, typedHeaders, "POST"));
+    const opened = await auth(scheduled(account, BRAIN_HOST_TURN.TYPED));
+    const followed = await auth(
+      scheduled(account, BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`),
+    );
+    assert.ok(overBearer && opened && followed);
+    assert.equal(overBearer.principalId, account);
+    for (const carried of [opened, followed]) {
+      assert.deepEqual(
+        [carried.authenticator, carried.issuer, carried.principalType, carried.principalId],
+        [
+          overBearer.authenticator,
+          overBearer.issuer,
+          overBearer.principalType,
+          overBearer.principalId,
+        ],
+        account,
+      );
+      assert.deepEqual(carried.attributes, {
+        ...overBearer.attributes,
+        [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+      });
+      assert.equal(actedForAccount(carried), account);
+    }
+  }
+
+  assert.equal(
+    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-b", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_NEW}`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(scheduled(undefined, BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NO_ACCOUNT,
   );
 });
 

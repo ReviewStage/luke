@@ -623,8 +623,9 @@ reaches eve included: a request that carries a bearer reaches eve over it,
 and one that carries only the cookie reaches eve as the deployment acting
 for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
 `eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
-automation run, and a task's delete and the account's, which retire the eve
-sessions of what they delete, all work in a browser. Note that a route
+automation run, a comment's ask of Luke, which the brain's door admits as
+the member's own principal, and a task's delete and the account's, which
+retire the eve sessions of what they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
 dispatcher's `route-path` query among them; whom eve is reached as is chosen

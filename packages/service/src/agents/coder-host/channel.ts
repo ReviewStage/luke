@@ -88,11 +88,11 @@ const UPLOAD_POLICY = {
  * on the one path a Start takes (`coder-host/start.ts`): the row the Start
  * made stands before eve is asked, so the door's ownership check bounds the
  * opening to a conversation the named account owns, as it bounds every
- * caller. On this channel, and this one alone,
- * the deployment presents the account's own identity
- * (`DEPLOYMENT_PRESENCE.ACCOUNT`): eve steers a running turn only with a
- * message whose principal is the turn's own, and an agent's turn runs under
- * the developer's bearer, so the voice steer is minted as the developer's
+ * caller. On this channel the deployment presents the account's own
+ * identity for everything it does (`DEPLOYMENT_PRESENCE.ACCOUNT`), where the
+ * brain's presents it for a typed ask alone: eve steers a running turn only
+ * with a message whose principal is the turn's own, and an agent's turn runs
+ * under the developer's bearer, so the voice steer is minted as the developer's
  * own tuple, authenticator, type, and id, and the record says the
  * deployment carried it in the `luke:carrier` attribute rather than in the
  * principal; the opening is minted the same way, so the agent's session

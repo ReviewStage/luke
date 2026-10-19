@@ -316,12 +316,12 @@ interface EvePostBody {
  * own secret, or the account itself, under the bearer its request carried,
  * which the door resolves as a hosted route resolves a bearer
  * (`auth/bearer.ts`'s `hostedUserId`) and never by a session cookie. The
- * brain's asks come from the voice function as the deployment; a coding
- * agent's Start and Stop come from a route and reach eve as its caller
- * (`coder-host/stop.ts`'s `eveFor`): over the developer's own bearer, or,
- * for a route a browser reached on its session cookie alone, as the
- * deployment acting for the account the cookie named, since eve takes no
- * cookie.
+ * brain's spoken asks come from the voice function as the deployment; a
+ * comment's ask of Luke, and a coding agent's Start and Stop, come from a
+ * route and reach eve as its caller (`coder-host/stop.ts`'s `eveFor`): over
+ * the developer's own bearer, or, for a route a browser reached on its
+ * session cookie alone, as the deployment acting for the account the cookie
+ * named, since eve takes no cookie.
  */
 export type EveCaller =
   | {

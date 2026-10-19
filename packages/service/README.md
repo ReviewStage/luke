@@ -357,14 +357,21 @@ it always has. The channels'
 door holds the deployment to what its actor admits
 (`src/agents/brain-host/auth.ts`): on the coding agents' channel the typed
 opening and line it already carried for the voice brain, which is an
-agent's Start, a message, an inbox answer, and a manual automation run, and
-on both channels a cancel, which is an agent's Stop, its Archive, a task's
-archive, and Luke's Stop on a plan, and a reset, which is how the two
-deletes, a task's and the account's, retire the eve sessions of what they
-delete (`src/agents/retire-sessions.ts`); each only on a session or a
-conversation the account reaches, as the door holds every caller. A typed ask
-of Luke, which a comment mentioning him hands over, is refused there for the
-deployment, so it reaches Luke over the desktop's bearer alone. What acts for one device rather than the account
+agent's Start, a message, an inbox answer, and a manual automation run, on
+Luke's channel a typed ask, which a comment mentioning him hands over
+(`src/tasks/comment-ask.ts`), and on both channels a cancel, which is an
+agent's Stop, its Archive, a task's archive, and Luke's Stop on a plan, and a
+reset, which is how the two deletes, a task's and the account's, retire the
+eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
+on a session or a conversation the account reaches, as the door holds every
+caller. A typed message is minted at either door as the account's own
+principal, the very identity its bearer would be admitted as, with the
+deployment named only in its `luke:carrier` attribute, because eve steers a
+running turn, and folds the messages that waited into one turn, only by that
+identity: a comment's ask of Luke from a browser waits behind a call's spoken
+turn, which runs as the deployment, and joins the member's own typed turn,
+exactly as the desktop's over the bearer does, and a teammate's runs as the
+teammate, never as the plan's owner. What acts for one device rather than the account
 takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
 eve's channels, which resolve with `hostedUserId`, as the voice and terminal
 relays resolve with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -2542,17 +2549,21 @@ account's by the time a delegation arrives. It calls eve's session routes
 under the deployment's `CRON_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
-account as its attribute — for a message naming a kind of turn its table,
-`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits (a spoken
-turn), for a cancel of a turn in a session, which is how the stop key's
-`stopAsk` and the hook's carried Stop reach eve, and for a GET of a session's
+account as its attribute — for a spoken message, which its table,
+`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits, for a
+cancel of a turn in a session, which is how the stop key's `stopAsk` and
+the hook's carried Stop reach eve, and for a GET of a session's
 event stream, which the live brain listens to from its tail so it reads a
 spoken ask's turn the moment eve tells an event rather than only on its
 250 ms poll (the poll stays, for a stream refused or dropped), and nothing
 else: any other route or kind of turn carrying the secret is refused outright
 rather than passed to the account authenticator behind it. The stream read is
 the brain's channel's alone; the coder channel's deployment, which presents
-the account, is refused it. Which account a request acts
+the account, is refused it. The table admits a typed message too, which a
+hosted route a browser reached on its session cookie alone carries for a
+comment's ask of Luke (`src/tasks/comment-ask.ts`): it is minted as the
+account's own principal instead, the deployment named only as its carrier,
+so it never joins the call's spoken turn, nor a spoken ask its turn. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
 a turn only on a conversation the named account reaches, and cancel one or
