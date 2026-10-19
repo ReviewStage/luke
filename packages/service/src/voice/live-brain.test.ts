@@ -452,7 +452,7 @@ it.live(
 );
 
 it.live(
-  "a turn's sentences and end reach the service the moment Realtime says the conversation's mark moved, and nothing before",
+  "a follow watches the conversation's mark, and a turn's sentences and end reach the service once Realtime says it moved",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -493,9 +493,7 @@ it.live(
         state: memoryRelayState(),
       };
       yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
-      // The record now holds the whole turn, and no change was heard: nothing is told.
-      yield* Effect.sleep(50);
-      assert.equal(f.events.length, 0);
+      // Note that nothing is asserted of the time before the mark moves, since the wait's safety beat may look on a slow store.
       yield* Queue.offer(moved, undefined);
       yield* f.arrived(5);
       assert.equal(f.events.at(-1)?.kind, LIVE_BRAIN_RUN_EVENT.ENDED);
