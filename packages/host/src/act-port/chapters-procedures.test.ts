@@ -8,8 +8,8 @@ import {
 } from "@luke/features/pull-request-chapters-view";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { Effect } from "effect";
-import type { ActSender } from "./base.js";
 import { type ActPortClient, CHAPTERS_ACT_KIND } from "../contract/index.js";
+import type { ActSender } from "./base.js";
 import { chaptersProcedures } from "./chapters-procedures.js";
 import { settledAct, type TestActPort, testActPort } from "./testing.js";
 

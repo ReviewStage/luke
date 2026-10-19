@@ -20,8 +20,10 @@
  * pull request's files, title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * Luke's own key (`chapters-generator.ts`), then answers as the read does. A
- * claim another request holds answers as generating, without asking the
- * model; a generation that fails lands its kind on the row, and any other
+ * claim another request holds answers as generating, without reading the
+ * diff or asking the model; a head pushed while the diff is read is answered
+ * as it now stands rather than told under the head it no longer is, since
+ * GitHub serves a pull request's files by its number, not its head; a generation that fails lands its kind on the row, and any other
  * failure while it runs lands as unexpected and is answered as the error it
  * was. The diff and the chapters travel only to the model, the store, and
  * the caller: a log line and the counted event carry kinds and counts alone.
@@ -31,6 +33,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
+  CHAPTER_GENERATION_STALE_MS,
   type ChapterClaim,
   claimChapterGeneration,
   failChapterGeneration,
@@ -60,7 +63,6 @@ import {
   type PublishedCache,
   type PublishedReach,
 } from "../agents/coder-host/published.js";
-import type { ModelCatalog } from "../providers/model-catalog.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   recordServerEvent,
@@ -83,6 +85,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import type { ModelCatalog } from "../providers/model-catalog.js";
 import {
   type ChaptersModel,
   chaptersModelOf,
@@ -222,6 +225,26 @@ const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
+/**
+ * Whether another request is generating the pull request's chapters for its
+ * head now: the newest claim stands `generating` on this head, claimed within
+ * the store's stale bound, past which a Generate takes it over.
+ */
+const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: ChaptersSubject) {
+  const { organizationId, agent, pullRequest } = subject;
+  const row = yield* hostedStoreOrUnavailable(
+    latestPullRequestChapters(organizationId, agent.repository, pullRequest.number),
+  );
+  if (Option.isNone(row)) return false;
+  const now = yield* Clock.currentTimeMillis;
+  const { status, headSha, startedAt } = row.value;
+  return (
+    status === PULL_REQUEST_CHAPTERS_STATUS.GENERATING &&
+    headSha === pullRequest.headSha &&
+    now - startedAt.getTime() < CHAPTER_GENERATION_STALE_MS
+  );
+});
+
 /** The model this deployment tells chapters on, or none where it holds no key for one. */
 const modelOf = (seams: PullRequestChaptersProcedureSeams) =>
   Effect.gen(function* () {
@@ -358,7 +381,17 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       if (pullRequest.baseSha === undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
       }
+      // A generation another request holds for this head answers as it stands, before GitHub is asked for a diff this request will not use.
+      if (yield* generatingNow(subject.value)) return yield* answerOf(subject.value, true);
       const read = yield* generationInput(subject.value);
+      // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
+      const after = yield* refusedAsRead(
+        pullRequestByNumber(subject.value.token, agent.repository, pullRequest.number),
+      );
+      if (Option.isNone(after)) return { pullRequest: null };
+      if (after.value.headSha !== pullRequest.headSha) {
+        return yield* answerOf({ ...subject.value, pullRequest: after.value }, true);
+      }
       const now = yield* Clock.currentTimeMillis;
       const claimed = yield* hostedStoreOrUnavailable(
         claimChapterGeneration({

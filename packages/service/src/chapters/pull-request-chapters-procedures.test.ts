@@ -147,7 +147,7 @@ function scriptedModel(refuses = false) {
 
 /** The repository answering the pull request's reads, its head the one `head` names now. */
 const pullRequestOf =
-  (head: () => string): RepositoryScript =>
+  (head: () => string, filesRead: () => void = () => undefined): RepositoryScript =>
   (sent) => {
     const repository = `/repos/${RELAY_FULL_NAME}`;
     const pull = `${repository}/pulls/${NUMBER}`;
@@ -171,7 +171,10 @@ const pullRequestOf =
         user: null,
       });
     }
-    if (path === `${pull}/files`) return Response.json([FILE]);
+    if (path === `${pull}/files`) {
+      filesRead();
+      return Response.json([FILE]);
+    }
     if (path === `${pull}/commits`) {
       return Response.json([{ sha: "1".repeat(40), commit: { message: "Expire invitations" } }]);
     }
@@ -191,7 +194,14 @@ interface Answer {
  * database, GitHub, and model, on a deployment holding a model key unless
  * told otherwise.
  */
-const standing = (options: { readonly refuses?: boolean; readonly keyless?: boolean } = {}) =>
+const standing = (
+  options: {
+    readonly refuses?: boolean;
+    readonly keyless?: boolean;
+    /** A head pushed while the files are read, as a developer pushing mid-Generate would. */
+    readonly pushedDuringFiles?: string;
+  } = {},
+) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const teammate = yield* openGithubUser();
@@ -218,7 +228,12 @@ const standing = (options: { readonly refuses?: boolean; readonly keyless?: bool
       [installation],
       undefined,
       undefined,
-      pullRequestOf(() => head),
+      pullRequestOf(
+        () => head,
+        () => {
+          head = options.pushedDuringFiles ?? head;
+        },
+      ),
     );
     const model = scriptedModel(options.refuses);
     const analytics = recordingProductAnalytics();
@@ -419,10 +434,10 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a Generate while another request holds the head's claim answers as generating, and the model is not asked",
+    "a Generate while another request holds the head's claim answers as generating, and neither the diff nor the model is asked for",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, organizationId, model, ask } = yield* standing();
+        const { owner, teammate, organizationId, model, github, ask } = yield* standing();
         const now = new Date(yield* Clock.currentTimeMillis);
         const held = yield* claimChapterGeneration({
           organizationId,
@@ -442,6 +457,28 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           startedAt: now.getTime(),
         });
         assert.equal(model.asked(), 0);
+        assert.equal(
+          github.sent.some((sent) => new URL(sent.url).pathname.endsWith("/files")),
+          false,
+        );
+      }),
+  );
+
+  it.effect(
+    "a head pushed while a Generate reads the diff is answered as it now stands, nothing generated under the head the diff no longer is",
+    () =>
+      Effect.gen(function* () {
+        const { owner, model, analytics, ask } = yield* standing({ pushedDuringFiles: "d00d000" });
+        assert.deepEqual(chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER })), {
+          pullRequest: {
+            number: NUMBER,
+            headSha: "d00d000",
+            generatable: true,
+            chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+          },
+        });
+        assert.equal(model.asked(), 0);
+        assert.deepEqual(analytics.recorded, []);
       }),
   );
 
