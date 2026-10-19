@@ -402,10 +402,12 @@ describe("the cookie account source", () => {
 
   it.effect("lets no launch read answered late stand over a revisit's newer one", () =>
     Effect.gen(function* () {
-      const release = yield* Deferred.make<void>();
-      const { open, state, revisit, sent } = scene({
-        heldRead: Effect.runPromise(Deferred.await(release)),
+      // The service's own promise, which the test resolves; nothing is run outside the test's fiber.
+      let resolveHeld: () => void = () => undefined;
+      const heldRead = new Promise<void>((resolve) => {
+        resolveHeld = resolve;
       });
+      const { open, state, revisit, sent } = scene({ heldRead });
       const session = yield* open;
 
       // The launch's read is asked as the first person and held; meanwhile another tab signs in as someone else.
@@ -414,7 +416,7 @@ describe("the cookie account source", () => {
       state.user = { ...USER, id: "user-2", email: "other@example.com" };
       yield* revisit;
       yield* Effect.promise(() => nextTurn());
-      yield* Deferred.succeed(release, undefined);
+      yield* Effect.sync(() => resolveHeld());
       yield* Fiber.join(launched);
       while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
       while (signedInEmail(session.snapshot()) !== "other@example.com") {
