@@ -1,0 +1,40 @@
+/* app.css -- the web app's one stylesheet, the panel's sheets in the order the
+   desktop's (`apps/desktop/src/renderer/styles/index.css`) sets them, so the
+   cascade the panel was written against is the same in a tab. The site's own
+   `styles.css` is not imported: it brings Tailwind's preflight, a second reset
+   over base.css's that would restyle every element the panel draws. */
+/* The shared tokens first, keyed on the root's `data-luke-profile` and
+   `data-luke-theme` (app.html), so every sheet below reads them. */
+@import "@luke/ui/tokens.css";
+/* Motion tokens next, so base.css can spend them. */
+@import "@luke/brand/motion-tokens.css";
+/* Before base.css: its tweaks to `.settings-input` have to win. */
+@import "@luke/panel/styles/settings.css";
+@import "@luke/panel/styles/base.css";
+/* The shared components' own rules, in the `components` layer: above
+   base.css's element resets and under the utilities below. */
+@import "@luke/ui/styles.css";
+@import "@luke/panel/styles/markdown.css";
+@import "@luke/panel/styles/shortcut.css";
+@import "@luke/panel/styles/tooltip.css";
+@import "@luke/panel/styles/sign-in.css";
+@import "@luke/panel/styles/tasks.css";
+/* Tailwind's theme and utilities alone, no preflight, as the desktop's
+   `tailwind.css` takes them: the utilities in a cascade layer, so a
+   hand-written rule beside them wins, except base.css's element resets in the
+   `base` layer under them. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@luke/panel/sources.css";
+@import "@luke/panel/styles/theme.css";
+/* After everything: the window's own layout restages the shared surface's
+   elements, and its overrides have to win. */
+@import "@luke/panel/styles/desktop.css";
+@import "@luke/panel/styles/issues.css";
+@import "@luke/panel/styles/call.css";
+
+/* Where else the utilities are gathered from: this app's own modules, and the
+   markdown renderer the components draw a reply with, which is the panel's
+   dependency and so stands in the panel's own `node_modules`. */
+@source "./";
+@source "../../../../packages/panel/node_modules/streamdown/dist/*.js";

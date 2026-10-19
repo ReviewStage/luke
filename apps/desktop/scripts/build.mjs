@@ -1,10 +1,21 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
+import {
+  EXCALIDRAW_UNUSED,
+  EXCALIDRAW_UNUSED_MODULE,
+  excalidrawLeftOut,
+  HIGHLIGHT_WORKER_BUILD,
+  LUCIDE_WHOLE,
+  lucideWholeModule,
+  panelDefines,
+  panelStaticDirectories,
+  REDIRECTED,
+  redirectOf,
+} from "@luke/panel/build-table";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
 import { bundleCeiling } from "./bundle-budget.mjs";
@@ -35,67 +46,39 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
-// The whiteboard bundle (`@luke/panel`'s `whiteboard/`) is Excalidraw, which
-// reaches three things the board never uses through dynamic imports: the
-// Mermaid converter, every interface language but English, and the font
-// subsetter an SVG export embeds its fonts with (1.8 MB of WebAssembly), the
-// board offering no export. Each would be split into chunks the app ships and
-// never loads, so each is answered with an empty module here rather than
-// carried; the English strings are Excalidraw's own built-ins. The locales
-// folder also holds the translation-progress table, which Excalidraw imports
-// statically, so it is kept.
-const EXCALIDRAW_UNUSED =
-  /^(@excalidraw\/mermaid-to-excalidraw|\.\/locales\/[^/]+\.js|\.\/subset-(shared|worker)\.chunk\.js)$/;
-const EXCALIDRAW_KEPT_LOCALE = /^\.\/locales\/percentages-/;
-// Only Excalidraw's own imports are answered, since the build is the renderer's whole.
-const EXCALIDRAW_IMPORTER = /[\\/]@excalidraw[\\/]/;
+// The panel's imports its build table (`@luke/panel/build-table`) answers
+// differently from the packages' own: Streamdown's HTML parser and Pierre's
+// diff writer, each redirected to a module of the panel's own, and the parts
+// of Excalidraw the board never uses, each answered with an empty module.
+// The table says why each is answered as it is; this is esbuild's shape of it.
+const panelRedirects = {
+  name: "panel-redirects",
+  setup(build) {
+    build.onResolve({ filter: REDIRECTED }, (args) => {
+      const target = redirectOf(args.path, args.importer);
+      return target === undefined ? undefined : { path: target };
+    });
+  },
+};
 const excalidrawTrim = {
   name: "excalidraw-trim",
   setup(build) {
     build.onResolve({ filter: EXCALIDRAW_UNUSED }, (args) =>
-      !EXCALIDRAW_IMPORTER.test(args.importer) || EXCALIDRAW_KEPT_LOCALE.test(args.path)
-        ? undefined
-        : { path: args.path, namespace: "excalidraw-unused" },
+      excalidrawLeftOut(args.path, args.importer)
+        ? { path: args.path, namespace: "excalidraw-unused" }
+        : undefined,
     );
     build.onLoad({ filter: /.*/, namespace: "excalidraw-unused" }, () => ({
-      contents: "export default {};",
+      contents: EXCALIDRAW_UNUSED_MODULE,
       loader: "js",
     }));
   },
 };
 
-// The HTML parser Streamdown draws every reply through, `rehype-raw` and
-// parse5 under it, loaded after the panel's first paint rather than parsed
-// with the bundle every window opens with: Streamdown's own import of it is
-// answered with the module that loads it on demand
-// (`@luke/panel`'s `markdown-html-parser.ts`), whose `import()` of the library
-// the splitting below makes a chunk of its own. `vitest.config.ts` answers
-// the import the same way, so the tests draw what the panel draws.
-const MARKDOWN_HTML_PARSER = path.join(appRoot, "../../packages/panel/src/markdown-html-parser.ts");
-const markdownHtmlParserOnDemand = {
-  name: "markdown-html-parser-on-demand",
-  setup(build) {
-    build.onResolve({ filter: /^rehype-raw$/ }, (args) =>
-      args.importer === MARKDOWN_HTML_PARSER ? undefined : { path: MARKDOWN_HTML_PARSER },
-    );
-  },
-};
-
-// The whole of Lucide's icons, which a section's icon picker draws every one
-// of (`src/renderer/desktop/section-icon-picker.tsx`), loaded on demand: its
-// `import("lucide-react")` is answered with a module of `icons` alone, read
-// from Lucide's CommonJS build, one file the panel's own named imports never
-// reach. Note that the ES build would not do, because its barrel, which
-// every window's bundle imports a few dozen glyphs through, names each of
-// some two thousand icon modules, and a module the splitting below can reach
-// from the window's entry through any import is loaded with it, so all of
-// them would be. The CommonJS file is read in a namespace of its own, so the
-// resolver never takes it for the package and keeps answering the named
-// imports with the ES build.
-// Note that the copy is the one the panel (`@luke/panel`), which draws the icons, resolves.
-const LUCIDE_WHOLE = createRequire(path.join(appRoot, "../../packages/panel/package.json")).resolve(
-  "lucide-react",
-);
+// A dynamic `import("lucide-react")` answered with the module of Lucide's
+// `icons` alone (`@luke/panel/build-table`'s `LUCIDE_WHOLE`). The CommonJS file
+// is read in a namespace of its own, so the resolver never takes it for the
+// package and keeps answering the named imports with the ES build.
 const LUCIDE_WHOLE_FILE = "lucide-whole-file";
 const lucideWholeOnDemand = {
   name: "lucide-whole-on-demand",
@@ -104,7 +87,7 @@ const lucideWholeOnDemand = {
       args.kind === "dynamic-import" ? { path: "icons", namespace: "lucide-whole" } : undefined,
     );
     build.onLoad({ filter: /.*/, namespace: "lucide-whole" }, () => ({
-      contents: `export { icons } from "${LUCIDE_WHOLE_FILE}";`,
+      contents: lucideWholeModule(LUCIDE_WHOLE_FILE),
       loader: "js",
       resolveDir: appRoot,
     }));
@@ -117,20 +100,6 @@ const lucideWholeOnDemand = {
       loader: "js",
       resolveDir: path.dirname(args.path),
     }));
-  },
-};
-
-// Pierre's diffs writes each diff as HTML with inline styles, which the
-// panel's policy refuses and reports one by one; its import of the writer is
-// answered with the diff bundle's own (`@luke/panel`'s `diff-view/inline-styles.ts`),
-// which carries each style where the bundle applies it through the CSSOM.
-const DIFF_MARKUP = path.join(appRoot, "../../packages/panel/src/diff-view/inline-styles.ts");
-const diffMarkupInDataAttributes = {
-  name: "diff-markup-in-data-attributes",
-  setup(build) {
-    build.onResolve({ filter: /^hast-util-to-html$/ }, (args) =>
-      args.importer === DIFF_MARKUP ? undefined : { path: DIFF_MARKUP },
-    );
   },
 };
 
@@ -166,15 +135,6 @@ const sideStylesheetsLinked = {
     }));
   },
 };
-
-// Excalidraw's fonts, copied beside the whiteboard bundle so the panel loads
-// nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
-// and the system's own font draws those characters instead.
-const EXCALIDRAW_FONTS = path.join(
-  path.dirname(fileURLToPath(import.meta.resolve("@excalidraw/excalidraw"))),
-  "fonts",
-);
-const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
 
 // The commit the bundle is cut from, which Settings › Updates names
 // (`@luke/host`'s `build-commit.ts`): the short SHA, whether the tree held
@@ -285,38 +245,10 @@ const SIDE_BUNDLE_ENTRIES = {
   "session-recorder": "src/renderer/session-recorder/index.ts",
 };
 
-// The worker Pierre's diffs highlights a Files changed list in
-// (`@luke/panel`'s `diff-view/index.ts`'s `highlightPool`), bundled whole as one
-// classic script and handed to the diff bundle as text
-// (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
-// place the panel's policy admits a worker from. Its WebAssembly engine is
-// answered with nothing, since the policy admits no WebAssembly and the
-// bundle asks for Shiki's JavaScript engine; carried, it would be 600 KB of
-// the worker's text.
-const SHIKI_WASM = /^shiki\/wasm$/;
-const shikiWasmLeftOut = {
-  name: "shiki-wasm-left-out",
-  setup(build) {
-    build.onResolve({ filter: SHIKI_WASM }, (args) => ({ path: args.path, namespace: "no-wasm" }));
-    build.onLoad({ filter: /.*/, namespace: "no-wasm" }, () => ({
-      contents: "export default undefined;",
-      loader: "js",
-    }));
-  },
-};
-const highlightWorker = await build({
-  entryPoints: [fileURLToPath(import.meta.resolve("@pierre/diffs/worker/worker.js"))],
-  bundle: true,
-  write: false,
-  platform: "browser",
-  format: "iife",
-  target: "chrome140",
-  minify: true,
-  conditions: ["production"],
-  plugins: [shikiWasmLeftOut],
-  define: { "process.env.NODE_ENV": '"production"' },
-  logLevel: "info",
-});
+// The worker Pierre's diffs highlights a Files changed list in, bundled as
+// the panel's build table says (`HIGHLIGHT_WORKER_BUILD`) and handed to the
+// diff bundle as text through `panelDefines`.
+const highlightWorker = await build(HIGHLIGHT_WORKER_BUILD);
 const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
 
 // The renderer, as ES modules: one entry per window role, so a window parses
@@ -347,9 +279,8 @@ const rendererBuild = build({
   minify: true,
   conditions: ["production"],
   plugins: [
-    markdownHtmlParserOnDemand,
+    panelRedirects,
     lucideWholeOnDemand,
-    diffMarkupInDataAttributes,
     excalidrawTrim,
     sideStylesheetsLinked,
     ...sentryPlugins(),
@@ -360,8 +291,7 @@ const rendererBuild = build({
   sourcemap: "external",
   logLevel: "info",
   define: {
-    "process.env.NODE_ENV": '"production"',
-    "process.env.IS_PREACT": '"false"',
+    ...panelDefines(highlightWorkerText),
     // The analytics project the screen recorder files into, from the
     // packaging environment rather than source, where secret scanners
     // cannot tell a published project key from a real secret, and only for a
@@ -369,7 +299,6 @@ const rendererBuild = build({
     // all — the same kill switch the site's own counting has, so a local run
     // or an unconfigured build cannot record into production's project.
     ...replayProjectKeyDefine(process.env),
-    DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   },
 });
 
@@ -477,22 +406,15 @@ await Promise.all(
   ),
 );
 
-await Promise.all(
-  (await fs.readdir(EXCALIDRAW_FONTS))
-    .filter((family) => !EXCALIDRAW_FONTS_LEFT_OUT.has(family))
-    .map((family) =>
-      fs.cp(path.join(EXCALIDRAW_FONTS, family), path.join(outputRoot, "renderer/fonts", family), {
-        recursive: true,
-      }),
-    ),
-);
-
-// The harness marks drawn as images rather than traced (`src/renderer/harness-marks.tsx`),
-// copied beside the bundle so the panel reaches them as its own files and the
+// The panel's static files, Excalidraw's fonts and the harness marks, copied
+// beside the bundle, which is the desktop's asset base
+// (`desktop-platform.ts`), so the panel loads nothing from the network and the
 // bundle carries none of their bytes.
-await fs.cp(path.join(appRoot, "src/renderer/marks"), path.join(outputRoot, "renderer/marks"), {
-  recursive: true,
-});
+await Promise.all(
+  panelStaticDirectories().map(({ from, to }) =>
+    fs.cp(from, path.join(outputRoot, "renderer", to), { recursive: true }),
+  ),
+);
 
 await Promise.all(
   Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>

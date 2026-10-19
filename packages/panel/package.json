@@ -9,6 +9,7 @@
     "./app": "./src/app.js",
     "./app-bridge": "./src/app-bridge.js",
     "./app-platform": "./src/app-platform.js",
+    "./build-table": "./scripts/build-table.mjs",
     "./bundle-loader": "./src/bundle-loader.js",
     "./call/avatar-view": "./src/call/avatar-view.js",
     "./call/call-avatar": "./src/call/call-avatar.js",
@@ -30,6 +31,7 @@
     "./styles/shortcut.css": "./src/styles/shortcut.css",
     "./styles/sign-in.css": "./src/styles/sign-in.css",
     "./styles/tasks.css": "./src/styles/tasks.css",
+    "./styles/theme.css": "./src/styles/theme.css",
     "./styles/tooltip.css": "./src/styles/tooltip.css",
     "./testing/action-label": "./src/testing/action-label.js",
     "./testing/app-bridge": "./src/testing/app-bridge.js",
@@ -98,6 +100,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "ai": "catalog:",
+    "esbuild": "0.27.7",
     "jsdom": "^30.0.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
