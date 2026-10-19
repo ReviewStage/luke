@@ -24,6 +24,7 @@ import {
   type DiffListSelection,
   type DiffLook,
   type DiffSelection,
+  type DiffTextSelection,
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
@@ -34,6 +35,7 @@ import {
 } from "./contract.js";
 import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
+import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
@@ -74,7 +76,9 @@ import { adoptShadowStyles } from "./inline-styles.js";
  * A changed line marks what it changed as asked (whole words joined across
  * the spaces between them, words, characters, or nothing), and a line too
  * long to compare is tinted whole. Lines handed as selected, a review
- * thread's, are lit in the code's blue, as a File tab's pointed lines are.
+ * thread's, are lit in the code's blue, as a File tab's pointed lines are,
+ * their rows alone and not the notes under them; the gutter's + stands
+ * inside the numbers' column, never over the code.
  * Between two hunks of a file stands how many unchanged lines they leave
  * out. One diff alone offers no way to show them, since only its patch is
  * at hand; an excerpt, a review thread's lines, says nothing of the lines
@@ -102,6 +106,12 @@ import { adoptShadowStyles } from "./inline-styles.js";
  * its own and holds it at the top while the file scrolls by. The view is
  * told which file stands at the top as the list scrolls, and scrolls it to
  * a file's header.
+ *
+ * Where the view comments on lines, code selected as text is read once the
+ * drag that began in a file lets go (`watchTextSelection`): the lines it
+ * runs over in that file's shadow root (`./text-selection.ts`) and where its
+ * words stand, which the view offers a comment on. A press in the list or a
+ * scroll lets the offer go.
  */
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
@@ -172,6 +182,19 @@ const LOOK_CSS = `
   [data-code],
   [data-gutter] {
     scrollbar-width: thin;
+  }
+  /* The gutter's + stands inside the numbers' column, over a number at
+     most, as GitHub's does; Pierre hangs it a character short of a line's
+     height past the column, over the code's first characters. */
+  [data-utility-button] {
+    margin-right: 0;
+  }
+  /* Lines lit, a comment's or a thread's, light their own rows alone: a
+     note under them, the comment being written or a thread, keeps its own
+     ground rather than standing in the band. */
+  [data-line-annotation][data-selected-line],
+  [data-gutter-buffer="annotation"][data-selected-line] {
+    --diffs-computed-selected-line-bg: var(--diffs-computed-diff-line-bg, transparent);
   }
   /* Note that a line's code scrolls sideways alone, so it keeps no room for a
      scroll bar up and down, which a system that draws its bars in the
@@ -532,6 +555,71 @@ function listOptions(
   };
 }
 
+/** The selection's range inside one shadow root, as a live range; none where nothing is selected there. */
+function rangeIn(root: ShadowRoot): Range | undefined {
+  const [composed] = document.getSelection()?.getComposedRanges({ shadowRoots: [root] }) ?? [];
+  if (composed === undefined || composed.collapsed) return undefined;
+  const range = document.createRange();
+  range.setStart(composed.startContainer, composed.startOffset);
+  range.setEnd(composed.endContainer, composed.endOffset);
+  return range;
+}
+
+/**
+ * Tells the view what code a drag that began in a file of the list selected
+ * as text, once it lets go, wherever the pointer then stands; and tells it
+ * the selection is gone as a press lands in the list. The selection is read
+ * a frame after the drag lets go, once the browser has settled it, and only
+ * in the file the drag began in, so a selection running into another file
+ * runs over no lines. Answers what stops the watch.
+ */
+function watchTextSelection(
+  host: HTMLElement,
+  watched: () => boolean,
+  tell: (selected: DiffTextSelection | undefined) => void,
+  pathOf: (element: EventTarget) => string | undefined,
+): () => void {
+  let origin: HTMLElement | undefined;
+  let frame: number | undefined;
+  const read = (element: HTMLElement) => {
+    frame = undefined;
+    const path = pathOf(element);
+    const range = element.shadowRoot === null ? undefined : rangeIn(element.shadowRoot);
+    const selection = range === undefined ? undefined : selectedLines(range);
+    const rect = range === undefined ? undefined : selectionRect(range);
+    if (path === undefined || selection === undefined || rect === undefined) return;
+    tell({ picked: { path, selection }, rect });
+  };
+  const press = (event: PointerEvent) => {
+    const path = event.composedPath();
+    // Note that only a press on the code begins a drag over it; one on a
+    // file's header or a note leaves the selection standing, which a let-go
+    // would otherwise read again and offer anew.
+    origin = pressedOnCode(path)
+      ? path.find(
+          (target): target is HTMLElement =>
+            target instanceof HTMLElement && pathOf(target) !== undefined,
+        )
+      : undefined;
+    tell(undefined);
+  };
+  const letGo = () => {
+    const element = origin;
+    origin = undefined;
+    if (element === undefined || !watched()) return;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => read(element));
+  };
+  host.addEventListener("pointerdown", press);
+  // Note that the drag may let go past the list, beyond the file it began in.
+  document.addEventListener("pointerup", letGo, true);
+  return () => {
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    host.removeEventListener("pointerdown", press);
+    document.removeEventListener("pointerup", letGo, true);
+  };
+}
+
 /**
  * Draws a list of files, as Files changed shows its pull request's. Note
  * that a file's patch is read again only when it changes, and its item
@@ -544,11 +632,14 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const paths = new WeakMap<FileDiffMetadata, string>();
   const releases: Array<() => void> = [];
   const dressed = new WeakSet<HTMLElement>();
+  // Each file's element by the file it draws now, which a drag's selection is read in.
+  const elementPaths = new WeakMap<EventTarget, string>();
   // Note that Pierre keeps a file's element for another file once the first
   // scrolls away, so each element's shadow root is dressed once, the first
   // time it is drawn, and whether it is drawn as notes alone every time.
   const dress = (element: HTMLElement, path: string) => {
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
+    elementPaths.set(element, path);
     if (dressed.has(element) || element.shadowRoot === null) return;
     dressed.add(element);
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
@@ -604,7 +695,24 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     top = path;
     latest.onTopFile(path);
   };
-  const unsubscribe = view.subscribeToScroll((scrollTop) => tellTop(scrollTop));
+  // Note that a selection's offer stands where the selection stood, so a
+  // scroll lets it go; the view is told so once, not on every scroll.
+  let offered = false;
+  const tellText = (selected: DiffTextSelection | undefined) => {
+    if (selected === undefined && !offered) return;
+    offered = selected !== undefined;
+    latest.onSelectText?.(selected);
+  };
+  const stopWatching = watchTextSelection(
+    host,
+    () => latest.onSelectText !== undefined,
+    tellText,
+    (element) => elementPaths.get(element),
+  );
+  const unsubscribe = view.subscribeToScroll((scrollTop) => {
+    tellTop(scrollTop);
+    tellText(undefined);
+  });
   tellTop(0);
   // The lines being commented on, lit; Pierre's own pick stands while none is.
   const light = (selected: DiffListSelection | undefined) => {
@@ -636,6 +744,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
     unmount: () => {
+      stopWatching();
       unsubscribe();
       view.cleanUp();
       for (const release of releases) release();

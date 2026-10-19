@@ -138,6 +138,20 @@ export interface DiffListSelection {
   readonly selection: DiffSelection;
 }
 
+/** Where a text selection stands in the window, in its viewport's pixels. */
+export interface DiffTextRect {
+  readonly top: number;
+  readonly left: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/** Code selected as text in one file of a list: the lines it runs over, as a pick of them, and where it stands. */
+export interface DiffTextSelection {
+  readonly picked: DiffListSelection;
+  readonly rect: DiffTextRect;
+}
+
 /**
  * What the view hands the bundle for a list of files: the files in order,
  * how to draw them, the element each file's header is drawn in and each
@@ -145,7 +159,10 @@ export interface DiffListSelection {
  * stands at the top of the list as it scrolls. Where lines may be commented
  * on, `onComment` is told the lines a press of the gutter's + picked, on a
  * file that draws lines of its own, and `selected` lights the lines being
- * commented on; with no `onComment` the gutter offers nothing.
+ * commented on; with no `onComment` the gutter offers nothing. Where lines
+ * may be commented on, `onSelectText` is told the lines code selected as
+ * text runs over once a drag lets go, and none once it is let go, scrolled
+ * past, or pressed away from.
  */
 export interface DiffListProps {
   readonly files: readonly DiffListFile[];
@@ -155,6 +172,8 @@ export interface DiffListProps {
   readonly onTopFile: (path: string) => void;
   readonly onComment?: ((picked: DiffListSelection) => void) | undefined;
   readonly selected?: DiffListSelection | undefined;
+  /** Told the lines code selected as text in a file runs over, and where it stands; none once it is gone. */
+  readonly onSelectText?: ((selected: DiffTextSelection | undefined) => void) | undefined;
   /** Reads a file's whole text on both sides, the first time the lines between its hunks are asked for; none offers no such lines. */
   readonly readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
 }
