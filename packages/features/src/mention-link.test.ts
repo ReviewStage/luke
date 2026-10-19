@@ -951,8 +951,9 @@ test("a comment's words ask Luke though twenty other mentions come before him", 
 });
 
 test("a date is written in the app's own form, a day, a time with its offset, or a range, and read back as written", () => {
+  const day: Mention = { kind: MENTION_KIND.DATE, start: "2026-10-20" };
   const dates: Mention[] = [
-    { kind: MENTION_KIND.DATE, start: "2026-10-20" },
+    day,
     { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00-07:00" },
     { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00+05:30", end: "2026-10-20T17:00+05:30" },
     { kind: MENTION_KIND.DATE, start: "2026-10-20", end: "2026-10-24" },
@@ -970,7 +971,7 @@ test("a date is written in the app's own form, a day, a time with its offset, or
     assert.deepEqual(decodeMention(encodeMention(date, PLACE), REPOSITORY), date);
   }
   assert.equal(
-    mentionMarkdown(dates[0] as Mention, "Oct 20, 2026", PLACE),
+    mentionMarkdown(day, "Oct 20, 2026", PLACE),
     "[@Oct 20, 2026](luke://date/2026-10-20)",
   );
 });

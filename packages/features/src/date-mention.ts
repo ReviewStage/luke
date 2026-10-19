@@ -430,12 +430,13 @@ function dayWords(day: Day, options: Intl.DateTimeFormatOptions): string {
 
 /** A time in words as `zone` reads it, its zone's short name after it where asked. */
 function timeWords(moment: string, zone: string, named: boolean): string {
-  return new Intl.DateTimeFormat(LOCALE, {
+  const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
     minute: "2-digit",
     timeZone: zone,
-    ...(named ? { timeZoneName: "short" } : {}),
-  }).format(Date.parse(moment));
+  };
+  if (named) options.timeZoneName = "short";
+  return new Intl.DateTimeFormat(LOCALE, options).format(Date.parse(moment));
 }
 
 /** Whether two moments fall on one day as `zone` reads them. */
