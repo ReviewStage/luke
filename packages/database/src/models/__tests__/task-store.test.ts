@@ -15,6 +15,7 @@ import { conversations } from "../../schemas/storage.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import { createIssue } from "../issue-store.js";
 import {
@@ -27,6 +28,7 @@ import {
   readTaskWorkspace,
   updateTask,
 } from "../task-store.js";
+import { voiceSessionRecord } from "../voice-session-record.js";
 
 /**
  * A plan's pin is its reader's own: two members of one workspace read the
@@ -511,6 +513,72 @@ it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
         assert.deepEqual(read, [agentId]);
         assert.equal((yield* listedTask(dean, taskId)).archivedAt, undefined);
         assert.equal((yield* archiveOf(dean, agentId)).archivedAt, undefined);
+      }),
+  );
+});
+
+/** A call the account opened on the task, held by a connection; answers its live session id. */
+const openCall = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const sessionId = `live-${randomUUID()}`;
+    yield* voiceSessionRecord().register({
+      userId,
+      sessionId,
+      taskId,
+      attachId: randomUUID(),
+      model: "gpt-realtime",
+    });
+    return sessionId;
+  });
+
+/** Which of the calls named the orphan sweep's next run reads, past any grace. */
+const sweptOf = (sessionIds: readonly string[]) =>
+  Effect.map(
+    voiceSessionRecord().detached({ detachedBefore: Date.UTC(1970, 0, 1, 0, 0, 1), limit: 1_000 }),
+    (swept) => sessionIds.filter((id) => swept.some((call) => call.sessionId === id)),
+  );
+
+it.layer(getTestDB())("a plan's archive and its live calls", (it) => {
+  it.effect(
+    "an archive hands every open call on the plan to the sweep, the member's and a teammate's, held or not, and no other",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const { id: otherTask } = yield* createTask(dean, {
+          name: "Billing export",
+          organizationId: yield* openWorkspace(dean),
+        });
+        const deansCall = yield* openCall(dean, taskId);
+        const charlesCall = yield* openCall(charles, taskId);
+        const ended = yield* openCall(dean, taskId);
+        yield* voiceSessionRecord().close({
+          sessionId: ended,
+          seconds: 3,
+          reason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
+        });
+        const elsewhere = yield* openCall(dean, otherTask);
+        const calls = [deansCall, charlesCall, ended, elsewhere];
+        assert.deepEqual(yield* sweptOf(calls), []);
+
+        yield* updateTask(charles, taskId, { archived: true });
+
+        assert.deepEqual(yield* sweptOf(calls), [deansCall, charlesCall]);
+      }),
+  );
+
+  it.effect(
+    "a call opened, or re-attached, on a plan the archive already landed on is handed to the sweep as well",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const held = yield* openCall(dean, taskId);
+        yield* updateTask(dean, taskId, { archived: true });
+
+        // A re-attach and a creation that read the plan before its archive land after it.
+        yield* voiceSessionRecord().attached({ sessionId: held, attachId: randomUUID() });
+        const late = yield* openCall(charles, taskId);
+
+        assert.deepEqual(yield* sweptOf([held, late]), [held, late]);
       }),
   );
 });

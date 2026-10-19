@@ -1,8 +1,9 @@
 import type { Task } from "@luke/features/task-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   VOICE_CLOSE_REASON,
@@ -12,7 +13,7 @@ import {
   type VoiceSegmentRole,
 } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
-import { readTask } from "./task-store.js";
+import { HANDED_TO_SWEEP_AT, readTask } from "./task-store.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -40,7 +41,8 @@ import { readTask } from "./task-store.js";
  * written only by the connection that still holds the row: the Mac re-attaches
  * within seconds, so the connection it replaced may write its detach after
  * the newer one attached, and that late stamp must not hand a live call to
- * the sweep.
+ * the sweep. A task's archive hands every open call on it to the sweep the
+ * same way, stamped as of the epoch whoever holds it (`task-store.ts`).
  *
  * The row also names the task the call was opened about, checked to be in a
  * workspace the account is a member of before anything is spent, and that binding is what a
@@ -452,20 +454,82 @@ const closeLostSession = SqlSchema.void({
     ),
 });
 
+const SessionTaskRequestSchema = Schema.Struct({ liveSessionId: Schema.String });
+
+/**
+ * The session's task as it stands, its row share-locked for the rest of the
+ * transaction: an archive under way is waited on and read once it lands, and
+ * one that comes after waits for this transaction and then sees its write.
+ */
+const lockSessionTask = SqlSchema.findAll({
+  Request: SessionTaskRequestSchema,
+  Result: Schema.Struct({ archivedAt: Schema.NullOr(InstantColumnSchema) }),
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .select({ archivedAt: task.archivedAt })
+        .from(voiceSessions)
+        .innerJoin(task, eq(task.id, voiceSessions.taskId))
+        .where(eq(voiceSessions.liveSessionId, request.liveSessionId))
+        .for("share", { of: task }),
+    ),
+});
+
+const stampSweepNow = SqlSchema.void({
+  Request: Schema.Struct({ liveSessionId: Schema.String, detachedAt: Schema.Date }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: row.detachedAt })
+        .where(
+          and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+        ),
+    ),
+});
+
+/**
+ * A creation's or a re-attach's write, fenced against the task's archive:
+ * the write lands, then the task is read under its lock, and a call on a task
+ * archived meanwhile is handed to the sweep as the archive hands the calls it
+ * found (`task-store.ts`), so no call opened or re-attached across an archive
+ * escapes it.
+ */
+function fencedByArchive<A, E, R>(
+  liveSessionId: string,
+  write: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | QueryError | Schema.SchemaError, R | DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const written = yield* write;
+        const tasks = yield* lockSessionTask({ liveSessionId });
+        if (tasks.some((row) => row.archivedAt !== null)) {
+          yield* stampSweepNow({ liveSessionId, detachedAt: HANDED_TO_SWEEP_AT });
+        }
+        return written;
+      }),
+    ),
+  );
+}
+
 export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRecord {
   const usage = (seconds: number, confirmed: boolean) => ({ seconds, confirmed });
   return {
     register: (input) =>
       Effect.andThen(
-        registerSession({
-          userId: input.userId,
-          liveSessionId: input.sessionId,
-          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          taskId: input.taskId,
-          attachId: input.attachId,
-          model: input.model,
-          startedAt: new Date(now()),
-        }),
+        fencedByArchive(
+          input.sessionId,
+          registerSession({
+            userId: input.userId,
+            liveSessionId: input.sessionId,
+            delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+            taskId: input.taskId,
+            attachId: input.attachId,
+            model: input.model,
+            startedAt: new Date(now()),
+          }),
+        ),
         Effect.map(
           findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
           Option.match({ onNone: () => undefined, onSome: (row) => row.id }),
@@ -511,7 +575,10 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         detachedAt: new Date(now()),
       }),
     attached: (input) =>
-      stampAttached({ liveSessionId: input.sessionId, attachId: input.attachId }),
+      fencedByArchive(
+        input.sessionId,
+        stampAttached({ liveSessionId: input.sessionId, attachId: input.attachId }),
+      ),
     detached: (input) =>
       Effect.map(
         findDetached({ before: new Date(input.detachedBefore), limit: input.limit }),

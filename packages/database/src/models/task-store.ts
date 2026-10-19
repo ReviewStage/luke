@@ -1111,6 +1111,27 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   );
 });
 
+/** The instant an archived task's open calls are stamped detached at: before any grace, so the sweep's next run takes them first. */
+export const HANDED_TO_SWEEP_AT = new Date(0);
+
+/**
+ * Every open call on the task, whichever member opened it, handed to the
+ * voice orphan sweep: stamped detached as of the epoch whether or not a
+ * connection holds it, so the sweep's next run ends it on Luke's key and
+ * each desktop on it hears `session.closed`; a re-attach is refused once
+ * the task is archived, so nothing takes the call back.
+ */
+const handTaskCallsToSweep = SqlSchema.void({
+  Request: Schema.Struct({ taskId: Schema.String, detachedAt: Schema.Date }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: row.detachedAt })
+        .where(and(eq(voiceSessions.taskId, row.taskId), isNull(voiceSessions.closedAt))),
+    ),
+});
+
 /**
  * The task's agents still standing unarchived, each with its conversation
  * locked, the lock every write of its lines and turns takes, in the
@@ -1263,6 +1284,9 @@ export function updateTask<E = never, R = never, RA = never>(
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
         if (changes.archived !== undefined) yield* followTaskArchive(taskId, row.archivedAt);
+        if (changes.archived === true) {
+          yield* handTaskCallsToSweep({ taskId, detachedAt: HANDED_TO_SWEEP_AT });
+        }
         return Option.some(yield* taskOf(userId, row));
       }),
     ),
