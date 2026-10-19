@@ -997,6 +997,36 @@ it.effect(
 );
 
 it.effect(
+  "a correction stamped into a line asked before a later ask still reaches the brain as the call ends",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Make invites expire after two days.", 0, 1_000);
+      sideband.delegation("item_1", 1_100);
+      yield* settle();
+      sideband.input("And resend them once.", 6_000, 7_000);
+      sideband.delegation("item_2", 7_100);
+      yield* settle();
+      // Delivered late, its timing places it on the first line, behind the second ask's span.
+      sideband.input(" No, three days.", 1_200, 1_600);
+      yield* settle();
+      const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
+      yield* settle();
+      sideband.closedBy("close_requested", 4);
+      yield* Fiber.join(ending);
+
+      assert.equal(f.brain.asks.length, 3);
+      const last = f.brain.asks[2];
+      assert.ok(last?.question.endsWith("Their line: No, three days."));
+      assert.ok(
+        last?.question.includes("Developer: Make invites expire after two days. No, three days."),
+      );
+    }),
+);
+
+it.effect(
   "the session closing of its own hands on the developer's undelegated words too, and a session let go of, or whose socket dropped, for its peer to attach to again hands on nothing",
   () =>
     Effect.gen(function* () {

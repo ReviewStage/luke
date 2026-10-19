@@ -855,13 +855,27 @@ export class LiveSessionService {
       for (const open of session.openAsks.values()) this.#claimLate(session, open);
       const context = session.ledger.askContext(session.lastDelegationOffsetMs);
       const rows = askRowsOf(context, session.askedRows, Number.POSITIVE_INFINITY);
-      // A row no ask claimed is unheard whole; an asked row only for the words it gained after its
-      // ask carried it, such as a correction that joined it in the last seconds of the call.
-      const unheard = context.turns.flatMap((turn) => {
+      // An asked row is unheard only for the words it gained after its ask carried it, such as a
+      // correction that joined it in the last seconds of the call; it is read wherever it stands,
+      // since a late fragment joins the row its timing places it in, behind the context's span too.
+      const gainedOf = (row: TranscriptUtterance): string => {
+        const carried = session.askedText.get(row.rowId);
+        return carried === undefined ? "" : row.text.slice(carried);
+      };
+      const grown = session.ledger
+        .utterances(TRANSCRIPT_SPEAKER.USER)
+        .filter(
+          (row) =>
+            gainedOf(row).trim() !== "" && !context.turns.some((turn) => turn.rowId === row.rowId),
+        );
+      const turns = [...context.turns, ...grown].sort(
+        (left, right) => left.startMs - right.startMs,
+      );
+      // A row no ask claimed is unheard whole.
+      const unheard = turns.flatMap((turn) => {
         if (turn.speaker !== TRANSCRIPT_SPEAKER.USER) return [];
         if (!session.askedRows.has(turn.rowId)) return [turn.text];
-        const carried = session.askedText.get(turn.rowId);
-        const gained = carried === undefined ? "" : turn.text.slice(carried);
+        const gained = gainedOf(turn);
         return gained.trim() === "" ? [] : [gained];
       });
       const last = unheard.at(-1);
@@ -869,13 +883,16 @@ export class LiveSessionService {
       this.#claim(session, rows, session.lastDelegationOffsetMs);
       this.#markAsked(
         session,
-        context.turns.map((turn) => turn.rowId),
+        turns.map((turn) => turn.rowId),
       );
       session.revisions += 1;
       const submissionId = this.#options.createId();
       const submission = yield* this.#brain.submitAsk({
         submissionId,
-        question: [renderAskContext(context), `${UNHEARD_ASK_NOTE} ${last.trim()}`].join("\n"),
+        question: [
+          renderAskContext({ turns, ask: context.ask }),
+          `${UNHEARD_ASK_NOTE} ${last.trim()}`,
+        ].join("\n"),
         sessionId: session.sessionId,
         revision: session.revisions,
       });
