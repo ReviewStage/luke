@@ -2584,21 +2584,32 @@ const insertAttachment = SqlSchema.void({
     ),
 });
 
-const insertSharedAttachment = SqlSchema.void({
-  Request: Schema.Struct({
-    id: Schema.String,
-    organizationId: Schema.String,
-    messageId: Schema.String,
-    contentType: chatImageTypeSchema,
-    byteCount: Schema.Number,
-    bytes: Schema.Uint8Array,
-    now: Schema.Date,
-  }),
-  execute: ({ now, messageId, ...picture }) =>
+/**
+ * The picture's `chat_attachment` row copied into `attachment`, as it was
+ * kept there rather than as the write handed it in: a post retried under
+ * its key reads its file again, which may have changed since the first
+ * write kept it, and `chat_attachment` keeps the first, so the copy does too.
+ */
+const copySharedAttachment = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, messageId: Schema.String }),
+  execute: ({ id, messageId }) =>
     Database.use((db) =>
       db
         .insert(attachment)
-        .values({ ...picture, chatMessageId: messageId, createdAt: now })
+        .select(
+          queryBuilder
+            .select({
+              id: chatAttachment.id,
+              organizationId: chatAttachment.organizationId,
+              chatMessageId: chatAttachment.messageId,
+              contentType: chatAttachment.contentType,
+              byteCount: chatAttachment.byteCount,
+              bytes: chatAttachment.bytes,
+              createdAt: chatAttachment.createdAt,
+            })
+            .from(chatAttachment)
+            .where(and(eq(chatAttachment.id, id), eq(chatAttachment.messageId, messageId))),
+        )
         .onConflictDoNothing(),
     ),
 });
@@ -2717,18 +2728,20 @@ export function attachMessageImages(
       const kept = images.map((image) => image.id);
       yield* deleteOtherAttachments({ messageId, kept });
       yield* deleteOtherSharedAttachments({ messageId, kept });
-      yield* Effect.forEach(images, (image) => {
-        const row = {
-          id: image.id,
-          organizationId,
-          messageId,
-          contentType: image.contentType,
-          byteCount: image.bytes.byteLength,
-          bytes: image.bytes,
-          now,
-        };
-        return Effect.andThen(insertAttachment(row), insertSharedAttachment(row));
-      });
+      yield* Effect.forEach(images, (image) =>
+        Effect.andThen(
+          insertAttachment({
+            id: image.id,
+            organizationId,
+            messageId,
+            contentType: image.contentType,
+            byteCount: image.bytes.byteLength,
+            bytes: image.bytes,
+            now,
+          }),
+          copySharedAttachment({ id: image.id, messageId }),
+        ),
+      );
       return true;
     }),
   );

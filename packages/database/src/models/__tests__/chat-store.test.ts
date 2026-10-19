@@ -16,7 +16,7 @@ import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
 import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
-import { chatMessage, workspaceChat } from "../../schemas/chat.js";
+import { chatAttachment, chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
@@ -1660,6 +1660,43 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
         assert.deepEqual(
           (yield* shared).map((row) => row.organizationId),
           [elsewhere],
+        );
+      }),
+  );
+
+  it.effect(
+    "a picture kept before the one table, written again with other bytes under its id, is copied there as it was first kept",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const room = yield* openRoom;
+        const id = randomUUID();
+        const message = yield* pictured(room, [id]);
+        const first = new Uint8Array([137, 80, 78, 71, 1]);
+        yield* db.insert(chatAttachment).values({
+          id,
+          organizationId: room.workspace,
+          messageId: message.id,
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          byteCount: first.byteLength,
+          bytes: first,
+          createdAt: yield* DateTime.nowAsDate,
+        });
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [
+          { id, contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([137, 80, 78, 71, 2]) },
+        ]);
+        const [copied] = yield* db
+          .select({ bytes: attachment.bytes })
+          .from(attachment)
+          .where(eq(attachment.id, id));
+        assert.deepEqual([...(copied?.bytes ?? [])], [...first]);
+        assert.deepEqual(
+          [
+            ...Option.getOrThrow(yield* readAttachment(room.owner, room.workspace, message.id, id))
+              .bytes,
+          ],
+          [...first],
         );
       }),
   );
