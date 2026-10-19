@@ -40,7 +40,7 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import {
@@ -1476,16 +1476,16 @@ function IssuesPage({ children }: { children: ReactNode }): ReactNode {
   return createElement(TaskMentions, { value: { ...taskPage(), readIssues }, children });
 }
 
+/** The workspaces whose issues the window's act port was asked to list, in order. */
+const issuesRead: string[] = [];
+
 /** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
-  const calls = fakeAppBridgeCalls();
-  fakeAppBridge({
-    ...calls,
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.ISSUES_LIST) return calls.act?.(request) ?? Promise.reject();
-      told.push(request);
-      const value = { issues: [...standing] };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  issuesRead.length = 0;
+  fakeActPort({
+    [ACT_KIND.ISSUES_LIST]: (payload) => {
+      issuesRead.push(payload.workspaceId);
+      return Promise.resolve({ issues: [...standing] });
     },
   });
   handState({ [EXPERIMENT.ISSUES]: on });
@@ -1585,10 +1585,7 @@ test("with Issues off an @ offers no issue and reads none", async () => {
   await settle();
 
   assert.deepEqual(issuesListed(container), []);
-  assert.equal(
-    told.some((each) => each.kind === ACT_KIND.ISSUES_LIST),
-    false,
-  );
+  assert.deepEqual(issuesRead, []);
 });
 
 test("a sent message's mention of an issue is drawn as the chip that opens the issue, its target on no attribute", async () => {

@@ -17,6 +17,7 @@ import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
@@ -39,7 +40,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -1678,15 +1679,12 @@ function acmeIssue(number: number, title: string, status: Issue["status"]): Issu
   };
 }
 
-/** A window whose issues list answers `issues` for the workspace asked, every other act refused; the workspaces asked for, in order. */
-function issuesAnswer(issues: () => Promise<ActOutcome>): string[] {
+/** A window whose act port lists `issues` for the workspace asked, a rejection standing for a refusal; the workspaces asked for, in order. */
+function issuesAnswer(issues: () => Promise<PortActResult<typeof ACT_KIND.ISSUES_LIST>>): string[] {
   const asked: string[] = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.ISSUES_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      asked.push(request.payload.workspaceId);
+  fakeActPort({
+    [ACT_KIND.ISSUES_LIST]: (payload) => {
+      asked.push(payload.workspaceId);
       return issues();
     },
   });
@@ -1696,10 +1694,7 @@ function issuesAnswer(issues: () => Promise<ActOutcome>): string[] {
 test("with Issues on, ⌘K finds the listed workspace's issues by title or identifier under Issues, and Enter opens the issue's page", async () => {
   const fix = acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.IN_PROGRESS);
   const asked = issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const opened: unknown[] = [];
@@ -1728,10 +1723,7 @@ test("with Issues on, ⌘K finds the listed workspace's issues by title or ident
 
 test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads none", async () => {
   const asked = issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
   );
   handState({});
   await paletteUnderState(tasksControl({ workspace: ACME }));
@@ -1744,11 +1736,11 @@ test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads no
 });
 
 test("Issues says the issues are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
-  let answer: (outcome: ActOutcome) => void = () => undefined;
+  let refuse: (reason: Error) => void = () => undefined;
   const asked = issuesAnswer(
     () =>
-      new Promise<ActOutcome>((resolve) => {
-        answer = resolve;
+      new Promise((_resolve, reject) => {
+        refuse = reject;
       }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
@@ -1756,7 +1748,7 @@ test("Issues says the issues are being read until they answer, and a refused rea
   chooseFilter("Issues");
   assert.equal(emptyLine(), "Reading the workspace's issues…");
 
-  answer({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+  refuse(new Error("Not here."));
   await settle();
   assert.match(emptyLine() ?? "", /The workspace's issues could not be read\./u);
   const retry = [...document.querySelectorAll("button")].find(
@@ -1769,10 +1761,7 @@ test("Issues says the issues are being read until they answer, and a refused rea
 
 test("an issue chosen over a peek filling the Issues list puts the peek away before opening the issue's page, so going back shows the list", async () => {
   issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const done: string[] = [];
@@ -1803,7 +1792,7 @@ test("an issue chosen over a peek filling the Issues list puts the peek away bef
 });
 
 test("with the Issues filter chosen, Issues turning off shows All again, which finds the rest", async () => {
-  issuesAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [] } }));
+  issuesAnswer(() => Promise.resolve({ issues: [] }));
   let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),

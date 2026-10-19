@@ -29,6 +29,7 @@ import {
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
+import { isPortActKind, type PortActKind, type PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -132,10 +133,12 @@ interface Standing {
   room: ShellRoom;
 }
 
-/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
+/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names, an act-port kind among them. */
 function mount(
   initial: Partial<Standing> = {},
-  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } = {},
+  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } & {
+    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
+  } = {},
   registry?: AtomRegistry,
 ) {
   const told: ActKind[] = [];
@@ -171,23 +174,43 @@ function mount(
     room: SHELL_ROOM.WIDE,
     ...initial,
   };
+  const appAnswers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } =
+    answers;
+  const portAnswers: {
+    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
+  } = answers;
+  /** An act-port kind's answer as the test gives it, or a rejection where it gives none. */
+  function portAnswer<Kind extends PortActKind>(
+    kind: Kind,
+    ...args: unknown[]
+  ): Promise<PortActResult<Kind>> {
+    const answer = portAnswers[kind];
+    if (answer !== undefined) return answer(...args);
+    return Promise.reject(new Error("Not answered in this test."));
+  }
+  /** An `app:act` kind's answer as the test gives it, recorded, or a rejection where it gives none. */
+  function appAnswer<Kind extends ActKind>(
+    kind: Kind,
+    ...args: unknown[]
+  ): Promise<ActResultFor<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
+    const answer = appAnswers[kind];
+    if (answer !== undefined) return answer(...args);
+    return Promise.reject(new Error("Not answered in this test."));
+  }
   function Probe() {
     const [held, setHeld] = useState(standing);
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // An act the test does not answer is recorded and refused.
-        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
-        act: (<Kind extends ActKind>(
-          kind: Kind,
-          ...args: unknown[]
-        ): Promise<ActResultFor<Kind>> => {
-          record(kind);
-          payloads.push({ kind, payload: args[0] });
-          const answer = answers[kind];
-          if (answer !== undefined) return answer(...args);
-          return Promise.reject(new Error("Not answered in this test."));
-        }) as ActHandle["act"],
+        // An `app:act` kind the test does not answer is recorded and refused;
+        // an act-port kind is answered as the port would, and recorded nowhere.
+        // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
+        act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
+          isPortActKind(kind)
+            ? portAnswer(kind, ...args)
+            : appAnswer(kind, ...args)) as ActHandle["act"],
         // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
         tell: ((kind: ActKind, ...args: unknown[]) => {
           record(kind);
