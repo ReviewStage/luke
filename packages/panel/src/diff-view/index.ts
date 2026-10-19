@@ -173,6 +173,13 @@ const LOOK_CSS = `
   [data-gutter] {
     scrollbar-width: thin;
   }
+  /* Note that a line's code scrolls sideways alone, so it keeps no room for a
+     scroll bar up and down, which a system that draws its bars in the
+     layout would otherwise leave as a strip at the end of every line, its
+     rows and its gaps stopping short of the file's header. */
+  [data-code] {
+    scrollbar-gutter: auto;
+  }
   /* A file drawn as its notes alone, laid out as blocks: its one empty line, the old side, the numbers, and the hatching beside a side's missing lines are hidden, so its notes run across its whole width, as tall as Pierre measured them. */
   :host([${LEAD_ATTRIBUTE}]) pre,
   :host([${LEAD_ATTRIBUTE}]) [data-code],
@@ -210,19 +217,50 @@ const FILL_CSS = `
 }
 `;
 
-/** How tall a list's file header stands, in pixels, which Pierre reserves for it before it is measured: the view's `.diff-list-head` (`styles/tasks.css`). */
-const LIST_HEADER_HEIGHT = 34;
+/** How tall a list's file header stands, in pixels, which Pierre reserves for it before it is measured: the view's `.diff-list-head` (`styles/tasks.css`), its row and its rule. */
+const LIST_HEADER_HEIGHT = 37;
+
+/** How tall a band between two hunks of a list's file stands, in pixels, which Pierre lays the list out by (`LIST_CSS`). */
+const LIST_GAP_HEIGHT = 24;
+
+/** The room between two files of a list, and above the first, in pixels: the panel's ground between their cards. */
+const LIST_FILE_GAP = 12;
 
 /** The room below a list's last file, in pixels, so its last lines can be scrolled up off the foot of the pane. */
 const LIST_FOOT_ROOM = 48;
 
+/**
+ * A file in a list: a card, its edge and its corners the panel's, holding
+ * its header and its lines, each gap between hunks a quiet band of its own
+ * height (`LIST_GAP_HEIGHT`). Note that the card's corners are clipped at
+ * the card's own edge, so its header, stuck at the top of the list while
+ * its lines scroll by, stands square there, the rounded top scrolled away.
+ */
+const LIST_CSS = `
+@layer unsafe {
+  :host {
+    box-sizing: border-box;
+    overflow: clip;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    --diffs-bg-separator-override: var(--luke-color-fill-hover);
+  }
+  [data-separator="line-info-basic"] {
+    height: ${LIST_GAP_HEIGHT}px;
+    color: var(--luke-color-text-subtle);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+  }
+}
+`;
+
 let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet } | undefined;
 
-/** The look's sheets, made once and adopted by every diff's shadow root: the look every diff in a list wears, and the same with the fill one diff alone wears. */
+/** The look's sheets, made once and adopted by every diff's shadow root: the look with the card every file of a list wears, and the look with the fill one diff alone wears. */
 function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet } {
   if (sheets !== undefined) return sheets;
   const look = new CSSStyleSheet();
-  look.replaceSync(LOOK_CSS);
+  look.replaceSync(`${LOOK_CSS}${LIST_CSS}`);
   const fill = new CSSStyleSheet();
   fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
   sheets = { look, fill };
@@ -476,8 +514,9 @@ function listOptions(
     itemMetrics: {
       lineHeight: Number(drawn.fontSize) * Number(LINE_HEIGHT_RATIO[drawn.lineHeight]),
       diffHeaderHeight: LIST_HEADER_HEIGHT,
+      hunkSeparatorHeight: LIST_GAP_HEIGHT,
     },
-    layout: { paddingTop: 0, paddingBottom: LIST_FOOT_ROOM, gap: 0 },
+    layout: { paddingTop: LIST_FILE_GAP, paddingBottom: LIST_FOOT_ROOM, gap: LIST_FILE_GAP },
     renderCustomHeader: (
       _drawn: FileDiffMetadata | FileContents,
       context: { item: { id: string } },
