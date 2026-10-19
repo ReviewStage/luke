@@ -62,10 +62,7 @@ import {
   utcWeekStartKey,
   windowFetchDays,
 } from "./admin-metrics.js";
-import {
-  ADMIN_OVERVIEW_ACCOUNTS_LIMIT,
-  type AdminOverviewSource,
-} from "./admin-overview.js";
+import { ADMIN_OVERVIEW_ACCOUNTS_LIMIT, type AdminOverviewSource } from "./admin-overview.js";
 import {
   DAILY_COUNT,
   type DailyCount,

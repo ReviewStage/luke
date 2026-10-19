@@ -324,7 +324,6 @@ export function DashboardScreen({
               trend={metrics.users.signupTrend}
               generatedAt={metrics.generatedAt}
             />
-
           </Refreshing>
         </AdminPage>,
       );

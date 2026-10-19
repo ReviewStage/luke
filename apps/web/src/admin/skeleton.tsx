@@ -57,7 +57,7 @@ const AVATAR_BONE = { small: "32px", large: "56px" } as const;
 /** Each plot height is its chart's own fixed height, so the bars land where the bone stood. */
 export const SKELETON_PLOT = {
   USAGE: "h-48",
-  ACTIVITY: "h-56",
+  ACTIVITY: "h-60",
   /** The funnel's and reach's seven rows of share bars. */
   SHARE_BARS: "h-50",
   SIGNUPS: "h-40",

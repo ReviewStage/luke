@@ -117,7 +117,7 @@ export function ActivityChart({
     >
       <ChartContainer
         config={ACTIVITY_CHART}
-        className={`aspect-auto h-56 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
+        className={`aspect-auto h-60 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
       >
         <BarChart data={[...daily]} {...barChartProps}>
           <CartesianGrid vertical={false} />
