@@ -1,5 +1,5 @@
 /* scroll-area.css -- the one box that scrolls: the axis it names and no
-   other, its overscroll held inside it, filling its parent's room or as
+   other, its overscroll held inside it or handed on, filling its parent's room or as
    tall as what it holds, and the edges it fades dissolving into whatever
    ground it stands on. No padding: the caller's is on its own element
    inside, so the scroll bar stands at the area's edge. */
@@ -58,6 +58,14 @@
     box-sizing: border-box;
     min-width: 0;
     min-height: 0;
+  }
+
+  /* Held, a swipe that reaches an end stops there. Handed on, the browser's
+     own chaining is left alone, so a swipe past the end, or up and down over
+     an area that scrolls only sideways, moves whatever scrolls around it.
+     Note that a contained axis an area does not scroll still swallows a
+     swipe along it, which is why a short box inside a scroller hands on. */
+  .luke-scroll-area[data-overscroll="contain"] {
     overscroll-behavior: contain;
   }
 

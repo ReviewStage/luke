@@ -1,4 +1,5 @@
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import { ScrollArea } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "./admin/auth-client";
 import { ForbiddenCard, SignInCard } from "./admin/chrome/cards";
@@ -112,9 +113,9 @@ export function AdminDashboard(): React.JSX.Element {
         onToggle={toggleSidebar}
         onNavigate={navigate}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
-        {content}
-      </div>
+      <ScrollArea>
+        <div className="flex h-full flex-col">{content}</div>
+      </ScrollArea>
     </div>
   );
 

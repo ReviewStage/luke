@@ -1,0 +1,6194 @@
+/* The whiteboard fills the tab edge to edge, between the header and the
+   microphone row: the panel is its frame. Excalidraw draws to the size of
+   the box it is given, so the canvas's box is the tab's own. Note that the
+   board isolates its own stacking, because Excalidraw raises its toolbar,
+   hints, and menus by z-index: unisolated they rose through the side panel's
+   tab strip and over the "+" menu dropped from it, while isolated they still
+   layer among themselves as Excalidraw says. */
+.task-board {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+}
+
+.task-board-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* A board narrower than Excalidraw's phone breakpoint draws its phone
+   toolbar, a row of tools wider than the side panel at its narrowest,
+   centred and cut off at both edges. There the row wraps within the board
+   instead, clear of the column of tools Excalidraw stands at its right, so
+   every tool is in reach. Note that these name Excalidraw's own classes,
+   which hold for the version the workspace pins. */
+.task-board .excalidraw--mobile .App-top-bar > section {
+  width: 100%;
+  padding-right: var(--default-button-size);
+}
+
+.task-board .excalidraw--mobile .App-top-bar > section > .Stack,
+.task-board .excalidraw--mobile .App-toolbar-container {
+  display: flex;
+  justify-content: center;
+}
+
+.task-board .excalidraw--mobile .App-toolbar--mobile {
+  min-width: 0;
+}
+
+.task-board .excalidraw--mobile .App-toolbar--mobile > .Stack_horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* The document is the record: it reads as text and is selectable, so Cmd-C
+   on a selection copies it. Note that it sets its own accent, because
+   `--accent` is only ever set by a `data-state` ancestor and nothing above
+   the plan carries one: unset, the caret, the writing ring, and the fresh tint
+   all drew nothing. Luke is the one writing, so the accent is his. It is
+   the block inside the `ScrollArea` the document scrolls in. */
+.plan-document-body {
+  --accent: var(--voice-luke);
+  padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.plan-body {
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
+}
+
+/* A plan is a document rather than a message, so its sections breathe. Every
+   unit after the header block opens on a section heading. Note that the gap
+   is the body's children's rather than `.plan-unit`'s own, because a unit is
+   drawn inside a wrapper where it carries a byline. */
+.plan-body > * + * {
+  margin-top: 1.1em;
+}
+
+/* The caret a save is typed behind: solid, as a caret is while someone types.
+   Note that it and the selection are inline, so they take none of the gap
+   `markdown.css` opens between a list item's blocks, which as an inline-block
+   the caret would otherwise take after a selection or an emphasis. */
+.plan-body .markdown-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-top: 0;
+  margin-left: 1px;
+  vertical-align: -0.2em;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+/* The words the caret is selecting to erase or cut, tinted as an editor
+   tints a selection, in the writer's own accent. */
+.plan-body .markdown-selection {
+  margin-top: 0;
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
+}
+
+/* The caret waiting where the last word went in, blinking as an editor's
+   idle cursor does, and held by `--loop-motion` like every animation with no
+   end of its own. */
+.plan-caret-resting .markdown-caret {
+  animation: plan-caret-blink 1060ms steps(1, end) infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* The unit the caret is typing in: a small ring in the accent turning after
+   its heading on the window's one spinner turn (`spinner.tsx`), held by
+   `--loop-motion` like every animation with no end of its own and still
+   reading as work under way while held. */
+.plan-writing > .markdown-heading:first-child::after {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin-left: var(--luke-space-6);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  vertical-align: 0.05em;
+  animation: luke-spinner-turn 900ms linear infinite;
+  animation-play-state: var(--loop-motion);
+  content: "";
+}
+
+/* A unit as it settles: a tint behind it that fades, on
+   opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
+   leave nothing lit. */
+.plan-fresh {
+  position: relative;
+  isolation: isolate;
+}
+
+.plan-fresh::before {
+  position: absolute;
+  z-index: -1;
+  inset: -2px;
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  content: "";
+  pointer-events: none;
+}
+
+/* A message a link named, brought into view in its agent's transcript
+   (message-links.tsx): lit once, as a fresh edit of the plan is. */
+[data-message-revealed] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-message-revealed]::before {
+  position: absolute;
+  z-index: -1;
+  inset: -4px;
+  border-radius: var(--luke-radius-8);
+  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
+  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  content: "";
+  pointer-events: none;
+}
+
+@keyframes plan-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes plan-fresh {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* The line under a document's title, a plan's and an issue's alike
+   (`DocumentByline`): who created it and when, then its last edit. Each
+   phrase wraps whole onto the next line rather than leaving a name cut
+   from its time. */
+.plan-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Who last edited the plan template, under its title in the muted meta weight. */
+.plan-edit-note {
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Who last changed a section, and when: the writer's face and a few
+   letters at the end of its heading's row, shown while the pointer or the
+   keyboard is on the section. It fades on opacity alone, so nothing moves.
+   `--plan-byline-room` holds a face and the widest of those letters, a date
+   such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
+   column with its ⋯, which hangs `--luke-space-6` past the column's edge. */
+.plan-body {
+  --plan-byline-room: 64px;
+  --plan-unit-row-room: calc(
+    var(--plan-byline-room) +
+    var(--luke-space-4) +
+    var(--luke-control-height) -
+    var(--luke-space-6)
+  );
+}
+
+.plan-unit-attributed {
+  position: relative;
+}
+
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
+}
+
+/* A section's heading wraps short of the row at its end, so the byline and
+   the ⋯ never stand over its words, however long it runs. The room is kept
+   whether or not they are shown, and in the editor too, so no heading
+   rewraps as the pointer comes and goes or as the text opens to be edited. */
+.plan-unit-attributed > .plan-unit > .markdown-heading:first-child,
+.plan-document-editor .plan-unit > .markdown-heading:is([data-level="1"], [data-level="2"]) {
+  padding-right: var(--plan-unit-row-room);
+}
+
+/* The byline and the section's ⋯ stand in one row at the heading's line, a
+   control tall, each centred on it, so the line reads level with the button.
+   The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always has,
+   and holds the room its heading keeps; where a section has no ⋯, the row
+   keeps its room, so every byline ends at one edge. It takes no pointer
+   itself, only its byline and its ⋯ do. */
+.plan-unit-row {
+  position: absolute;
+  top: 0;
+  right: calc(var(--luke-space-6) * -1);
+  width: calc(var(--plan-unit-row-room) + var(--luke-space-6));
+  display: flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-4);
+  pointer-events: none;
+}
+
+.plan-unit-row:not(:has(.plan-unit-more)) {
+  padding-right: calc(var(--luke-control-height) + var(--luke-space-4));
+}
+
+.plan-unit-byline {
+  min-width: 0;
+  max-width: var(--plan-byline-room);
+  /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
+  overflow: clip;
+  overflow-clip-margin: var(--luke-focus-ring-room);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-attributed:hover .plan-unit-byline,
+.plan-unit-attributed:focus-within .plan-unit-byline {
+  opacity: 1;
+}
+
+/* A section's ⋯, which copies its link (`plan-body.tsx`): the row's end,
+   shown as the byline is. Note that it stays drawn while its menu stands, as
+   every ⋯ does. */
+.plan-unit-more {
+  display: flex;
+  flex: none;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-attributed:hover .plan-unit-more,
+.plan-unit-attributed:focus-within .plan-unit-more,
+.plan-unit-more:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+/* A chip held with its punctuation (`.link-glued`, markdown.css) is capped
+   by its length alone, because the box it stands in is the one held to the
+   column, and the chip in it already gives way before it would push its
+   comma past the edge. Note that a share of the column would not do: the
+   box takes its width from the chip, so the share has nothing to resolve
+   against while it does, Chromium reads the cap as none, and the box keeps
+   the room of the whole name as a gap after the chip it then cuts, washed
+   where a version's change mark holds the chip. */
+.link-glued [data-mention-ref] {
+  max-width: var(--luke-inline-ref-pill-width);
+}
+
+.link-glued [data-mention-ref][data-stated] {
+  max-width: var(--luke-inline-ref-pill-stated-width);
+}
+
+/* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
+   on a searchable menu's surface, whose field is the editor it was typed
+   in, hung under the word's line inside it, under a narrowed kind's crumb
+   and over the keys it hears at its foot. Named with the menu's own class,
+   since the menu's rule opens it under a trigger and is read later. */
+.searchable-menu.mention-menu {
+  z-index: 3;
+  width: 360px;
+  max-width: 100%;
+}
+
+/* A narrowed list stands under its kind's crumb, as an MCP server's page
+   stands under its own; a kind typed with its colon has no back arrow, so
+   its glyph keeps the rows' inset. */
+.mention-menu-crumb:not(:has(button)) {
+  padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
+}
+
+/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
+.mention-menu-crumb-glyph {
+  display: inline-flex;
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.mention-menu-crumb-glyph svg {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+}
+
+/* A folder's path too long for the crumb is cut short. */
+.mention-menu-crumb-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-menu .mention-menu-foot {
+  display: flex;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-6) calc(var(--row-inset) + var(--luke-menu-inset));
+}
+
+/* The editor of a plan's text is the room its @ list hangs in. */
+.plan-document-editor {
+  position: relative;
+}
+
+/* The byline's writer hangs their card, and its time, where the window
+   offers the version history, opens it on the section's last change, a
+   press drawn as the line over the document's is. Note that both take the
+   pointer although the line fades out, because a pointer on them is on
+   their section, which shows it. */
+.plan-unit-byline > :is([data-actor-ref], button) {
+  pointer-events: auto;
+}
+
+/* A section changed since the developer last looked: a still wash of Luke's
+   accent behind it, the hover wash's shape, standing until they dismiss it.
+   Nothing about it moves, so reduced motion has nothing to hold. */
+.plan-changed {
+  position: relative;
+  isolation: isolate;
+}
+
+.plan-changed::after {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+/* How many sections changed since the last look, under the "Edited by"
+   line in the caption role, with its dismissal. The line keeps the room it
+   always had and the Dismiss button overhangs it, so the button does not
+   push the document down. */
+.plan-changed-note {
+  display: flex;
+  height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: calc(-1 * var(--luke-space-6)) 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* The text open in its editor, in the document's own type, so the words do
+   not jump as it opens or closes. */
+.plan-document-editor > * + * {
+  margin-top: 0.5em;
+}
+
+/* The plan's document (`plan-document-editor.tsx`). Its title and
+   sections are blocks: the words take the text cursor and nothing else marks
+   them, since a click into them edits them, and a block the keyboard selects
+   wears a soft tint of the focus colour a little past its words, as a
+   document editor marks a selected block. */
+.plan-document-block {
+  position: relative;
+  isolation: isolate;
+  cursor: text;
+}
+
+.plan-document-block:focus-visible {
+  outline: none; /* no ring: the tint below marks the block */
+}
+
+.plan-document-block:focus-visible::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+/* A title that is not edited, with what stands at its right end on its line,
+   as a page's actions stand at the end of its title. */
+.task-title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--luke-space-12);
+}
+
+.task-title-line > .task-title {
+  min-width: 0;
+}
+
+.task-title-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+/* The title breaks inside a word only where the word is wider than the
+   column, so a narrow column never splits "teammates" for want of a few
+   pixels. Note that it outranks `.markdown p`, which breaks anywhere. */
+.task-title .markdown-heading {
+  overflow-wrap: break-word;
+}
+
+/* The title is edited where it is drawn: its caret in the accent and no box. */
+.task-title-text {
+  caret-color: var(--luke-color-accent);
+  outline: none; /* no ring: the caret alone, edited where it is drawn */
+}
+
+/* The space between two sections, resolved at the text's own size so a
+   heading's own size does not scale it, as the drawn sections' gap is. */
+@property --plan-section-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* The whole text in its editor (`plan-editor/plan-editor.ts`), over the read
+   view's classes. TipTap draws a heading and a paragraph as elements of
+   their own, where the read view draws every block as a margin-less
+   paragraph, so these give them the read view's box; a heading keeps the
+   read view's class and level, and a section's heading the gap the drawn
+   sections stand apart by. */
+.plan-document-text {
+  --plan-section-gap: 1.5em;
+  caret-color: var(--accent);
+  outline: none; /* no ring: a document, or a well that rings for it */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.plan-document-text :is(h1, h2, h3, h4, h5, h6),
+.plan-document-text p {
+  margin: 0;
+  font-size: inherit;
+}
+
+/* Note that a drawn section's heading margin folds into the gap above its
+   section, so a heading in the editor stands the gap alone. */
+.desktop-document
+  .plan-document-text
+  > .markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
+  margin-top: var(--plan-section-gap);
+}
+
+/* A link the read view draws as a mention's chip wears the chip's light look
+   while its section is edited, so opening the section does not turn its
+   chips into underlined words; its glyph is the read view's alone. */
+.plan-document-text a.plan-mention-link {
+  padding: 0 var(--luke-space-4);
+  color: inherit;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-weight: var(--luke-weight-medium);
+  text-decoration: none;
+  box-decoration-break: clone;
+}
+
+.plan-document-text p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--luke-color-text-subtle);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+/* A task item as TipTap draws it: its box in a label and its words in a block
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
+.plan-document-text li[data-checked] {
+  position: relative;
+  list-style: none;
+}
+
+.plan-document-text li[data-checked] > label {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
+}
+
+.plan-document-text li[data-checked] > label > input {
+  display: block;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+  font: inherit;
+  accent-color: var(--luke-color-accent);
+}
+
+.plan-document-text li[data-checked] > div {
+  margin-top: 0;
+}
+
+/* What the editor keeps byte for byte but does not draw as its own: inline
+   HTML, a footnote, a link's definition, a block of HTML. */
+.plan-raw-block {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+/* A Mermaid fence drawn as its diagram (`plan-diagram.tsx`): a picture the
+   diagram bundle drew, on the section's fill, its code a press away. The
+   picture is an `<img>`, so its own size holds it and the column bounds it. */
+.plan-diagram {
+  display: block;
+  margin: var(--luke-space-12) 0;
+  padding: var(--luke-space-12) var(--luke-space-16);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.plan-diagram-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--luke-space-8);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.plan-diagram-picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A fence Mermaid refused says so over its code, in the failure's red. */
+.plan-diagram-failed {
+  margin: 0 0 var(--luke-space-8);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* In the editor the fence stays code, and its diagram stands under it,
+   out of the text: nothing in it takes the caret or a selection. */
+.plan-diagram-preview {
+  margin-top: var(--luke-space-4);
+  user-select: none;
+}
+
+/* What stands under the editor: a failed save, or Luke's change and the
+   choice it asks, in the caption role. Note that it outranks the editor's
+   own gap between its children by coming later. */
+.plan-editor-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* The Code tab: every code Luke showed on the plan, one card each under the
+   call it was shown on, in a log that fills the tab (code-pane.tsx). */
+.code-pane {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The transcript's frame (../ai-elements/conversation.tsx): a log that
+   scrolls inside the room its pane leaves it, in a `ScrollArea` holding the
+   block its lines stand in (`.conversation-log`), its lines a step apart,
+   the way back to its newest line floating over their foot, and the line it
+   says in place of lines. It sits in the components layer, under the
+   window's own rules and utilities, so a pane's log (`.checkpoint-log`,
+   `.agent-log-over-composer`) and a line's own spacing still say the last
+   word, as they did over the utilities this replaced. */
+@layer components {
+  .conversation {
+    position: relative;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .conversation-log {
+    padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+  }
+
+  .conversation-log > :not(:last-child) {
+    margin-block-end: var(--luke-space-12);
+  }
+
+  .conversation-empty {
+    display: flex;
+    max-width: 280px; /* off-scale: a short line's measure */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-12);
+    margin: auto;
+    padding: var(--luke-space-24);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: center;
+  }
+
+  .conversation-empty-wide {
+    max-width: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
+  }
+
+  /* Its own ground under the button, ringed and lifted off the lines, which
+     the button's lit fill is laid over as a title bar's is. */
+  .conversation-scroll {
+    --luke-button-ground: var(--luke-color-well);
+    position: absolute;
+    bottom: var(--luke-space-16);
+    left: 50%;
+    display: flex;
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-button-ground);
+    box-shadow:
+      inset 0 0 0 1px var(--luke-color-border),
+      0 6px 16px var(--luke-color-shadow-soft);
+    translate: -50% 0;
+  }
+}
+
+/* A transcript's messages (../ai-elements/message.tsx) and the quiet lines
+   between them (working-time.tsx, call-card.tsx, inbox-pane.tsx). They sit in
+   the components layer, as the frame above does, so a surface's own rule for
+   a message (`.agent-origin`, `.agent-turn-foot > [data-worked]`) still says
+   the last word, as it did over the utilities these replaced. */
+@layer components {
+  .transcript-message {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .transcript-message.is-user {
+    max-width: 95%;
+    margin-left: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  /* A reply is reading text, so it keeps a reading leading rather than the
+     body role's. It clips past the keyboard's ring rather than at its edge,
+     so a fold, a tool line, or a chip it holds keeps its ring. */
+  .message-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: clip;
+    overflow-clip-margin: var(--luke-focus-ring-room);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-reading-leading);
+  }
+
+  /* Note that the rhythm between a message's blocks weighs nothing, so a
+     block's own margin, a quiet line's or a note's, still wins. */
+  :where(.message-content > :not(:last-child)) {
+    margin-block: 0 var(--luke-space-8);
+  }
+
+  .transcript-message.is-user .message-content {
+    width: fit-content;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) var(--spring);
+  }
+
+  .message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+    padding: var(--luke-space-2);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  }
+
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A working line and the line a finished turn or a call ends on: the
+     caption type, muted, its words selectable. */
+  .status-line {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    user-select: text;
+  }
+
+  .status-line:is([data-worked], [data-call-ended]) {
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-line[data-worked] {
+    margin-block: var(--luke-space-8) 0;
+  }
+
+  /* Only its top margin is cleared, because the conversation's gap below it
+     is a bottom margin. */
+  .status-line[data-working] {
+    margin-top: 0;
+  }
+
+  .status-line[data-working]:last-child {
+    margin-bottom: 0;
+  }
+
+  .working-time {
+    color: var(--luke-color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .working-time-after {
+    margin-left: var(--luke-space-6);
+  }
+
+  /* How long ago a thread's line says something happened. */
+  .thread-time {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The Inbox's thread, inside the `ScrollArea` that scrolls it in the room
+     its pane leaves it. */
+  .inbox-board {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
+     muted gray with the highlight in the text's own ink. Its duration is a
+     literal as DESIGN.md allows a loop with no end of its own, because it
+     answers `--loop-motion` with its play state. */
+  .shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+/* A replay card's head: what it is, the source's chip, and how many steps,
+   on one line that gives way at its end. */
+.replay-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-space-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  outline: none;
+}
+
+/* A replay card's foot: the branch, the pull request, and the way to the
+   whole transcript, over a dashed rule. */
+.replay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px dashed var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.replay-foot > * {
+  min-width: 0;
+}
+
+/* A message's actions, their glyphs the control icon whichever way each is
+   drawn, a copy's glyph inside its own swap. */
+.message-actions svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* An Inbox item's words and what was filled in, which a reader may select
+   and copy. */
+.inbox-words {
+  margin: 0;
+  user-select: text;
+}
+
+/* A link the window does not open: its address beside its label, to copy. */
+.inbox-link-address {
+  color: var(--luke-color-text-muted);
+  user-select: text;
+}
+
+/* A code card's failure stands at its foot, so it draws no rule under it. */
+.code-card > .file-tab-notice {
+  border-bottom: 0;
+}
+
+/* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
+   to the log's top (../ai-elements/checkpoint.tsx): the log's fade starts
+   beneath the checkpoint's band (`SCROLL_FADE_INSET.BAND`), so the time
+   stands whole and what scrolls under it dissolves just below it. The band
+   is held at that inset's height whatever it holds, because a band taller
+   than the inset would slice what passes under its foot, and one shorter
+   would fade its own foot. What the keys reach, and a card a File tab's note
+   reveals (code-pane.tsx), scrolls in past both. */
+.checkpoint-log {
+  --checkpoint-height: var(--luke-scroll-band);
+  /* No top padding, because a sticky checkpoint would leave what scrolled
+     under it showing in that band; cards fade beneath it. */
+  padding-top: 0;
+}
+
+/* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
+   left in the muted ink, a hairline running on from them, and what the
+   caller puts at the right, stuck to the log's top on the well's own ground
+   so nothing shows through. A standing call's "Live" stands at the right in
+   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+.checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  background: var(--luke-color-well);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.checkpoint-rule {
+  height: 1px;
+  min-width: 0;
+  flex: 1;
+  background: var(--luke-color-border);
+}
+
+.checkpoint-live {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-complete);
+}
+
+.checkpoint-live > svg {
+  width: 14px; /* off-scale: the voice mark at the divider's words */
+  height: 14px;
+}
+
+/* One line, as a teammate's heading already keeps (`.call-caller`), so a
+   time that would wrap in a narrow panel cannot outgrow the band. */
+.checkpoint-log [data-checkpoint] {
+  height: var(--checkpoint-height);
+  white-space: nowrap;
+}
+
+/* The card clips at its rounded edge, against which its header's actions
+   stand flush, so a ring inside it is drawn inside its control. */
+.code-card {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  overflow: hidden;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+  background: var(--code-ground);
+}
+
+/* The file at the left and the card's actions flush with its right edge,
+   so the header is the buttons' height and no more, as a transcript
+   fence's is. */
+.code-card-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A card's copy and its file's opening keep to the header's right. */
+.code-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* A File tab: the file's heading over its lines, which fill the tab and
+   scroll, with a row above and below them that reads more of the file. */
+.file-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+/* How a run of lines filling its place is drawn (code-lines.tsx), as
+   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
+   which scroll on both axes together, stand as wide as the longest or the
+   place, so the lit lines' ground runs under the whole of every one; and
+   the numbers' gutter may be gone. The frame around them is as wide as
+   the place, which a note between them measures itself by. */
+.code-lines-frame {
+  container-type: inline-size;
+}
+
+.code-lines[data-wrap="false"] {
+  width: max-content;
+  min-width: 100%;
+}
+
+.code-lines[data-wrap="false"] .code-line-text {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.code-lines[data-line-numbers="false"] .code-line-number {
+  display: none;
+}
+
+.code-lines[data-line-numbers="false"] .code-line-text {
+  padding-left: var(--luke-space-12);
+}
+
+/* A File tab beside its repository's tree, under one bar across both: the
+   file takes the room the tree leaves, and the tree keeps to the right, as
+   an editor's explorer docked there does. */
+.file-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The tree slides in past the view's right edge and out over the file, so
+   the body clips what stands past it, with `clip` rather than `hidden`,
+   which would make a scroller a focus could scroll sideways. */
+.file-view-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+}
+
+.file-view-body > .file-tab {
+  min-width: 0;
+}
+
+/* The bar: history, the path, then the file's actions and the tree's
+   toggle at its end, in the window's toolbar buttons. It stands the one
+   height of a tab's bar whatever it holds, words alone or nothing yet, its
+   words in the caption's type.
+
+   Every tab's bar is this one (File, Changes, Page, Terminal, Pull
+   request), and each keeps to the panel's top row's two edges, so the tab
+   reads down from the strip above it: a control at its start stands where
+   the row's first tab does, its last control ends where the row's last
+   control ends, and words leading the bar start at the content inset,
+   where a tab's glyph does. Its groups stand a control's gap apart, the
+   glyphs within a group close. */
+.file-view-bar {
+  display: flex;
+  min-width: 0;
+  min-height: var(--secondary-bar-height);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--column-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Words leading the bar, with no control before them. */
+.file-view-bar > .page-view-title,
+.file-view-bar > .terminal-tab-title,
+.file-view-bar > .luke-breadcrumb-bar > .file-view-path:first-child {
+  padding-left: var(--row-inset);
+}
+
+.file-view-history,
+.file-view-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.file-view-actions {
+  margin-left: auto;
+}
+
+/* A plan with no repository names the file plainly, cut from its left, in
+   the window's own type as the breadcrumbs are. */
+.file-view-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The commit a pinned read is at, quiet beside the path. */
+.file-view-commit {
+  flex: 0 0 auto;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  white-space: nowrap;
+}
+
+/* A crumb's tree, hung under the crumb over the window on a menu's surface
+   (file-breadcrumbs.tsx). */
+.file-crumb-tree {
+  position: fixed;
+  z-index: var(--luke-z-menu);
+  max-height: calc(100vh - 16px);
+  -webkit-app-region: no-drag;
+}
+
+/* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
+.file-crumb-tree:focus {
+  outline: none; /* no ring: the tree's own row carries it */
+}
+
+.file-crumb-tree .file-tree-host {
+  --trees-bg-override: var(--luke-color-overlay);
+}
+
+.file-crumb-notice {
+  margin: 0;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* The box a pane's toggle stands in, which names the place it opens the
+   pane (file-view.tsx): one place is shown at a time, by the panel's width. */
+.file-tree-toggle {
+  display: flex;
+}
+
+/* The tree beside a File tab, its search level with the tab's heading. */
+.file-tree-pane {
+  display: flex;
+  width: min(264px, 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--luke-color-border);
+}
+
+/* A tree on its way out has left the layout, the file already standing in
+   its room, and slides out over the file's edge on its own ground
+   (file-view.tsx). */
+.file-tree-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  background: var(--luke-color-well);
+}
+
+/* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
+   shells, stands there while the panel holds it open or it slides out; it
+   may be drawn for its place over the tab alone, which a wide panel does
+   not show (`usePaneRoom`). Its count stands under the tab while it stands
+   nowhere beside it. Note that each rule here and under the query names
+   one selector, so each weighs only its own. */
+.file-view[data-pane-beside="false"] :is(.file-tree-pane, .terminal-shells) {
+  display: none;
+}
+
+.file-view[data-pane-beside="true"] > .file-tree-foot {
+  display: none;
+}
+
+.file-tree-toggle[data-place="over"] {
+  display: none;
+}
+
+/* A panel too narrow for a tab and its pane side by side floats the pane
+   over the tab's right edge instead (`usePaneRoom`), as the main sidebar
+   floats over the work in a narrow window: away until the pointer rests
+   on its toggle or at the tab's right edge, or the toggle is pressed, and
+   away again once a peek is left, at a press beside it, at Escape, or at a
+   choice in it. Its count stands under the tab. A peek waits a beat before
+   it slides, so a pointer passing on its way elsewhere leaves before
+   anything covers the tab. Each pane folds at its own width: a tree below
+   a 360px panel, under the panel's default width
+   (`SIDE_PANEL_WIDTH.DEFAULT`), so a File or Changes tab left as it opens
+   keeps its tree beside it, and only a panel dragged narrower folds. */
+@container side-panel (max-width: 359px) {
+  .file-view .file-tree-pane {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--luke-space-48)));
+    background: var(--luke-color-well);
+    box-shadow: var(--luke-menu-shadow);
+  }
+
+  .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .file-view[data-pane-over="peek"] .file-tree-pane {
+    animation-delay: var(--duration-quick);
+  }
+
+  .file-view[data-pane-over="closed"] .file-tree-pane {
+    display: none;
+  }
+
+  .file-tree-pane > .file-tree-foot {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="over"] {
+    display: flex;
+  }
+
+  .file-view[data-pane-beside] > .file-tree-foot {
+    display: block;
+  }
+}
+
+/* A Terminal tab's shells float the same way below a 480px panel, so the
+   screen beside them never falls under forty columns: at the panel's
+   default width the screen has the whole tab, the shells a hover away. */
+@container side-panel (max-width: 479px) {
+  .terminal-tab .terminal-shells {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--luke-space-48)));
+    box-shadow: var(--luke-menu-shadow);
+  }
+
+  .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .terminal-tab[data-pane-over="peek"] .terminal-shells {
+    animation-delay: var(--duration-quick);
+  }
+
+  .terminal-tab[data-pane-over="closed"] .terminal-shells {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="over"] {
+    display: flex;
+  }
+}
+
+@keyframes pane-over-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+/* A page's tab (page-pane.tsx): a File tab's bar over the page's frame,
+   which takes the rest of the pane. The frame sets no background of its
+   own: a page that names no colour scheme is a light document, and
+   Chromium grounds a frame whose scheme differs from the window's dark one
+   in the page's own white, as a browser draws it. */
+.page-view-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-view-version {
+  color: var(--luke-color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The version's steps and count are a group of their own, a control's gap
+   before the page's actions, as the File tab's history stands from its path. */
+.page-view-versions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+  margin-right: calc(var(--luke-control-gap) - var(--luke-space-2));
+}
+
+/* A narrow panel counts the versions without words between the steps,
+   leaving the page's title its room. */
+.page-view-version-count {
+  display: none;
+}
+
+@container side-panel (max-width: 359px) {
+  .page-view-version-words {
+    display: none;
+  }
+
+  .page-view-version-count {
+    display: inline;
+  }
+}
+
+.page-view-frame {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+}
+
+/* A page's card (page-card.tsx) previews its newest version under its head:
+   the page laid out four times the card's width, a desktop window's, and
+   scaled down by as much into a box of a window's shape, its corners a
+   control's. The frame takes no pointer, so the card stays standing as the
+   pointer crosses it, and it fades in once loaded over a quiet ground that
+   holds its place meanwhile. */
+.page-card-preview {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+}
+
+.page-card-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.25);
+  transform-origin: 0 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.page-card-preview[data-loaded="true"] .page-card-frame {
+  opacity: 1;
+}
+
+/* The find a page's tab keeps over its source fills the tab as the panel's
+   own would. */
+/* A Browser tab (browser-pane.tsx): the page's bar, its address field
+   filling what the steps leave, and the body main lays the page's view
+   over, which draws a still of the page while something covers it. */
+.browser-view-address {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+
+.browser-view-address input {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
+  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+  background: var(--luke-color-well);
+  color: var(--luke-color-text);
+  font-family: inherit;
+  font-size: var(--luke-type-caption-size);
+  text-overflow: ellipsis;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.browser-view-address input::placeholder {
+  color: var(--luke-color-text-subtle);
+}
+
+.browser-view-address input:focus {
+  border-color: var(--luke-color-text-subtle);
+  outline: none; /* no ring: its border lights */
+}
+
+.browser-view-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+}
+
+/* The still stands where the page stood, at the size the page was drawn
+   at (browser-pane.tsx sets it), never at the image's own, which is in the
+   screen's pixels, nor stretched to a body that has since moved. */
+.browser-view-still {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+}
+
+.page-view-find {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* What became of a changed file, lettered quietly beside its path in a
+   Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
+   tree is. */
+.file-view-status {
+  flex: 0 0 auto;
+  color: var(--luke-color-attention);
+  font-family: var(--luke-font-mono);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.file-view-status[data-status="added"] {
+  color: var(--luke-color-complete);
+}
+
+.file-view-status[data-status="deleted"] {
+  color: var(--luke-color-danger-text);
+}
+
+.file-view-status[data-status="renamed"] {
+  color: var(--luke-color-working);
+}
+
+/* The Files changed bar's diff settings (diff-settings.tsx): the button,
+   and under it `@luke/ui`'s popover panel, its rows the settings page's
+   own, set apart in groups by a rule. */
+.diff-settings {
+  position: relative;
+  display: flex;
+}
+
+.diff-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+.diff-settings-group + .diff-settings-group {
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+/* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
+   (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
+   the panel's look (diff-view/index.ts). */
+.diff-view {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The list fills the File tab's place, its scroll area the whole of it. */
+.diff-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* Files changed's list of diffs (diff-list.tsx): every file under a header
+   of its own, which Pierre keeps at the top while the file's lines scroll
+   under it, so it is drawn opaque, on the code's ground, at the height the
+   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
+   stage-cli's keys stand on is ringed as a focused control is. */
+.diff-list-head {
+  border-top: 1px solid var(--luke-color-border);
+  background: var(--code-ground);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+}
+
+.diff-list-head-row {
+  display: flex;
+  box-sizing: border-box;
+  height: 33px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  background: var(--luke-color-surface);
+  font-size: var(--luke-type-caption-size);
+  white-space: nowrap;
+}
+
+.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.diff-list-head[data-standing] {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-inset);
+}
+
+.diff-list-fold {
+  transform: rotate(90deg);
+  transition: transform var(--duration-quick) ease;
+}
+
+.diff-list-head[data-collapsed] .diff-list-fold {
+  transform: none;
+}
+
+.diff-list-path {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--luke-font-mono);
+  text-overflow: ellipsis;
+}
+
+/* A file's Viewed box, GitHub's own (viewed-files.ts), at the end of its
+   header's row. */
+.diff-list-viewed {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* Why a file has no hunks to draw, in their place under its header in the
+   list (diff-view/index.ts draws it across the file's width). */
+.diff-list-notice {
+  margin: 0;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-40);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A changed image in Files changed's list (image-diff.tsx), under its
+   header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
+   checkerboard that shows what is transparent, or the after laid over the
+   before, swiped or faded with the slider under them. */
+.image-diff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12);
+  font-family: var(--luke-font-sans);
+}
+
+.image-diff-modes {
+  display: flex;
+  justify-content: center;
+}
+
+.image-diff-sides {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--luke-space-12);
+}
+
+.image-diff-side {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 200px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: 0;
+}
+
+.image-diff-side > figcaption {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.image-diff-picture,
+.image-diff-stack {
+  max-width: 100%;
+  max-height: 480px;
+  border: 1px solid var(--luke-color-border);
+  background:
+    repeating-conic-gradient(var(--luke-color-surface) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+.image-diff-picture {
+  object-fit: contain;
+}
+
+.image-diff-stacked {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+/* The two sides stand in one cell of a grid, as large as the larger, the
+   after over the before: each fills the cell, scaled to fit, on a
+   checkerboard of its own, so the after at full strength or swiped all the
+   way hides the before however their sizes differ. */
+.image-diff-stack {
+  display: grid;
+}
+
+.image-diff-stack > .image-diff-picture {
+  width: 100%;
+  height: 100%;
+  grid-area: 1 / 1;
+  border: 0;
+  background-color: var(--code-ground);
+}
+
+.image-diff-slider {
+  width: min(320px, 100%);
+}
+
+.image-diff-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The tree's search field and its filter, in one row over the tree. */
+.file-tree-search {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.file-tree-search > .luke-search-field {
+  flex: 1;
+}
+
+.file-tree-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+  margin: 0;
+  padding: var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Pierre's tree draws in a shadow root of its own, which inherits these:
+   the panel's words, its fills, and its focus ring, so the tree reads as
+   the panel's own list, beside a File tab and under a crumb alike. The ring
+   is the window's width drawn inside the row, because the tree's scroller
+   lays its rows edge to edge with no room for one outside. Its ground is
+   the opaque ground it stands on, never transparent, because the tree
+   cuts a long name in its middle by painting the cut over in that ground:
+   a transparent one drew both halves of the name over one another. */
+.file-tree-host {
+  --trees-bg-override: var(--luke-color-well);
+  --trees-bg-muted-override: var(--luke-color-fill-hover);
+  --trees-fg-override: var(--luke-color-text);
+  --trees-fg-muted-override: var(--luke-color-text-muted);
+  --trees-selected-bg-override: var(--luke-color-fill-selected);
+  --trees-selected-fg-override: var(--luke-color-text);
+  --trees-selected-focused-border-color-override: var(--luke-color-focus-ring);
+  --trees-border-color-override: var(--luke-color-border);
+  --trees-focus-ring-color-override: var(--luke-color-focus-ring);
+  --trees-focus-ring-width-override: var(--luke-focus-ring-width);
+  --trees-focus-ring-offset-override: var(--luke-focus-ring-inset);
+  --trees-font-family-override: var(--luke-font-sans);
+  --trees-font-size-override: var(--luke-type-caption-size);
+  --trees-git-added-color-override: var(--luke-color-complete);
+  --trees-git-modified-color-override: var(--luke-color-attention);
+  --trees-git-deleted-color-override: var(--luke-color-danger-text);
+  --trees-git-renamed-color-override: var(--luke-color-working);
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The tree rings whichever row holds focus, a pressed one too, so until the
+   keyboard has moved focus its ring is drawn in no colour at all, as every
+   other control's is drawn not at all (base.css). */
+:root:not([data-keyboard="true"]) .file-tree-host {
+  --trees-focus-ring-color-override: transparent;
+  --trees-selected-focused-border-color-override: transparent;
+}
+
+.file-tree-host > *,
+.file-tree-view > * {
+  min-height: 0;
+  flex: 1;
+}
+
+/* Each tree the pane may show draws in a frame of its own, the one not
+   standing hidden. */
+.file-tree-view {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.file-tree-view[hidden],
+.file-tree-host > .file-tree-notice[hidden] {
+  display: none;
+}
+
+/* The line under the tree saying a folder was listed short of whole. */
+.file-tree-host > .file-tree-cut {
+  flex: none;
+  border-top: 1px solid var(--luke-color-border);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The line under a change set's tree counting its files (file-tree-pane.tsx),
+   in the tree's own notice under it. */
+.file-tree-foot {
+  flex: none;
+  margin: 0;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* Why the file is not drawn, standing over the lines Luke showed of it. */
+.file-tab-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.file-tab-notice > p {
+  flex: 1;
+  margin: 0;
+}
+
+/* Who a pull request names, in a notice's voice: who opened it and its
+   reviewers, each a line of words around its faces
+   (`pull-request-people.tsx`). */
+.changes-people {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* A reviewer's standing, in GitHub's colours: approved green, changes asked
+   for red, a review asked for amber, a comment or a dismissal quiet. */
+[data-review-state="approved"] {
+  --review-tone: var(--luke-color-complete);
+}
+
+[data-review-state="changes-requested"] {
+  --review-tone: var(--luke-color-danger);
+}
+
+[data-review-state="requested"] {
+  --review-tone: var(--luke-color-attention);
+}
+
+[data-review-state="commented"],
+[data-review-state="dismissed"] {
+  --review-tone: var(--luke-color-text-subtle);
+}
+
+.review-state {
+  display: inline-grid;
+  place-items: center;
+  color: var(--review-tone);
+}
+
+.changes-comment-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  color: var(--luke-color-text);
+}
+
+.changes-comment-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+}
+
+.changes-comment-state .review-state > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.changes-comment-time {
+  color: var(--luke-color-text-subtle);
+}
+
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
+   bar, wearing the pull request's standing as a pill in its own colour and
+   its branches quiet beside it, over the page read top to bottom in one
+   scroller, its sections each under a quiet heading.
+
+   It keeps to the panel's top row's two edges, so the tab reads down from
+   the strip above it: whatever is boxed or edged (the pill, the merge box,
+   the checks, a comment) stands at the row's inset, where a tab's chip
+   does, and every word and glyph at the content inset, where a tab's glyph
+   does, a box holding its own at a row's inset within; the bar's last
+   control ends where the row's last control ends, as every tab's bar's
+   does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   (`--boxed-inset`), so what it holds lands on the content inset to the
+   pixel. */
+.pull-request-tab {
+  --boxed-inset: calc(var(--row-inset) - 1px);
+}
+
+/* The tab shown fills the room under the header and the tabs, the others
+   kept drawn but hidden, so switching back draws what each last read. */
+.pull-request-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pull-request-view[hidden] {
+  display: none;
+}
+
+/* The fixed header under the bar: the title, the branches, who opened it
+   and its reviewers, and whether it merges, standing put while the tab
+   under it scrolls. */
+.pull-request-header {
+  flex: none;
+  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
+}
+
+.side-panel-content .pull-request-header {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The Conversation's filters, Hide resolved and Hide bots, at the end of a
+   row that stays put over the conversation as it scrolls, each its word,
+   the quiet count of what it leaves out, and its switch; the word and the
+   count press it too. */
+.pull-request-filters {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--luke-space-6) var(--luke-space-16);
+  padding: var(--luke-space-8) var(--column-inset) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.side-panel-content .pull-request-filters {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  user-select: none;
+}
+
+.pull-request-filter > label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+}
+
+/* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
+   the row, so its first section adds none. */
+.pull-request-section:first-child {
+  margin-top: 0;
+}
+
+/* Where GitHub did not take the last change: a line under the bar, at the
+   content inset, its dismissal at the row's end. */
+.pull-request-write-note {
+  flex: 0 0 auto;
+  padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
+   the press holds the panel's anchor, and the panel is a popover card as
+   the context ring's is, its words' field over what the review says, each
+   choice a row with its meaning under its name, as stage-cli draws them. */
+.pull-request-review {
+  position: relative;
+  display: flex;
+}
+
+.pull-request-review-lead {
+  margin: calc(-1 * var(--luke-space-8)) 0 0;
+  color: var(--luke-color-text-muted);
+}
+
+/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
+   Preview over the field, the preview drawn in the field's own box. */
+.markdown-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+}
+
+/* The box is the preview's frame, its words scrolling inside it in
+   `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
+   as the box that scrolled itself did. */
+.markdown-field-preview {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+  flex-direction: column;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+}
+
+.markdown-field-preview-words {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.markdown-field-preview-words > p:only-child {
+  margin: 0;
+}
+
+/* The pending comments the member's review holds, counted on the bar's
+   Review press as stage-cli's badge counts them. */
+.pull-request-review-count {
+  min-width: 16px;
+  margin-inline-start: var(--luke-space-4);
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+.pull-request-review-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+/* The branches it merges, quiet in the code face under the title. */
+.pull-request-branches {
+  margin: var(--luke-space-2) 0 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The branches and, beside them, the stack it stands in
+   (`pull-request-stack.tsx`): the branches give way first. */
+.pull-request-branch-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-branch-row > .pull-request-branches {
+  flex: 0 1 auto;
+}
+
+/* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
+.pull-request-stack-count {
+  color: var(--luke-color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Its labels under the title, each a pill in its GitHub colour
+   (`pull-request-labels.tsx`): a tint with its words in the colour on the
+   dark ground, a solid fill on the light one; one whose colour GitHub
+   spelled otherwise stands quiet. */
+.pull-request-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
+  padding: 0 var(--row-inset);
+  list-style: none;
+}
+
+.pull-request-label {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px var(--luke-space-8);
+  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
+  border-radius: var(--luke-radius-full);
+  background: var(--label-fill-dark, transparent);
+  color: var(--label-words-dark, var(--luke-color-text-muted));
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: light) {
+  .pull-request-label {
+    border-color: var(--label-edge-light, var(--luke-color-border));
+    background: var(--label-fill-light, transparent);
+    color: var(--label-words-light, var(--luke-color-text-muted));
+  }
+}
+
+/* The labels and, at their end, the label picker (`pull-request-pickers.tsx`),
+   wrapping as one row under the title. */
+.pull-request-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
+  padding: 0 var(--row-inset);
+}
+
+.pull-request-label-row > .pull-request-labels {
+  margin: 0;
+  padding: 0;
+}
+
+/* The reviewers' faces and, beside them, the reviewer picker. */
+.pull-request-reviewers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* A label's colour, leading its item in the label picker. */
+.pull-request-label-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  background: var(--label-dot, transparent);
+}
+
+/* The reviewers' glyph, standing for the word in the header's one line. */
+.pull-request-reviewers-glyph {
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-text-subtle);
+}
+
+/* The words that stand on the page rather than in a box, at the content
+   inset. */
+.pull-request-title,
+.pull-request-view .pull-request-branches,
+.pull-request-header .pull-request-branches,
+.changes-people.pull-request-people,
+.pull-request-heading,
+.pull-request-none,
+.pull-request-section > .pull-request-words {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-title {
+  margin: 0;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-dialog-leading);
+  user-select: text;
+}
+
+/* The title edited in place (`pull-request-writes.tsx`): its pencil stands
+   faint after the number until the title is hovered or the pencil focused,
+   and the field takes the title's own type and room. */
+.pull-request-title-edit {
+  margin-inline-start: var(--luke-space-2);
+  vertical-align: middle;
+  opacity: 0;
+}
+
+.pull-request-title-editable:hover .pull-request-title-edit,
+.pull-request-title-edit:has(:focus-visible) {
+  opacity: 1;
+}
+
+.pull-request-title-field {
+  display: grid;
+}
+
+.pull-request-number {
+  color: var(--luke-color-text-subtle);
+  font-weight: var(--luke-weight-regular);
+}
+
+/* Who opened it and its reviewers, standing on the page rather than
+   across it. */
+.changes-people.pull-request-people {
+  padding-block: var(--luke-space-6) 0;
+  border-bottom: 0;
+}
+
+.pull-request-quiet {
+  color: var(--luke-color-text-subtle);
+}
+
+/* Whether it would merge as it stands, boxed as GitHub's own box is, its
+   glyph in the colour of what it means: ready green, a wait amber, and
+   something to fix red. */
+.pull-request-merge {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-12) 0 0;
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+}
+
+.pull-request-merge > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--merge-tone);
+}
+
+.pull-request-merge-words {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
+   of a merge already asked for, quiet, then the one press, `@luke/ui`'s
+   Button, or its SplitButton where a chevron chooses the method. */
+.merge-box-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+  margin-inline-start: auto;
+}
+
+.merge-box-note {
+  color: var(--luke-color-text-muted);
+}
+
+[data-merge-tone="ready"] {
+  --merge-tone: var(--luke-color-complete);
+}
+
+[data-merge-tone="waiting"] {
+  --merge-tone: var(--luke-color-attention);
+}
+
+[data-merge-tone="blocked"] {
+  --merge-tone: var(--luke-color-danger);
+}
+
+.pull-request-section {
+  margin-top: var(--luke-space-20);
+}
+
+.pull-request-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  margin: 0 0 var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.pull-request-count {
+  color: var(--luke-color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--luke-weight-regular);
+}
+
+.pull-request-none {
+  margin: 0;
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A part of the overview still being read: its blocks in the type its
+   words will stand in, at the content inset; under the title, the branches'
+   and the people's two lines; in the checks, rows as boxed as theirs will
+   be. A part whose read failed says so in the same place, with its Retry. */
+.pull-request-skeleton,
+.pull-request-failure {
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-skeleton > .skeleton + .skeleton {
+  margin-top: var(--luke-space-6);
+}
+
+.pull-request-head-skeleton,
+.pull-request-title + .pull-request-failure {
+  margin-top: var(--luke-space-8);
+}
+
+.pull-request-checks-skeleton {
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+/* A deployment's door to the address it serves, quiet at its row's end. */
+.pull-request-deployment-open > svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+/* The App that runs a check, by its square logo as GitHub draws an App. */
+.pull-request-check-avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-hover);
+  object-fit: cover;
+}
+
+/* A check's lead: its standing's glyph, then its App's avatar. */
+.pull-request-check-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-check-glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--check-tone);
+}
+
+.pull-request-check-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+[data-check-state="passed"] {
+  --check-tone: var(--luke-color-complete);
+}
+
+[data-check-state="failed"] {
+  --check-tone: var(--luke-color-danger);
+}
+
+[data-check-state="pending"] {
+  --check-tone: var(--luke-color-attention);
+}
+
+[data-check-state="skipped"] {
+  --check-tone: var(--luke-color-text-subtle);
+}
+
+/* Words written on GitHub, drawn at the transcript's own size, a step over
+   the page's quiet lines, its headings no more than a step above that
+   (`PANEL_MARKDOWN_COMPONENTS`). */
+.pull-request-words {
+  min-width: 0;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-reading-leading);
+  user-select: text;
+}
+
+/* The comments and reviews, oldest first, each boxed under its head. */
+.pull-request-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-entry {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A task list stands as GitHub draws one: its boxes in the bullets' place. */
+.pull-request-words ul:has(> li > input[type="checkbox"]) {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pull-request-words li > input[type="checkbox"] {
+  margin: 0 var(--luke-space-6) 0 0;
+  vertical-align: middle;
+}
+
+/* A picture GitHub's rendering names, read through the service: as wide as
+   the words around it at most, at its own shape, and a quiet box of a
+   screenshot's shape while it is read. */
+.pull-request-picture {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--luke-radius-6);
+  vertical-align: middle;
+}
+
+.pull-request-picture-waiting {
+  display: inline-block;
+  width: min(100%, 240px);
+  aspect-ratio: 16 / 10;
+  vertical-align: middle;
+}
+
+.pull-request-entry .changes-comment-state {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* A review's threads on lines, under its words: each boxed as the checks
+   are, its head a row like a check's that opens and closes it, its chevron
+   at the end as a docked card's is; then the lines it is on, drawn as Files
+   changed draws a diff's rows, and its comments, each under its head. The
+   box clips at its own edge, so its head's ring is drawn inside. */
+.pull-request-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  min-width: 0;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+/* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
+   InlineThread): Pierre stands it under its line, in the diff's light DOM,
+   so the window's own type and card draw it, inset from the code's edges
+   as GitHub's are; one the diff draws no row for stands in a list above it. */
+.diff-note {
+  padding: var(--luke-space-6) var(--luke-space-12);
+  font-family: var(--luke-font-sans);
+  white-space: normal;
+}
+
+/* A line's review threads minimized to one chip (minimized-threads.tsx), as
+   stage-cli draws them: the chip, its fold's summary, floats up over the end
+   of the line in a row of no height while closed, so the diff reads as if the
+   line held no comments, and a note holding the fold alone keeps no padding
+   of its own. Open, the chip stands at the end of its own row over the
+   threads it shows. */
+.diff-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.diff-thread-chip-row {
+  position: relative;
+}
+
+.diff-thread-chip-row:not([open]) {
+  height: 0;
+}
+
+.diff-thread-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  width: fit-content;
+  margin-inline-start: auto;
+  padding: var(--luke-space-2) var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.diff-thread-chip:hover {
+  color: var(--luke-color-text);
+}
+
+.diff-thread-chip-row:not([open]) > .diff-thread-chip {
+  position: absolute;
+  right: 0;
+  bottom: var(--luke-space-2);
+}
+
+.diff-thread-chip-row[open] > .diff-thread-chip {
+  margin-bottom: var(--luke-space-4);
+}
+
+.diff-thread-chip > svg {
+  width: var(--luke-space-12);
+  height: var(--luke-space-12);
+}
+
+.diff-thread-chip-faces {
+  display: inline-flex;
+}
+
+.diff-thread-chip-faces > .actor-mark + .actor-mark {
+  margin-inline-start: calc(-1 * var(--luke-space-4));
+}
+
+.diff-thread-chip-resolved {
+  color: var(--luke-color-complete);
+}
+
+.diff-thread-chip-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.diff-inline-thread {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  max-width: 720px;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+/* A comment being written on lines of a file (`line-comment.tsx`), under
+   the last of them as a review thread stands: a card of the thread's own
+   face, its head naming the lines, the words with their preview, GitHub's
+   refusal, and what GitHub's own line comment offers at its foot. */
+.line-comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  max-width: 720px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.line-comment-head {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.line-comment-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.line-comment-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+.diff-outdated-threads {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  list-style: none;
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.pull-request-thread-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--boxed-inset);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.pull-request-thread-head:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.pull-request-thread-turn {
+  display: flex;
+  margin-left: auto;
+}
+
+/* A long path is cut at its start rather than its end, so its file's name
+   stands; the path itself is isolated, so it still reads left to right. */
+.pull-request-thread-path {
+  min-width: 0;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-request-thread-head > .pull-request-quiet {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Whether a thread was resolved or outdated, in the quiet badge a bot's
+   name wears (desktop.css's `.actor-bot`). */
+/* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
+.pull-request-thread-lines {
+  flex: none;
+  overflow-y: visible;
+  border-top: 1px solid var(--luke-color-border);
+  background: var(--code-ground);
+}
+
+.pull-request-thread-comments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-thread-comment {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.pull-request-thread-more {
+  margin: 0 var(--boxed-inset) var(--luke-space-8);
+}
+
+/* Under a thread's comments, what a member does on it
+   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
+   opens the reply's own field, and Resolve or Unresolve at the row's end;
+   GitHub's refusal of the last one under them. */
+.pull-request-thread-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.pull-request-thread-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+.pull-request-thread-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-thread-reply-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+/* The reactions under a description or a comment, as GitHub draws them:
+   a row of pills, each its emoji and how many gave it, the reader's own lit.
+   A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
+   may not is a count drawn here in the same look, lit in the accent as a
+   pressed one is. */
+.pull-request-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-section > .pull-request-reactions {
+  margin-top: var(--luke-space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-2) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.pull-request-reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Add reaction's row of GitHub's eight, hung from its button: one compact
+   line of the app's icon buttons, each wearing its emoji at the dialog's
+   type size, wrapping where a narrow panel leaves less room than eight. */
+.pull-request-reaction-picker {
+  position: relative;
+}
+
+.pull-request-reaction-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-4);
+}
+
+.pull-request-reaction-emoji {
+  font-size: var(--luke-type-dialog-size);
+  line-height: 1;
+}
+
+.pull-request-reaction[data-mine="true"] {
+  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  color: var(--luke-color-text);
+}
+
+/* The comment box at the foot of the Conversation
+   (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
+   refusal under them, drawn as every refusal is (`ErrorState`), and
+   Comment at the row's end. */
+.pull-request-comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-comment-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The earlier entries a read left on GitHub, counted where they would stand. */
+.pull-request-earlier {
+  margin: 0 0 var(--luke-space-8);
+  padding-inline: var(--row-inset);
+}
+
+/* What a read left on GitHub, counted as a press in the caption's type. */
+.pull-request-more {
+  align-self: flex-start;
+  max-width: 100%;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.file-tab-snippet-label {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.file-tab-edge {
+  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
+  color: var(--luke-color-text-subtle);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
+   card in the window's own type between the lines, as a review comment
+   stands in a diff. Lines unwrapped scroll sideways under it while it
+   keeps to the tab's width in view. */
+.file-note {
+  display: grid;
+  align-items: center;
+  margin: var(--luke-space-6) var(--luke-space-12);
+  overflow: hidden;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-body-size);
+  grid-template-columns: minmax(0, 1fr) auto;
+  line-height: var(--luke-type-body-leading);
+}
+
+/* Note that the note is stuck within the lines, which are as wide as the
+   longest, so it stays in view across the whole of them, and is as wide
+   as the place they scroll in, less its margins. */
+.code-lines[data-wrap="false"] > .file-note {
+  position: sticky;
+  left: var(--luke-space-12);
+  width: calc(100cqi - 2 * var(--luke-space-12));
+}
+
+/* The fold's line, its age and link beside it, then its words the card's
+   whole width under both: the fold's parts stand in the card's own grid. */
+.file-note-fold {
+  display: contents;
+}
+
+.file-note-fold > summary {
+  min-width: 0;
+  margin: var(--luke-space-2);
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.file-note-fold::details-content {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+/* The note's words select with the lines around it; its line and what
+   stands beside it are the card's controls. */
+.file-note-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  padding-right: var(--luke-space-8);
+  font-size: var(--luke-type-caption-size);
+  grid-column: 2;
+  grid-row: 1;
+  line-height: var(--luke-type-caption-leading);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.file-note-author {
+  flex: 0 0 auto;
+  color: var(--voice-luke);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.file-note-lines,
+.file-note-time {
+  flex: 0 0 auto;
+  color: var(--luke-color-text-subtle);
+}
+
+/* The lines give way before the header's parts would stand on one another. */
+.file-note-lines {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Folded, the note's words stand in the header cut to one line. */
+.file-note-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A narrow panel's note says its age in the link's pill, and the link
+   folds to the Code tab's glyph alone, named still. */
+@container side-panel (max-width: 359px) {
+  .file-note-time {
+    display: none;
+  }
+
+  .file-note-actions {
+    --luke-fold: folded;
+  }
+}
+
+.file-note-words {
+  padding: 0 var(--luke-space-12) var(--luke-space-8) var(--luke-space-40);
+  overflow-wrap: anywhere;
+}
+
+/* Luke's note reads as the step's words, so the path above it steps back. */
+.code-card:has(> .code-card-note) [data-file-ref] {
+  color: var(--luke-color-text-muted);
+}
+
+.code-card-note {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.code-card-header:has(+ .code-card-note) {
+  border-bottom: 0;
+}
+
+/* Lines wrap rather than scroll sideways, so no card takes a swipe from the
+   feed. Note that they opt back into selection, because the window selects
+   nothing by default (`base.css`): a File tab's, a card's, and an inbox
+   item's code is read to be copied, the gutter's numbers left out of it. */
+.code-lines {
+  padding: var(--luke-space-6) 0;
+  color: var(--code-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.code-line {
+  display: flex;
+}
+
+/* The lines pointed at, lit across the whole width with a bar in the gutter. */
+.code-line[data-pointed="true"] {
+  background: var(--code-pointed);
+  box-shadow: inset 2px 0 0 var(--code-pointed-edge);
+}
+
+.code-line-number {
+  flex: 0 0 auto;
+  width: 48px; /* off-scale: a gutter for four digits */
+  padding: 0 var(--luke-space-12) 0 0;
+  color: var(--code-line-number);
+  text-align: right;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.code-line[data-pointed="true"] .code-line-number {
+  color: var(--code-line-number-pointed);
+}
+
+.code-line-text {
+  padding-right: var(--content-inset);
+  font: inherit;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
+   in the theme's own foreground carries neither and takes the pane's. A
+   transcript's fenced block is coloured the same way. */
+.code-line-text > span,
+.transcript-code-body span {
+  color: var(--run-dark, var(--code-text));
+}
+
+@media (prefers-color-scheme: light) {
+  .code-line-text > span,
+  .transcript-code-body span {
+    color: var(--run-light, var(--code-text));
+  }
+}
+
+/* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
+   selectable, breaking a long path anywhere rather than widening the
+   column. Its headings are a note's, a step above the words around them and
+   no more, and its lists keep to the column's own indent. These stand
+   outside every layer, as the utilities they replaced won over Streamdown's
+   own spacing between blocks; its first block's top margin and its last
+   block's bottom one are still none. */
+.transcript-markdown {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.transcript-heading {
+  margin: var(--luke-space-8) 0 var(--luke-space-4);
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"], [data-level="3"]) {
+  font-weight: var(--luke-weight-semibold);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"]) {
+  margin-top: var(--luke-space-12);
+}
+
+.transcript-heading:where([data-level="1"]) {
+  font-size: var(--luke-type-dialog-size);
+}
+
+.transcript-heading:where([data-level="2"]) {
+  font-size: var(--luke-type-section-size);
+}
+
+.transcript-list {
+  margin-block: var(--luke-space-4);
+  padding-left: var(--luke-space-20);
+  list-style-type: disc;
+}
+
+ol.transcript-list {
+  list-style-type: decimal;
+}
+
+.transcript-list-item {
+  margin-block: var(--luke-space-2);
+}
+
+.transcript-markdown > :first-child {
+  margin-top: 0;
+}
+
+.transcript-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* A tool call's input or output (../ai-elements/code-block.tsx): its words
+   as they are, in mono, wrapping anywhere rather than widening the
+   transcript, and scrolling inside the block past its height, in the
+   block's `ScrollArea` (`@luke/ui`). */
+.code-block {
+  display: flex;
+  max-height: 256px; /* off-scale: a block's tallest before it scrolls */
+  flex-direction: column;
+}
+
+.code-block-words {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+/* Where a transcript line's words start: past a call's line inset, its 16px
+   icon seat, and the gap after it. What opens under a line (a call's body,
+   a model's reasoning, a todo list, a subagent's failure, a call's pictures)
+   is set in to it, so it stands under the words rather than the icon. */
+:root {
+  --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
+}
+
+/* A tool call (../ai-elements/tool.tsx): one line, opening its body under
+   it, or a tab elsewhere (`.tool-opening`), in the muted ink its icon,
+   subject, and working mark keep, its label in the full ink over it; a
+   hover fill says the line opens. */
+.tool {
+  font-size: var(--luke-type-caption-size);
+}
+
+.tool-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.tool-line:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+/* A call whose subject opens in a tab of its own: the same line as a button
+   across the transcript's width. */
+.tool-opening {
+  width: 100%;
+  background: transparent;
+  font-size: var(--luke-type-caption-size);
+  text-align: left;
+}
+
+.tool-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.tool-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tool-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+}
+
+.tool-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Note that a chip after the label gives way first, since a name cut at its
+   end still reads. */
+.tool-label[data-chipped] {
+  flex-shrink: 0;
+}
+
+.tool-chip {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* The subject takes what is left of the line and fades where the line cuts
+   it, over the last `--label-fade` as a cut label's (desktop.css). Note
+   that it is drawn without measuring the words, unlike a label's
+   (`use-clipped.ts`), because the subject's box takes the line's whole rest
+   whatever it holds, so words that stop short end before the fade begins,
+   and words still streaming in reach it without a resize to measure. */
+.tool-subject {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  white-space: nowrap;
+}
+
+.tool-subject[data-code] {
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tool-place {
+  flex-shrink: 0;
+  padding-inline: var(--luke-space-4);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The body under an open line, set in past its icon: a card holding the
+   input and the answer, a hairline between them, clipped to its corners so
+   a focus ring draws inside it. */
+.tool-body {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
+  overflow: hidden;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+}
+
+.tool-body > * + * {
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.tool-prompt {
+  color: var(--luke-color-text-muted);
+  user-select: none;
+}
+
+.tool-patch-line {
+  display: block;
+}
+
+.tool-patch-line[data-line="added"] {
+  color: var(--luke-color-working);
+}
+
+.tool-patch-line[data-line="removed"] {
+  color: var(--luke-color-danger-text);
+}
+
+.tool-patch-line[data-line="mark"] {
+  color: var(--luke-color-text-muted);
+}
+
+.tool-error {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-danger-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+/* Show more, under an answer cut to its first lines: a quiet strip across
+   the card's width. */
+.tool-more {
+  margin: 0;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
+   on drawn as one: a card on the raised ground inside a hairline, clipped to
+   its corners so the header's hover fill follows them and what is in it
+   rings inside itself. The header is the one line a closed card shows, its
+   chevron and icon in the muted ink and the title cut to the line behind
+   its quieter label; open, the plan stands under a hairline in the body
+   type, its words running or, for a replay, its blocks stacked. */
+.plan-card {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+}
+
+.plan-card-head {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-12);
+  border-radius: inherit;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.plan-card-head:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+.plan-card[open] > .plan-card-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.plan-card-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plan-card-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-card-label {
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-name {
+  font-weight: var(--luke-weight-medium);
+}
+
+.plan-card-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+}
+
+.plan-card-body[data-layout="stack"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
+/* A model's reasoning (../ai-elements/reasoning.tsx): one line, a call's
+   line's height and type, the brain in the 16px seat a call's icon stands
+   in, "Thought" in the full ink and the preview after it in the muted one,
+   cut to the line. Open, its words sit under the line's, set in past the
+   brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
+.reasoning {
+  font-size: var(--luke-type-caption-size);
+}
+
+.reasoning-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.reasoning-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.reasoning-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.reasoning-preview {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-label {
+  color: var(--luke-color-text);
+}
+
+.reasoning-body {
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
+  color: var(--luke-color-text-muted);
+}
+
+.reasoning-words {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
+   tab card is: the code's own ground inside a hairline, a header naming
+   the language with the copy at its right, and the lines in the cards'
+   type. The copy is the window's own icon button, flush with the header's
+   right edge, so the header is the button's height and no more. The lines
+   keep whole and scroll sideways inside the block, so a long one never
+   widens the transcript. */
+.transcript-code {
+  overflow: hidden;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--code-ground);
+}
+
+.transcript-code-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.transcript-code-language {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--luke-font-mono);
+  text-overflow: ellipsis;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.transcript-code-body {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  color: var(--code-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
+  overflow-wrap: normal;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.transcript-code-body > code {
+  font: inherit;
+}
+
+/* An inline span of code: the blocks' type on a subtle fill, no edge. */
+.transcript-inline-code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-family: var(--luke-font-mono);
+  font-size: 0.9em;
+}
+
+/* A transcript's table: no box, a hairline under each row, the header in
+   the muted ink at the label's weight, the outer columns flush with the
+   words around it, in the body's type. A table wider than the column
+   scrolls sideways inside its own box, fading each edge it hides columns
+   past as a Markdown table does (markdown.css). A cell keeps the alignment
+   its column's rule gave it, which it carries as its own style. */
+.transcript-table {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.transcript-table > table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--luke-type-body-size);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--luke-type-body-leading);
+}
+
+.transcript-table :is(th, td) {
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  overflow-wrap: normal;
+  text-align: left;
+  vertical-align: top;
+}
+
+.transcript-table :is(th, td):first-child {
+  padding-left: 0;
+}
+
+.transcript-table :is(th, td):last-child {
+  padding-right: 0;
+}
+
+.transcript-table th {
+  border-bottom-color: var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-medium);
+  white-space: nowrap;
+}
+
+.transcript-table tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+/* The two transcripts: the Call tab and an agent's tab, each a frame the
+   log fills, their rows drawn by the one set of blocks
+   (../tasks/transcript-blocks.tsx over ../ai-elements/). What follows is
+   each one's own: Luke's mark beside a note of his, drawn at the row's 16px
+   in his voice's colour; the agent's composer; a worker's line. */
+.task-call,
+.agent-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.transcript-luke-mark {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.transcript-luke-mark .luke-face {
+  width: 16px;
+  height: 16px;
+  color: var(--voice-luke);
+}
+
+/* Coding agents --------------------------------------------------------- */
+
+/* The block a transcript ends on once its turn was stopped or failed, or
+   once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
+   end line's row, then under it Continued in, where an archive took the
+   box. In an empty transcript the two stand as siblings in the empty
+   state's own centred column instead. */
+.agent-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+}
+
+/* The end line's row: the line, then Continue in new agent (or Continue
+   again) after its words, centred on the line's text. Note that the line is
+   one flex item, so a failure too long to share the row takes it whole and
+   the press wraps under it, never between its words; in the empty state
+   the row is centred as its column is. */
+.agent-end-row {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.conversation-empty > .agent-end-row {
+  justify-content: center;
+}
+
+/* Note that it keeps the gap the log's `space-y-3` leaves under every block
+   but its last, which the reset below takes, so a failure's press never
+   touches the pull request's row under it. */
+.conversation-log > :is(.agent-end, .agent-end-line):not(:last-child) {
+  margin-bottom: var(--luke-space-12);
+}
+
+/* The end line: a failure's mark, its words, then what the turn cost after
+   a dot, flowing as one sentence, so a long failure wraps under its own
+   words and the mark never parts from the first of them. Note that the
+   14px mark is lowered to sit centred on the words' x-height, and that
+   only a failure is drawn in the danger ink: a stop is the developer's own
+   doing. */
+.agent-end-line {
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.agent-end-line > .failed-mark {
+  margin-right: var(--luke-space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
+}
+
+.agent-end-line[data-failed] > .agent-end-words {
+  color: var(--luke-color-danger-text);
+}
+
+.agent-end-remedy {
+  margin-left: var(--luke-space-8);
+  vertical-align: middle;
+}
+
+/* Where an agent may be continued (`continue-agent.tsx`), on a failed
+   turn's end line's row, in a closed box's note, or in a continued box's:
+   Continue in new agent, and why it did not start where it did not. */
+.agent-continue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-8);
+}
+
+.agent-continue-note {
+  color: var(--luke-color-danger-text);
+}
+
+/* The row naming the agents that continued this one, at the transcript's
+   end where an archive took the box: an arrow, as Forked to leads on its
+   split, then Continued in and the chips, which take their baseline from
+   their names, so every word stands on one line. */
+.agent-continued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-continued > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+  align-self: center;
+}
+
+/* Continued in and its chips, in the row above or the continued box's note. */
+.agent-continued-in {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+}
+
+.agent-continued-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+}
+
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+}
+
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: 0;
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-undelivered > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
+}
+
+/* A finished turn's line (`working-time.tsx`) breaks between how long it
+   worked and when it ended, never inside either. */
+[data-worked] > :is([data-worked-length], time) {
+  white-space: nowrap;
+}
+
+/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot): how long
+   it worked, then its Copy and Copy link to the right of it, as a sent
+   message's line holds them under its bubble. Note that the room above is
+   the row's rather than the worked line's, because the buttons are taller
+   than the words and centring them would push the words down. */
+.agent-turn-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-width: 0;
+  margin-top: var(--luke-space-4);
+}
+
+.agent-turn-foot > [data-worked] {
+  min-width: 0;
+  margin-top: 0;
+}
+
+/* The quiet line under an agent's message naming the agents forked at it
+   (`fork-action.tsx`), in the meta voice a finished turn's line speaks in,
+   its chips wrapping as words do. */
+.agent-forked-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-2) 0 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-forked-to > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+.agent-forked-to-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A forked draft's chip over its box: what it forks, the message's opening
+   words, and the × that lets the fork go, docked on the composer's own
+   inset as the to-do list is. The × is the shared quiet IconButton, held to
+   the chip's end by its seat (fork-action.tsx). */
+.draft-fork-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
+.draft-fork-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: 0 0 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.draft-fork-glyph {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.draft-fork-quote {
+  min-width: 0;
+  background: none;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-fork-drop {
+  display: flex;
+  margin-left: auto;
+}
+
+/* The room under the transcript for the composer, with no rule between
+   them: the card's own edge is where the transcript ends. It keeps to the
+   tab's foot where no transcript stands above it, as in a draft's tab. */
+.agent-tab-foot {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+/* An agent's log runs right up to the card's top edge and its words
+   dissolve over `--luke-scroll-fade` just above it (its `ScrollArea`'s end
+   fade), rather than being sliced short of the card. Its foot pads past the
+   fade, so the newest line, scrolled to or followed, stands whole above it;
+   the area's own scroll padding brings a control focused from below in
+   past the fade as well. */
+.agent-log-over-composer {
+  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
+}
+
+/* The to-do list the agent is working through, docked over the composer
+   on the composer's own inset, so its card and the composer's line up; a
+   column or a panel that pads the composer in pads the list in alike. */
+.agent-todos-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
+/* The agent's pull request's row (agent-published.tsx), pinned over the
+   composer under the docked to-do list on the same inset, so the row, the
+   list, and the composer's card line up. */
+.agent-published-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
+/* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
+   on the task card's look (`.plan-card`): one line saying how far the list
+   has got, the item it is at cut to the line, and the chevron at its end,
+   which opens onto the whole list under a hairline. */
+.todos-dock {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+}
+
+.todos-dock-head {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-12);
+  border-radius: inherit;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.todos-dock-head:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+.todos-dock[open] > .todos-dock-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.todos-dock-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.todos-dock-summary {
+  flex-shrink: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.todos-dock-focus {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todos-dock-chevron {
+  display: flex;
+  margin-left: auto;
+}
+
+.todos-dock-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+/* One write of the list, as a call's row opens onto it: set bare at the
+   row's text column, past the line's inset and icon, and selectable as a
+   call's body is; a failure is said under it. */
+.todos-body {
+  margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
+  user-select: text;
+}
+
+.todos-error {
+  margin: var(--luke-space-4) 0 0;
+  color: var(--luke-color-danger-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* A list's items, each behind the glyph of where it stands, in a 16px
+   seat with a call's 8px gap after it, centred on the item's first line.
+   Pending and done wear the muted ink, in progress the full one, and a
+   done item's words are muted beside it. */
+.todo-items {
+  --state-glyph-size: 14px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  line-height: var(--luke-type-body-leading);
+  list-style: none;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-icon-gap);
+}
+
+.todo-mark {
+  display: flex;
+  width: 16px;
+  height: 1lh;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.todo-item[data-todo-status="in_progress"] > .todo-mark {
+  color: var(--luke-color-text);
+}
+
+.todo-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.todo-item[data-todo-status="done"] > .todo-words {
+  color: var(--luke-color-text-muted);
+}
+
+/* The list opens upward, since the composer under it holds the card's foot
+   down. Opening, the card's top edge rises from where it stood to where the
+   open card puts it, and its line and the list under it rise with that edge
+   as one sheet, the list fading in as it comes up out of the card's foot;
+   closing, the sheet sinks back the same way as the list fades. The distance
+   is the list's height, measured as the press lands (`--disclosure-rise`,
+   `use-disclosure.ts`). Note that the list travels with the line rather than
+   standing still under it, because the card's ground is translucent and a
+   line passing over a list would show it through. */
+[data-todos-dock][data-disclosure="opening"] {
+  animation: todos-dock-unroll var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="opening"] > summary {
+  animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
+  animation:
+    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] {
+  animation: todos-dock-roll-up var(--duration-exit) var(--motion-exit) forwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] > summary {
+  animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
+  animation:
+    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+}
+
+/* Note that each clip names both ends, because a clip cannot be interpolated
+   to or from none: it would flip halfway through instead. */
+@keyframes todos-dock-unroll {
+  from {
+    clip-path: inset(var(--disclosure-rise) 0 0 round var(--radius-lg));
+  }
+  to {
+    clip-path: inset(0 round var(--radius-lg));
+  }
+}
+
+@keyframes todos-dock-roll-up {
+  from {
+    clip-path: inset(0 round var(--radius-lg));
+  }
+  to {
+    clip-path: inset(var(--disclosure-rise) 0 0 round var(--radius-lg));
+  }
+}
+
+@keyframes todos-dock-rise {
+  from {
+    transform: translateY(var(--disclosure-rise));
+  }
+}
+
+@keyframes todos-dock-sink {
+  to {
+    transform: translateY(var(--disclosure-rise));
+  }
+}
+
+/* The shared composer card (../ai-elements/prompt-input.tsx): one card on
+   the sidebar's ground inside a hairline; under its field, the foot with
+   the owner's controls at its left and the round submit at its right. */
+.prompt-input {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
+.prompt-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-12);
+  padding: 0 var(--luke-space-12) var(--luke-space-12);
+}
+
+.prompt-input-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
+   default type, and a note under it, on the transcript's own inset so the
+   card and the column line up. What stands here is the room around the
+   card, none above it, since the log meets the card itself. */
+.agent-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-space-12);
+}
+
+/* A message that did not go: the failure's line (`ErrorState`), and under
+   it, where the agent takes no more, the press that continues it. */
+.agent-composer-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
+  padding-left: var(--luke-space-4);
+}
+
+/* The box's field (`composer-field.tsx`): its editor in the body type, one
+   line to eight and then scrolling, with no space between its paragraphs,
+   as a textarea's lines stand, and the placeholder the field draws at the
+   editor's own insets while the words are empty, dimmed with the editor
+   while the box is held. */
+.agent-composer-field {
+  position: relative;
+  --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+}
+
+.agent-composer-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
+  background: transparent;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  outline: none;
+  user-select: text;
+}
+
+.agent-composer-input[aria-disabled="true"] {
+  opacity: 0.6;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
+}
+
+.agent-composer-input p {
+  margin: 0;
+}
+
+.agent-composer-placeholder {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  padding: var(--luke-space-16) var(--luke-space-16) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-field:has([aria-disabled="true"]) .agent-composer-placeholder {
+  opacity: 0.6;
+}
+
+/* A chosen skill's pill in the composer (`skill-picker.tsx`): a word of the
+   editor's, which a press opens the skill's file from where the skill is
+   known. */
+.skill-chip {
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
+}
+
+.skill-chip[data-opens] {
+  cursor: pointer;
+}
+
+.skill-chip[data-opens]:hover {
+  background: var(--luke-color-fill-selected);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-selected);
+}
+
+/* The list a `/` opens: a searchable menu whose field is the composer,
+   standing over the caret's line at the left the line put it, inside the
+   box. Named with the menu's own class, since the menu's rule opens it
+   under a trigger and is read later. */
+.searchable-menu.skill-menu {
+  top: auto;
+  z-index: 3;
+  width: 320px;
+  max-width: 100%;
+}
+
+/* The foot's right: the model chip, the context ring, the microphone, and
+   the round Send or Stop.
+   It may narrow, so a long model name is cut short before the presses are. */
+.agent-composer-actions {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The composer answers its card's width, not the window's, so it holds in
+   the main column and the side panel alike (`agent-composer.tsx`). The
+   presses never give way, the model chip's words do first, and the ⋯
+   stands only once it has something to take in. */
+.agent-composer > form {
+  container: composer / inline-size;
+}
+
+.agent-composer-actions > :is(.agent-servers, .agent-context) {
+  flex: none;
+}
+
+/* The +, the MCP button and the ⋯ each stand in a box of their own, which
+   the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
+   stands only once the card is too narrow for every press. */
+.agent-composer-attach,
+.agent-servers-button,
+.agent-context-button,
+.dictate-button {
+  display: flex;
+}
+
+.agent-composer-actions .agent-composer-more {
+  display: none;
+}
+
+/* Too narrow for every press: the ⋯ takes in the MCP servers, the
+   context ring, and the microphone. The servers' and the
+   ring's boxes stay, out of the row at its right end, so a popover the ⋯
+   opens for them hangs where the ⋯ stands. */
+@container composer (max-width: 399px) {
+  .agent-composer :is(.agent-servers-button, .agent-context-button),
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
+    display: none;
+  }
+
+  .agent-composer-actions > :is(.agent-servers, .agent-context) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+  }
+
+  .agent-composer-actions .agent-composer-more {
+    display: inline-flex;
+  }
+}
+
+/* The narrowest: the + goes into the ⋯ too, leaving what the agent
+   published, the model, the ⋯, and Send. */
+@container composer (max-width: 239px) {
+  .agent-composer .agent-composer-attach {
+    display: none;
+  }
+}
+
+/* The Inbox's answer box draws the same card and field
+   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
+   box's does, and its quiet line beside it is cut short before its
+   microphone and Send are, and goes once the card is too narrow for
+   both, when the microphone goes too. */
+.inbox-answer-tools {
+  flex: 1 1 0;
+}
+
+.inbox-answer-quiet {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-answer-actions {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.inbox-answer-quiet [data-inbox-quiet] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a send found the answer lacking reads in the attention ink, as the
+   item's own mark does, until it is filled. */
+.inbox-answer-quiet [data-wanting] {
+  color: var(--luke-color-attention);
+}
+
+/* A box answered in words alone holds its round Send at the field's end
+   once the card is narrow, so the field keeps to one line and the thread
+   above it keeps its room. */
+.inbox-answer {
+  position: relative;
+}
+
+@container composer (max-width: 299px) {
+  .inbox-answer-foot .inbox-answer-quiet,
+  .inbox-answer .dictate-button,
+  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
+    display: none;
+  }
+
+  .inbox-answer:not([data-named-send]) .agent-composer-input {
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
+      var(--luke-space-12) var(--luke-space-12);
+  }
+
+  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
+      var(--luke-space-12);
+  }
+
+  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
+    position: absolute;
+    right: var(--luke-space-6);
+    bottom: var(--luke-space-6);
+    padding: 0;
+  }
+}
+
+/* A dictation standing in place of the card's foot: the voice's bars
+   across it, newest at the right, the time so far, and the two ways out,
+   ✓ as round as the Send it stands in for. */
+.dictation-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-control-gap);
+  color: var(--luke-color-text-muted);
+}
+
+.dictation-wave {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: var(--luke-space-20);
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-2);
+  overflow: clip;
+}
+
+.dictation-wave-bar {
+  flex: none;
+  width: var(--luke-space-2);
+  height: 100%;
+  border-radius: var(--luke-radius-full);
+  background: currentColor;
+  transform: scaleY(0.08);
+}
+
+.dictation-clock {
+  flex: none;
+  min-width: 34px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dictation-transcribing {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+/* Files dragged over the box: the card's edge brightens as it does under
+   focus, so the drop target is the card itself. */
+.agent-composer[data-dropping] form {
+  border-color: var(--luke-color-border-selected);
+}
+
+/* A quote block in the message box (`reply-to-selection.tsx`): the agent's
+   words set off by a straight rule at their leading edge, as a sent quote is
+   (`.markdown-quote`), three lines at most, with the press that takes it out
+   at its end. It stands in the editor's flow as a line of its own does. */
+.composer-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-4) 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-body-leading);
+  user-select: none;
+}
+
+.composer-quote .composer-quote-words {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* Reply over words selected in an agent's message: one press on the menus'
+   surface, centred over the selection, or under it where the window's top
+   leaves no room. It moves with `translate`, since the surface's own
+   entrance animates its `transform`. */
+.reply-to-selection {
+  position: fixed;
+  z-index: var(--luke-z-menu);
+  padding: var(--luke-space-2);
+  translate: -50% -100%;
+  -webkit-app-region: no-drag;
+}
+
+.reply-to-selection[data-below] {
+  translate: -50% 0;
+}
+
+/* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
+   the box's words, and over the developer's bubble in the transcript, at its
+   right as the bubble is; and the pictures a call answered
+   (`agent-pictures.tsx`), on the same chips. */
+.attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-composer .attached-files {
+  padding: var(--luke-space-12) var(--luke-space-12) 0;
+}
+
+.is-user > .attached-files {
+  justify-content: flex-end;
+}
+
+/* A file's type icon in its type's colour, as the file tree draws it:
+   Pierre's own colour for each type of the complete set (`@pierre/trees`'
+   stylesheet), in the palette `base.css` repeats from it. A type Pierre
+   colours nowhere takes the muted ink the tree gives it. */
+.file-type-icon {
+  color: var(--luke-color-text-muted);
+  fill: currentColor;
+}
+
+.file-type-icon:is([data-file-type="default"], [data-file-type="text"]) {
+  color: var(--file-icon-gray);
+}
+
+.file-type-icon:is(
+  [data-file-type="npm"],
+  [data-file-type="postcss"],
+  [data-file-type="ruby"],
+  [data-file-type="svelte"],
+  [data-file-type="yml"]
+) {
+  color: var(--file-icon-red);
+}
+
+.file-type-icon[data-file-type="git"] {
+  color: var(--file-icon-vermilion);
+}
+
+.file-type-icon:is(
+  [data-file-type="claude"],
+  [data-file-type="html"],
+  [data-file-type="json"],
+  [data-file-type="rust"],
+  [data-file-type="svg"],
+  [data-file-type="swift"],
+  [data-file-type="zig"],
+  [data-file-type="zip"]
+) {
+  color: var(--file-icon-orange);
+}
+
+.file-type-icon:is(
+  [data-file-type="babel"],
+  [data-file-type="browserslist"],
+  [data-file-type="javascript"]
+) {
+  color: var(--file-icon-yellow);
+}
+
+.file-type-icon:is(
+  [data-file-type="bash"],
+  [data-file-type="markdown"],
+  [data-file-type="svgo"],
+  [data-file-type="vue"]
+) {
+  color: var(--file-icon-green);
+}
+
+.file-type-icon:is([data-file-type="mcp"], [data-file-type="prettier"], [data-file-type="table"]) {
+  color: var(--file-icon-teal);
+}
+
+.file-type-icon:is(
+  [data-file-type="go"],
+  [data-file-type="oxc"],
+  [data-file-type="react"],
+  [data-file-type="tailwind"]
+) {
+  color: var(--file-icon-cyan);
+}
+
+.file-type-icon:is(
+  [data-file-type="biome"],
+  [data-file-type="c"],
+  [data-file-type="cpp"],
+  [data-file-type="docker"],
+  [data-file-type="python"],
+  [data-file-type="typescript"],
+  [data-file-type="vscode"],
+  [data-file-type="webpack"]
+) {
+  color: var(--file-icon-blue);
+}
+
+.file-type-icon:is(
+  [data-file-type="bootstrap"],
+  [data-file-type="css"],
+  [data-file-type="eslint"],
+  [data-file-type="terraform"],
+  [data-file-type="wasm"]
+) {
+  color: var(--file-icon-indigo);
+}
+
+.file-type-icon:is([data-file-type="astro"], [data-file-type="database"], [data-file-type="vite"]) {
+  color: var(--file-icon-purple);
+}
+
+.file-type-icon:is([data-file-type="graphql"], [data-file-type="image"], [data-file-type="sass"]) {
+  color: var(--file-icon-pink);
+}
+
+.file-type-icon[data-file-type="bun"] {
+  color: var(--file-icon-mauve);
+}
+
+/* A file opened over the window (attachment-viewer.tsx): the dialog's
+   media card, fitted to what it holds, with the file's name and its buttons
+   along the top and the file under them, an image fitted to the window, a
+   text file's lines scrolling inside the card, any other file its icon over
+   Download. */
+.attachment-viewer {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.attachment-viewer[data-view="text"] {
+  width: min(880px, 100vw - 2 * var(--luke-space-24));
+  height: calc(100vh - 2 * var(--luke-space-24));
+}
+
+.attachment-viewer[data-view="other"] {
+  width: min(400px, 100vw - 2 * var(--luke-space-24));
+}
+
+.attachment-viewer-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.attachment-viewer-header > .file-type-icon,
+.attachment-viewer-header > .icon-button-glyph {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+  margin-right: var(--luke-space-4);
+}
+
+.attachment-viewer-title {
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-viewer-size {
+  flex: none;
+  margin: 0 auto 0 var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* What the place opening the viewer says of the file shown, after its size
+   in the same quiet ink, a plan's picture saying who last edited it: the
+   size gives it the room the size kept before the header's buttons, and it
+   is cut before it reaches them. */
+.attachment-viewer-size:has(+ .attachment-viewer-note) {
+  margin-right: 0;
+}
+
+.attachment-viewer-note {
+  display: flex;
+  min-width: 0;
+  margin: 0 auto 0 var(--luke-space-12);
+  overflow: clip;
+  overflow-clip-margin: var(--luke-focus-ring-room);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.attachment-viewer-walk {
+  display: flex;
+  align-items: center;
+}
+
+.attachment-viewer-place {
+  min-width: 48px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.attachment-viewer-body {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.attachment-viewer[data-view="image"] .attachment-viewer-body {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
+/* The picture is zoomed by a transform over its fitted size
+   (use-image-zoom.ts), so the card keeps its size and the frame clips what
+   stands past it. A press zooms in where it is fitted; zoomed, it is held
+   and dragged, and a press puts it back. A step from a press or a key
+   glides; a pinch or a drag follows the fingers at once. */
+.attachment-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 2 * var(--luke-space-24) - 50px);
+  object-fit: contain;
+  cursor: zoom-in;
+  touch-action: none;
+  user-select: none;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"] {
+  cursor: grab;
+}
+
+.attachment-viewer-image[data-zoom="zoomed"]:active {
+  cursor: grabbing;
+}
+
+.attachment-viewer-image[data-glide="true"] {
+  transition: transform var(--duration-quick) var(--motion-pane);
+}
+
+/* A text file's lines fill the card under its header and scroll there
+   (code-lines.tsx), on the code's ground. */
+.attachment-viewer-lines {
+  display: flex;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+.attachment-viewer-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-24);
+  text-align: center;
+}
+
+.attachment-viewer-other > .file-type-icon,
+.attachment-viewer-other > .icon-button-glyph {
+  width: 48px;
+  height: 48px;
+}
+
+.attachment-viewer-other-name {
+  max-width: 100%;
+  margin: var(--luke-space-6) 0 0;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.attachment-viewer-other-size {
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* An archived plan's agent takes no message, so its composer's place says
+   why on one quiet row (`archived-task.tsx`, `@luke/ui`'s Banner), with
+   Unarchive as the press that opens it again. The note a continued agent's
+   box gives way to (`continue-agent.tsx`) is framed as the box was, on its
+   card, edge and corner, so it stands where the box stood rather than across
+   the column. */
+.continued-composer {
+  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
+/* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
+   bar naming the agent and where the connection stands in words, over the
+   terminal's screen on the terminal's own ground. A state with an action
+   lays one slim mono bar over the screen; the screen under any state
+   without a shell connected is dimmed, never blanked. */
+.terminal-tab-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  white-space: nowrap;
+}
+
+.terminal-tab-title [data-agent-ref] {
+  flex: 0 1 auto;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.terminal-tab-agent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-tab-standing {
+  flex: 0 0 auto;
+}
+
+/* A narrow panel leaves out the word "sandbox" the tab's name already
+   implies, so the agent's name keeps more of the bar. */
+@container side-panel (max-width: 359px) {
+  .terminal-tab-sandbox {
+    display: none;
+  }
+}
+
+/* The screen and the shells beside it; the list slides in past the body's
+   right edge and out over the screen, so the body clips what stands past
+   it, with `clip` rather than `hidden`, as a File tab's body does. */
+.terminal-tab-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+  background: var(--terminal-ground);
+}
+
+.terminal-tab-host {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.terminal-tab-screen {
+  min-height: 0;
+  flex: 1;
+}
+
+/* The shells beside the screen (`terminal-shells.tsx`), on the panel's well,
+   as a File tab's tree stands beside its file. */
+.terminal-shells {
+  display: flex;
+  width: min(208px, 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--luke-color-border);
+  background: var(--luke-color-well);
+}
+
+/* A list on its way out has left the layout, the screen already standing in
+   its room, and slides out over the screen's edge on its own ground. Note
+   that the body is the box it stands against. */
+.terminal-shells[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+}
+
+.terminal-shells-head {
+  display: flex;
+  min-height: 35px;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-4) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.terminal-shells-title {
+  flex: 1;
+}
+
+/* The shells' rows, inside the `ScrollArea` that scrolls them. */
+.terminal-shells-rows {
+  padding: var(--luke-space-4);
+}
+
+.terminal-shells-none {
+  flex: 1;
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* The list's room while no read has listed the shells: the blocks standing
+   for them, or the failure, with the foot kept at the list's end. */
+.terminal-shells-wait {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.terminal-shells-wait[data-failed] {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+/* What runs in a shell, or where it stands, in the code face. */
+.terminal-shell-detail {
+  font-family: var(--luke-font-mono);
+}
+
+/* A dot while a command runs in the shell, centred where the × steps in. */
+.terminal-shell-running {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: var(--luke-space-12);
+  border-radius: 50%;
+  background: var(--luke-color-working);
+}
+
+.terminal-shells-foot {
+  display: flex;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.terminal-shells-foot [data-agent-ref] .harness-mark,
+.terminal-shells-foot [data-agent-ref] .working-mark {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.terminal-tab-screen[data-dim="true"] {
+  opacity: 0.42;
+}
+
+.terminal-tab-failed {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) var(--luke-space-16);
+  color: var(--luke-color-danger-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Where the words and the action do not fit one line, the action drops to
+   a line of its own at the right, so the words never give way to nothing. */
+.terminal-bar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  min-height: 28px;
+  align-items: center;
+  gap: var(--luke-space-2) var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-16);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+/* A bar for a state that often heals at once, a dropped connection the host
+   is already making again, shows only once it has held a second, so a blip
+   is never seen. */
+.terminal-bar[data-late="true"] {
+  animation: terminal-bar-late 0s linear var(--late-delay) both;
+}
+
+@keyframes terminal-bar-late {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+.terminal-bar-busy {
+  color: var(--luke-color-text-subtle);
+  letter-spacing: 1px;
+}
+
+.terminal-bar-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-bar-end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-left: auto;
+}
+
+.terminal-bar-note {
+  color: var(--luke-color-text-subtle);
+}
+
+/* The action's key, after its words, in the action's own ink. */
+.terminal-bar-key {
+  --shortcut-ink: currentColor;
+  margin-inline-start: var(--luke-space-4);
+}
+
+/* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which
+   hangs its tab's card: the mark alone, centred in the room it stands in. */
+.agent-mark-ref {
+  display: flex;
+}
+
+/* The chips along the box's foot: the model chip, the MCP button, and the
+   context ring, each the box its popover hangs from (`@luke/ui`'s
+   `AnchoredPopover`), above itself since the box stands at the panel's foot,
+   and before them what the agent published, in the composer's pill
+   (`chip.tsx`), the pull request's wearing its state's colour, the branch's
+   its name in the code face. */
+.agent-model-chip,
+.agent-servers,
+.agent-context {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+/* A model and the effort it runs at, wherever the pair stands
+   (`model-label.tsx`): the name in the colour of its line, the effort after
+   it in the muted secondary colour. */
+.model-label {
+  white-space: nowrap;
+}
+
+.model-label-detail {
+  color: var(--luke-color-text-muted);
+}
+
+/* The MCP servers popover: the searchable menu's surface, its search field
+   first (`@luke/ui`'s SearchField), then one row per server under Connected
+   and Not connected (its List rows), and Manage in Settings pinned at its
+   foot. A row is its mark, its name, how many tools it offers in the muted
+   detail type, and beside it its switch, or Connect as Settings ›
+   Integrations draws it (`@luke/ui`'s Button); a row that opens onto its
+   tools wears the row's chevron. The list is taller than the searchable
+   menu's, as tall as a server's page, so going in and back keeps the
+   popover's size, and never taller than the window leaves above the
+   composer once the field and the foot are drawn, so the field stays on
+   screen in the shortest window. */
+.agent-servers-scroll {
+  display: flex;
+  max-height: clamp(160px, 100vh - 320px, 400px);
+  flex-direction: column;
+}
+
+/* The rows, inside the list's `ScrollArea` (`@luke/ui`), at the menu's inset. */
+.agent-servers-list {
+  padding: var(--luke-menu-inset);
+}
+
+/* A section's heading over its rows, inset as a row's words are, and what
+   the list says in its rows' place, centred at a row or two's height. */
+.agent-servers-heading {
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
+}
+
+.agent-servers-heading:first-child {
+  padding-top: var(--luke-space-2);
+}
+
+.agent-servers-note {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--luke-space-4) var(--luke-space-12);
+  text-align: center;
+}
+
+/* The searchable menu's class rides a box drawn as its contents
+   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
+.luke-popover-panel > .agent-servers-menu {
+  display: contents;
+}
+
+/* A server's words, one line beside its mark: its name, its count, and
+   why it lists no tools, each giving way so the reason stays in sight. */
+.agent-servers-words {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+.agent-servers-name {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-servers-count {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.agent-servers-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin-left: auto;
+}
+
+/* Why a connected server lists no tools, after its name in the attention
+   tint at the count's size, cut where the row's buttons begin; a long name
+   gives way first past most of the line, so the reason stays in sight. */
+.agent-servers-name:has(~ .agent-servers-problem) {
+  max-width: 60%;
+}
+
+.agent-servers-problem {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--luke-color-attention);
+  font-size: var(--luke-type-caption-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A sign-in's line in the same place is no problem: never finished, in the
+   muted detail colour. One still waiting on the browser is the shared ring
+   alone after the name, its words in its title, with Reopen and Cancel at
+   the row's end, as Settings › Integrations draws them. */
+.agent-servers-problem[data-tone="quiet"] {
+  color: var(--luke-color-text-muted);
+}
+
+.agent-servers-waiting {
+  display: flex;
+}
+
+/* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
+   its mark and name, its count, and its switch at the end, over a hairline,
+   at the search field's height. */
+.agent-servers-page-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  height: 40px;
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.agent-servers-page-title {
+  overflow: hidden;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A tool's page, in the server page's place: its body as tall as the list
+   and the field above it together, at most, so stepping in and back keeps
+   the popover's size where the list is full, and never grows past the
+   room the window leaves. The page is a grid so the body's `ScrollArea`
+   fills that row under the head. */
+.agent-servers-tool-page .integration-tool-detail {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto clamp(200px, 100vh - 280px, 440px);
+}
+
+/* The context ring beside the MCP button: the window's one icon button
+   holding a ring a glyph's size, its track faint and its fill muted with
+   room to spare, amber within a tenth of the window of eve's compaction,
+   and red at or past it. */
+.agent-context-button {
+  --context-fill: var(--luke-color-text-muted);
+}
+
+.agent-context-button[data-level="near"] {
+  --context-fill: var(--luke-color-attention);
+}
+
+.agent-context-button[data-level="over"] {
+  --context-fill: var(--luke-color-danger);
+}
+
+.agent-context-ring {
+  transform: rotate(-90deg);
+  fill: none;
+}
+
+.agent-context-track {
+  stroke: var(--luke-color-border-strong);
+}
+
+.agent-context-fill {
+  stroke: var(--context-fill);
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--duration-quick) var(--spring);
+}
+
+/* The popover hangs above the ring as the model menu does above its chip,
+   at its width, on the menu's own surface; each part of the context wears
+   one colour on the bar and on its legend row's square. */
+.agent-context-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-context-full {
+  font-weight: var(--luke-weight-semibold);
+}
+
+.agent-context-total {
+  color: var(--luke-color-text-muted);
+}
+
+.agent-context-bar {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  gap: var(--luke-space-2);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-fill-strong);
+}
+
+.agent-context-segment {
+  flex: none;
+  background: var(--context-part);
+}
+
+.agent-context-legend,
+.agent-context-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-context-stats {
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.agent-context-row {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+.agent-context-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: var(--luke-radius-6);
+  background: var(--context-part);
+}
+
+.agent-context-label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.agent-context-count {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-context-note {
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-context [data-part="system-prompt"] {
+  --context-part: var(--luke-color-merged);
+}
+
+.agent-context [data-part="tool-definitions"] {
+  --context-part: var(--luke-color-working);
+}
+
+.agent-context [data-part="brief"] {
+  --context-part: var(--luke-color-complete);
+}
+
+.agent-context [data-part="conversation"] {
+  --context-part: var(--luke-color-text-muted);
+}
+
+/* The branch's chip's box (agent-published.tsx) draws no box of its
+   own, so the chip stands in the composer's row as the row's own. */
+.agent-published-chip {
+  display: contents;
+}
+
+/* A pull request's colour for where it stands, in GitHub's colours: open in
+   the success green, a draft in the muted ink, merged in the merged purple,
+   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
+   chip naming it wears the shared palette's tone for it
+   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
+[data-pull-request-state="open"] {
+  --pull-request-tone: var(--luke-color-complete);
+}
+
+[data-pull-request-state="draft"] {
+  --pull-request-tone: var(--luke-color-text-subtle);
+}
+
+[data-pull-request-state="merged"] {
+  --pull-request-tone: var(--luke-color-merged);
+}
+
+[data-pull-request-state="closed"] {
+  --pull-request-tone: var(--luke-color-danger);
+}
+
+.pull-request-mark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* Keyed on the mark's own attributes as well, so a place sizing it by a
+   class of its own (`.task-mark-glyph`) does not take its colour too. */
+.pull-request-mark[data-pull-request-state] {
+  color: var(--pull-request-tone);
+}
+
+.pull-request-mark[data-failing="true"] {
+  color: var(--luke-color-danger);
+}
+
+/* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
+   success green, closed as done in the merged purple, and closed as not
+   planned in the muted ink. */
+.issue-mark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.issue-mark[data-issue-state="open"] {
+  color: var(--luke-color-complete);
+}
+
+.issue-mark[data-issue-state="closed"] {
+  color: var(--luke-color-merged);
+}
+
+.issue-mark[data-issue-state="not-planned"] {
+  color: var(--luke-color-text-subtle);
+}
+
+/* The pull request's row pinned over the composer, a card of one row
+   (`@luke/ui`'s List). The lines it adds and removes read in the success
+   green and the danger red, in tabular numerals so a count does not shift as
+   it grows. The row answers its own width, as the composer does, so it holds
+   in the main column and the side panel alike. */
+.agent-published {
+  container: published-row / inline-size;
+}
+
+.agent-published-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+/* Too narrow for the checks' word: the mark's red still says they failed. */
+@container published-row (max-width: 359px) {
+  .agent-published-checks {
+    display: none;
+  }
+}
+
+/* Too narrow for the lines as well: they go, so the title keeps a few
+   words beside the number. The Changes tab and GitHub still count them. */
+@container published-row (max-width: 259px) {
+  .agent-published-lines {
+    display: none;
+  }
+}
+
+/* The one word the checks still get: said, in the danger red, only once
+   they have failed, since that is the one result that asks for a look. */
+.agent-published-checks {
+  color: var(--luke-color-danger-text);
+}
+
+.agent-published-lines {
+  white-space: nowrap;
+}
+
+.agent-published-added {
+  color: var(--luke-color-complete);
+}
+
+.agent-published-removed {
+  color: var(--luke-color-danger-text);
+}
+
+/* The Work tab's own ----------------------------------------------------- */
+
+/* The Work tab's Show earlier work, a quiet line over its oldest turn. */
+.task-call-earlier {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Lucide's glyphs, which the AI Elements components draw with, at the
+   stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
+   the Work and Transcript tabs read at the weight of the rest of the window. */
+svg.lucide {
+  stroke-width: 1.9;
+}
+
+/* A subagent's row, on the Work tab and an agent's tab alike
+   (transcript-blocks.tsx): a line drawn as a call's row is (`.tool-line`),
+   in its muted ink, unboxed, the whole of it the button that opens the
+   subagent's tab, with the same hover fill and the focus ring every button
+   of ours draws. It answers its own width, so the job, the one thing naming
+   the subagent, keeps the room in a narrow column. */
+.subagent-line {
+  container: subagent-row / inline-size;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  background: none;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.subagent-line:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+/* The harness's mark, in the 16px seat a call's icon stands in. */
+.subagent-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.subagent-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.subagent-job {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  white-space: nowrap;
+}
+
+.subagent-pair,
+.subagent-time {
+  flex-shrink: 0;
+}
+
+/* Why a call failed, under the job, past the line's 4px padding, mark, and
+   gap. */
+.subagent-error {
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Too narrow for the job beside the model and effort: they go first, as
+   the subagent's card still names them, and the working mark and its
+   count stay. */
+@container subagent-row (max-width: 319px) {
+  .subagent-pair {
+    display: none;
+  }
+}
+
+/* A narrow panel's Call tab gives a subagent's job two lines before it
+   cuts it, so the time and marks beside it leave more than a word of it. */
+@container side-panel (max-width: 359px) {
+  .subagent-line {
+    height: auto;
+    min-height: 28px; /* off-scale: a call's line */
+    padding-block: var(--luke-space-2);
+  }
+
+  .subagent-job {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
+/* Inbox ----------------------------------------------------------------------- */
+
+/* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
+   words, below, whose room around it is the card's gap between blocks. */
+[data-inbox-image] > .picture-block {
+  margin: 0;
+}
+
+/* A picture in written words (`picture-block.tsx`): its own block, at its
+   own width up to the column's and no taller than a screenful's worth, on
+   the section's fill while its bytes are read, a press opening the file
+   viewer. Its caption stands under it in the secondary ink, and may run
+   wider than a skinny picture, whose frame still hugs the picture. */
+.picture-block {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--luke-space-12) 0;
+}
+
+.picture-frame {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  overflow: clip;
+}
+
+button.picture-frame {
+  cursor: zoom-in;
+}
+
+.picture-image {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  height: auto;
+  object-fit: contain;
+}
+
+.picture-caption {
+  display: block;
+  margin-top: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+/* While the bytes are read: a quiet box of a screenshot's shape. */
+.picture-pending {
+  display: grid;
+  width: 480px;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  cursor: default;
+}
+
+/* A picture this reader cannot reach, or whose bytes are gone: its words. */
+.picture-missing {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  width: 480px;
+  padding: var(--luke-space-12);
+  border-style: dashed;
+  color: var(--luke-color-text-muted);
+  cursor: default;
+  font-size: 0.92em;
+}
+
+.picture-missing > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* A picture from outside Luke is a link to it, never fetched. */
+.picture-outside-glyph {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.25em;
+  vertical-align: -0.12em;
+}
+
+/* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
+   block, ringed while selected, its tools hung above it from its left edge.
+   The block's top margin is the wrapper's, so the wrapper's top is the
+   picture's own and the tools are measured from it. */
+.editor-picture {
+  display: block;
+}
+
+.editor-picture-drawn {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: var(--luke-space-12);
+}
+
+.editor-picture-drawn > .picture-block {
+  margin-top: 0;
+}
+
+.editor-picture-drawn[data-selected="true"] .picture-frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Note that the tools are as wide as their own names, past a skinny
+   picture's edge where they need to be, and never wrap, because the
+   picture's box is no measure for them. Above it, they cover none of the
+   picture, only the line before it while it is selected. */
+.picture-tools {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 6px 18px var(--luke-color-shadow-deep);
+  translate: 0 calc(-100% - var(--luke-space-8));
+  white-space: nowrap;
+}
+
+/* With no room above the picture inside the plan's scroller, as at its top,
+   the tools stand inside the picture's top edge rather than be cut off. */
+.picture-tools[data-above="false"] {
+  top: var(--luke-space-8);
+  left: var(--luke-space-8);
+  translate: none;
+}
+
+/* A tool that is its glyph alone, in a column too narrow for its name, folds
+   its words away, named by its pill. */
+.picture-tools[data-worded="false"] {
+  --luke-fold: folded;
+}
+
+/* A field under a picture that describes it anew. */
+.picture-describe {
+  display: grid;
+  width: min(360px, 100%);
+  margin: var(--luke-space-6) 0 var(--luke-space-12);
+}
+
+/* A picture waiting on its upload: the Mac's own bytes at half strength,
+   and the wait said where its caption will stand with the window's own
+   spinner; a failed upload says so there, as every failure does. */
+.picture-block[data-upload] .picture-image {
+  opacity: 0.5;
+}
+
+.picture-status {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-top: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.picture-failure {
+  display: block;
+  margin-top: var(--luke-space-6);
+}
+
+/* Several pictures an agent showed at once (`agent-pictures.tsx`): one
+   justified row of two or three, each at its own shape and captioned under
+   it, the row stretched to the column so they share a height; more stand as
+   thumbnails of one height that wrap, the last drawn saying how many more. */
+.picture-set {
+  max-width: 100%;
+  margin: var(--luke-space-12) 0;
+}
+
+.picture-set-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-6);
+}
+
+.picture-set-tile {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: zoom-in;
+  font: inherit;
+  text-align: left;
+}
+
+.picture-set-frame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  place-items: center;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
+  overflow: clip;
+}
+
+.picture-set-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.picture-set-frame > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.picture-set-caption {
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-set-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--luke-color-veil);
+  color: var(--luke-color-on-veil);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+/* The pictures an integration's call answered: the message box's chips,
+   set in under the row's words, a picture not kept saying so. */
+.call-pictures {
+  margin: var(--luke-space-2) 0 var(--luke-space-6) var(--transcript-gutter);
+}
+
+/* A version's change to a picture: written in on the green edge, struck out
+   dimmed behind the red, as its words would be (`markdown-message.tsx`'s
+   change marks); the mark lends it no wash of its own. */
+.markdown-inserted:has(> .picture-block),
+.markdown-deleted:has(> .picture-block) {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  background: none;
+}
+
+.markdown-inserted > .picture-block .picture-frame {
+  outline: 2px solid color-mix(in srgb, var(--luke-color-complete) 75%, transparent);
+  outline-offset: 2px;
+}
+
+.markdown-deleted > .picture-block .picture-frame {
+  opacity: 0.45;
+  outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Comments on the plan (`plan-comments.tsx`) -------------------------------- */
+
+/* The words a thread is on, a block's whole or a few of them alike: a wash
+   under them and an edge beneath, stronger while its thread is open or the
+   pointer is on them. */
+.plan-comment-mark {
+  padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
+  border-bottom: 1.5px solid var(--comment-mark-edge);
+  border-radius: 2px;
+  background: var(--comment-mark);
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--duration-hover) ease;
+}
+
+.plan-comment-mark:hover,
+.plan-comment-mark[data-active="true"] {
+  border-bottom-color: var(--comment-mark-active-edge);
+  background: var(--comment-mark-active);
+}
+
+/* Words under two threads in the editor stand in a mark inside another,
+   which the read view draws as one mark; the inner one adds nothing, so they
+   read the same in both. */
+.plan-comment-mark .plan-comment-mark {
+  padding-bottom: 0;
+  border-bottom: 0;
+  background: none;
+}
+
+/* The body is the room its comments are measured and stood in. */
+.desktop-document .plan-body {
+  position: relative;
+}
+
+/* Everything the comments draw over the body, one box laid over it whole, so the
+   gap the body opens between its children opens none here, and only what is
+   drawn in it takes the pointer. */
+.desktop-document .plan-body > .comment-layer {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.comment-layer > * {
+  pointer-events: auto;
+}
+
+.comment-margin {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--comment-margin-gap));
+  width: var(--comment-card-width);
+}
+
+.comment-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+}
+
+/* A card already in the margin travels to its next place, as threads above
+   it open, grow, or arrive, on the spring every move rides; one arriving
+   lands where it belongs and fades in. */
+.comment-slot[data-moves="true"] {
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+@keyframes comment-slot-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
+/* The button stands in the gutter past the column's end, its start level
+   with a folded line's count, which stands in its place on a line holding
+   threads. */
+.comment-block-button {
+  position: absolute;
+  left: calc(100% + var(--luke-space-2));
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-body:hover .comment-block-button,
+.comment-block-button:focus-within {
+  opacity: 1;
+}
+
+/* The bubble that rises over words selected, one button in a menu's surface. */
+.comment-bubble {
+  position: absolute;
+  z-index: 3;
+  transform: translateY(calc(-100% - var(--luke-space-6)));
+}
+
+/* Where the margin folds: a line's comments counted at its end, in the
+   gutter past the column where the block's button stands, a quiet button
+   lit while its threads stand under it; the open thread floats under it. */
+.comment-count {
+  position: absolute;
+  left: calc(100% + var(--luke-space-2));
+}
+
+.comment-float {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--luke-space-6) * -1);
+  display: flex;
+  width: var(--comment-card-width);
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+/* A line's other threads stand closed beside the open one, each on the
+   same raised surface, so the stack reads as one set over the page. */
+.comment-float .comment-card[data-open="false"] {
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+/* Note that the hover's fill is translucent, so over the page it is laid on the card's own surface, never the words beneath. */
+.comment-float .comment-card[data-open="false"]:is(:hover, [data-pointed="true"]) {
+  background: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover))
+    var(--luke-color-overlay);
+}
+
+/* A thread: at rest its words on the column's ground, open on a menu's surface. */
+.comment-card {
+  --comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
+  border: 1px solid transparent;
+  border-radius: var(--luke-menu-radius);
+  color: var(--luke-color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.comment-card[data-open="false"] {
+  border-color: var(--luke-color-border);
+  cursor: pointer;
+}
+
+.comment-card[data-open="false"]:hover,
+.comment-card[data-open="false"][data-pointed="true"] {
+  background: var(--luke-color-fill-hover);
+}
+
+.comment-card[data-open="true"] {
+  padding-top: var(--luke-space-8);
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.comment-entry {
+  position: relative;
+  padding: var(--luke-space-4) 0;
+}
+
+.comment-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* The writer gives way first, cut short at its end, so the time and the
+   tools beside it always stand whole. */
+.comment-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The row's end: the time, and in its place under the pointer the thread's
+   tools, both in one cell, so the row never reflows and nothing stands
+   over the writer's name. */
+.comment-head-end {
+  display: grid;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+
+.comment-head-end > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.comment-time {
+  color: var(--luke-color-text-subtle);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* A comment's words, as Markdown spaces a message's blocks, under the name. */
+.comment-words {
+  display: block;
+  margin-left: var(--comment-indent);
+  color: var(--luke-color-text-body);
+  overflow-wrap: anywhere;
+}
+
+/* The thread's quote under its first comment's writer, level with the words. */
+.comment-entry > :is(.comment-quote, .comment-gone) {
+  margin-left: var(--comment-indent);
+}
+
+.comment-entry > .comment-quote-link {
+  width: calc(100% - var(--comment-indent));
+}
+
+.comment-entry > .comment-quote {
+  margin-top: var(--luke-space-4);
+}
+
+/* A thread at rest shows its first comment's first lines, chips and all. */
+.comment-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* A thread at rest is one press over its words and replies. */
+.comment-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+/* The keyboard on a thread at rest rings its card, since its button may
+   hold nothing to see but its name for a screen reader. */
+.comment-card[data-open="false"]:has(> .comment-open:focus-visible) {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(var(--luke-focus-ring-width) / -2);
+}
+
+.comment-replies {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-2) 0 0 var(--comment-indent);
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+}
+
+.comment-faces {
+  display: inline-flex;
+}
+
+/* A comment's tools stand at its corner under the pointer or the keyboard. */
+.comment-tools {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  margin-right: calc(var(--luke-space-6) * -1);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-head-end > .comment-time {
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-entry:hover .comment-tools,
+.comment-tools:focus-within,
+.comment-tools:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+/* Note that the time gives the tools its place under the pointer, presses
+   included, so a press over where it stood lands on the tools. */
+.comment-entry:hover .comment-head-end > .comment-time {
+  pointer-events: none;
+}
+
+.comment-entry:hover .comment-head-end > .comment-time,
+.comment-head-end:has(.comment-tools:focus-within) > .comment-time,
+.comment-head-end:has([aria-expanded="true"]) > .comment-time {
+  opacity: 0;
+}
+
+/* What happened to a thread, a line drawn as a comment's head: its writer
+   level with every name above it, what they did in the quiet ink, and the
+   time at the row's end. */
+.comment-event {
+  padding: var(--luke-space-4) 0;
+}
+
+.comment-event-words {
+  flex: none;
+  color: var(--luke-color-text-muted);
+  font-weight: 400;
+  white-space: pre;
+}
+
+.comment-note {
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-danger-text);
+  font-size: 12px;
+}
+
+.comment-gone {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-bottom: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+.comment-gone svg {
+  width: 13px;
+  height: 13px;
+}
+
+.comment-quote {
+  display: -webkit-box;
+  margin: 0 0 var(--luke-space-8);
+  padding-left: var(--luke-space-8);
+  overflow: hidden;
+  border-left: 2px solid var(--comment-mark-edge);
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.comment-quote[data-gone="true"] {
+  border-left-color: var(--luke-color-border-strong);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* The field that answers a thread, or starts one, in the composer's well. */
+.comment-field {
+  --comment-field-inline: var(--luke-space-8);
+  margin-top: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}
+
+.comment-text {
+  display: block;
+  width: 100%;
+  min-height: 36px; /* off-scale: one line and its padding */
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  line-height: 1.45;
+  resize: none;
+}
+
+.comment-text::placeholder {
+  color: var(--luke-color-text-muted);
+}
+
+/* The agent box's editor as a comment's field, its placeholder and its
+   paragraphs at the comment field's padding. */
+.comment-field .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--comment-field-inline) 0;
+}
+
+.comment-field .agent-composer-input {
+  min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
+  max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
+  line-height: 1.45;
+}
+
+.comment-field-foot {
+  --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  display: flex;
+  min-height: 26px; /* off-scale: as its tools */
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+.comment-field-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin-left: auto;
+}
+
+/* A dictation stands in the foot's place while it records, at its height. */
+.comment-field-foot .dictation-strip {
+  height: 26px; /* off-scale: as the foot's tools */
+  flex: 1;
+}
+
+/* A thread's first comment is the card itself: its words on the card's own
+   surface, no well inside it, its tools along the card's foot. */
+.comment-field[data-variant="first"] {
+  --comment-field-inline: 0;
+  margin-top: 0;
+  border: 0;
+  background: none;
+}
+
+.comment-field[data-variant="first"] .comment-field-foot {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+/* A reply is a composer as every box in the window is (`PromptInput`): the
+   card's ground, its hairline, and its larger round, ringed while it holds
+   the caret. */
+.comment-field[data-variant="reply"] {
+  border-color: var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
+.comment-editing {
+  margin-left: var(--comment-indent);
+}
+
+/* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
+/* The Comments tab: its head over a list that scrolls under it, fading at
+   its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
+   which holds the list's own padded element). */
+.comments-tab {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The tab's head, as the sidebar's section heads are: the list's name in
+   the quiet ink, how many it holds after it, and its toggle at the end. */
+.comments-head {
+  display: flex;
+  height: var(--luke-control-height);
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--luke-space-6) var(--column-inset) var(--luke-space-2) var(--luke-space-16);
+}
+
+.comments-head-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  padding-left: var(--luke-space-12);
+}
+
+/* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
+.comments-list:has(.luke-empty-state) {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.comments-list {
+  box-sizing: border-box;
+  padding: 0 var(--luke-space-16) var(--luke-space-24);
+}
+
+.comments-row + .comments-row {
+  margin-top: var(--luke-space-8);
+}
+
+/* In the tab every thread stands whole, on the panel's ground with a
+   hairline round it rather than floating over the page. */
+.comments-list .comment-card[data-open="true"] {
+  border-color: var(--luke-color-border);
+  background: none;
+  box-shadow: none;
+}
+
+/* A quote that shows its words in the plan: the quote's look, pressed. */
+.comment-quote-link {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.comment-quote-link:hover {
+  color: var(--luke-color-text);
+}
+
+/* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
+   the line that opens the agent, a toggle at its end, and the words whole
+   under it, set in to the line's words as a call's body is. */
+.tool-opening-row {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.tool-opening-row > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-sent-block {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.tool-sent-note {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}

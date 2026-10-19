@@ -3,7 +3,14 @@ import { CALL_KIND, callLine } from "@luke/features/turn-rows";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool.js";
-import { cardTitle, sentWords, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model.js";
+import {
+  calledAgent,
+  cardTitle,
+  sentWords,
+  TOOL_TARGET,
+  toolCallView,
+  toolTarget,
+} from "./tool-call-model.js";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -664,6 +671,28 @@ test("what a start or a message sent another agent is read whole: a message's wo
   });
   assert.equal(sentWords("start_agent", {}), undefined);
   assert.equal(sentWords("stop_agent", { agentId: "a", text: "x" }), undefined);
+});
+
+test("a change to an agent names the agent its answer titles and opens its tab; a refused change opens nothing", () => {
+  const asked = {
+    tool: "update_agent",
+    callId: "call-1",
+    input: { agentId: "agent-2", model: "openai/gpt-6.1-sol", effort: "low" },
+  };
+  const changed = {
+    ...asked,
+    output: {
+      status: "accepted",
+      agent: { id: "agent-2", title: "Bill by seat", model: "openai/gpt-6.1-sol" },
+    },
+  };
+
+  const view = toolCallView(changed);
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.UPDATE_AGENT, "Bill by seat"]);
+  assert.deepEqual(toolTarget(changed), { kind: TOOL_TARGET.AGENT, agent: "agent-2" });
+  assert.equal(calledAgent(changed)?.id, "agent-2");
+  const refused = { ...asked, output: { status: "rejected", reason: "Not changed." } };
+  assert.equal(toolTarget(refused), undefined);
 });
 
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {

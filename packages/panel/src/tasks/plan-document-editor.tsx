@@ -71,6 +71,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
 /** What every block of a document the keyboard moves between wears: the title, and each section. */
 export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
 
+/** What the open editor's room wears: the text and what it opened inside it, where the focus is the editor's. */
+export const EDITOR_ROOM_CLASS = "plan-document-editor";
+
 /** What the text says while the editor's bundle could not be loaded. */
 export const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
@@ -775,7 +778,7 @@ export function PlanDocumentEditor({
   });
   if (!AsyncResult.isSuccess(module)) {
     return (
-      <section ref={room} className="plan-document-editor ph-no-capture" aria-busy="true">
+      <section ref={room} className={`${EDITOR_ROOM_CLASS} ph-no-capture`} aria-busy="true">
         {drawn}
         {AsyncResult.isFailure(module) ? (
           <p className="plan-editor-note" role="alert">
@@ -815,7 +818,7 @@ export function PlanDocumentEditor({
   return (
     <section
       ref={room}
-      className="plan-document-editor ph-no-capture"
+      className={`${EDITOR_ROOM_CLASS} ph-no-capture`}
       aria-label="Editing the plan"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) once(doors.onLeave);

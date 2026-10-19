@@ -762,6 +762,8 @@ function tasksToolView(
       return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
     case AGENT_TOOL.STOP_AGENT:
       return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
+    case AGENT_TOOL.UPDATE_AGENT:
+      return answeredAgentCall(CALL_KIND.UPDATE_AGENT, input, output);
     case AGENT_TOOL.CREATE_SECTION:
       return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
     case AGENT_TOOL.DELETE_SECTION:
@@ -988,6 +990,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
   [AGENT_TOOL.UPDATE_TASK, answeredTask],
+  [AGENT_TOOL.UPDATE_AGENT, namedAgent],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
@@ -1031,6 +1034,7 @@ const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.ARCHIVE_AGENT,
   AGENT_TOOL.UNARCHIVE_AGENT,
   AGENT_TOOL.STOP_AGENT,
+  AGENT_TOOL.UPDATE_AGENT,
   RETIRED_TOOL.READ_CODING_AGENT,
   RETIRED_TOOL.MESSAGE_CODING_AGENT,
   RETIRED_TOOL.START_CODING_AGENT,
