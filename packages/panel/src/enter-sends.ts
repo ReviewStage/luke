@@ -14,7 +14,7 @@
 const COARSE_POINTER = "(pointer: coarse)";
 
 /** The label an on-screen keyboard draws on its return key: Send where Enter sends, a return where it is a new line. */
-export const ENTER_KEY_HINT = {
+const ENTER_KEY_HINT = {
   SEND: "send",
   NEW_LINE: "enter",
 } as const;
