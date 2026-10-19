@@ -65,7 +65,6 @@
     "./schemas/github-install-intent": "./src/schemas/github-install-intent.js",
     "./schemas/github-installation": "./src/schemas/github-installation.js",
     "./schemas/inbox": "./src/schemas/inbox.js",
-    "./schemas/conversation-attachment": "./src/schemas/conversation-attachment.js",
     "./schemas/attachment": "./src/schemas/attachment.js",
     "./schemas/inbox-item-read": "./src/schemas/inbox-item-read.js",
     "./schemas/inbox-message": "./src/schemas/inbox-message.js",
