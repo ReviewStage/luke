@@ -1,5 +1,4 @@
 import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
-import type { IntegrationProvider } from "./integration-wire.js";
 
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
@@ -267,31 +266,6 @@ export const VOICE_SERVICE_PATH = {
   /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
   SESSIONS: "/api/voice/sessions",
 } as const;
-
-/** Begins a browser sign-in to one provider for the account (POST), answering the address the browser opens. */
-export function integrationConnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/connect`;
-}
-
-/** The tools one provider's server offers the account's agents (GET), read from the server now or shortly before. */
-export function integrationToolsPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/tools`;
-}
-
-/** Ends the account's sign-in to one provider under way (POST), and nothing else: no grant is revoked. */
-export function integrationCancelPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/cancel`;
-}
-
-/** Ends the account's connection to one provider (POST); what agents already did there stands. */
-export function integrationDisconnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
-}
-
-/** Names one of the account's accounts at a provider (POST), the label it then carries. */
-export function integrationRenamePath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/rename`;
-}
 
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
