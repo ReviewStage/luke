@@ -113,7 +113,8 @@ async function publicTableNames(): Promise<readonly string[]> {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql`
-        select table_name as name from information_schema.tables where table_schema = 'public'
+        select table_name as name from information_schema.tables
+        where table_schema = 'public' and table_type = 'BASE TABLE'
       `;
     }),
   );
