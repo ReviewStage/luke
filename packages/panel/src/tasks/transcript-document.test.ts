@@ -9,7 +9,12 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  type OpenedLink,
+  openingLinks,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { InboxPictures } from "./inbox-pictures.js";
@@ -77,7 +82,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
-const told: Act[] = [];
+const told: (Act | OpenedLink)[] = [];
 
 beforeEach(() => {
   told.length = 0;
@@ -88,6 +93,7 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
+  fakeActPort(openingLinks((link) => told.push(link)));
 });
 
 afterEach(() => {
