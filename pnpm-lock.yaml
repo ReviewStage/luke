@@ -67,6 +67,9 @@ patchedDependencies:
   drizzle-orm@1.0.0-rc.4:
     hash: 7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b
     path: patches/drizzle-orm@1.0.0-rc.4.patch
+  eve@0.74.0:
+    hash: 9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e
+    path: patches/eve@0.74.0.patch
 
 importers:
 
@@ -317,6 +320,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
+      '@sentry/effect':
+        specifier: 11.7.0
+        version: 11.7.0(@babel/core@7.29.7)(effect@4.0.4)(rollup@4.62.4)
       '@sentry/node':
         specifier: 11.7.0
         version: 11.7.0(@babel/core@7.29.7)(rollup@4.62.4)
@@ -343,7 +349,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -396,6 +402,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
+      '@sentry/effect':
+        specifier: 11.7.0
+        version: 11.7.0(@babel/core@7.29.7)(effect@4.0.4)(rollup@4.62.4)
       '@sentry/node':
         specifier: 11.7.0
         version: 11.7.0(@babel/core@7.29.7)(rollup@4.62.4)
@@ -422,7 +431,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -1050,7 +1059,7 @@ importers:
         version: link:../wire
       '@sentry/effect':
         specifier: 11.7.0
-        version: 11.7.0(effect@4.0.4)
+        version: 11.7.0(@babel/core@7.29.7)(effect@4.0.4)(rollup@4.62.4)
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(ai@7.0.135)(better-auth@1.7.7)(eve@0.74.0)
@@ -1071,7 +1080,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -10061,7 +10070,7 @@ snapshots:
     dependencies:
       '@sentry/conventions': 0.27.0
 
-  '@sentry/effect@11.7.0(effect@4.0.4)':
+  '@sentry/effect@11.7.0(@babel/core@7.29.7)(effect@4.0.4)(rollup@4.62.4)':
     dependencies:
       '@sentry/browser': 11.7.0
       '@sentry/conventions': 0.27.0
@@ -10782,7 +10791,7 @@ snapshots:
     optionalDependencies:
       ai: 7.0.135(zod@4.5.4)
       better-auth: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4)(next@16.3.1)(pg@8.23.0)(react-dom@19.2.8)(react@19.2.8)(vitest@5.0.0)
-      eve: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
+      eve: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
 
   '@vercel/functions@3.10.1(ws@8.22.0)':
     dependencies:
@@ -11865,7 +11874,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
 
-  eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135):
+  eve@0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135):
     dependencies:
       ai: 7.0.135(zod@4.5.4)
       nitro: 3.0.260903-beta
