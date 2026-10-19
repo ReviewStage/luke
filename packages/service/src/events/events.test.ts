@@ -289,3 +289,44 @@ it.effect("an older build's retired event names are skipped and its live events 
     assert.equal(posthog.forwarded.length, 1);
   }),
 );
+
+it.effect(
+  "every forwarded event names the deployment and the build its batch came from, and an older build's batch still lands",
+  () =>
+    Effect.gen(function* () {
+      const signIn = { name: PRODUCT_EVENT.ACCOUNT_SIGN_IN, at: NOW - 10_000, properties: {} };
+
+      const current = upstream();
+      const stamped = yield* post(
+        forUser("user-stamp", {
+          request: eventsRequest({
+            events: [signIn],
+            build: { app_version: "0.18.0", packaged: false },
+          }),
+          deployment: "preview",
+          httpClient: current.layer,
+        }),
+      );
+      assert.equal(stamped.status, 202);
+      const [currentEvent] = current.forwarded[0]?.body.batch ?? [];
+      assert.equal(currentEvent?.properties.environment, "preview");
+      assert.equal(currentEvent?.properties.app_version, "0.18.0");
+      assert.equal(currentEvent?.properties.packaged, false);
+
+      // Builds 0.7 to 0.17 send no `build`; their counts land with the
+      // deployment alone, and a service Vercel names no environment for is
+      // not production.
+      const older = upstream();
+      const accepted = yield* post(
+        forUser("user-stamp", {
+          request: eventsRequest({ events: [signIn] }),
+          httpClient: older.layer,
+        }),
+      );
+      assert.equal(accepted.status, 202);
+      const [olderEvent] = older.forwarded[0]?.body.batch ?? [];
+      assert.equal(olderEvent?.properties.environment, "development");
+      assert.equal(olderEvent?.properties.app_version, undefined);
+      assert.equal(olderEvent?.properties.packaged, undefined);
+    }),
+);

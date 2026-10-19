@@ -178,9 +178,19 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.deepEqual(sessionReplayBootstrap(app.snapshot()), {
     permitted: true,
     appVersion: "1.2.3",
+    packaged: true,
     accountId: "person",
   });
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
+  assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
+});
+
+it("an unpackaged run never records, whatever the host permitted", () => {
+  const app = new AppStateStore(
+    initialAppState({ ...RUN, packaged: false }, true, []),
+    Context.empty(),
+  );
+  app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 

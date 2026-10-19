@@ -5,7 +5,7 @@ import {
   type AppPanelTab,
   type AppSettingId,
 } from "@luke/wire/app-settings";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
@@ -511,6 +511,47 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
     events.push(event);
   }
   return events;
+}
+
+/** The fields of a batch's `build`, which the service stamps on every event the batch carries. */
+export const PRODUCT_EVENT_BUILD_FIELD = {
+  APP_VERSION: PRODUCT_EVENT_PROPERTY.APP_VERSION,
+  PACKAGED: "packaged",
+} as const;
+
+/**
+ * What the desktop says about the build a whole batch came from: its release
+ * version, read as strictly as an event's own, and whether it runs from a
+ * packaged bundle rather than a development checkout. It rides beside the
+ * events rather than inside each one, because it is a fact of the sender and
+ * not of anything counted, and one place on the request keeps it out of every
+ * event's allowlist.
+ */
+const ProductEventBuildSchema = Schema.Struct({
+  [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: Schema.optionalKey(
+    Schema.String.check(
+      Schema.makeFilter(
+        (value) => value === value.trim() && parseReleaseVersion(value) !== undefined,
+      ),
+    ),
+  ),
+  [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: Schema.optionalKey(Schema.Boolean),
+});
+
+export type ProductEventBuild = typeof ProductEventBuildSchema.Type;
+
+const decodeProductEventBuild = Schema.decodeUnknownOption(ProductEventBuildSchema);
+
+/**
+ * Reads a batch's `build`, which is never a reason to refuse it. Note that a
+ * missing or unreadable `build` is left off whole rather than refusing the
+ * batch, because builds 0.7 to 0.17 send none at all and their counts still
+ * have to land; an event then carries no claim about its build rather than a
+ * wrong one. A field the schema does not name is not copied forward.
+ */
+export function productEventBuildFromWire(value: UnparsedWireValue): ProductEventBuild {
+  if (!isRecord(value)) return {};
+  return Option.getOrElse(decodeProductEventBuild(value.build), () => ({}));
 }
 
 /** What every emitter is handed: a name, and exactly that name's properties. */
