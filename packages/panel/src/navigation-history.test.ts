@@ -88,6 +88,8 @@ function mount(initial: TasksControl) {
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
     /** The address of every step held, oldest first. */
     addresses: () => held.current().entries.map((entry) => entry.address),
+    /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
+    moveHistory: (delta: number) => act(() => held.go(delta)),
   };
 }
 
@@ -169,6 +171,47 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
 
   act(() => asked[0]?.());
   assert.deepEqual(homes, ["home"], "Leave takes the step it asked about");
+});
+
+test("a move the history makes by itself while a page holds unsaved work stands the history back on the window's step and asks, and Leave makes the move again", () => {
+  const asked: (() => void)[] = [];
+  let standing: LeaveAsk | undefined;
+  const asking = (base: TasksControl): TasksControl => ({
+    ...base,
+    leaveGuard: {
+      stand: () => () => undefined,
+      pass: (leave) => leave(),
+      guard:
+        (leave) =>
+        (...args) => {
+          if (standing === undefined) leave(...args);
+          else standing(() => leave(...args));
+        },
+    },
+  });
+  const homes: string[] = [];
+  const window = mount(asking(tasksControl()));
+  window.stand(
+    asking(
+      tasksControl({
+        page: TASKS_PAGE.DOCUMENT,
+        activeTaskId: TASK_ID,
+        boundFor: TASK_ID,
+        onLeaveTask: () => homes.push("home"),
+      }),
+    ),
+  );
+
+  standing = (leave) => asked.push(leave);
+  window.moveHistory(-1);
+  assert.deepEqual(homes, [], "the move waits on the ask");
+  assert.equal(window.history().canGoBack, true, "and the history stands back on the plan");
+  assert.equal(window.history().canGoForward, false);
+
+  act(() => asked[0]?.());
+  assert.deepEqual(homes, ["home"], "Leave takes the move it asked about");
+  assert.equal(window.history().canGoBack, false);
+  assert.equal(window.history().canGoForward, true);
 });
 
 test("a person's page is a step of its own, which Back from a plan opened after it returns to, and another person's is another step", () => {
