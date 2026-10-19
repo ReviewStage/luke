@@ -15,7 +15,7 @@ export type AdminRead<T> =
   | { status: "forbidden" }
   | { status: "missing" }
   | { status: "error"; detail: string }
-  | { status: "ready"; value: T; question: string; refreshFailure: string | undefined };
+  | { status: "ready"; value: T; question: AdminQuestion; refreshFailure: string | undefined };
 
 /**
  * Asks the read's procedure on the browser client, under the signal the hook
@@ -23,14 +23,39 @@ export type AdminRead<T> =
  */
 export type AdminReader<T> = (signal: AbortSignal) => Promise<T>;
 
+/** The admin reads a screen asks, by the browser client's procedure name. */
+export const ADMIN_READ = {
+  COST: "cost",
+  DAY: "day",
+  METRICS: "metrics",
+  RELIABILITY: "reliability",
+  USER: "user",
+  USERS: "users",
+  WORKSPACES: "workspaces",
+} as const;
+
+type AdminReadProcedure = (typeof ADMIN_READ)[keyof typeof ADMIN_READ];
+
 /**
  * The question a read asks, the procedure and its query: what the hook reads
  * again when it changes, and what tells a refresh of the shown answer from a
- * read of another one.
+ * read of another one. Two questions are the same when they name the same
+ * procedure and every query field holds the same value ({@link sameQuestion}).
  */
-export function adminQuestion(procedure: string, query: AdminQuery): string {
-  const search = new URLSearchParams(Object.entries(query)).toString();
-  return search ? `${procedure}?${search}` : procedure;
+export interface AdminQuestion {
+  readonly procedure: AdminReadProcedure;
+  readonly query: AdminQuery;
+}
+
+/** Whether two questions ask the same: one procedure, and each query field the same value. */
+function sameQuestion(left: AdminQuestion, right: AdminQuestion): boolean {
+  if (left.procedure !== right.procedure) return false;
+  const leftFields = new Map(Object.entries(left.query));
+  const rightFields = new Map(Object.entries(right.query));
+  return (
+    leftFields.size === rightFields.size &&
+    [...leftFields].every(([field, value]) => rightFields.get(field) === value)
+  );
 }
 
 interface AdminReadOptions<T> {
@@ -102,7 +127,7 @@ function adminReadRefused(cause: unknown, errorDetail: string): AdminRead<never>
 async function adminReadSettled<T>(
   reader: AdminReader<T>,
   signal: AbortSignal,
-  question: string,
+  question: AdminQuestion,
   errorDetail: string,
 ): Promise<AdminRead<T>> {
   try {
@@ -138,9 +163,9 @@ export function adminReadFailure(state: AdminRead<unknown>, endpointDetail: stri
 function settleRead<State extends { status: string }>(
   current: State,
   next: State,
-  asked: string,
+  asked: AdminQuestion,
 ): State {
-  if (isFailedRead(next) && isShownAnswer(current) && current.question === asked) {
+  if (isFailedRead(next) && isShownAnswer(current) && sameQuestion(current.question, asked)) {
     return { ...current, refreshFailure: next.detail };
   }
   return next;
@@ -149,7 +174,7 @@ function settleRead<State extends { status: string }>(
 interface ShownAnswer {
   status: "ready";
   /** The request the answer came from, so a failure can say whether it asked the same one. */
-  question: string;
+  question: AdminQuestion;
   refreshFailure: string | undefined;
 }
 
@@ -177,7 +202,7 @@ function isFailedRead<State extends { status: string }>(state: State): state is 
  * sign-out withdrawal — is the same on every screen and lives here.
  */
 export function useAdminRead<T>(
-  question: string,
+  asked: AdminQuestion,
   reader: AdminReader<T>,
   errorDetail: string,
   options: AdminReadOptions<T> = {},
@@ -190,6 +215,12 @@ export function useAdminRead<T>(
   );
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef<AbortController>(null);
+
+  // The question a screen hands over is a fresh object every render; the one
+  // held here changes only when it asks something else, so only then does
+  // the read run again.
+  const [question, setQuestion] = useState(asked);
+  if (!sameQuestion(question, asked)) setQuestion(asked);
 
   // The reader, the detail, and the identity check are read at the moment a
   // read starts rather than closed over, so a screen may write them inline

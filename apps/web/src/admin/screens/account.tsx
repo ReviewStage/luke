@@ -25,7 +25,7 @@ import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-hea
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { accountReadQuery } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminQuestion, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, useAdminRead } from "../use-admin-read";
 import { AccountSupportSections, formatInstant } from "./account-support";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";
@@ -78,7 +78,7 @@ export function AccountScreen({
 }): React.JSX.Element {
   const query = accountReadQuery(id, windowDays);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    adminQuestion("user", query),
+    { procedure: ADMIN_READ.USER, query: query },
     readUserDetail(query),
     ACCOUNT_ERROR,
     { keeps: (shown) => shown.account.id === id },

@@ -19,7 +19,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { dayReadQuery } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminQuestion, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const DAY_ERROR = "The day endpoint did not answer.";
 
@@ -108,7 +108,7 @@ export function DayScreen({
 }): React.JSX.Element {
   const query = dayReadQuery(day, hideAdmins);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    adminQuestion("day", query),
+    { procedure: ADMIN_READ.DAY, query: query },
     readDayDetail(query),
     DAY_ERROR,
     { keeps: (shown) => shown.day === day },

@@ -34,9 +34,9 @@ import {
   usersReadQuery,
 } from "../routing";
 import {
+  ADMIN_READ,
   type AdminReader,
   type AdminWriter,
-  adminQuestion,
   adminReadFailure,
   useAdminRead,
   useAdminWrite,
@@ -126,7 +126,7 @@ export function UsersScreen({
 
   const asked = usersReadQuery(hideAdmins, windowDays, searchTerm(query));
   const { state, refreshing, reload, withdraw, revise } = useAdminRead(
-    adminQuestion("users", asked),
+    { procedure: ADMIN_READ.USERS, query: asked },
     readUserList(asked),
     USERS_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },

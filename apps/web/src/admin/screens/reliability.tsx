@@ -44,7 +44,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { reliabilityWindow, windowedReadQuery } from "../routing";
 import { CHART_PAIR_EVEN, SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminQuestion, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's
@@ -409,7 +409,7 @@ export function ReliabilityScreen({
   const shownWindow = reliabilityWindow(windowDays);
   const query = windowedReadQuery(hideAdmins, shownWindow);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    adminQuestion("reliability", query),
+    { procedure: ADMIN_READ.RELIABILITY, query: query },
     readReliability(query),
     RELIABILITY_ERROR,
   );

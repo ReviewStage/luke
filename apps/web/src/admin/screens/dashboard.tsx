@@ -25,9 +25,9 @@ import { PageSkeleton } from "../chrome/page-skeleton";
 import { windowedReadQuery } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import {
+  ADMIN_READ,
   type AdminReader,
   type AdminReadHandle,
-  adminQuestion,
   adminReadFailure,
   useAdminRead,
 } from "../use-admin-read";
@@ -191,9 +191,14 @@ export function useMetricsRead(
   enabled: boolean,
 ): AdminReadHandle<AdminMetrics> {
   const query = windowedReadQuery(hideAdmins, windowDays);
-  return useAdminRead(adminQuestion("metrics", query), readMetrics(query), METRICS_ERROR, {
-    enabled,
-  });
+  return useAdminRead(
+    { procedure: ADMIN_READ.METRICS, query: query },
+    readMetrics(query),
+    METRICS_ERROR,
+    {
+      enabled,
+    },
+  );
 }
 
 export function DashboardScreen({

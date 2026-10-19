@@ -45,7 +45,7 @@ import {
   searchTerm,
   workspacesReadQuery,
 } from "../routing";
-import { type AdminReader, adminQuestion, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
@@ -317,7 +317,7 @@ export function WorkspacesScreen({
 
   const asked = workspacesReadQuery(hideAdmins, sharedOnly, searchTerm(query));
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    adminQuestion("workspaces", asked),
+    { procedure: ADMIN_READ.WORKSPACES, query: asked },
     readWorkspaceList(asked),
     WORKSPACES_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },

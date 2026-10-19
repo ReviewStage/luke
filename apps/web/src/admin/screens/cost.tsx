@@ -30,7 +30,7 @@ import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { windowedReadQuery } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminQuestion, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const COST_ERROR = "The cost endpoint did not answer.";
 
@@ -232,7 +232,7 @@ export function CostScreen({
 }): React.JSX.Element {
   const query = windowedReadQuery(hideAdmins, windowDays);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    adminQuestion("cost", query),
+    { procedure: ADMIN_READ.COST, query: query },
     readCost(query),
     COST_ERROR,
   );
