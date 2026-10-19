@@ -23,6 +23,7 @@ import {
 } from "@luke/panel/tasks/message-links";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { codingAgentsControl } from "@luke/panel/testing/tasks-control";
 import { newestToastSays } from "@luke/panel/testing/toast";
 import { ToastHost } from "@luke/panel/toast";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -31,7 +32,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { codingAgentsControl } from "#testing/tasks-control";
 
 /**
  * A message of an agent's transcript has a link of its own: Copy link

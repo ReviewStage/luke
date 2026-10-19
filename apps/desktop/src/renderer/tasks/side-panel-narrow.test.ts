@@ -10,12 +10,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { AgentChangesTab } from "@luke/panel/tasks/agent-changes-tab";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { codingAgentsControl } from "@luke/panel/testing/tasks-control";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { layContainersAt } from "#testing/container-width";
-import { codingAgentsControl } from "#testing/tasks-control";
 
 /**
  * The side panel's Changes tab at its narrowest, 280px, where it has no room

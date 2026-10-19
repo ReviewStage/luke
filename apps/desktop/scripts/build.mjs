@@ -91,7 +91,10 @@ const markdownHtmlParserOnDemand = {
 // them would be. The CommonJS file is read in a namespace of its own, so the
 // resolver never takes it for the package and keeps answering the named
 // imports with the ES build.
-const LUCIDE_WHOLE = createRequire(path.join(appRoot, "package.json")).resolve("lucide-react");
+// Note that the copy is the one the panel (`@luke/panel`), which draws the icons, resolves.
+const LUCIDE_WHOLE = createRequire(path.join(appRoot, "../../packages/panel/package.json")).resolve(
+  "lucide-react",
+);
 const LUCIDE_WHOLE_FILE = "lucide-whole-file";
 const lucideWholeOnDemand = {
   name: "lucide-whole-on-demand",

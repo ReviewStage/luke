@@ -4,10 +4,15 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import {
+  DesktopVersionHistory,
+  taskVersionSubject,
+} from "@luke/panel/desktop/desktop-version-history";
 import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { newestToastSays } from "@luke/panel/testing/toast";
 import { ToastHost } from "@luke/panel/toast";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,8 +20,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { tasksControl } from "#testing/tasks-control";
-import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 
 /**
  * A plan's version has a link of its own: a version's row's menu copies its

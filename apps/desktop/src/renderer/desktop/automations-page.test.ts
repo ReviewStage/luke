@@ -41,6 +41,7 @@ import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { playMotions } from "@luke/panel/testing/pane-motion";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { ToastHost } from "@luke/panel/toast";
 import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
@@ -51,7 +52,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { layContainersAt } from "#testing/container-width";
-import { tasksControl } from "#testing/tasks-control";
 
 /**
  * automations-page.test.ts -- the Automations page as the window draws it: the listed workspace's automations, the workspace's before the personal ones, each naming its owner, an automation turned off saying so, a failed run marked, a switch's write taken in place, and a read that did not land said with a retry.

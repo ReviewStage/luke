@@ -99,10 +99,10 @@ const SCOPED_AFTER = {
   // The line under the plan's title: who started its task and who last edited it.
   byline: ["packages/panel/src/tasks/plan-body.tsx"],
   // The Plan tab's row, and the shell's toggle onto the document.
-  row: ["apps/desktop/src/renderer/desktop/main-tabs.tsx"],
-  toggle: ["apps/desktop/src/renderer/desktop/desktop-shell.tsx"],
+  row: ["packages/panel/src/desktop/main-tabs.tsx"],
+  toggle: ["packages/panel/src/desktop/desktop-shell.tsx"],
   // The New task dialog's Plan switch, in its test.
-  switch: ["apps/desktop/src/renderer/tasks/new-task-dialog.test.ts"],
+  switch: ["packages/panel/src/tasks/new-task-dialog.test.ts"],
   // Who wrote a revision of the plan, and a save that lost to another or was not made.
   writer: [
     "packages/database/src/models/plan-revisions.ts",
@@ -168,11 +168,11 @@ const WIRE_NAME = {
     "apps/desktop/src/renderer/desktop/automations-page.test.ts",
     "apps/desktop/src/renderer/desktop/command-palette.test.ts",
     "apps/desktop/src/renderer/desktop/desktop-agent-page.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-home.test.ts",
+    "packages/panel/src/desktop/desktop-home.test.ts",
     "apps/desktop/src/renderer/desktop/desktop-inbox.test.ts",
     "apps/desktop/src/renderer/desktop/person-page.test.ts",
     "apps/desktop/src/renderer/settings/workspace-page.test.ts",
-    "apps/desktop/src/renderer/tasks/agent-automation.test.ts",
+    "packages/panel/src/tasks/agent-automation.test.ts",
     "apps/desktop/src/renderer/tasks/chip-cards.test.ts",
   ],
   // The inbox's agents with no task (`account-inbox-wire.ts`).
@@ -349,7 +349,7 @@ export const CANARY = {
     ["MAX_PER_PLAN", "packages/features/src/anywhere.ts"],
     ["planet", "packages/features/src/anywhere.ts"],
     ["PlanTitle", "packages/panel/src/ai-elements/plan.tsx"],
-    ["PLAN_ROW", "apps/desktop/src/renderer/desktop/main-tabs.tsx"],
+    ["PLAN_ROW", "packages/panel/src/desktop/main-tabs.tsx"],
     ["planClosed", "packages/panel/src/tasks/use-main-tabs.ts"],
     ["useNewTaskPlanning", "packages/panel/src/tasks/new-task-composer.tsx"],
   ],
