@@ -1085,11 +1085,21 @@ the archiving agent and its reason on the archived agent's row
 (`archived_by`), and bring one back; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
-staying available and an idle one answered as idle; `read_page`, a page shown on any task
+staying available and an idle one answered as idle; `update_agent`, which
+renames an agent of the workspace, moves it to another model and effort the
+catalog takes, pins one on no task for the starter, or switches its MCP
+servers, every change asked in one transaction; `read_page`, a page shown on any task
 of the workspace by its id, its HTML cut on a line to a bound, which a
 mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
-section the agent's starter keeps it in, and those sections;
+section the agent's starter keeps it in, and those sections; `read_task`
+and `create_task` (`src/agents/task-tools.ts`), which read one task of the
+workspace with its plan, its brief, and the issue it was started from, and
+make one for the starter, on the repository named or the agent's own,
+confirmed through the workspace's installation, with a brief and a plan to
+start from and no agent on it, under an id drawn from eve's key for the
+call (`src/agents/called-id.ts`), so a call run again makes one, which
+`start_agent` then starts on by its id;
 `create_section`, `delete_section`, and `move_task`
 (`src/agents/task-section-tools.ts`), which make and delete the starter's
 own sections of the workspace's sidebar and move a task into one or out of
@@ -1894,8 +1904,10 @@ research reads beside it, `queue_question`
 how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
 `list_agents`, `read_agent`, `message_agent`, `start_agent`,
-`stop_agent`, `archive_agent`, `unarchive_agent`, `list_tasks`, `update_task`,
-and `list_models` every coding agent is offered, and the same
+`stop_agent`, `update_agent`, `archive_agent`, `unarchive_agent`,
+`list_tasks`, `update_task`, and `list_models` every coding agent is
+offered, the same `read_task` and `create_task`
+(`src/agents/task-tools.ts`), and the same
 `create_section`, `delete_section`, and `move_task`
 (`src/agents/task-section-tools.ts`), which keep the call's member's own
 sidebar sections, and `list_issues`, `read_issue`, `create_issue`, and

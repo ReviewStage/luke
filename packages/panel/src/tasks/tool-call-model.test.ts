@@ -611,7 +611,7 @@ test("a stop names the agent its answer titles and opens that agent's tab, which
   assert.equal(toolTarget(refused), undefined);
 });
 
-test("a task read names the task its answer names, nothing before the answer, and opens nothing", () => {
+test("a task read or a task made names the task its answer names, nothing before the answer for a read, and opens that task", () => {
   const read = {
     tool: "read_task",
     callId: "call-1",
@@ -625,7 +625,20 @@ test("a task read names the task its answer names, nothing before the answer, an
 
   const view = toolCallView(read);
   assert.deepEqual([view.kind, view.subject], [CALL_KIND.READ_TASK, "Bill by seat"]);
-  assert.equal(toolTarget(read), undefined);
+  assert.deepEqual(toolTarget(read), { kind: TOOL_TARGET.TASK, task: "task-1" });
+  const made = {
+    tool: "create_task",
+    callId: "call-2",
+    input: { name: "Bill by seat" },
+    output: { status: "accepted", task: { id: "task-2", name: "Bill by seat", repository: null } },
+  };
+  const madeView = toolCallView(made);
+  assert.deepEqual([madeView.kind, madeView.subject], [CALL_KIND.CREATE_TASK, "Bill by seat"]);
+  assert.deepEqual(toolTarget(made), { kind: TOOL_TARGET.TASK, task: "task-2" });
+  assert.equal(
+    toolTarget({ ...made, output: { status: "rejected", reason: "Not made." } }),
+    undefined,
+  );
   assert.equal(toolCallView({ ...read, output: undefined }).subject, "");
 });
 

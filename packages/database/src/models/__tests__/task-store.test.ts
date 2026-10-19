@@ -19,6 +19,7 @@ import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import { createIssue } from "../issue-store.js";
 import {
   createTask,
+  createTaskOnce,
   deleteTask,
   listTasks,
   nameUntitledTask,
@@ -219,6 +220,28 @@ it.layer(getTestDB())("a plan's starting name", (it) => {
         "Untitled",
       );
     }),
+  );
+});
+
+it.layer(getTestDB())("a task made under an id its maker chose", (it) => {
+  it.effect(
+    "stands under that id with the text given, and a second make under it, even at once, makes nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const organizationId = yield* openWorkspace(owner);
+        const id = randomUUID();
+        const make = (name: string) =>
+          createTaskOnce(owner, { id, organizationId, name, text: "## Goal\n\nBulk invites." });
+        const [first, second] = yield* Effect.all([make("Bulk invites"), make("Again")], {
+          concurrency: "unbounded",
+        });
+
+        assert.equal([first, second].filter(Option.isSome).length, 1, "one make took the id");
+        const stored = Option.getOrThrow(yield* readTask(owner, id));
+        assert.equal(stored.text, "## Goal\n\nBulk invites.");
+        assert.ok(Option.isNone(yield* make("Later")), "a make under a taken id makes nothing");
+      }),
   );
 });
 
