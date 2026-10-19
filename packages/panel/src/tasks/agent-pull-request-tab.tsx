@@ -38,6 +38,7 @@ import {
   Badge,
   Button,
   CopyIcon,
+  CountParts,
   DETAIL_PAGE_INSET,
   DetailPage,
   DisclosureChevron,
@@ -48,6 +49,7 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  linesCount,
   PAGE_FRAME,
   ProviderMark,
   SKELETON_SHAPE,
@@ -1415,16 +1417,6 @@ function checksCount(summary: CheckSummary, count: number | undefined): ReactNod
   );
 }
 
-/** What the Files changed tab counts: the lines a pull request adds and removes, each in its colour. */
-function linesCount(additions: number, deletions: number): ReactNode {
-  return (
-    <>
-      <TabCount tone={TAB_COUNT_TONE.COMPLETE}>{`+${additions.toLocaleString()}`}</TabCount>{" "}
-      <TabCount tone={TAB_COUNT_TONE.DANGER}>{`−${deletions.toLocaleString()}`}</TabCount>
-    </>
-  );
-}
-
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
 function conversationCount(conversation: CodingAgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
@@ -1472,7 +1464,9 @@ function tabsOf(
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined ? undefined : linesCount(published.additions, published.deletions),
+        published === undefined ? undefined : (
+          <CountParts parts={linesCount(published.additions, published.deletions)} />
+        ),
     },
   ];
 }
