@@ -140,9 +140,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       credentialsUsable: runMode.observesProviders,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
-      // Who is signed in where the source keeps no account here, as its
-      // session names them. Peeked rather than awaited, so a settings read
-      // made before the merge links the account reads no one rather than waiting.
+      // Note that the link is peeked, because a read before the merge links the account must read no one rather than wait.
       sessionAccountEmail: () =>
         Effect.flatMap(late.peek, (links) =>
           Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
@@ -243,9 +241,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       Effect.forever,
     );
 
-    // Note that the key is the session's, not the settings file's account,
-    // because a source that keeps no account here (a browser's cookie
-    // session) still names who is signed in.
+    // Note that the key is the session's, because a cookie session keeps no account in the settings file.
     const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
       linked((links) => links.readAccountKey());
 
@@ -260,10 +256,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
-      // Note that the arrival already settled whose the local preferences
-      // are; asked again here, where it is a no-op once settled, because an
-      // arrival whose settling did not land must not hand another account's
-      // choices to this one, and a failure here stops the action instead.
+      // Note that we settle again, because an arrival whose settling failed must not hand this account another's choices.
       yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
