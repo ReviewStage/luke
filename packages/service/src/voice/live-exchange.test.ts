@@ -24,7 +24,7 @@ import {
 } from "@luke/live";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
-import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
+import { Deferred, Duration, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
@@ -40,6 +40,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, sessionStarted } from "../testing/live-events.js";
+import { tickingLiveWake } from "../testing/live-wake.js";
 import { settled } from "../testing/settle.js";
 import { hostedLiveExchange } from "./live-exchange.js";
 
@@ -183,6 +184,9 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
   for (const event of events) await database.run(relay.handle(event, standing));
 }
 
+/** How often a follow's watch hears a change on the real clock, as Realtime would hear each write the turn makes. */
+const FOLLOW_TICK = Duration.millis(5);
+
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
 async function stand(
   target: TaskTarget,
@@ -240,11 +244,12 @@ async function stand(
         accountId: target.userId,
         liveSessionId,
         conversation: { userId: target.userId, conversationId: target.conversationId },
+        taskId: target.taskId,
         writer,
         eve,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
-      }),
+      }).pipe(Effect.provide(tickingLiveWake(FOLLOW_TICK))),
       scope,
     ),
   );

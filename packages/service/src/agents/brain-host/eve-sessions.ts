@@ -172,7 +172,7 @@ const streamedEvent = EffectSchema.Struct({
 });
 
 /** What a follower hears of one event on a session's stream. */
-export interface EveStreamEvent {
+interface EveStreamEvent {
   readonly type: string;
   readonly turnId: string | undefined;
 }

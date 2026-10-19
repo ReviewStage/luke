@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import type { LiveStatement } from "@luke/database/core/live-statement";
 import { askRecord } from "@luke/database/models/asks";
 import { childConversationId } from "@luke/database/models/ids";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -52,7 +53,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
-  type EveStreamEvent,
   eveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
@@ -62,10 +62,12 @@ import {
   SEARCH_WEB_TOOL,
 } from "../agents/public-research.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "../core.js";
+import { LiveWake } from "../live/live-wake.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
+import { tickingLiveWake } from "../testing/live-wake.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import {
   type HostedLiveBrain,
@@ -93,10 +95,12 @@ const TASK = {
   name: "Teammate invitations",
 } as const;
 /**
- * The follow's bounds narrowed so a poll is milliseconds, with the bound left
- * wide: a turn's events land through the store, and the store on CI is one
- * Postgres shared with every other job, so a bound measured in milliseconds
- * against it would expire under load before the turn's first event arrives.
+ * How often the follow's watch hears a change: Realtime is scripted to hear
+ * one every few milliseconds, as it would each write the turn makes, with
+ * the bound left wide: a turn's events land through the store, and the
+ * store on CI is one Postgres shared with every other job, so a bound
+ * measured in milliseconds against it would expire under load before the
+ * turn's first event arrives.
  */
 const POLL_MS = 5;
 /**
@@ -109,7 +113,10 @@ const POLL_MS = 5;
  * (`standOnTestClock`) and run under `it.effect`.
  */
 const QUIET_POLLS = { AFTER_END: 6, AFTER_REFUSAL: 4, AFTER_STOP: 8 } as const;
-const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
+const QUICK = { FOLLOW: Duration.minutes(1) };
+
+/** The conversation's mark as the exchange hands the brain it, by its shape alone: what a follow's watch is asked for. */
+const MARK: LiveStatement = { sql: "select mark", params: [] };
 
 // The relay's writer holds rows to the hosted set, as production's does, so a brain turn's research call is written.
 const writer = await database.run(
@@ -264,6 +271,7 @@ async function stand(
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
   over?: EveSessions,
   accountId: string = target.userId,
+  wake: Layer.Layer<never> = tickingLiveWake(Duration.millis(POLL_MS)),
   sentry?: RecordingSentry,
 ): Promise<Stand> {
   const eve = fakeEve();
@@ -284,8 +292,9 @@ async function stand(
         store,
         writer,
         report: (message) => reports.push(message),
+        live: [MARK],
         bounds,
-      }),
+      }).pipe(Effect.provide(wake)),
       scope,
     ).pipe(Effect.provideContext(reporting)),
   );
@@ -443,28 +452,39 @@ it.live(
 );
 
 it.live(
-  "with the poll a minute away, a turn's sentences and end reach the service the moment eve's stream of the session tells an event, and the stream's deltas wake nothing",
+  "a turn's sentences and end reach the service the moment Realtime says the conversation's mark moved, and nothing before",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
+      const moved = yield* Queue.unbounded<void>();
+      const watched: (readonly LiveStatement[])[] = [];
+      const marked = Layer.succeed(LiveWake, {
+        watch: (statements) =>
+          Effect.sync(() => {
+            watched.push(statements);
+            return { changed: Queue.take(moved) };
+          }),
+      });
       const f = yield* Effect.promise(() =>
-        stand(target, { ...QUICK, POLL: Duration.minutes(1), SETTLE: Duration.minutes(1) }),
+        stand(
+          target,
+          QUICK,
+          database.store,
+          target.conversationId,
+          askEffects,
+          undefined,
+          target.userId,
+          marked,
+        ),
       );
-      const told = yield* Queue.unbounded<EveStreamEvent>();
-      const listened: string[] = [];
-      f.eve.stream = (sessionId) => {
-        listened.push(sessionId);
-        return Stream.fromQueue(told);
-      };
       const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
-      // The follow attaches to the session's stream and makes its first read of a turn not yet begun.
-      for (let look = 0; look < 200 && listened.length === 0; look += 1)
+      // The follow watches the mark and makes its first read of a turn not yet begun.
+      for (let look = 0; look < 200 && watched.length === 0; look += 1)
         yield* Effect.sleep(POLL_MS);
-      yield* Effect.sleep(50);
-      assert.equal(f.events.length, 0);
+      assert.deepEqual(watched, [[MARK]]);
       const standing: RelayStanding = {
         sessionId,
         target,
@@ -473,13 +493,11 @@ it.live(
         state: memoryRelayState(),
       };
       yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
-      // The record now holds the whole turn, and the poll is a minute away: a delta wakes nothing.
-      yield* Queue.offer(told, { type: "message.appended", turnId: "turn_0" });
+      // The record now holds the whole turn, and no change was heard: nothing is told.
       yield* Effect.sleep(50);
       assert.equal(f.events.length, 0);
-      yield* Queue.offer(told, { type: "turn.completed", turnId: "turn_0" });
+      yield* Queue.offer(moved, undefined);
       yield* f.arrived(5);
-      assert.deepEqual(listened, [sessionId]);
       assert.equal(f.events.at(-1)?.kind, LIVE_BRAIN_RUN_EVENT.ENDED);
       yield* Effect.promise(() => f.stop());
     }),
@@ -496,53 +514,6 @@ function exceptionTypes(sentry: RecordingSentry): string[] {
     (item) => item.payload.exception?.values.at(-1)?.type ?? "",
   );
 }
-
-it.live(
-  "a session stream that dies is reported to Sentry once, the follow goes on on its poll, and the socket's close reports nothing",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const sentry = recordingSentry();
-      const f = yield* Effect.promise(() =>
-        stand(
-          target,
-          QUICK,
-          database.store,
-          target.conversationId,
-          askEffects,
-          undefined,
-          target.userId,
-          sentry,
-        ),
-      );
-      const attached = yield* Deferred.make<void>();
-      f.eve.stream = () =>
-        Stream.unwrap(
-          Effect.as(
-            Deferred.succeed(attached, undefined),
-            Stream.die(new RangeError("the stream broke")),
-          ),
-        );
-      const accepted = yield* Effect.promise(() => database.run(reported(f, spokenAsk("q"))));
-      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
-      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      const standing: RelayStanding = {
-        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
-        target,
-        turn: BRAIN_HOST_TURN.SPOKEN,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      yield* Deferred.await(attached);
-      yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
-      yield* f.arrived(5);
-      assert.equal(f.events.at(-1)?.kind, LIVE_BRAIN_RUN_EVENT.ENDED);
-      // A second ask is still being followed as the socket closes, which interrupts it.
-      yield* Effect.promise(() => database.run(reported(f, spokenAsk("q"))));
-      yield* Effect.promise(() => f.stop());
-      assert.deepEqual(exceptionTypes(sentry), ["RangeError"]);
-    }),
-);
 
 it.live(
   "a follow whose read of the turn fails is told failed as before and reported to Sentry once",
@@ -573,6 +544,7 @@ it.live(
           askEffects,
           undefined,
           target.userId,
+          undefined,
           sentry,
         ),
       );

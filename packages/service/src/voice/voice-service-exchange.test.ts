@@ -26,7 +26,7 @@ import {
   sessionInstructions,
 } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
-import { Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
+import { Duration, Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
@@ -47,6 +47,7 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "../testing/live-events.js";
+import { tickingLiveWake } from "../testing/live-wake.js";
 import {
   connect,
   fakeAccounts,
@@ -100,6 +101,8 @@ const BEARER = "Bearer account-token-1";
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const CLOSE_TIMEOUT_MS = 300;
+/** How often a follow's watch hears a change on the real clock, as Realtime would hear each write the turn makes. */
+const FOLLOW_TICK_MS = 5;
 /** How long a frame is waited on where none is expected, before its absence counts. */
 const QUIET_MS = 150;
 
@@ -306,7 +309,10 @@ async function stand(offer: Offer): Promise<Stand> {
           Effect.gen(function* () {
             offered.push(session);
             if (offer === OFFER.GATED) yield* Effect.promise(() => gate);
-            return yield* attachment(session);
+            // The exchange's follows wait on Realtime, scripted here to hear a change as often as the turn writes.
+            return yield* attachment(session).pipe(
+              Effect.provide(tickingLiveWake(Duration.millis(FOLLOW_TICK_MS))),
+            );
           });
   const voice = voiceServer();
   const scope = await database.run(Scope.make());

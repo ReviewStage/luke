@@ -16,10 +16,11 @@ import {
   type LiveSessionStatus,
   type LiveSessionTrace,
 } from "@luke/voice/live-session";
-import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
+import { Cause, Effect, Layer, Option, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
@@ -57,6 +58,8 @@ export interface HostedLiveExchangeOptions {
   readonly conversation: ConversationTarget;
   /** The developer's time zone, which every spoken ask hands the brain's turn; none reads UTC. */
   readonly timeZone?: string | undefined;
+  /** The task the session is bound to, whose conversation's mark a spoken ask's turn is followed on over Neon Realtime. */
+  readonly taskId: string;
   /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
   /**
@@ -192,10 +195,12 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   });
   const reported = (message: string | undefined): Effect.Effect<void> =>
     message === undefined ? Effect.void : Effect.sync(() => report(message));
+  const live = taskConversationLiveStatements(conversation.userId, options.taskId);
   const brain = yield* hostedLiveBrain({
     accountId,
     conversation,
     timeZone: options.timeZone,
+    live: Option.match(live, { onNone: () => [], onSome: ({ mark }) => [mark] }),
     asks: {
       asks: askRecord(),
       eve: options.eve,
