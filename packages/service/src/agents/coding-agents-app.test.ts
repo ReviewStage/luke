@@ -208,6 +208,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
@@ -5710,6 +5711,43 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         );
       return { ...opened, workspace, first, second, person, channel, telling, post, rowsOf };
     });
+
+  it.effect(
+    "a post whose pictures cannot be kept is not posted at all, so no reader ever sees an image block without its bytes, and nobody is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const attachmentId = randomUUID();
+        // One byte past a chat picture's bound, which the store's own check refuses as it writes the picture.
+        const bytes = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
+        bytes.set(PNG);
+        const refused = yield* Effect.flip(
+          postChat(
+            chat.telling,
+            {
+              authorMemberId: chat.person.id,
+              to: { channelId: chat.channel.id },
+              blocks: [
+                { type: CHAT_BLOCK.MARKDOWN, text: "@agent-1 the new email." },
+                { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+              ],
+              mentions: ["agent-1"],
+              clientKey: randomUUID(),
+            },
+            [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes }],
+          ).pipe(Effect.provide(chat.github.layer)),
+        );
+        assert.deepEqual(refused, HOSTED_REFUSAL.UNAVAILABLE);
+        const kept = Option.getOrThrow(
+          yield* history(chat.owner, chat.workspace, chat.person.id, {
+            channelId: chat.channel.id,
+          }),
+        );
+        assert.deepEqual(kept, [], "the message went with its pictures");
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
 
   it.effect(
     "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
