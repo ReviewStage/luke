@@ -309,7 +309,7 @@ fi
 # each hand-rolled in several test files, and every copy drifted: three
 # temporary directories were never cleaned up. `temporaryDirectory` lives in
 # @luke/runtime/testing, because the host's tests are in a package and a
-# package cannot reach into an app; the rest are under apps/desktop/src/testing.
+# package cannot reach into an app.
 # This call is how a hand-rolled one always begins. A microtask drain and a
 # fake clock are no longer this check's concern: `TestClock` is the clock an
 # `it.effect` test drives, and a plain vitest test's own wait is a
@@ -509,7 +509,6 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    "apps/desktop/src/testing/**",
     // What the desktop answers the platform door of the panel with, which
     // the window root installs: each capability as the act or the preload
     // event main serves, so it names nothing but the panel and the act table.

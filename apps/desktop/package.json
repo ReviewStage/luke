@@ -21,10 +21,6 @@
     "#shared/*": [
       "./src/shared/*.ts",
       "./src/shared/*"
-    ],
-    "#testing/*": [
-      "./src/testing/*.ts",
-      "./src/testing/*"
     ]
   },
   "scripts": {

@@ -165,7 +165,7 @@ const WIRE_NAME = {
     "packages/host/src/compose-automations.test.ts",
     "packages/service/src/automations/automations-app.ts",
     "packages/service/src/automations/automations-app.test.ts",
-    "apps/desktop/src/renderer/desktop/automations-page.test.ts",
+    "packages/panel/src/desktop/automations-page.test.ts",
     "packages/panel/src/desktop/command-palette.test.ts",
     "packages/panel/src/desktop/desktop-agent-page.test.ts",
     "packages/panel/src/desktop/desktop-home.test.ts",

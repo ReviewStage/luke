@@ -8,14 +8,14 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { AgentChangesTab } from "@luke/panel/tasks/agent-changes-tab";
-import { onRegistry } from "@luke/panel/testing/copy-feedback";
-import { codingAgentsControl } from "@luke/panel/testing/tasks-control";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { layContainersAt } from "#testing/container-width";
+import { layContainersAt } from "../testing/container-width.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { codingAgentsControl } from "../testing/tasks-control.js";
+import { AgentChangesTab } from "./agent-changes-tab.js";
 
 /**
  * The side panel's Changes tab at its narrowest, 280px, where it has no room
@@ -23,7 +23,7 @@ import { layContainersAt } from "#testing/container-width";
  * asked, by a press, a peek, or the pointer at the tab's edge, and Escape or
  * a press on the diff puts it away. jsdom lays nothing out, so the window's
  * stylesheets are laid once for a panel that wide
- * (`#testing/container-width`) and what is drawn is read through them.
+ * (`testing/container-width.ts`) and what is drawn is read through them.
  */
 
 /** The plan the tab stands on. */
