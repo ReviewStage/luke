@@ -305,7 +305,10 @@ const servedActPort = (operator: OperatorClient, services: Context.Context<never
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      createActPortHandler({ issues: { host: operator.host } }).upgrade(channel.port2, {
+      createActPortHandler({
+        issues: { host: operator.host },
+        workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
+      }).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },
           trusted: true,
