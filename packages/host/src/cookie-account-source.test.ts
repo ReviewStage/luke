@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { accountCall, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import { LIVE_VOICE } from "@luke/live";
@@ -69,20 +69,28 @@ interface ServiceState {
   updatedAt?: number;
   /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
+  /** Holds the next session read's answer, as it stood when asked, until this settles. */
+  heldRead?: Promise<void> | undefined;
 }
 
 /** The service's routes over `state`, answered as Better Auth and Luke's routes answer them. */
 function respond(
   state: ServiceState,
   request: Pick<RecordedRequest, "method" | "pathname" | "body">,
-): Response {
+): Response | Promise<Response> {
   switch (request.pathname) {
-    case "/api/auth/get-session":
+    case "/api/auth/get-session": {
       if (state.outages > 0) {
         state.outages -= 1;
         return new Response(null, { status: 503 });
       }
-      return jsonResponse(state.user ? { session: { id: "session-1" }, user: state.user } : null);
+      const answer = jsonResponse(
+        state.user ? { session: { id: "session-1" }, user: state.user } : null,
+      );
+      const held = state.heldRead;
+      state.heldRead = undefined;
+      return held === undefined ? answer : held.then(() => answer);
+    }
     case "/api/auth/sign-in/social":
     case "/api/auth/link-social":
       return jsonResponse({ url: PROVIDER_CONSENT, redirect: true });
@@ -179,6 +187,10 @@ function scene(initial: Partial<ServiceState> = {}) {
   };
   return { state, service, navigated, gate, open, sent, holdOpening, revisit };
 }
+
+/** The signed-in person's address, and nothing for any other status. */
+const signedInEmail = (account: AccountSnapshot) =>
+  account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
 
 /** Advances the test clock a second at a time, letting each read land, until `fiber` ends. */
 const runOut = <A, E>(fiber: Fiber.Fiber<A, E>) =>
@@ -385,6 +397,31 @@ describe("the cookie account source", () => {
       // The held opening finishes first; the sign-out's closing comes after it, and last.
       assert.ok(gate.indexOf("open") < gate.indexOf("close"));
       assert.equal(gate.at(-1), "close");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lets no launch read answered late stand over a revisit's newer one", () =>
+    Effect.gen(function* () {
+      const release = yield* Deferred.make<void>();
+      const { open, state, revisit, sent } = scene({
+        heldRead: Effect.runPromise(Deferred.await(release)),
+      });
+      const session = yield* open;
+
+      // The launch's read is asked as the first person and held; meanwhile another tab signs in as someone else.
+      const launched = yield* Effect.forkChild(session.initialize);
+      while (sent("/api/auth/get-session").length === 0) yield* Effect.promise(() => nextTurn());
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* revisit;
+      yield* Effect.promise(() => nextTurn());
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(launched);
+      while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
+      while (signedInEmail(session.snapshot()) !== "other@example.com") {
+        yield* Effect.promise(() => nextTurn());
+      }
+
+      assert.equal(signedInEmail(session.snapshot()), "other@example.com");
     }).pipe(Effect.scoped),
   );
 

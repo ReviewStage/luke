@@ -28,6 +28,7 @@ import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { HTTP_METHOD, HTTP_STATUS } from "@luke/wire";
 import {
   Data,
+  Deferred,
   Duration,
   Effect,
   Fiber,
@@ -411,8 +412,15 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       Effect.ignore,
     );
 
-  // Every return to the tab reads the session again, for as long as the session stands open.
-  yield* Effect.forkScoped(Stream.runForEach(door.revisits, refreshOnce));
+  // Every return to the tab reads the session again, for as long as the
+  // session stands open, but only once the launch's own read has settled, so
+  // that read's older answer can never land over a newer one.
+  const initialized = yield* Deferred.make<void>();
+  yield* Effect.forkScoped(
+    Stream.runForEach(door.revisits, () =>
+      Effect.andThen(Deferred.await(initialized), refreshOnce()),
+    ),
+  );
 
   return {
     snapshot: () => account,
@@ -420,6 +428,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     initialize: Effect.gen(function* () {
       // Note that an outage reads as signed out, there being no account to
       // name, and the launch's own `refreshOnce` reads again soon after.
+      const asked = generation;
       const settled = yield* Effect.result(
         runMode.requiresAccount && runMode.sendsNetwork
           ? readSession
@@ -429,8 +438,12 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         Result.isSuccess(settled) && settled.success.signedIn
           ? settled.success.account
           : SIGNED_OUT;
-      yield* settleArrival(initial);
-      account = initial;
+      // A change that landed while the launch read, a refused call's, stands over it.
+      if (asked === generation) {
+        yield* settleArrival(initial);
+        account = initial;
+      }
+      yield* Deferred.succeed(initialized, undefined);
       return account;
     }),
     beginSignIn,
