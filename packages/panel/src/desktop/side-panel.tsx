@@ -87,7 +87,7 @@ import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
-import { FileView } from "../tasks/file-view.js";
+import { FileView, type TreeShown } from "../tasks/file-view.js";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
 import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
@@ -138,6 +138,7 @@ import {
 } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import { useFileTreeWidth } from "./folded-groups.js";
 import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
@@ -1379,7 +1380,7 @@ function TabContent({
   /** Opens a file of the task's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
-  fileTree: { readonly open: boolean; readonly onToggle: () => void };
+  fileTree: TreeShown;
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
@@ -1491,6 +1492,7 @@ function TabContent({
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
+          treeWidth={fileTree.width}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
           history={{
             canGoBack: (file.back?.length ?? 0) > 0,
@@ -1871,9 +1873,16 @@ export function SidePanel({
   // alike and for the window's life, as an editor's explorer stands across
   // its tabs.
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  // How wide the tree stands, kept across launches as the Inbox's list's width is.
+  const fileTreeWidth = useFileTreeWidth();
+  const { width: treeWidth, onResize: onTreeResize } = fileTreeWidth;
   const fileTree = useMemo(
-    () => ({ open: fileTreeOpen, onToggle: () => setFileTreeOpen((was) => !was) }),
-    [fileTreeOpen],
+    () => ({
+      open: fileTreeOpen,
+      onToggle: () => setFileTreeOpen((was) => !was),
+      width: { width: treeWidth, onResize: onTreeResize },
+    }),
+    [fileTreeOpen, treeWidth, onTreeResize],
   );
   // Whether a Terminal tab's shells list is open, for every one of them alike
   // and for the window's life, as the File tabs' tree is.

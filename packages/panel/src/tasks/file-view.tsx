@@ -9,7 +9,8 @@ import {
   SidePanelIcon,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FILE_TREE_WIDTH, type FileTreeWidth } from "../desktop/folded-groups.js";
 import {
   type FloatingBox,
   PANE_FLOAT,
@@ -18,6 +19,11 @@ import {
   useHoverPane,
 } from "../desktop/hover-pane.js";
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
+import {
+  EDGE_SIDE,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "../desktop/use-resizable-edge.js";
 import type { ReadFolder } from "../file-tree/contract.js";
 import { Tooltip } from "../tooltip.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
@@ -189,8 +195,16 @@ export interface PaneRoom {
   readonly toggles: PaneToggles;
   /** Takes down the pane floating over the tab, as a file or a shell chosen in it does, to show it. */
   readonly closeOver: () => void;
+  /** Shows or hides the pane where it is seen, as its toggle there does: beside the tab, or over it. */
+  readonly toggle: () => void;
+  /** What a strip standing in the closed pane's place wears: the pointer resting on it peeks the pane over the tab. */
+  readonly strip: {
+    readonly onPointerEnter: () => void;
+    readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
+  };
   /** What the view's root wears: the marks the stylesheet places the pane by, and Escape anywhere in the view, its bar's toggle included, taking down the pane floating over the tab. */
   readonly root: {
+    readonly ref: React.RefCallback<HTMLElement>;
     readonly "data-pane-beside": string;
     readonly "data-pane-over": PaneFloat;
     readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
@@ -204,8 +218,14 @@ export interface PaneRoom {
 /** How near the body's right edge, in CSS pixels, the pointer peeks the pane: the sidebar's own strip at the window's left, `--luke-space-6`. */
 const PEEK_EDGE = 6;
 
+/** The toggle that opens the pane beside the tab, which the stylesheet draws only where the pane can stand there. */
+const BESIDE_TOGGLE = '.file-tree-toggle[data-place="beside"]';
+
 /** The toggle that floats the pane over the tab, which the stylesheet draws only where the pane cannot stand beside it. */
 const OVER_TOGGLE = '.file-tree-toggle[data-place="over"]';
+
+/** The strip a closed pane may leave in its place, which peeks the pane over the tab (`changes-strip.tsx`). */
+const PANE_STRIP = ".file-tree-strip";
 
 /** What takes the keyboard in a pane opened over the tab: its chosen row, else its first field or button. */
 function paneFocus(pane: HTMLElement): HTMLElement | null {
@@ -215,10 +235,19 @@ function paneFocus(pane: HTMLElement): HTMLElement | null {
   );
 }
 
-/** Whether the view floats its pane over the tab rather than beside it, which is the stylesheet's to say: its over toggle is drawn. */
+/** Whether an element of the view is drawn, which is the stylesheet's to say. */
+function drawnIn(view: Element | null, selector: string): boolean {
+  const element = view?.querySelector(selector);
+  return element !== null && element !== undefined && getComputedStyle(element).display !== "none";
+}
+
+/**
+ * Whether the view floats its pane over the tab rather than beside it,
+ * which is the stylesheet's to say: its over toggle is drawn, or a strip
+ * stands in the closed pane's place.
+ */
 function floats(view: Element | null): boolean {
-  const toggle = view?.querySelector(OVER_TOGGLE);
-  return toggle !== null && toggle !== undefined && getComputedStyle(toggle).display !== "none";
+  return drawnIn(view, OVER_TOGGLE) || drawnIn(view, PANE_STRIP);
 }
 
 /** Whether the pane's own view floats it now, a panel widened past its line having docked it. */
@@ -255,8 +284,14 @@ export function usePaneRoom(shown: {
     floatsNow: floatsAround,
   });
   const closeOver = pane.close;
+  const view = useRef<HTMLElement | null>(null);
   const peek = () => setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
   const unpeek = () => setOver((was) => (was === PANE_FLOAT.PEEK ? PANE_FLOAT.CLOSED : was));
+  const toggleOver = () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open());
+  // A pane opened beside the tab floats over it no more.
+  useEffect(() => {
+    if (shown.open) setOver(PANE_FLOAT.CLOSED);
+  }, [shown.open]);
   return {
     beside,
     drawn: beside.drawn || pane.floating,
@@ -264,7 +299,7 @@ export function usePaneRoom(shown: {
       ...shown,
       over: pane.floating,
       peeked: over === PANE_FLOAT.PEEK,
-      onToggleOver: () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open()),
+      onToggleOver: toggleOver,
       float: {
         onPointerEnter: peek,
         onPointerLeave: (event) => {
@@ -276,7 +311,21 @@ export function usePaneRoom(shown: {
       },
     },
     closeOver,
+    // Note that the pane is shown beside the tab wherever it has room there,
+    // a strip in its place being no float of its own.
+    toggle: () => (drawnIn(view.current, BESIDE_TOGGLE) ? shown.onToggle() : toggleOver()),
+    strip: {
+      onPointerEnter: peek,
+      onPointerLeave: (event) => {
+        const to = event.relatedTarget;
+        if (to instanceof Node && beside.pane.current?.contains(to)) return;
+        unpeek();
+      },
+    },
     root: {
+      ref: (element) => {
+        view.current = element;
+      },
       "data-pane-beside": String(beside.drawn),
       "data-pane-over": over,
       onKeyDown: (event) => {
@@ -293,12 +342,15 @@ export function usePaneRoom(shown: {
         // held, as a drag holds one, peeks nothing.
         const box = event.currentTarget.getBoundingClientRect();
         const atEdge = event.clientX >= box.right - PEEK_EDGE;
-        const onPane = event.target instanceof Node && beside.pane.current?.contains(event.target);
+        const onPane =
+          event.target instanceof Element &&
+          (beside.pane.current?.contains(event.target) === true ||
+            event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {
           if (floats(event.currentTarget.parentElement)) peek();
           return;
         }
-        if (over === PANE_FLOAT.PEEK && !atEdge && onPane !== true) unpeek();
+        if (over === PANE_FLOAT.PEEK && !atEdge && !onPane) unpeek();
       },
     },
     pane: {
@@ -308,6 +360,37 @@ export function usePaneRoom(shown: {
       onKeyDown: pane.onKeyDown,
     },
   };
+}
+
+/** How much of the box the tree stands in a drag leaves the tab beside it, in CSS pixels. */
+const TAB_RESERVE = 320;
+
+/** The tree as the panel holds it for every File and Changes tab: open or not, and how wide. */
+export interface TreeShown {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  /** Its width and the drag that asks for another; none draws it at its default width with no edge. */
+  readonly width?: FileTreeWidth | undefined;
+}
+
+/**
+ * The edge the tree beside a tab is dragged by, on its left: between its
+ * bounds, leaving the tab its room, shut by a drag past its least width,
+ * reset by a double-click; none where the panel keeps no width for it.
+ * Note that it is called by the view, which outlives the tree a drag shuts.
+ */
+export function useTreeEdge(tree: TreeShown): ResizableEdgeProps | undefined {
+  const width = tree.width;
+  const edge = useResizableEdge({
+    side: EDGE_SIDE.LEFT,
+    width: width?.width ?? FILE_TREE_WIDTH.DEFAULT,
+    bounds: FILE_TREE_WIDTH,
+    reserve: () => TAB_RESERVE,
+    label: "Resize files",
+    onResize: (asked) => width?.onResize(asked),
+    onToggleCollapsed: tree.onToggle,
+  });
+  return width === undefined ? undefined : edge;
 }
 
 /** A File tab's history as its bar walks it: whether each way holds a file, and the step. */
@@ -443,6 +526,7 @@ export function FileView({
   openGitHub,
   treeOpen,
   onToggleTree,
+  treeWidth,
   onBrowse,
   history,
   onFoldNote,
@@ -464,6 +548,8 @@ export function FileView({
   openGitHub: (url: string) => void;
   treeOpen: boolean;
   onToggleTree: () => void;
+  /** How wide the tree stands, and the drag that asks for another width; none draws it at its default width. */
+  treeWidth?: FileTreeWidth | undefined;
   /** A file chosen in the tree or the breadcrumbs, to show in this tab, or in a tab of its own where `newTab` asks. */
   onBrowse: (path: string, newTab: boolean) => void;
   history: FileHistory;
@@ -532,6 +618,7 @@ export function FileView({
   );
   const browsing = repository !== null;
   const tree = usePaneRoom({ open: browsing && treeOpen, onToggle: onToggleTree });
+  const edge = useTreeEdge({ open: treeOpen, onToggle: onToggleTree, width: treeWidth });
   // A file chosen in the tree floating over the tab takes the tree down, to show the file.
   const browse = (path: string, newTab: boolean) => {
     tree.closeOver();
@@ -583,6 +670,8 @@ export function FileView({
             pane={tree.beside.pane}
             float={tree.pane}
             leaving={tree.beside.leaving}
+            width={treeWidth?.width}
+            edge={edge}
           />
         ) : null}
       </div>
