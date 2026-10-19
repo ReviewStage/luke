@@ -9,13 +9,16 @@ import { installAppPlatform } from "../app-platform.js";
 
 /**
  * What a panel a test drives asks of its shell just by standing and being
- * walked through: a menu bar that sends no command, and surface events that
- * are counted nowhere. A test that reads either answers it itself.
+ * walked through: a menu bar that sends no command, surface events that are
+ * counted nowhere, and static files served beside the document, as the
+ * desktop serves them. A test that reads any of them answers it itself.
  */
-export const QUIET_PANEL: Pick<AppPlatform, "onMenuCommand" | "recordSurfaceEvent"> = {
-  onMenuCommand: () => () => undefined,
-  recordSurfaceEvent: () => undefined,
-};
+export const QUIET_PANEL: Pick<AppPlatform, "onMenuCommand" | "recordSurfaceEvent" | "assetBase"> =
+  {
+    onMenuCommand: () => () => undefined,
+    recordSurfaceEvent: () => undefined,
+    assetBase: () => new URL(".", document.baseURI).href,
+  };
 
 /**
  * The desktop's own two ways out to a link, each the act main opens it

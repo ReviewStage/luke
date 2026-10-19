@@ -12,7 +12,7 @@ import { LIVE_CLOSE_REASON } from "@luke/live";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { TaskCard } from "./desktop/task-card.js";
 import { ChangesCard } from "./tasks/agent-changes-tab.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
@@ -21,6 +21,7 @@ import { CallEnded } from "./tasks/call-card.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
 import { TurnCard } from "./tasks/turn-card.js";
+import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
@@ -40,6 +41,8 @@ const roots: Root[] = [];
 
 // Note that a skill chip is drawn through the markdown parser, which lands as its own chunk, so the suite waits for it once rather than racing it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
