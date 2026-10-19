@@ -11,7 +11,15 @@ import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 
 const SETTINGS_FILE_NAME = "settings.json";
-const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
+/**
+ * Where a write lands before its rename: one name per writer where the file
+ * has several (browser tabs over one storage), so two overlapping writes
+ * never rename each other's bytes away, and one name otherwise, so a write
+ * cut off midway leaves at most one file behind for the next to replace.
+ */
+function temporaryFileName(writer: string | undefined): string {
+  return writer === undefined ? "settings.json.tmp" : `settings.json.${writer}.tmp`;
+}
 /** Owner read/write only: a settings file carries a decryption key's ciphertext. */
 const SETTINGS_FILE_MODE = 0o600;
 
@@ -63,11 +71,12 @@ export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSett
   function* (
     directory: string,
     contents: string,
+    writer?: string,
   ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem | Path.Path> {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-    const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
+    const temporaryPath = path.join(directory, temporaryFileName(writer));
     yield* fileSystem.makeDirectory(directory, { recursive: true });
     yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
     yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);

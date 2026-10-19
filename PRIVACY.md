@@ -1292,7 +1292,9 @@ were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac and each repository's run command for Run
-are kept with that Mac's settings. Our service
+are kept with that Mac's settings. Luke in a browser keeps your settings in
+that browser's own storage for the site, and no sign-in token at all: it is
+signed in by the site's session cookie, which only the browser holds. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
