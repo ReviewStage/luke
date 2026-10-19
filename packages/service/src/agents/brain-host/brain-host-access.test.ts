@@ -357,6 +357,43 @@ test("at the door the deployment is admitted for the named account's own convers
   );
 });
 
+test("at the door the deployment's retire of a session, which a delete a browser asked for ends a task's session with, is admitted on the named account's own recorded session and refused on another account's, on one no record attributes, as a read, and for eve's other session controls", async () => {
+  const auth = ownedAuth(
+    [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
+    ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
+  );
+  const control = (account: string, sessionId: string, route: string, method = "POST") =>
+    request(
+      `/eve/v1/session/${sessionId}/${route}`,
+      CRON_SECRET,
+      { [BRAIN_HOST_HEADER.ACCOUNT]: account },
+      method,
+    );
+
+  const retired = await auth(control("user-a", SESSION_A, "reset"));
+  assert.equal(retired?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.equal(actedForAccount(retired ?? null), "user-a");
+  assert.equal(
+    await refusal(() => auth(control("user-b", SESSION_A, "reset"))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(control("user-a", SESSION_NEW, "reset"))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(control("user-a", SESSION_A, "reset", "GET"))),
+    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
+  for (const route of ["compact", "clear"]) {
+    assert.equal(
+      await refusal(() => auth(control("user-a", SESSION_A, route))),
+      BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+      route,
+    );
+  }
+});
+
 test("a session the deployment opened for an account admits that account's own bearer as the same initiator, and another account not at all", async () => {
   const userA = await database.createUser();
   const userB = await database.createUser();

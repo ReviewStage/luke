@@ -643,7 +643,8 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
     }),
   );
   if (Option.isSome(recorded)) {
-    yield* executeAutomationRun(() => eveFor(seams, request), recorded.value);
+    // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
+    yield* executeAutomationRun(() => eveFor(seams, request, userId), recorded.value);
   }
   const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
   if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

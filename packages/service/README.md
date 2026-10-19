@@ -341,13 +341,30 @@ never falls to the cookie beside it, because Better Auth's bearer plugin
 leaves the cookie standing under any header it did not sign. So a page on the
 deployment's own origin reaches the account routes the desktop does, its
 state-changing requests held to that origin by `src/http/origin-guard.ts`
-first, but for the work that reaches eve over the caller's own bearer, which
-eve's channels take alone: an agent's Start, message, and Stop, an inbox
-answer handed to its agent, and a manual automation run are refused at eve
-for a cookie, and the two deletes, a task's and the account's, refuse a
-cookie themselves (`hostedBearerOnly` in `src/http/http-effect.ts`), since
-each ends the eve sessions of what it deletes over that bearer and a refusal
-there would go unnoticed. What acts for one device rather than the account
+first. eve's channels take no cookie, so the work that reaches eve picks
+its caller per request in one place (`src/agents/coder-host/stop.ts`'s
+`eveFor`): a request that carries an `Authorization` header reaches eve over
+that bearer as it came, as every desktop request does, and one that carries
+none, whose account the cookie named, reaches eve as the deployment acting
+for that account, under the deployment's own `CRON_SECRET` with the account
+in `x-luke-account`. The account is always the one the route resolved from
+that request, never one the request or a row names, and a deployment with
+no secret or no eve origin answers such a request unavailable, a delete
+included: a cookie's delete composes eve before it stops or erases anything
+and is refused where it cannot (`src/agents/retire-sessions.ts`'s
+`retiringReach`), while a bearer's goes on with its retires a courtesy, as
+it always has. The channels'
+door holds the deployment to what its actor admits
+(`src/agents/brain-host/auth.ts`): on the coding agents' channel the typed
+opening and line it already carried for the voice brain, which is an
+agent's Start, a message, an inbox answer, and a manual automation run, and
+on both channels a cancel, which is an agent's Stop, its Archive, a task's
+archive, and Luke's Stop on a plan, and a reset, which is how the two
+deletes, a task's and the account's, retire the eve sessions of what they
+delete (`src/agents/retire-sessions.ts`); each only on a session or a
+conversation the account reaches, as the door holds every caller. A typed ask
+of Luke, which a comment mentioning him hands over, is refused there for the
+deployment, so it reaches Luke over the desktop's bearer alone. What acts for one device rather than the account
 takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
 eve's channels, which resolve with `hostedUserId`, as the voice and terminal
 relays resolve with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -1038,11 +1055,13 @@ files is `src/agents/coder-host/`: the same door and conversation
 admission as the hosted brain's (`src/agents/brain-host/door.ts`,
 `src/agents/brain-host/conversation.ts`), with the developer's own bearer the caller
 the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
-Start and a Stop come from a route still holding it, and a follow-up
+Start and a Stop come from a route holding it, and a follow-up
 steers; the deployment acting for the account is admitted for the two things
 the voice brain does there on the developer's behalf, a typed opening that
 starts an agent and a typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier. The agent (`apps/dev/agent.ts`) runs none of eve's default
+developer's own principal with the deployment named as its carrier, and the
+same route reached on a browser's session cookie alone walks in as that
+deployment for the cookie's account, a Stop and a delete's retire with it. The agent (`apps/dev/agent.ts`) runs none of eve's default
 tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from

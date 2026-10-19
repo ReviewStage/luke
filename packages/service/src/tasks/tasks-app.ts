@@ -72,7 +72,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
-import { retireSessions } from "../agents/retire-sessions.js";
+import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import {
   TASK_LIST_ARCHIVED,
@@ -90,7 +90,6 @@ import {
   HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedBearerOnly,
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
@@ -538,7 +537,7 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ): Effect.Effect<TaskStartAnswer, never, TasksServices> =>
-  startRequestedAgent(eveFor(seams, request), userId, task.id, agent).pipe(
+  startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
     Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
     Effect.catch((refusal) =>
       Effect.gen(function* () {
@@ -557,9 +556,9 @@ const startedAgentOn = (
  * its workspaces; POST starts one with an empty document, its repository
  * confirmed and its Linear issue and its own issue read first, and, where it
  * names an agent, starts that agent on it: a start naming an agent and no
- * repository is refused as an agent's Start on such a task is, and one
- * carrying no bearer, which the agent's session is opened over, as
- * unauthenticated, both before anything is written; one whose agent's key
+ * repository is refused as an agent's Start on such a task is, before
+ * anything is written, and the agent's session is opened as the request's
+ * own caller (`coder-host/stop.ts`'s `eveFor`); one whose agent's key
  * already started an agent in the workspace answers that agent's task and
  * the agent (`startedBefore`).
  */
@@ -592,8 +591,6 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { agent } = started.success;
   if (agent !== undefined) {
-    // Note that the agent's session is opened over the developer's bearer, so a cookie's start is refused before anything is written.
-    yield* hostedBearerOnly(request);
     if (started.success.repository === undefined || started.success.repository === null) {
       return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
     }
@@ -684,9 +681,11 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
     const ready = yield* Effect.forEach(agents, stopsForGood);
     if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-    yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
-      discard: true,
-    });
+    yield* Effect.forEach(
+      agents,
+      (agent) => stoppedForGood(seams, writer, request, userId, agent),
+      { discard: true },
+    );
   }
   const task = yield* updateTask(
     userId,
@@ -728,10 +727,14 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the task standing and refused.
  *
- * It takes the developer's bearer alone (`hostedBearerOnly`), because the
- * Stops and the retires reach eve over it: a browser's session cookie
- * carries none eve takes, so a cookie's delete of an idle task would go on
- * with every session of it left standing.
+ * The Stops and the retires reach eve as the request's own caller
+ * (`coder-host/stop.ts`'s `eveFor`): over the developer's bearer, or, for a
+ * browser's session cookie, as the deployment acting for the account the
+ * cookie named, which eve's door admits for a cancel and a retire on a
+ * session that account reaches, so a cookie's delete retires the task's
+ * sessions as a bearer's does. A cookie's delete on a deployment that cannot
+ * reach eve as itself is refused as unavailable before anything is stopped
+ * (`retiringReach`), where a bearer's goes on with its retires a courtesy.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -740,11 +743,11 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
-  yield* hostedBearerOnly(request);
+  const eveAt = yield* retiringReach(seams, request, userId);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, taskId, { includeArchived: true }),
   );
-  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
+  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
     discard: true,
   });
   const stopped = new Set(agents.map(({ id }) => id));
@@ -756,7 +759,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       // agent started meanwhile refuses retires nothing.
       beforeDelete: (conversationIds) =>
         Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
-          retireSessions((mount) => eveFor(seams, request, mount), sessions),
+          retireSessions(eveAt, sessions),
         ),
     }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
   );
@@ -1227,7 +1230,7 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
-/** POST stops the turn Luke is running on the task, call or no call, under its conversation's owner, through eve on the developer's own bearer. */
+/** POST stops the turn Luke is running on the task, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */
 const stopEndpoint = /* @__PURE__ */ Effect.fn("web/planStopEndpoint")(function* (
   seams: TasksAppSeams,
   writer: Effect.Effect<StoreWriter>,
@@ -1237,7 +1240,8 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/planStopEndpoint")(function*
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const taskId = yield* idOf(request, TASK_ID_QUERY);
-  const { conversationId } = yield* reachedTask(yield* resolvedUserId(seams, request), taskId);
+  const userId = yield* resolvedUserId(seams, request);
+  const { conversationId } = yield* reachedTask(userId, taskId);
   const owner = Option.getOrUndefined(
     conversationId === undefined
       ? Option.none()
@@ -1245,7 +1249,7 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/planStopEndpoint")(function*
   );
   if (conversationId === undefined || owner === undefined)
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
-  const eve = yield* eveFor(seams, request, EVE_MOUNT.TASKS);
+  const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
   const stopSeams = { store: hostedStore(), asks: askRecord(), writer: yield* writer, eve };
   const stopped = yield* hostedStoreOrUnavailable(
     stopConversation(stopSeams, owner, conversationId),

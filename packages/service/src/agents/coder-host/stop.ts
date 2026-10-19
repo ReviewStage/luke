@@ -13,12 +13,14 @@ import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { Clock, DateTime, Effect, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Option, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
+import { HostedEnvironment } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import {
@@ -41,8 +43,8 @@ import {
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
  *
  * A Stop pressed on the agent, its archive, and the archive or the delete of
- * the task it works on all stop it here, reaching eve as the developer over the
- * request's own authorization; a continue of the agent stops it here too,
+ * the task it works on all stop it here, reaching eve as the request's own
+ * caller (`eveFor`); a continue of the agent stops it here too,
  * over the eve its Start reached (`start.ts`), and an agent's `stop_agent`
  * stops one as the deployment acting for the member the caller acts for
  * (`../coding-agent-tools.ts`). The cancel names the turn the row was
@@ -63,19 +65,50 @@ export interface EveReach {
   eveOrigin: () => string | undefined;
   /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
   eve?: (authorization: Redacted.Redacted) => EveSessions;
+  /** eve as the deployment reaches it acting for an account, for a request that carried the browser's session cookie and no bearer; a test hands a fake, and the deployment composes eve's client under its own secret. */
+  eveAs?: (account: string) => EveSessions;
 }
 
-/** eve as the developer reaches it, the coding agents' service unless another is named, or unavailable where the deployment names no origin for eve. */
+/**
+ * eve as the request's own caller reaches it, the coding agents' service
+ * unless another is named. A request that carries a bearer reaches eve over
+ * that bearer, as it always has, and eve verifies the account itself. A
+ * request that carries none is one a browser's session cookie named
+ * (`hostedCarriesBearer`, the question `auth/bearer.ts`'s `requestUserId`
+ * asks too), which eve's channels never read, so it reaches eve as the
+ * deployment acting for the account, under the deployment's own secret: the
+ * channel's door admits that caller only for what its actor admits
+ * (`brain-host/auth.ts`), and only on a session or a conversation the
+ * account reaches, as it holds every caller. `account` is the one the
+ * route resolved from this request (`resolveUserId`), never one a request
+ * or a row names, so the cookie names the account eve acts for exactly as
+ * the bearer would have. A deployment that names no origin for eve, or no
+ * secret for a cookie's request, answers unavailable.
+ */
 export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   request: Request,
+  account: string,
   mount: EveMount = EVE_MOUNT.CODER,
 ): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-  if (reach.eve !== undefined) return reach.eve(authorization);
+  if (hostedCarriesBearer(request)) {
+    const authorization = Redacted.make(request.headers.get("authorization") ?? "");
+    if (reach.eve !== undefined) return reach.eve(authorization);
+    const origin = reach.eveOrigin();
+    if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return yield* eveSessions({ origin, caller: { authorization }, mount });
+  }
+  if (reach.eveAs !== undefined) return reach.eveAs(account);
+  // Note that a runtime without the deployment's environment refuses a cookie's request as
+  // unavailable on purpose, as one whose environment names no secret does: the deployment acts
+  // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+  const environment = yield* Effect.serviceOption(HostedEnvironment);
+  const secret = Option.getOrUndefined(environment)?.cronSecret;
   const origin = reach.eveOrigin();
-  if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* eveSessions({ origin, caller: { authorization }, mount });
+  if (secret === undefined || origin === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return yield* eveSessions({ origin, caller: { secret, account }, mount });
 });
 
 /** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
@@ -150,14 +183,15 @@ function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgent
   );
 }
 
-/** eve's cancel of the agent's turn under way, then the row's stamp; nothing where no turn runs that a Stop has to stop. */
+/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp; nothing where no turn runs that a Stop has to stop. */
 export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
+  account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  yield* cancelledTurn(eveFor(reach, request), writer, agent);
+  yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 
 /**
@@ -226,9 +260,10 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
+  account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  yield* stoppedTurn(reach, writer, request, agent);
+  yield* stoppedTurn(reach, writer, request, account, agent);
   const status = yield* statusOf(agent);
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);

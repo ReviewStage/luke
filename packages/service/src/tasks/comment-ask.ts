@@ -35,6 +35,11 @@ import {
  * message to an agent takes (`coder-host/steer.ts`); Luke hears it as a
  * typed ask on the plan's planning conversation (`brain-host/brain-ask.ts`),
  * under the member's own bearer, which is the only way a typed turn opens.
+ * Each reaches eve as the request's own caller (`coder-host/stop.ts`'s
+ * `eveFor`), so a member on a browser's session cookie reaches an agent as
+ * the deployment acting for them, which the coder channel admits for the
+ * message; the brain channel admits the deployment for no typed turn, so
+ * that member's ask of Luke is refused at eve and said back unsent.
  * Either is sent under a key drawn from the one the member's client made for
  * the comment, so a comment sent again is handed over once. A comment that
  * mentions no one hands nothing to anyone, and an agent's own reply never
@@ -137,7 +142,7 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const { userId, taskId, to, clientKey, text, words } = input;
   if (to.actor === PLAN_COMMENT_ACTOR.AGENT) {
-    const eve = yield* eveFor(seams, request);
+    const eve = yield* eveFor(seams, request, userId);
     const writer = storeWriter({ tools: CODER_TOOL_SET });
     yield* steerCodingAgent(eve, writer, userId, to.agent, {
       text,
@@ -150,7 +155,7 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const conversation = yield* hostedStoreOrUnavailable(openTaskConversation(userId, taskId));
   if (Option.isNone(conversation))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.NOT_FOUND);
-  const eve = yield* eveFor(seams, request, EVE_MOUNT.TASKS);
+  const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
   const accepted = yield* hostedStoreOrUnavailable(
     acceptAsk(
       { asks: askRecord(), eve },

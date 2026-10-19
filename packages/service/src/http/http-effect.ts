@@ -122,29 +122,14 @@ export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRe
 }
 
 /**
- * Refuses, as unauthenticated, a request that carries no `Authorization`:
- * one that only a browser's session cookie could name. A request that
- * carries one is read by its bearer alone (`auth/bearer.ts`'s
- * `requestUserId`), so an endpoint asks for this where its work reaches eve
- * as the developer over that bearer and must not go on without it: a
- * delete ends the eve sessions of what it deletes (`agents/retire-sessions.ts`),
- * and a refusal there goes unnoticed. Note that the endpoint asks for it
- * itself rather than its route file handing the group a bearer-only
- * resolver, because every function holding a group answers every path the
- * group declares (`apps/web/server/function-dispatch.ts`).
- */
-export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
-  return hostedCarriesBearer(request) ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-}
-
-/**
  * Whether a request carries an `Authorization`, so its account was read
  * from that bearer alone and never from a browser's session cookie
  * (`auth/bearer.ts`'s `requestUserId`, which resolves nobody for one that
  * does not verify). An endpoint that does on a GET what a link must not
- * make a browser do asks for this itself, as `hostedBearerOnly` is asked
- * for, because a Lax cookie rides a top-level navigation and every
- * function holding a group answers every path the group declares.
+ * make a browser do asks for this itself, because a Lax cookie rides a
+ * top-level navigation and every function holding a group answers every
+ * path the group declares; and the work that reaches eve picks its caller
+ * by it (`agents/coder-host/stop.ts`'s `eveFor`).
  */
 export function hostedCarriesBearer(request: Request): boolean {
   return request.headers.has("authorization");

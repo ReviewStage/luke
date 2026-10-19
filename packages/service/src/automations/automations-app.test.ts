@@ -45,7 +45,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result, type Schema, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Redacted, Result, type Schema, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import {
@@ -54,6 +54,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
+import { requestUserId } from "../auth/bearer.js";
 import { BRAIN_REQUEST_FAILURE } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
@@ -108,21 +109,38 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the test's own database, GitHub, and a fake eve that writes down every session it opens. */
+/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
+function sessionCookieOf(userId: string): string {
+  return `better-auth.session_token=${userId}`;
+}
+
+/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
+function deploymentFor(account: string): string {
+  return `deployment for ${account}`;
+}
+
+/** The group over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const opened: string[] = [];
-    const sessions: EveSessions = {
+    /** Who opened each session, in order: the request's bearer, or the deployment acting for an account. */
+    const openedAs: string[] = [];
+    const sessionsAs = (caller: string): EveSessions => ({
       open: (message) =>
         Effect.sync(() => {
           opened.push(message.conversationId);
+          openedAs.push(caller);
           return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
         }),
       send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
       cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
       reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
       stream: () => Stream.empty,
-    };
+    });
+    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
+    const sessions = new Map(
+      [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
+    );
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
@@ -132,20 +150,33 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     );
     const app = HttpRouter.toWebHandler(
       automationsApp({
+        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
         resolveUserId: (incoming: Request) =>
-          Effect.succeed(
-            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+          requestUserId(
+            incoming,
+            (input) => {
+              const sub = bearers.get(input.headers.get("authorization") ?? "");
+              return Effect.succeed(sub === undefined ? undefined : { sub });
+            },
+            (input) =>
+              Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
           ),
         eveOrigin: () => ORIGIN,
-        eve: () => sessions,
+        eve: (authorization) => sessionsAs(Redacted.value(authorization)),
+        eveAs: (account) => sessionsAs(deploymentFor(account)),
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
     yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
     const ask = (
       path: string,
-      bearer: string,
-      init: { readonly method?: string; readonly body?: unknown } = {},
+      bearer: string | undefined,
+      init: {
+        readonly method?: string;
+        readonly body?: unknown;
+        /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
+        readonly cookie?: string;
+      } = {},
     ) =>
       Effect.gen(function* () {
         // Note that the rewrite moves a path's id into the `id` query, which the group reads.
@@ -154,11 +185,14 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
           segments === null
             ? path
             : `/api/automations/${segments[2] ?? "automation"}?id=${segments[1]}`;
+        const headers = new Headers({ "content-type": "application/json" });
+        if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+        if (init.cookie !== undefined) headers.set("cookie", init.cookie);
         const response = yield* Effect.promise(() =>
           app.handler(
             new Request(`${ORIGIN}${routed}`, {
               method: init.method ?? "GET",
-              headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
+              headers,
               ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
             }),
           ),
@@ -168,7 +202,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
-    return { ask, opened };
+    return { ask, opened, openedAs };
   });
 
 /** The answer read through its schema, failing the test where the status or the body is not what it should be. */
@@ -195,13 +229,13 @@ const openAccounts = Effect.gen(function* () {
   assert.ok(installation);
   yield* connectWorkspaceGitHub(task.workspaceId, installation);
   const bare = yield* startTask(owner, { name: "No repository yet" });
-  const { ask, opened } = yield* standing(
+  const { ask, opened, openedAs } = yield* standing(
     new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]),
   );
-  return { owner, other, task, bare, ask, opened };
+  return { owner, other, task, bare, ask, opened, openedAs };
 });
 
 const weekdays = (taskId: string) => ({
@@ -699,6 +733,82 @@ it.layer(getTestDB())("the automation routes", (it) => {
           history.runs.map((run) => run.id),
           [first.run.id],
         );
+      }),
+  );
+
+  it.effect(
+    "a Run now over a browser's session cookie starts the automation's agent as the deployment acting for the cookie's account, over the bearer over the bearer, and another account's cookie runs nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, openedAs } = yield* openAccounts;
+        const made = () =>
+          Effect.map(
+            ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+              method: "POST",
+              body: weekdays(task.id),
+            }),
+            (answer) =>
+              readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
+          );
+        const byCookie = yield* made();
+        const byBearer = yield* made();
+        const runNow = (id: string, bearer: string | undefined, cookie?: string) =>
+          ask(automationRunPath(id), bearer, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+            ...(cookie === undefined ? undefined : { cookie }),
+          });
+
+        const stranger = yield* runNow(byCookie.id, undefined, sessionCookieOf(other));
+        const overCookie = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* runNow(byCookie.id, undefined, sessionCookieOf(owner)),
+        );
+        const overBearer = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* runNow(byBearer.id, owner),
+        );
+
+        assert.equal(stranger.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.deepEqual(
+          [overCookie.run.status, overBearer.run.status],
+          [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.STARTED],
+        );
+        assert.deepEqual(overCookie.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
+        assert.deepEqual(openedAs, [deploymentFor(owner), `Bearer ${owner}`]);
+      }),
+  );
+
+  it.effect(
+    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent as the deployment acting for the teammate, never for the automation's creator",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, openedAs } = yield* openAccounts;
+        yield* joinWorkspace(task.workspaceId, other);
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: { ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE },
+          }),
+        );
+
+        const { run } = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(automation.id), undefined, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+            cookie: sessionCookieOf(other),
+          }),
+        );
+
+        assert.equal(run.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.deepEqual(run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: other });
+        assert.deepEqual(openedAs, [deploymentFor(other)]);
       }),
   );
 

@@ -215,15 +215,18 @@ import {
  * the request names none, the task's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
  * session opened with the task's document, or the prompt the request named in
- * its place, as the first message, here under the developer's own bearer so
- * eve's door admits it as the developer. A retry carrying the same key is
+ * its place, as the first message, here as the request's own caller so eve's
+ * door admits it as the developer: over the developer's bearer, or, for a
+ * browser's session cookie, as the deployment acting for the account the
+ * cookie named (`coder-host/stop.ts`'s `eveFor`), which the coder channel
+ * mints as the developer's own principal. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
  * status from its newest turn. The transcript
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
  * cursor, held open while the agent runs (`packages/service/src/agents/coder-host/transcript.ts`).
  * A message (`POST /api/agents/{id}/messages`) is the developer's words
- * handed to the session the agent runs in, under the developer's own
- * bearer, with the client's own key for the send, through the one steer
+ * handed to the session the agent runs in, as the request's own caller,
+ * with the client's own key for the send, through the one steer
  * path the voice brain's tool shares (`packages/service/src/agents/coder-host/steer.ts`): the
  * words steer the turn under way, or open a turn where none runs, and are
  * written as a user row awaiting its turn, so the transcript shows the
@@ -500,7 +503,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
         Effect.provideService(HostedEnvironment, environment),
       ));
   const { agent, created } = yield* startRequestedAgent(
-    eveFor(seams, request),
+    eveFor(seams, request, userId),
     userId,
     taskId,
     asked.success,
@@ -615,8 +618,8 @@ function messageRefusal(body: UnparsedWireValue): HostedRefusal {
 
 /**
  * POST sends the agent a message: the developer's words handed to the
- * session the agent runs in under the developer's own bearer, through the
- * one steer path the voice brain's tool shares (`coder-host/steer.ts`),
+ * session the agent runs in as the request's own caller (`eveFor`), through
+ * the one steer path the voice brain's tool shares (`coder-host/steer.ts`),
  * with the client's own key for the send.
  */
 const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -628,7 +631,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const eve = yield* eveFor(seams, request);
+  const eve = yield* eveFor(seams, request, userId);
   yield* steerCodingAgent(eve, writer, userId, agent, {
     ...asked.success,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -747,7 +750,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const { archived } = archive.success;
     if (archived) {
       // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedForGood(seams, writer, request, agent);
+      yield* stoppedForGood(seams, writer, request, userId, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -822,7 +825,7 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, agent);
+  yield* stoppedTurn(seams, writer, request, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
@@ -1619,7 +1622,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
+    const eve = yield* eveFor(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
       attachments,
@@ -1692,7 +1695,7 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
+    const eve = yield* eveFor(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,

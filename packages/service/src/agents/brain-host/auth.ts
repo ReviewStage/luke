@@ -48,13 +48,21 @@ import {
  * that starts one, where it presents the account's own principal so the
  * line steers the agent's running turn, never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
- * table's, decided before any principal exists. The one other thing the
- * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as
- * the deployment's cancel, from the voice function or from the hook that
- * carries a waiting ask's Stop at its turn's start, and neither holds a
- * bearer of the account's. A cancel opens no turn, so the table says nothing
- * about it and it names no kind; what bounds it is the door's ownership
- * check, which admits it only on a session the named account's conversation
+ * table's, decided before any principal exists. The two other things the
+ * secret may do are stop a turn and retire a session. The Stop a spoken ask
+ * takes reaches eve as the deployment's cancel, from the voice function or
+ * from the hook that carries a waiting ask's Stop at its turn's start, and
+ * neither holds a bearer of the account's. A retire is eve's reset of a
+ * session for good, which a task's delete and an account's deletion ask of
+ * every session of what they delete (`agents/retire-sessions.ts`). Both
+ * also come from a hosted route a browser reached on its session cookie,
+ * which carries no bearer eve takes, so the route reaches eve as the
+ * deployment acting for the account the cookie named (`coder-host/stop.ts`'s
+ * `eveFor`), and so does every message such a route sends: a coding agent's
+ * start, a message to one, an inbox answer, a manual automation's run. A
+ * cancel and a reset open no turn, so the table says nothing about them and
+ * they name no kind; what bounds them is the door's ownership check, which
+ * admits them only on a session a conversation the named account reaches
  * recorded.
  */
 
@@ -139,12 +147,14 @@ export interface DeploymentActor {
 
 /**
  * The routes a deployment actor may reach: a message opening a session or
- * following one up, a cancel of a turn in a session, and, for an actor that
- * presents itself, a read of a session's event stream; no other.
+ * following one up, a cancel of a turn in a session, a reset retiring a
+ * session for good, and, for an actor that presents itself, a read of a
+ * session's event stream; no other.
  */
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
 const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
+const RESET_ROUTE = /^\/eve\/v1\/session\/[^/]+\/reset\/?$/;
 const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
 
 /**
@@ -154,10 +164,13 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message, a cancel, or a stream read, or is a message naming a kind of turn the table does
- * not admit for what it does is refused here, before any later authenticator could admit it
- * as something else. The stream read is the voice function hearing a spoken
- * ask's turn as eve writes it rather than reading the record on a timer, so
+ * message, a cancel, a reset, or a stream read, or is a message naming a kind
+ * of turn the table does not admit for what it does is refused here, before
+ * any later authenticator could admit it as something else. A cancel and a
+ * reset are posted on a session the door's ownership check holds to one the
+ * named account reaches, on every channel alike. The stream read is the
+ * voice function hearing a spoken ask's turn as eve writes it rather than
+ * reading the record on a timer, so
  * it is admitted to the actor that presents itself (the brain channel's)
  * and no other, and the door's ownership check still holds it to a session
  * the named account reaches. An actor that presents the account mints the account's
@@ -183,11 +196,12 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       isBrainHostTurn(turn) &&
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
+    const reset = posted && RESET_ROUTE.test(pathname);
     const stream =
       actor.presents === DEPLOYMENT_PRESENCE.DEPLOYMENT &&
       request.method === "GET" &&
       STREAM_ROUTE.test(pathname);
-    if (!message && !cancel && !stream) {
+    if (!message && !cancel && !reset && !stream) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     if (actor.presents === DEPLOYMENT_PRESENCE.ACCOUNT) {

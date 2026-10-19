@@ -27,9 +27,11 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * same walk too, in the same order: the deployment acting for an account
  * first, over the two-row table below, then the account's bearer, then,
  * where eve is a development server, the development principal. A coding
- * agent is started, messaged, and stopped by routes still holding the
- * developer's own bearer, which reach eve as that developer; what the
- * deployment does here is carry the three things the voice brain does for the
+ * agent is started, messaged, and stopped by routes that reach eve as the
+ * developer: over the developer's own bearer, or, where a browser reached
+ * the route on its session cookie alone, as the deployment acting for the
+ * account the cookie named (`stop.ts`'s `eveFor`), on the same rows below.
+ * What else the deployment does here is carry the three things the voice brain does for the
  * developer in a planning call, and a coding agent does for the member who
  * started it (`agents/coding-agent-tools.ts`), since neither session holds
  * a bearer of the account's: a message it sends an
@@ -96,14 +98,17 @@ const UPLOAD_POLICY = {
  * principal; the opening is minted the same way, so the agent's session
  * runs as the developer whether the developer or Luke started it. A caller
  * of another role adds its row here and nowhere else.
- * Note that the table holds no row for a cancel, and needs none: a cancel
- * opens no turn, so the deployment's authenticator admits one on every
- * channel without asking the table (`brain-host/auth.ts`), and here mints it
- * as the account's own principal like the rest. What bounds it is the door's
- * ownership check, which admits it only on a session a conversation the
- * named account reaches recorded. It is how a continue the voice brain or a
- * coding agent starts (`start_agent`'s `from`) stops the agent it took over
- * from, as the developer's own Stop would (`coder-host/start.ts`).
+ * Note that the table holds no row for a cancel or a reset, and needs none:
+ * neither opens a turn, so the deployment's authenticator admits both on
+ * every channel without asking the table (`brain-host/auth.ts`), and here
+ * mints them as the account's own principal like the rest. What bounds them
+ * is the door's ownership check, which admits them only on a session a
+ * conversation the named account reaches recorded. A cancel is how a
+ * continue the voice brain or a coding agent starts (`start_agent`'s `from`)
+ * stops the agent it took over from, as the developer's own Stop would
+ * (`coder-host/start.ts`); a reset is how a task's delete or an account's
+ * deletion a browser asked for retires an agent's session
+ * (`agents/retire-sessions.ts`).
  */
 export const CODER_DEPLOYMENT_TURNS = {
   [DEPLOYMENT_ACT.OPEN]: {
