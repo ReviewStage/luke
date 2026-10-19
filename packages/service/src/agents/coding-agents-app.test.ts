@@ -571,6 +571,7 @@ function request(
     attachment?: string;
     picture?: string;
     src?: string;
+    number?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -581,6 +582,7 @@ function request(
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
+  if (init.number !== undefined) url.searchParams.set("number", init.number);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -1861,6 +1863,108 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
             ["reopenPullRequest", { id }],
             ["updatePullRequest", { id, title: "Expire invitations weekly" }],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a Pull request tab naming another pull request of the agent's repository by its number reads and changes that one, and the agent's own where it names none",
+    () =>
+      Effect.gen(function* () {
+        const earlier = {
+          number: 11,
+          branch: "luke/teammate-invitations-base",
+          headSha: "beef0001",
+        };
+        const repository: RepositoryScript = (sent) => {
+          const path = `/repos/${RELAY.owner}/${RELAY.name}`;
+          switch (new URL(sent.url).pathname) {
+            case `${path}/pulls/${earlier.number}`:
+              return Response.json({
+                number: earlier.number,
+                title: "Lay the invitations' base",
+                html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${earlier.number}`,
+                state: "open",
+                draft: false,
+                merged: false,
+                merged_at: null,
+                additions: 9,
+                deletions: 2,
+                changed_files: 3,
+                body: "The base.",
+                body_html: "<p>The base.</p>",
+                base: { ref: "main" },
+                head: { ref: earlier.branch, sha: earlier.headSha },
+                created_at: "2026-10-14T09:00:00Z",
+                mergeable_state: "clean",
+                user: null,
+                requested_reviewers: [],
+              });
+            case `${path}/commits/${earlier.headSha}/check-runs`:
+            case `${path}/commits/refs%2Fpull%2F${earlier.number}%2Fhead/check-runs`:
+              return Response.json({ check_runs: [] });
+            case `${path}/commits/${earlier.headSha}/status`:
+            case `${path}/commits/refs%2Fpull%2F${earlier.number}%2Fhead/status`:
+              return Response.json({ statuses: [] });
+            default:
+              return publishedPullRequest(sent);
+          }
+        };
+        const { owner, other, agent, calls, ask } = yield* published({ repository });
+        const header = (number?: string) =>
+          Effect.map(
+            ask(
+              request(AGENT_OVERVIEW_PULL_REQUEST, owner, {
+                id: agent.id,
+                ...(number === undefined ? undefined : { number }),
+              }),
+            ),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewPullRequestAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest?.title,
+          );
+
+        assert.equal(yield* header(String(earlier.number)), "Lay the invitations' base");
+        assert.equal(yield* header(), "Expire teammate invitations");
+        const named = readAnswer(
+          codingAgentPullRequestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_PULL_REQUEST, owner, { id: agent.id, number: String(earlier.number) }),
+          ),
+        );
+        assert.deepEqual(
+          [named.branch, named.pullRequest?.number, named.pullRequest?.additions],
+          [earlier.branch, earlier.number, 9],
+        );
+        const before = calls.length;
+        const ready = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, other, {
+            method: "POST",
+            id: agent.id,
+            number: String(earlier.number),
+            body: { action: "ready-for-review" },
+          }),
+        );
+        assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls
+            .slice(before)
+            .filter((call) => !call.query.includes("mutation"))
+            .map((call) => call.variables.number),
+          [earlier.number],
+        );
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id, number: "0" })),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id, number: "x" })),
+          invalid,
         );
       }),
   );

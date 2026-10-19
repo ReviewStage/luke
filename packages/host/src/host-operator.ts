@@ -62,6 +62,7 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestReadParams,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
@@ -574,11 +575,11 @@ export interface HostOperator {
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentChangesAnswerView>;
   /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
   codingAgentGitHubImage(
@@ -590,11 +591,11 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
   /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
   codingAgentPullRequestViewed(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
   codingAgentReviewOptions(
@@ -602,11 +603,11 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   codingAgentOverviewChecks(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
   /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
   codingAgentOverviewConversation(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
@@ -724,6 +725,15 @@ function terminalAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Enco
 interface HostOperatorOptions {
   client: GatewayClient;
   report: (message: string) => void;
+}
+
+/** A Pull request tab's read as the gateway carries it: the agent, and the pull request's number where the tab names one other than the agent's own. */
+function pullRequestRead(
+  params: CodingAgentPullRequestReadParams,
+): CodingAgentPullRequestReadParams {
+  return params.number === undefined
+    ? { agentId: params.agentId }
+    : { agentId: params.agentId, number: params.number };
 }
 
 /**
@@ -1674,12 +1684,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, pullRequestRead(params)),
         codingAgentAnswer(codingAgentChangesAnswerViewSchema),
       ),
     codingAgentGitHubImage: (params) =>
@@ -1690,21 +1700,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentPullRequestAction: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
-          agentId: params.agentId,
+          ...pullRequestRead(params),
           request: params.request,
         }),
         codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
       ),
     codingAgentPullRequestViewed: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestViewedAnswerViewSchema),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, {
-          agentId: params.agentId,
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
       ),
     codingAgentReviewOptions: (params) =>
@@ -1714,14 +1722,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewChecksAnswerViewSchema),
       ),
     codingAgentOverviewConversation: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, {
-          agentId: params.agentId,
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewConversationAnswerViewSchema),
       ),
     providerKeysRead: () =>
