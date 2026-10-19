@@ -1,3 +1,4 @@
+import { onDrawnThemeChange } from "@luke/ui/appearance";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -13,7 +14,7 @@ import {
   type TerminalProps,
 } from "./contract.js";
 import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
-import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-theme.js";
+import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
 /**
  * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, coloured from the window's tokens, its keys sorted between the shell and the window.
@@ -186,11 +187,9 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   fit.fit();
 
   // The tokens' values flip with the appearance, and the canvas holds the old ones until told.
-  const appearance = window.matchMedia(LIGHT_APPEARANCE);
-  const retheme = () => {
+  const stopRetheming = onDrawnThemeChange(() => {
     terminal.options.theme = terminalTheme(host);
-  };
-  appearance.addEventListener("change", retheme);
+  });
 
   // A box resized many times in a frame is fitted once, at the frame.
   let frame: number | undefined;
@@ -212,7 +211,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     unmount: () => {
       resized.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
-      appearance.removeEventListener("change", retheme);
+      stopRetheming();
       for (const each of heard) each.dispose();
       terminal.dispose();
       stopAdopting();
