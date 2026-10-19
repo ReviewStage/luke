@@ -42,11 +42,17 @@ const BRANCH_PATTERN = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,255}$/u;
 const terminalSize = (maximum: number) =>
   EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum }));
 
-/** Opening the agent's branch in a terminal on this Mac: the agent, its repository and branch, and the terminal's size in cells. */
+/** Opening the agent's branch in a terminal on this Mac: the agent, its repository and branch, the pull request from it where there is one, and the terminal's size in cells. */
 export const macTerminalOpenParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f-]{36}$/u)),
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String.check(EffectSchema.isPattern(BRANCH_PATTERN)),
+  /** The pull request's number, whose last head opens where GitHub deleted the branch once it merged; null for none. */
+  pullRequest: EffectSchema.optional(
+    EffectSchema.NullOr(
+      EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum: 2_147_483_647 })),
+    ),
+  ),
   cols: terminalSize(1_000),
   rows: terminalSize(1_000),
 });

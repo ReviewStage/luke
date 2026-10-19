@@ -176,6 +176,7 @@ export function macTerminalActRows(
             clone: cloneFolder(stateRoot, params.repository),
             worktree: worktreeFolder(stateRoot, params.repository, params.branch),
             branch: params.branch,
+            pullRequest: params.pullRequest,
             command,
             ttyFile,
             size: { cols: params.cols, rows: params.rows },
