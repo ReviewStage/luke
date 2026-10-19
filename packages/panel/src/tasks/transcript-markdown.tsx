@@ -65,9 +65,8 @@ const CODE_ROW = {
 
 type CodeRow = (typeof CODE_ROW)[keyof typeof CODE_ROW];
 
-/** A diff's line that removes or adds, never its file headers' `---` and `+++`. */
-const DIFF_REMOVED = /^-(?!--)/u;
-const DIFF_ADDED = /^\+(?!\+\+)/u;
+/** A diff's file header, `--- a/path` or `+++ b/path`: three marks, then a space or nothing. */
+const DIFF_HEADER = /^(?:---|\+\+\+)(?:\s|$)/u;
 
 /** A row of a block drawn as rows: what it does, and the words it shows. */
 interface Row {
@@ -242,11 +241,13 @@ function rowsOf(language: string, code: string): readonly Row[] | undefined {
   }
   if (language !== DIFF_LANGUAGE) return undefined;
   return lines.map((text) => ({
-    kind: DIFF_REMOVED.test(text)
-      ? CODE_ROW.REMOVED
-      : DIFF_ADDED.test(text)
-        ? CODE_ROW.ADDED
-        : CODE_ROW.CONTEXT,
+    kind: DIFF_HEADER.test(text)
+      ? CODE_ROW.CONTEXT
+      : text.startsWith("-")
+        ? CODE_ROW.REMOVED
+        : text.startsWith("+")
+          ? CODE_ROW.ADDED
+          : CODE_ROW.CONTEXT,
     text,
   }));
 }

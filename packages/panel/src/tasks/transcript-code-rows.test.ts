@@ -99,10 +99,10 @@ test("a suggestion as written holds its new lines alone, every one added, a line
   ]);
 });
 
-test("a diff's lines are tinted by their marks, which they keep, and its file headers and unchanged lines stand untinted", async () => {
+test("a diff's lines are tinted by their marks, which they keep, a line whose words start with -- or ++ among them, and its file headers and unchanged lines stand untinted", async () => {
   const drawing = await drawn(
     createElement(TranscriptWords, {
-      text: "```diff\n--- a/days.ts\n+++ b/days.ts\n const unit = 1;\n-const days = 30;\n+const days = 7;\n```",
+      text: "```diff\n--- a/days.ts\n+++ b/days.ts\n const unit = 1;\n-const days = 30;\n+const days = 7;\n---counter;\n+++counter;\n```",
     }),
   );
 
@@ -112,5 +112,7 @@ test("a diff's lines are tinted by their marks, which they keep, and its file he
     { kind: "context", text: " const unit = 1;" },
     { kind: "removed", text: "-const days = 30;" },
     { kind: "added", text: "+const days = 7;" },
+    { kind: "removed", text: "---counter;" },
+    { kind: "added", text: "+++counter;" },
   ]);
 });
