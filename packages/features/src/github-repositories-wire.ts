@@ -354,8 +354,8 @@ export interface GitHubIssueRef {
   readonly number: number;
 }
 
-/** `owner/name#N`, or `#N` alone, typed whole. */
-const ISSUE_REF = /^(?:([^\s#]+\/[^\s#]+))?#([1-9]\d{0,8})$/u;
+/** `owner/name#N`, or `#N` alone, typed whole; neither part holds a slash, so the match never backtracks over one. */
+const ISSUE_REF = /^(?:([^\s#/]{1,39}\/[^\s#/]{1,100}))?#([1-9]\d{0,8})$/u;
 
 /**
  * The issue words typed or pasted name whole: a link to one of GitHub's

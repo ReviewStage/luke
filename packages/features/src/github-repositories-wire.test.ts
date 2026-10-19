@@ -21,6 +21,8 @@ test("words name an issue whole: a link to its page, owner/name#N, or #N of the 
   assert.equal(githubIssueRefIn("fix #7", "acme/relay"), undefined);
   assert.equal(githubIssueRefIn("acme/../relay#7", null), undefined);
   assert.equal(githubIssueRefIn("https://github.com/acme/relay/pull/7", null), undefined);
+  assert.equal(githubIssueRefIn(`${"!/".repeat(50_000)}#7`, null), undefined);
+  assert.equal(githubIssueRefIn("acme/relay/extra#7", null), undefined);
 });
 
 test("an issue's author is outside unless GitHub names them its owner, a member, or a collaborator, a value it adds later among the outside", () => {
