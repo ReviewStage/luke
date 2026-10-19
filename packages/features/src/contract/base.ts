@@ -1,5 +1,5 @@
 /**
- * base.ts -- the builder every hosted procedure contract starts from.
+ * base.ts -- the builder every hosted procedure contract starts from, and the inputs a JSON body is read through.
  *
  * The import above is oRPC's Effect input-output extension, loaded here
  * because every contract module builds from this one, so `.input` and
@@ -7,6 +7,9 @@
  * procedure declares the whole refusal map: which refusals a route answers
  * is its handler's to say, and a refusal it answers is then always a
  * declared error rather than an unknown one.
+ *
+ * A JSON body is read as the old routes read one (`readEither`): a key its
+ * schema does not name is refused, where the extension would drop it.
  */
 
 import "@orpc/experimental-effect/extensions/input-output";
