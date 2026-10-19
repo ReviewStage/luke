@@ -48,4 +48,8 @@ test("a member named after many references is still read, however many reference
     read.members.map(({ mention }) => mention.kind),
     [MENTION_KIND.PERSON],
   );
+  assert.equal(
+    chatWordsForAgents(`${references} and ${person}`, () => "ada"),
+    `${references} and @ada`,
+  );
 });
