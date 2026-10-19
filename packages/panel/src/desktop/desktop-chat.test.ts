@@ -706,12 +706,15 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   act(() => archive?.click());
   act(() => dialogButton("Archive channel").click());
   await settle();
-  assert.equal(
-    [...page.querySelectorAll(".chat-rail li button")].some((row) =>
-      row.textContent?.includes("release-train"),
-    ),
-    false,
-  );
+  // The topic archived while it is read keeps its row in sight, under the folded archive, still the one shown.
+  const archivedRows = () =>
+    [...page.querySelectorAll(".chat-rail section")]
+      .filter((group) => group.textContent?.startsWith("Archived"))
+      .flatMap((group) => [...group.querySelectorAll("li button")].map(railName));
+  assert.deepEqual(archivedRows(), ["release-train"]);
+  assert.ok(rail(page).includes("▸ release-train"));
+  act(() => railRow(page, "general").click());
+  assert.deepEqual(archivedRows(), [], "the fold holds it once another place is shown");
 
   // Archived channels fold apart, and a topic among them is brought back from its own menu.
   const archived = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find((each) =>

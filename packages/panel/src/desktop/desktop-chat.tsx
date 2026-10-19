@@ -105,15 +105,23 @@ function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGroupin
 /** What the archived group counts. */
 const CHANNEL_NOUN = { one: "channel", many: "channels" } as const;
 
-/** The archived channels, folded under the sidebar's own group header until a press opens them, each opened as any channel is. */
+/**
+ * The archived channels, folded under the sidebar's own group header until
+ * a press opens them, each opened as any channel is. Folded, the one shown
+ * stays in sight, as the sidebar keeps its current task under a fold, so a
+ * topic archived while it is read keeps its row.
+ */
 function ArchivedChannels({
   rows,
   row,
+  current,
 }: {
   rows: readonly ChatRailRow[];
   row: (each: ChatRailRow) => React.JSX.Element;
+  current: (each: ChatRailRow) => boolean;
 }): React.JSX.Element {
   const [folded, setFolded] = useState(true);
+  const drawn = folded ? rows.filter(current) : rows;
   return (
     <section className="chat-rail-group">
       <SidebarGroupHeader
@@ -125,7 +133,7 @@ function ArchivedChannels({
         steady
         onToggle={() => setFolded((was) => !was)}
       />
-      {folded ? null : <ul className="sidebar-tasks">{rows.map(row)}</ul>}
+      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
     </section>
   );
 }
@@ -276,7 +284,11 @@ export function DesktopChat({
               </section>
             )}
             {rail.archived.length === 0 ? null : (
-              <ArchivedChannels rows={rail.archived} row={row} />
+              <ArchivedChannels
+                rows={rail.archived}
+                row={row}
+                current={(each) => shows(view.place, each)}
+              />
             )}
             {rail.direct.length === 0 ? null : (
               <section className="chat-rail-group">
