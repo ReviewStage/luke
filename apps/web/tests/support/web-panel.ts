@@ -23,7 +23,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { browserHistory } from "../../src/app/browser-history";
 import { withLoadLink } from "../../src/app/load-link";
-import { WEB_BUNDLES, WEB_PLATFORM } from "../../src/app/web-platform";
+import { WEB_BUNDLES, webPlatform } from "../../src/app/web-platform";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -114,7 +114,8 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
 export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   installAppBridge(withLoadLink(fixtureBridge(profile)));
-  installAppPlatform(WEB_PLATFORM);
+  // Nothing counts a surface event here: no host stands behind the fixture.
+  installAppPlatform(webPlatform({ recordSurfaceEvent: () => undefined }));
   installShellBundles(WEB_BUNDLES);
   installWindowHistory(browserHistory());
 }

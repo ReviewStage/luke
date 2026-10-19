@@ -53,23 +53,30 @@ export function Refreshing({
 }
 
 /**
- * The window every windowed read answers to, as one control of three fixed
- * lengths. The choice lives in the address bar, so the press hands it up
+ * The window every windowed read answers to, as one control of fixed
+ * lengths, three unless the screen offers fewer. The choice lives in the address bar, so the press hands it up
  * rather than keeping state of its own, and flipping it refetches the way the
  * scope toggle does.
  */
 export function WindowSwitcher({
   value,
   onChange,
+  windows,
 }: {
   value: AdminMetricsWindow;
   onChange: (windowDays: AdminMetricsWindow) => void;
+  /** The lengths a screen offers, where it answers fewer than all three. */
+  windows?: readonly AdminMetricsWindow[] | undefined;
 }): React.JSX.Element {
-  const chosen = WINDOW_OPTIONS.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
+  const options =
+    windows === undefined
+      ? WINDOW_OPTIONS
+      : WINDOW_OPTIONS.filter((option) => windows.includes(ADMIN_METRICS_WINDOW[option.value]));
+  const chosen = options.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
   return (
     <ChoiceBar
       label="Window in days"
-      items={WINDOW_OPTIONS}
+      items={options}
       value={chosen?.value}
       look={CHOICE_BAR_LOOK.SEGMENTED}
       onChange={(name) => onChange(ADMIN_METRICS_WINDOW[name])}

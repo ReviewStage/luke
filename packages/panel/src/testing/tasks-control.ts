@@ -270,6 +270,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onOpenLink: ignore,
     messageReveal: undefined,
     onMessageRevealed: ignore,
+    threadReveal: undefined,
+    onThreadRevealed: ignore,
     sectionReveal: undefined,
     commentReveal: undefined,
     onSectionRevealed: ignore,

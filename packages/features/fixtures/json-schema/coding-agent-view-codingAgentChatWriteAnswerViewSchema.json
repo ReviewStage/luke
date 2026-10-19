@@ -340,6 +340,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -868,6 +871,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -1363,6 +1369,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [

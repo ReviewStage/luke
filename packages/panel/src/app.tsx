@@ -75,6 +75,7 @@ import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
+import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
@@ -736,69 +737,77 @@ export function App(): React.JSX.Element {
                               onRevealed: tasks.onMessageRevealed,
                             }}
                           >
-                            <DesktopShell
-                              gates={{
-                                accountRequired: state.run.accountRequired,
-                                signInWait: signIn.signInWait,
-                                signInFailure: signIn.signInFailure,
-                                lastSignIn,
-                                onBeginSignIn: signIn.beginSignIn,
-                                onCancelSignIn: signIn.cancelSignIn,
+                            <ThreadRevealProvider
+                              value={{
+                                reveal: tasks.threadReveal,
+                                onRevealed: tasks.onThreadRevealed,
                               }}
-                              tab={tab}
-                              onTabChange={changeTab}
-                              tasks={shellTasks}
-                              history={history}
-                              sidebar={sidebar}
-                              room={room}
-                              settingsStep={{
-                                listed: settingsPlace.listed,
-                                onList: history.lists.settings,
-                              }}
-                              call={call}
-                              captions={{
-                                caption,
-                                volumeHint: {
-                                  wanted: volumeHintWanted,
-                                  text: volumeHintText(outputAudio),
-                                  onDismiss: dismissVolumeHint,
-                                },
-                              }}
-                              settings={{
-                                account: state.account,
-                                onSignOut: async () => {
-                                  await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                                },
-                                // The delete happens at the service before anything local moves,
-                                // so a failure resolves to why and the account is still standing.
-                                onDeleteAccount: async () => {
-                                  try {
-                                    await act(ACT_KIND.ACCOUNT_DELETE);
-                                    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                                  } catch {
-                                    return {
-                                      status: ACTION_RESULT_STATUS.REJECTED,
-                                      reason:
-                                        "Luke could not delete the account. Try again in a moment.",
-                                    };
-                                  }
-                                },
-                                view: shownView,
-                                onViewChange: chooseSettingsView,
-                                microphone,
-                                notifications: {
-                                  status: state.notifications.status,
-                                  packaged: state.run.packaged,
-                                  onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                                  onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
-                                },
-                                updates,
-                                settings,
-                                shortcuts,
-                                workspace,
-                                capabilities: state.run.capabilities,
-                              }}
-                            />
+                            >
+                              <DesktopShell
+                                gates={{
+                                  accountRequired: state.run.accountRequired,
+                                  signInWait: signIn.signInWait,
+                                  signInFailure: signIn.signInFailure,
+                                  lastSignIn,
+                                  onBeginSignIn: signIn.beginSignIn,
+                                  onCancelSignIn: signIn.cancelSignIn,
+                                }}
+                                tab={tab}
+                                onTabChange={changeTab}
+                                tasks={shellTasks}
+                                history={history}
+                                sidebar={sidebar}
+                                room={room}
+                                settingsStep={{
+                                  listed: settingsPlace.listed,
+                                  onList: history.lists.settings,
+                                }}
+                                call={call}
+                                captions={{
+                                  caption,
+                                  volumeHint: {
+                                    wanted: volumeHintWanted,
+                                    text: volumeHintText(outputAudio),
+                                    onDismiss: dismissVolumeHint,
+                                  },
+                                }}
+                                settings={{
+                                  account: state.account,
+                                  onSignOut: async () => {
+                                    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+                                  },
+                                  // The delete happens at the service before anything local moves,
+                                  // so a failure resolves to why and the account is still standing.
+                                  onDeleteAccount: async () => {
+                                    try {
+                                      await act(ACT_KIND.ACCOUNT_DELETE);
+                                      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                                    } catch {
+                                      return {
+                                        status: ACTION_RESULT_STATUS.REJECTED,
+                                        reason:
+                                          "Luke could not delete the account. Try again in a moment.",
+                                      };
+                                    }
+                                  },
+                                  view: shownView,
+                                  onViewChange: chooseSettingsView,
+                                  microphone,
+                                  notifications: {
+                                    status: state.notifications.status,
+                                    packaged: state.run.packaged,
+                                    onOpenSettings: () =>
+                                      tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                                    onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
+                                  },
+                                  updates,
+                                  settings,
+                                  shortcuts,
+                                  workspace,
+                                  capabilities: state.run.capabilities,
+                                }}
+                              />
+                            </ThreadRevealProvider>
                           </MessageRevealProvider>
                         </div>
                         {/* A note to the people who make Luke, written in a dialog over the

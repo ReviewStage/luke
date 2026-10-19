@@ -159,7 +159,7 @@ function ChoiceLists(): React.JSX.Element {
           options={[
             { value: "medium", label: "medium" },
             { value: "high", label: "high" },
-            { value: "xhigh", label: "xhigh" },
+            { value: "xhigh", label: "xhigh", badge: "Recommended" },
           ]}
           start={["high"]}
           look={CHOICE_LOOK.PILL}

@@ -67,8 +67,9 @@ function errorName(cause: unknown): string | undefined {
   return cause instanceof Error ? cause.name : undefined;
 }
 
+/** A line about the path, on the console: the desktop's main process and a browser tab both have one, and only Node has `process`. */
 function report(message: string): void {
-  process.stderr.write(`${message}\n`);
+  console.error(message);
 }
 
 /**
@@ -87,8 +88,8 @@ interface FeedbackDeliveryEffects {
   ): Effect.Effect<FeedbackResult, never, HttpClient.HttpClient>;
 }
 
-/** The delivery as effects over `effect/http`'s `HttpClient` tag. */
-function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
+/** The delivery as effects over `effect/http`'s `HttpClient` tag, which the caller provides: a browser tab's is its own same-origin fetch. */
+export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
   const url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
   const requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
   const deadline = Duration.millis(requestTimeoutMs);
