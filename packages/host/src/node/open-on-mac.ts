@@ -122,8 +122,8 @@ const SWEEP = [
   "  done",
   '  if [ -n "$earlier_clone" ] && [ -e "$earlier_clone/.git" ] &&',
   '    [ "$(git -C "$earlier_clone" worktree list --porcelain | grep -c "^worktree ")" = 1 ] &&',
-  // Note that the clone checks nothing out, so any file in it beside its `.git` is the developer's, and keeps it.
-  '    [ -z "$(ls -A "$earlier_clone" | grep -vx .git)" ] &&',
+  // Note that the clone checks nothing out, so any file in it beside its `.git` is the developer's, and keeps it, as a listing that fails does.
+  '    listed="$(ls -A "$earlier_clone")" && [ -z "$(printf "%s\\n" "$listed" | grep -vx .git)" ] &&',
   '    [ -z "$(git -C "$earlier_clone" rev-list --max-count=1 --branches --not --remotes --glob=refs/luke/*)" ]; then',
   '    mkdir -p "$trash" && mv "$earlier_clone" "$trash/$(date +%s)-$$-clone" &&',
   '      echo "▸ Removed the clone an earlier Luke kept at $earlier_clone"',
