@@ -389,10 +389,20 @@ Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 ## Merging
 
+Do not rebase onto or merge in `main` to bring a branch up to date unless the
+user asks or the branch cannot go on without it: a conflict GitHub reports,
+or a change on `main` the work needs. Being behind `main` is not a reason: CI
+runs on the PR's merge with `main`, and the merge queue tests each PR against
+the latest `main` before it lands, so an up-to-date branch buys nothing and
+costs a rebuild, a re-run of CI, and a force-push. This holds before a push,
+while CI runs, before arming auto-merge, and while a PR waits in the queue.
+Restacking a stack onto the PR beneath it after that PR changed is the one
+routine rebase.
+
 To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits on
-CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
-arm a PR only once it targets `main`.
+step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits
+on CI, so do not wait on it yourself, and do not update the branch first. In a
+stack, arm a PR only once it targets `main`.
 
 ## TypeScript
 
