@@ -43,3 +43,8 @@ test("a preview drops a fence and its language, nested emphasis, and emphasis ac
   assert.equal(previewWords(said("**bold\nand bold**")), "bold and bold");
   assert.equal(previewWords(said("- one\n- two\n\n> quoted")), "one two quoted");
 });
+
+test("a preview says the words inside raw HTML, as the message draws them, and none of its tags or comments", () => {
+  assert.equal(previewWords(said("<div>Release ready</div>")), "Release ready");
+  assert.equal(previewWords(said("Ship <b>now</b><!-- not this -->")), "Ship now");
+});

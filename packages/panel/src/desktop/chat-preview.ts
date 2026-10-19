@@ -24,11 +24,15 @@ const PHRASING_PARENTS: ReadonlySet<Nodes["type"]> = new Set([
   "tableCell",
 ]);
 
-/** A node's words as drawn: text and code by their own words, a picture by its alt, raw HTML by none. */
+/** Raw HTML's tags and comments, which the message draws as no words of its own. */
+const HTML_MARKUP = /<!--[\s\S]*?-->|<[^>]*>/gu;
+
+/** A node's words as drawn: text and code by their own words, a picture by its alt, raw HTML by the text between its tags. */
 function nodeWords(node: Nodes): string {
   switch (node.type) {
     case "html":
-      return "";
+      // Note that the message draws the text inside ordinary HTML, so the preview keeps it; React escapes it as plain text.
+      return node.value.replace(HTML_MARKUP, " ");
     case "image":
     case "imageReference":
       return node.alt ?? "";
