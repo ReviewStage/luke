@@ -490,6 +490,9 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire

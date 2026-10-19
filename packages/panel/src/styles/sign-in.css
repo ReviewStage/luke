@@ -48,6 +48,12 @@
   -webkit-app-region: no-drag;
 }
 
+/* A shell that is not the Mac app offers it under everything else: the way
+   in that needs no sign-in here. */
+.sign-in-elsewhere {
+  margin-top: var(--luke-space-12);
+}
+
 .sign-in-error {
   margin: 0;
   color: var(--luke-color-attention);

@@ -8,6 +8,7 @@ import {
   type CallAnswer,
   type CallCredential,
   callAnswered,
+  resolvedCredential,
 } from "./account-call.js";
 import {
   INTEGRATION_CALL_FAILURE,
@@ -145,6 +146,14 @@ function integrationStatusesViewOf(
   };
 }
 
+/** Whether a read holds a sign-in still under way, at a provider's first account or any other. */
+function holdsPending(read: typeof integrationStatusesReadSchema.Type): boolean {
+  return (
+    Object.values(read.integrations).includes(INTEGRATION_STATUS.PENDING) ||
+    accountsFromRead(read).some((account) => account.status === INTEGRATION_STATUS.PENDING)
+  );
+}
+
 /** Which account a call is about, and on a Connect whether it signs in a new one: none named is the provider's first. */
 export interface IntegrationAccountTarget {
   readonly connection?: string | undefined;
@@ -187,8 +196,10 @@ function readAnswer<Answer, Encoded>(
 /** The window's reads and changes of the account's integrations. */
 export class HostedIntegrationsClient {
   readonly #call: AccountCallEffects;
+  readonly #credential: CallCredential;
 
   constructor(options: HostedIntegrationsClientOptions) {
+    this.#credential = options.credential;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
@@ -196,15 +207,32 @@ export class HostedIntegrationsClient {
     });
   }
 
-  /** Where every provider's connection stands. */
+  /**
+   * Where every provider's connection stands. Note that a caller with no
+   * bearer, a browser tab on its cookie session, reads a sign-in under way
+   * as stored, because the service settles none on a GET a cookie carries;
+   * so where that read holds one pending, the settling POST is asked as
+   * well and its answer stands. A bearer's GET has settled already.
+   */
   statuses(): Effect.Effect<IntegrationStatusesView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS }),
-      (answer) =>
-        Effect.map(readAnswer(answer, integrationStatusesReadSchema), (read) =>
-          "failure" in read ? read : integrationStatusesViewOf(read),
-        ),
-    );
+    const send = this.#call.send;
+    const credential = this.#credential;
+    const read = (method: typeof HTTP_METHOD.GET | typeof HTTP_METHOD.POST, path: string) =>
+      Effect.flatMap(send({ method, path }), (answer) =>
+        readAnswer(answer, integrationStatusesReadSchema),
+      );
+    return Effect.gen(function* () {
+      const stored = yield* read(HTTP_METHOD.GET, HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS);
+      if ("failure" in stored) return stored;
+      if (!holdsPending(stored)) return integrationStatusesViewOf(stored);
+      const { authorization } = yield* resolvedCredential(credential);
+      if (authorization !== undefined) return integrationStatusesViewOf(stored);
+      const settled = yield* read(
+        HTTP_METHOD.POST,
+        HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE,
+      );
+      return integrationStatusesViewOf("failure" in settled ? stored : settled);
+    });
   }
 
   /** A browser sign-in to one account at a provider begun, or to a new one: the address the browser opens, which the caller opens and never shows, and the account it signs in. */
