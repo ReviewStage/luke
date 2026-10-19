@@ -122,6 +122,12 @@ export interface SettingsStoreOptions {
   fileSystem: FileSystem.FileSystem;
   /** The path service the settings file's own path is joined through, resolved by the same composer. */
   path: Path.Path;
+  /**
+   * This store's own name among several writing one file (browser tabs over
+   * one storage), which its writes' temporary file is named by. A store that
+   * is its file's one writer, as the desktop's is, is handed none.
+   */
+  writer?: string;
 }
 
 /* ----- The settings file's record ----- */
@@ -577,6 +583,7 @@ export class SettingsStore {
   readonly #sessionAccountEmail: (() => Effect.Effect<string | undefined>) | undefined;
   readonly #fileSystem: FileSystem.FileSystem;
   readonly #path: Path.Path;
+  readonly #writer: string | undefined;
   /**
    * The settings as last read or written. The gate beside it is what makes a
    * read shared rather than repeated: a second reader waits for the first
@@ -785,6 +792,7 @@ export class SettingsStore {
     this.#sessionAccountEmail = options.sessionAccountEmail;
     this.#fileSystem = options.fileSystem;
     this.#path = options.path;
+    this.#writer = options.writer;
   }
 
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
@@ -1121,7 +1129,11 @@ export class SettingsStore {
   #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
     const written = { ...encodePersistedSettings(persisted), ...this.#carried };
     return this.#onFileSystem(
-      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(written, undefined, 2)}\n`),
+      writeSettingsFileAtomic(
+        this.#directory(),
+        `${JSON.stringify(written, undefined, 2)}\n`,
+        this.#writer,
+      ),
     );
   }
 

@@ -159,6 +159,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       overrides,
       fileSystem,
       path,
+      // A file another writer shares, as the shell's change signal says, is written through a temporary file of this host's own.
+      ...(Option.isSome(changedElsewhere) ? { writer: kernel.createId() } : undefined),
     });
 
     /**
