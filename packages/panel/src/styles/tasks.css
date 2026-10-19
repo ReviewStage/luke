@@ -2366,18 +2366,11 @@
   }
 }
 
-/* The labels and, at their end, the label picker (`pull-request-pickers.tsx`),
-   wrapping as one row under the title. */
-.pull-request-label-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin: var(--luke-space-6) 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
-}
-
-.pull-request-label-row > .pull-request-labels {
+/* The labels at the end of the header's line of people, after the
+   pickers: they keep to that line while they fit, and wrap onto the next
+   as one compact group where they do not. */
+.changes-people.pull-request-people > .pull-request-labels {
+  min-width: 0;
   margin: 0;
   padding: 0;
 }
