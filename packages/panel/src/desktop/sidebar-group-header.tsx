@@ -1,4 +1,11 @@
-import { type ContextMenuProps, NAV_COUNT_SHOWN, NAV_ITEM_VARIANT, NavItem } from "@luke/ui";
+import {
+  type ContextMenuProps,
+  DIALOG_TONE,
+  type DialogQuestion,
+  NAV_COUNT_SHOWN,
+  NAV_ITEM_VARIANT,
+  NavItem,
+} from "@luke/ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip.js";
 
@@ -35,6 +42,17 @@ export interface CountNoun {
 }
 
 const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
+
+/** What a group's Archive tasks asks, a repository's or a section's, where a task in it has coding agents, which the archive stops and archives with them. */
+export function archiveTasksQuestion(named: string, count: number): DialogQuestion {
+  return {
+    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
+    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
+    verb: "Archive",
+    running: "Archiving",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
 
 /** A group's header, its press folding and unfolding the group. */
 export function SidebarGroupHeader({

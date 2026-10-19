@@ -364,9 +364,14 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace kind as `answer` does. */
+/** The act port answering every workspace kind, and the run commands', as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
-  const procedures = Object.values(WORKSPACE_ACT_KIND).map((kind) => [kind, onPort(kind)]);
+  const kinds: readonly PortActKind[] = [
+    ...Object.values(WORKSPACE_ACT_KIND),
+    ACT_KIND.MAC_REPOSITORIES,
+    ACT_KIND.MAC_REPOSITORY_SET,
+  ];
+  const procedures = kinds.map((kind) => [kind, onPort(kind)]);
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }

@@ -554,6 +554,14 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
+test("a page whose workspace is not known offers no Copy link, rather than a link naming no workspace", async () => {
+  const { page } = mountWith({ workspace: undefined, workspaces: [] }, CHARLES.userId);
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  assert.doesNotMatch(document.body.textContent ?? "", /Copy link/u);
+});
+
 test("a page for someone neither the members nor those who left name, as a link from outside the workspace opens, says it is not found", async () => {
   const { page } = mount("user-stranger");
   await settle();

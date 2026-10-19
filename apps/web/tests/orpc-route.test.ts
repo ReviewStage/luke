@@ -164,3 +164,26 @@ test("the held message reads are reached at their public paths through the commi
   assert.equal(posted.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
   assert.equal(await posted.text(), '{"error":"method-not-allowed"}');
 });
+
+test("an integration's parameterized path reaches its procedure through the committed table, the dispatcher and the deployed route, which refuses as its old group did", async () => {
+  const routes = new Map([
+    ["account/integrations/connect", orpcRoute],
+    ["account/integrations/rename", orpcRoute],
+  ]);
+  const unsigned = await dispatched(
+    new Request(`${ORIGIN}/api/account/integrations/slack/connect?add=true`, {
+      method: HTTP_METHOD.POST,
+    }),
+    routes,
+  );
+  assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(unsigned.headers.get("cache-control"), null);
+  assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+
+  const fetched = await dispatched(
+    new Request(`${ORIGIN}/api/account/integrations/slack/rename?connection=slack`),
+    routes,
+  );
+  assert.equal(fetched.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
+  assert.equal(await fetched.text(), '{"error":"method-not-allowed"}');
+});

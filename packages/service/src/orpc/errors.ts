@@ -64,8 +64,9 @@ export const hostedRefusalWrap: NonNullable<HostedContext["effect/wrap"]> = <A, 
 
 /**
  * The body an error is answered with: a refusal as itself, an input its
- * schema refused as the invalid request the old groups answered, and
- * anything else left to the handler (`handler.ts` answers it as the old
+ * schema refused as the invalid request the old groups answered, a body
+ * past the handler's request limit as the request too large they answered,
+ * and anything else left to the handler (`handler.ts` answers it as the old
  * groups answered a defect).
  */
 export function encodeHostedError(error: ORPCError<string, unknown>): object | null {

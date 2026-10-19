@@ -11,16 +11,9 @@ import {
 } from "@luke/features/factory-world-view";
 import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
-import { FACTORY_ACT_KIND } from "../contract/index.js";
-import {
-  CALL,
-  closeWindowPorts,
-  openWindowPort,
-  PANEL,
-  settled,
-  UNREACHED_DEPENDENCIES,
-  VOICE,
-} from "./testing.js";
+import { type ActPortClient, FACTORY_ACT_KIND } from "../contract/index.js";
+import { factoryProcedures } from "./factory-procedures.js";
+import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The Factory page's world act, through the act port as a window calls it:
@@ -30,6 +23,30 @@ import {
  * own words before the host is asked; and an answer the schema does not
  * admit is refused rather than handed to the page. Synthetic ids and names.
  */
+
+// The platform's handle on the window that asked, which no procedure here reads.
+const SENDER = Symbol("window");
+
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
+const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
+const CALL: ActSender = { ...PANEL, panel: false, call: true };
+
+const ports: TestActPort<unknown>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
+
+/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
+function windowClient(
+  procedures: Parameters<typeof testActPort<unknown>>[0],
+  actor: ActSender,
+  trusted = true,
+): ActPortClient {
+  const port = testActPort<unknown>(procedures);
+  ports.push(port);
+  return port.as(actor, { trusted });
+}
 
 const REFUSAL = "Could not read the workspace's world on this system.";
 
@@ -90,8 +107,6 @@ const QUIET_WORLD = {
 
 const QUIET: FactoryWorldView = { world: QUIET_WORLD };
 
-afterEach(closeWindowPorts);
-
 /** A window's act port over a host answering each workspace's world, and the workspaces it was asked for. */
 function windowPort(
   actor: ActSender,
@@ -111,24 +126,21 @@ function windowPort(
         },
       };
     });
-  const client = openWindowPort(
-    {
-      ...UNREACHED_DEPENDENCIES,
-      factory: {
-        host: {
-          factoryWorld: ({ workspaceId }) =>
-            Effect.sync(() => {
-              asked.push(workspaceId);
-              return answer(workspaceId);
-            }),
-        },
+  const client = windowClient(
+    factoryProcedures({
+      host: {
+        factoryWorld: ({ workspaceId }) =>
+          Effect.sync(() => {
+            asked.push(workspaceId);
+            return answer(workspaceId);
+          }),
       },
-    },
+    }),
     actor,
     options.trusted ?? true,
   );
   const world = (workspaceId: string) =>
-    settled(() => client[FACTORY_ACT_KIND.FACTORY_WORLD]({ workspaceId }));
+    settledAct(client[FACTORY_ACT_KIND.FACTORY_WORLD]({ workspaceId }));
   return { world, asked };
 }
 

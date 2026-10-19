@@ -6,6 +6,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import { AUTOMATION_ACT_KIND, FACTORY_ACT_KIND, INTEGRATION_ACT_KIND } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,7 +31,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -783,6 +784,13 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
 /** Every act the window sent over the bridge, by kind, in order. */
 let sentActs: string[] = [];
 
+/** The port kinds this window's fake refuses rather than answers with nothing. */
+const REFUSED_ON_PORT: readonly string[] = Object.values({
+  ...AUTOMATION_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
+});
+
 /**
  * The bridge as the window meets it, every act written down, with Factory
  * on, and Settings' chunk already loaded, as it is
@@ -799,6 +807,12 @@ async function handBridge(): Promise<void> {
       sentActs.push(request.kind);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sentActs.push(request.kind);
+    // A read of the account's automations, integrations, or a Factory world is refused, as `app:act` refused it before it moved onto the port.
+    if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    return Promise.resolve(undefined);
   });
 }
 

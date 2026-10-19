@@ -12,15 +12,8 @@ import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
 import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
 import type { IntegrationProceduresDependencies } from "./index.js";
-import {
-  CALL,
-  closeWindowPorts,
-  openWindowPort,
-  PANEL,
-  settled,
-  UNREACHED_DEPENDENCIES,
-  VOICE,
-} from "./testing.js";
+import { integrationProcedures } from "./integration-procedures.js";
+import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * Settings' integration acts, through the act port as a window calls them:
@@ -29,6 +22,30 @@ import {
  * kind's own words before the host is asked; and a panel's ask reaches the
  * host, the status read with no payload at all.
  */
+
+// The platform's handle on the window that asked, which no procedure here reads.
+const SENDER = Symbol("window");
+
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
+const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
+const CALL: ActSender = { ...PANEL, panel: false, call: true };
+
+const ports: TestActPort<unknown>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
+
+/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
+function windowClient(
+  procedures: Parameters<typeof testActPort<unknown>>[0],
+  actor: ActSender,
+  trusted = true,
+): ActPortClient {
+  const port = testActPort<unknown>(procedures);
+  ports.push(port);
+  return port.as(actor, { trusted });
+}
 
 const LINEAR = { provider: INTEGRATION_PROVIDER.LINEAR } as const;
 const RENAME = {
@@ -88,8 +105,6 @@ const ACTS: readonly {
   },
 ];
 
-afterEach(closeWindowPorts);
-
 /** A window's act port over a host that answers each integration ask, and what it was asked, in order. */
 function windowPort(actor: ActSender, trusted = true) {
   const asked: string[] = [];
@@ -125,11 +140,7 @@ function windowPort(actor: ActSender, trusted = true) {
         return { account: { provider, connection, label, status: INTEGRATION_STATUS.CONNECTED } };
       }),
   };
-  const client = openWindowPort(
-    { ...UNREACHED_DEPENDENCIES, integrations: { host } },
-    actor,
-    trusted,
-  );
+  const client = windowClient(integrationProcedures({ host }), actor, trusted);
   return { client, asked };
 }
 
@@ -137,7 +148,7 @@ it("the voice and call windows are refused every integration act in the kind's o
   for (const actor of [VOICE, CALL]) {
     const { client, asked } = windowPort(actor);
     for (const act of ACTS) {
-      assert.deepEqual(await settled(() => act.call(client)), { refused: REFUSAL[act.kind] });
+      assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
     }
     assert.deepEqual(asked, []);
   }
@@ -146,7 +157,7 @@ it("the voice and call windows are refused every integration act in the kind's o
 it("a frame this build does not trust is refused every integration act, even as a panel, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL, false);
   for (const act of ACTS) {
-    assert.deepEqual(await settled(() => act.call(client)), { refused: REFUSAL[act.kind] });
+    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
   }
   assert.deepEqual(asked, []);
 });
@@ -154,13 +165,13 @@ it("a frame this build does not trust is refused every integration act, even as 
 it("a panel's ask reaches the host, and the host's answer is the panel's", async () => {
   const { client, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await settled(() => client[INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]()), {
+  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS]()), {
     answer: { integrations: { ...DISCONNECTED, linear: INTEGRATION_STATUS.CONNECTED } },
   });
-  assert.deepEqual(await settled(() => client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR)), {
+  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT](LINEAR)), {
     answer: { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED },
   });
-  assert.deepEqual(await settled(() => client[INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME](RENAME)), {
+  assert.deepEqual(await settledAct(client[INTEGRATION_ACT_KIND.INTEGRATIONS_RENAME](RENAME)), {
     answer: {
       account: {
         provider: INTEGRATION_PROVIDER.LINEAR,
