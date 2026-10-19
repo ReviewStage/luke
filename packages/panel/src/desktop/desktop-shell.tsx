@@ -100,8 +100,9 @@ const TasksBoard = lazy(() =>
   import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
 );
 
-/** What stands while the Board's chunk loads: its frame and title over quiet blocks. */
-function BoardLoading(): React.JSX.Element {
+/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
+function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -702,7 +703,7 @@ export function DesktopShell({
               </PageFind>
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
-                <Suspense fallback={<BoardLoading />}>
+                <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
                   <TasksBoard tasks={tasks} />
                 </Suspense>
               </PageFind>

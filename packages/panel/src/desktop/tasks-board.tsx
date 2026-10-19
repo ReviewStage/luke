@@ -5,6 +5,7 @@ import {
   type TaskSummary,
 } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
   Chip,
@@ -33,6 +34,7 @@ import { Schema } from "effect";
 import { SquareKanbanIcon } from "lucide-react";
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -55,7 +57,9 @@ import { useRowDrag } from "./use-row-drag.js";
  * Backlog, Todo, In progress, and Done stand at first; Canceled is a filter
  * of the toolbar's, kept on this Mac as the sidebar's view is
  * (`folded-groups.ts`). A task archived is off the board, as it is off the
- * sidebar's list.
+ * sidebar's list. A task from a service before statuses stands under Todo,
+ * where a task starts, and is sent nothing until it is dragged. Escape
+ * closes the board, as it closes Factory.
  */
 
 /** The columns the board stands before Canceled is asked for. */
@@ -188,6 +192,7 @@ function TaskBoardColumnView({
 
 /** The window's Board, in the plan's place: the listed workspace's tasks by status. */
 export function TasksBoard({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const toast = useToast();
   const [canceled, setCanceled] = useState(() => readKept(CANCELED_KEY, storedCanceled, false));
   const listed = tasks.listed.tasks;

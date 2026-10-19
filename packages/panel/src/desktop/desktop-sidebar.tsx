@@ -8,7 +8,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -1224,6 +1224,19 @@ function sectionedTasks(
   return { sections, taskIds };
 }
 
+/** A section as the status filter leaves it: its tasks of the statuses shown, and any with no status, each with its entry, in its order. */
+function sectionInStatuses(drawn: DrawnSection, statuses: readonly TaskStatus[]): DrawnSection {
+  const kept = drawn.tasks.filter(
+    (task) => task.status === undefined || statuses.includes(task.status),
+  );
+  const keptIds = new Set(kept.map((task) => task.id));
+  return {
+    ...drawn,
+    entries: drawn.entries.filter((entry) => keptIds.has(entry.taskId)),
+    tasks: kept,
+  };
+}
+
 /** New section, at the head of Tasks while the account keeps sections: it opens the section dialog in the listed workspace. */
 function NewSectionButton({ onNew }: { onNew: () => void }): React.JSX.Element {
   return (
@@ -1483,6 +1496,9 @@ function SidebarColumn({
     sectionsShown ? tasks.workspace?.id : undefined,
     tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
   );
+  // The status filter thins the sections' tasks as it thins the list's, a row dropped among them landing among those drawn.
+  const statuses = shownStatuses(taskView.view);
+  const shownSections = sectioned.sections.map((drawn) => sectionInStatuses(drawn, statuses));
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
@@ -1500,7 +1516,7 @@ function SidebarColumn({
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
     tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
   };
@@ -1516,7 +1532,7 @@ function SidebarColumn({
       if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined || task === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
@@ -1575,8 +1591,8 @@ function SidebarColumn({
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
   // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
-  const statuses = shownStatuses(taskView.view);
-  const hidden = archive.shown ? [] : hiddenStatuses(rows, statuses);
+  const sectionRows = sectioned.sections.flatMap((drawn) => drawn.tasks.map(taskRow));
+  const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1597,7 +1613,7 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
-  const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
+  const sectionsDrawn = shownSections.flatMap(({ section, tasks: held }) =>
     (folds.sectionFolded(section.id) ? held.filter((task) => current(task.id)) : held).map(taskRow),
   );
   const drawn = [
@@ -1714,9 +1730,9 @@ function SidebarColumn({
                 onDropOut={sectionsShown ? dropPinned : undefined}
               />
             ) : null}
-            {sectioned.sections.length > 0 ? (
+            {shownSections.length > 0 ? (
               <SidebarSections
-                sections={sectioned.sections}
+                sections={shownSections}
                 context={{
                   tasks,
                   dialogs: sectionDialogs,

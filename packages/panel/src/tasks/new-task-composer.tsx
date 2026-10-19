@@ -195,11 +195,21 @@ const COMPOSER_WORDS = {
   FILE_HINT: "Add it to the backlog without starting it",
 } as const;
 
-/** The name a task filed for later stands under: its issue's, else its words' first line, cut to a name's bound. */
+/**
+ * The name a task filed for later stands under: its issue's, else its
+ * words' first line, cut to a name's bound. Note that the bound counts
+ * UTF-16 units, as the wire does, and the cut falls between characters, so
+ * an emoji is kept whole or left out rather than split.
+ */
 function filedName(issueName: string | undefined, said: string): string {
   if (issueName !== undefined) return issueName;
   const line = said.split("\n", 1)[0]?.trim() ?? "";
-  return Array.from(line).slice(0, TASK_BOUNDS.MAX_NAME_CHARS).join("");
+  let name = "";
+  for (const character of line) {
+    if (name.length + character.length > TASK_BOUNDS.MAX_NAME_CHARS) break;
+    name += character;
+  }
+  return name;
 }
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
@@ -470,8 +480,11 @@ export function NewTaskComposer({
   };
   // Note that an agent on the workspace's own issue with nothing written is
   // started on the task's plan, the issue's, as its Start agent… starts one.
+  // Which press a Retry repeats: Start's, or File for later's.
+  const filing = useRef(false);
   const start = () => {
     if (!canStart) return;
+    filing.current = false;
     if (planning) begin(issueName ?? "", true, said === "" ? {} : { brief: said });
     else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
     else {
@@ -491,11 +504,15 @@ export function NewTaskComposer({
     }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin(issueName ?? "", false);
+  const bare = () => {
+    filing.current = false;
+    begin(issueName ?? "", false);
+  };
   // File for later is a bare task in the backlog, its words kept as its brief.
   const filable = said !== "" || named !== undefined;
   const file = () => {
     if (!filable) return;
+    filing.current = true;
     begin(filedName(issueName, said), false, {
       status: TASK_STATUS.BACKLOG,
       ...(said === "" ? undefined : { brief: said }),
@@ -580,7 +597,7 @@ export function NewTaskComposer({
     note,
     closed: undefined,
     send: start,
-    retry: start,
+    retry: () => (filing.current ? file() : start()),
     sent: [],
   };
 

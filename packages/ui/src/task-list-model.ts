@@ -308,7 +308,7 @@ function byPriority(a: TaskSummary, b: TaskSummary): number {
 /**
  * The Board's columns: one for each status asked for, in the order asked,
  * each holding the tasks standing in it, the most pressing first. A task
- * from a service before statuses stands in no column.
+ * from a service before statuses stands under Todo, where a task starts.
  */
 export function taskBoardColumns(
   tasks: readonly TaskSummary[],
@@ -316,7 +316,9 @@ export function taskBoardColumns(
 ): readonly TaskBoardColumn[] {
   return statuses.map((status) => ({
     status,
-    tasks: tasks.filter((task) => task.status === status).toSorted(byPriority),
+    tasks: tasks
+      .filter((task) => (task.status ?? TASK_STATUS.TODO) === status)
+      .toSorted(byPriority),
   }));
 }
 

@@ -8,7 +8,7 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -283,6 +283,23 @@ test("with the experiment on a section stands over its tasks, which Tasks leaves
   assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
   const header = sidebar.querySelector('nav[aria-label="Sections"] button[aria-expanded]');
   assert.equal(header === null ? undefined : heardName(header), "Launch");
+});
+
+test("the status filter leaves a section's backlog task out as it does the list's, and counts it among those it hides", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [
+      { ...INVITES, status: TASK_STATUS.BACKLOG },
+      { ...RETRIES, status: TASK_STATUS.TODO },
+    ],
+  });
+
+  assert.deepEqual(namesIn(sidebar, "Sections"), []);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.equal(
+    sidebar.querySelector(".sidebar-hidden-statuses button")?.textContent,
+    "1 more in Backlog",
+  );
 });
 
 test("a task's Move to section puts it on top of the section chosen", async () => {

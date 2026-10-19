@@ -1596,3 +1596,28 @@ test("File for later is held while the box is empty, and Start's task names no s
 
   assert.deepEqual(card.statuses, [undefined]);
 });
+
+test("Retry after a refused File for later files the task for later again, rather than starting it", async () => {
+  const card = await mount("Luke can't reach acme/web.");
+  act(() => modeToggle().click());
+  card.type("Rate limit search");
+  act(() => card.button("File for later").click());
+  await settle();
+  act(() => card.button("Retry").click());
+  await settle();
+
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG, TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false, false]);
+});
+
+test("a task filed for later is named by as much of its first line as a name holds, an emoji kept whole", async () => {
+  const card = await mount();
+  card.type(`${"a".repeat(199)}🚀 and more`);
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(
+    card.starts.map(([name]) => name),
+    ["a".repeat(199)],
+  );
+});

@@ -76,6 +76,7 @@ export const APP_COMMAND = {
   EXIT_AUTOMATIONS: "exit-automations",
   ISSUES: "issues",
   EXIT_ISSUES: "exit-issues",
+  EXIT_BOARD: "exit-board",
   NEW_ISSUE: "new-issue",
   BACK: "back",
   FORWARD: "forward",
@@ -474,6 +475,10 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
     experiment: EXPERIMENT.ISSUES,
   },
+  [APP_COMMAND.EXIT_BOARD]: {
+    label: "Exit board",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
   [APP_COMMAND.NEW_ISSUE]: {
     label: "New issue",
     chord: { key: SHORTCUT_KEY.C, plain: true },
@@ -543,6 +548,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,
       APP_COMMAND.EXIT_AUTOMATIONS,
+      APP_COMMAND.EXIT_BOARD,
     ],
   },
   {

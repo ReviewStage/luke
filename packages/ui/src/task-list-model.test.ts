@@ -358,7 +358,7 @@ test("a status turned on joins the others in the order work moves through them, 
   ]);
 });
 
-test("the board's columns hold their status's tasks, the most pressing first and the unweighed last, the latest first within a priority", () => {
+test("the board's columns hold their status's tasks, the most pressing first and the unweighed last, the latest first within a priority, and a task with no status under Todo", () => {
   const tasks = [
     standing("Unweighed", TASK_STATUS.TODO, TASK_PRIORITY.NONE, 9),
     standing("Low", TASK_STATUS.TODO, TASK_PRIORITY.LOW, 8),
@@ -372,7 +372,10 @@ test("the board's columns hold their status's tasks, the most pressing first and
   const columns = taskBoardColumns(tasks, [TASK_STATUS.TODO, TASK_STATUS.DONE]);
 
   expect(columns.map((column) => [column.status, column.tasks.map((each) => each.name)])).toEqual([
-    [TASK_STATUS.TODO, ["Urgent", "High, newer", "High, older", "Low", "Unweighed"]],
+    [
+      TASK_STATUS.TODO,
+      ["Urgent", "High, newer", "High, older", "Low", "Unweighed", "Older service"],
+    ],
     [TASK_STATUS.DONE, ["Shipped"]],
   ]);
 });

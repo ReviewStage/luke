@@ -11,10 +11,12 @@ import {
 } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -58,10 +60,14 @@ let sent: [string, TaskStanding][] = [];
 /** Whether the service keeps the changes sent. */
 let keeps = true;
 
+/** How many times the board was closed. */
+let closed = 0;
+
 beforeEach(() => {
   opened = [];
   sent = [];
   keeps = true;
+  closed = 0;
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({
@@ -126,6 +132,7 @@ async function mountBoard(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEl
     me: DEAN,
     listRead: true,
     onSelect: (taskId) => opened.push(taskId),
+    boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
     onSetTaskStanding: (taskId, standing) => {
       sent.push([taskId, standing]);
       return Promise.resolve(keeps);
@@ -179,6 +186,25 @@ test("each status but Canceled has its column, its cards the most pressing first
   );
   assert.equal(card.querySelector(".tasks-board-name")?.textContent, "Rate limit search");
   assert.ok(card.querySelector(".actor-mark"), "the card wears its creator's face");
+});
+
+test("a task from a service before statuses stands under Todo", async () => {
+  const { status: _status, ...older } = task(
+    30,
+    "Older task",
+    TASK_STATUS.TODO,
+    TASK_PRIORITY.NONE,
+  );
+  const board = await mountBoard([older]);
+  assert.deepEqual(columns(board)[1], ["Todo", ["ACME-30"]]);
+});
+
+test("Escape closes the board", async () => {
+  await mountBoard();
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_BOARD), "the board's way out is offered");
+  });
+  assert.equal(closed, 1);
 });
 
 test("a press on a card opens its task", async () => {
