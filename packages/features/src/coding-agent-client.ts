@@ -95,6 +95,7 @@ import {
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
@@ -115,7 +116,6 @@ import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
   modelChoiceSchema,
-  modelsAnswerSchema,
 } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -322,6 +322,26 @@ function readAnswer<Answer, Encoded>(
 }
 
 /**
+ * A procedure's answer, or the refusal it failed with where it is one the
+ * caller names, with the fields that refusal carries; unanswered for
+ * everything else.
+ */
+function hostedAnswer<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+  named: NamedRefusals,
+): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
+}
+
+function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
+  if (failed._tag !== "HostedRefused") return UNANSWERED;
+  const failure = named[failed.refusal];
+  if (failure === undefined) return UNANSWERED;
+  const unreached = failed.data?.unreached;
+  return unreached === undefined ? { failure } : { failure, unreached };
+}
+
+/**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
@@ -334,8 +354,15 @@ export class HostedCodingAgentClient {
   readonly #held: AccountCallEffects;
   readonly #start: AccountCallEffects;
 
+  readonly #hosted: HostedClient;
+
   constructor(options: HostedCodingAgentClientOptions) {
     const { credential } = options;
+    this.#hosted = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
@@ -355,10 +382,7 @@ export class HostedCodingAgentClient {
 
   /** The models a coding agent may run on, as the service offers them now. */
   models(): Effect.Effect<CodingAgentModelsAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.MODELS }),
-      (answer) => readAnswer(answer, modelsAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
   }
 
   /** The account's default model and effort, read off the preferences snapshot. */
