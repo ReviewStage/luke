@@ -1,5 +1,5 @@
 /**
- * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
+ * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
  */
 
 // @vitest-environment jsdom
@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
@@ -23,12 +23,15 @@ const PATH = "src/billing/plan.ts";
 const roots: Root[] = [];
 
 beforeEach(() => {
+  // View settings opens its syntax theme on the window's appearance, here the dark one.
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
   installScrollIntoView();
   fakeAppBridge({});
   handSettings();
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
@@ -89,7 +92,7 @@ function press(container: HTMLElement, name: string): void {
   act(() => button.click());
 }
 
-test("View settings on a File tab offers its lines' wrap, numbers, and type, no syntax theme, and each is drawn on its lines at once", async () => {
+test("View settings on a File tab offers its lines' wrap, numbers, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
   press(container, "View settings");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
@@ -103,7 +106,16 @@ test("View settings on a File tab offers its lines' wrap, numbers, and type, no 
       // A pop-up's name ends with the value it names, which is not the row's.
       (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
-    ["Word wrap", "Line numbers", "Font", "Font size", "Line height", "Ligatures"],
+    [
+      "Word wrap",
+      "Line numbers",
+      "Syntax theme",
+      "For dark mode",
+      "Font",
+      "Font size",
+      "Line height",
+      "Ligatures",
+    ],
   );
   assert.deepEqual(drawnLines(container), {
     numbers: "true",

@@ -52,9 +52,9 @@ import {
  * turns them); and Text, how code looks (the syntax theme of the appearance
  * chosen, the type, its size and line height, and ligatures). Its foot opens
  * Settings › Appearance › Diffs, which holds the same settings. A File
- * tab's lines and a page's source follow wrap, numbers, and the type, not
- * yet the syntax theme, so there it offers those alone, never a row that
- * changes nothing on the tab. Each row
+ * tab's lines and a page's source follow wrap, numbers, the syntax theme,
+ * and the type, not a diff's own marks, so there it offers those alone,
+ * never a row that changes nothing on the tab. Each row
  * carries the settings' mark while it differs from its default. A diff too
  * narrow to split says so under its layout, the choice kept for a wider one.
  * It closes on Escape, its ×, the button, or focus leaving it, and hands the
@@ -212,7 +212,7 @@ function SettingsGroup({
   );
 }
 
-/** What a View settings button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, and its type. */
+/** What a View settings button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, its syntax theme, and its type. */
 export const VIEW_SETTINGS_SCOPE = {
   DIFF: "diff",
   LINES: "lines",
@@ -246,6 +246,45 @@ function LinesRows(): React.JSX.Element {
         changed={changed("lineNumbers")}
         onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
       />
+    </>
+  );
+}
+
+/**
+ * The syntax theme of one appearance at a time, the window's own as it
+ * opens and the other a press away: the press picks which theme is set,
+ * never the window's appearance.
+ */
+function ThemeRows(): React.JSX.Element {
+  const { settings, change } = useFileViewSettings();
+  const [appearance, setAppearance] = useState(currentAppearance);
+  const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
+  return (
+    <>
+      <SegmentedRow
+        label="Syntax theme"
+        value={appearance}
+        options={APPEARANCE_OPTIONS}
+        changed={false}
+        onChange={setAppearance}
+      />
+      {appearance === APPEARANCE.DARK ? (
+        <ThemeRow
+          label="For dark mode"
+          themes={DIFF_THEMES.DARK}
+          value={settings.diffDarkTheme}
+          changed={changed("diffDarkTheme")}
+          onChange={(diffDarkTheme) => change("diffDarkTheme", diffDarkTheme)}
+        />
+      ) : (
+        <ThemeRow
+          label="For light mode"
+          themes={DIFF_THEMES.LIGHT}
+          value={settings.diffLightTheme}
+          changed={changed("diffLightTheme")}
+          onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
+        />
+      )}
     </>
   );
 }
@@ -302,7 +341,6 @@ function TypeRows(): React.JSX.Element {
  */
 function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
-  const [appearance, setAppearance] = useState(currentAppearance);
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
@@ -355,30 +393,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         />
       </SettingsGroup>
       <SettingsGroup title={GROUP_TITLE.TEXT}>
-        <SegmentedRow
-          label="Syntax theme"
-          value={appearance}
-          options={APPEARANCE_OPTIONS}
-          changed={false}
-          onChange={setAppearance}
-        />
-        {appearance === APPEARANCE.DARK ? (
-          <ThemeRow
-            label="For dark mode"
-            themes={DIFF_THEMES.DARK}
-            value={settings.diffDarkTheme}
-            changed={changed("diffDarkTheme")}
-            onChange={(diffDarkTheme) => change("diffDarkTheme", diffDarkTheme)}
-          />
-        ) : (
-          <ThemeRow
-            label="For light mode"
-            themes={DIFF_THEMES.LIGHT}
-            value={settings.diffLightTheme}
-            changed={changed("diffLightTheme")}
-            onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
-          />
-        )}
+        <ThemeRows />
         <TypeRows />
       </SettingsGroup>
     </>
@@ -416,6 +431,7 @@ function ViewSettingsPopover({
             <LinesRows />
           </SettingsGroup>
           <SettingsGroup title={GROUP_TITLE.TEXT}>
+            <ThemeRows />
             <TypeRows />
           </SettingsGroup>
         </>

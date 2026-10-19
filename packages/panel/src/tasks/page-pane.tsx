@@ -15,8 +15,9 @@ import { useCopyToast } from "../copy-feedback.js";
 import { FindScope } from "../find-in-tab.js";
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
-import { CodeLinesView, useLinesLook } from "./code-lines.js";
+import { useLinesLook } from "./code-lines.js";
 import { BarMenu } from "./file-menu.js";
+import { type RunRead, ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
@@ -140,13 +141,19 @@ function usePageSources(readSource: ReadPageSource) {
   return { held, ask, forget };
 }
 
+/** The name a page's source is coloured under: an HTML document's. */
+const PAGE_SOURCE_NAME = "page.html";
+
 /** The version's source in the frame's place: its lines as a File tab draws them, or why they are not. */
 function PageSource({
   title,
+  version,
   read,
   onRetry,
 }: {
   title: string;
+  /** The page and the version whose source this is, which its colouring is kept under. */
+  version: RunRead;
   read: SourceRead;
   onRetry: () => void;
 }): React.JSX.Element {
@@ -161,7 +168,9 @@ function PageSource({
   }
   return (
     <section className="file-tab" aria-label={`${title} source`}>
-      <CodeLinesView
+      <ThemedCodeLinesView
+        name={PAGE_SOURCE_NAME}
+        read={version}
         look={look}
         fade={SCROLL_FADE.START}
         firstLine={1}
@@ -292,9 +301,11 @@ export function PagePane({
             ) : null}
           </div>
         </header>
+        {showingSource ? <ThemeWarmer name={PAGE_SOURCE_NAME} /> : null}
         {showingSource ? (
           <PageSource
             title={page.title}
+            version={{ source: page.id, revision: String(version) }}
             read={source ?? { kind: SOURCE_READ.READING }}
             onRetry={() => ask(version)}
           />

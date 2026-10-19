@@ -162,6 +162,7 @@ let boxWidth = 900;
 let root: Root | undefined;
 
 const standIn: DiffViewModule = {
+  colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
   mountList: (_host, props) => {
     drawn.push(props);

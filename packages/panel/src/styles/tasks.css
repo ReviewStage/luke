@@ -1049,6 +1049,24 @@
   container-type: inline-size;
 }
 
+/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
+   stand on the theme's ground, as a diff in that theme does; every run
+   coloured in the theme names its own ink. */
+.code-lines-ground {
+  --code-ground: var(--theme-ground-dark, var(--luke-color-ground));
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+@media (prefers-color-scheme: light) {
+  .code-lines-ground {
+    --code-ground: var(--theme-ground-light, var(--luke-color-ground));
+  }
+}
 .code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
