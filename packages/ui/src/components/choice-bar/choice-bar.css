@@ -193,8 +193,13 @@
     padding-inline: var(--luke-space-12);
   }
 
+  /* Narrower than its options need, a fill bar shows an option other than
+     the chosen one by its glyph alone. Note that it does so only while one
+     is chosen, because a clearable bar with none chosen would otherwise
+     name none of its options. */
   @container luke-choice-bar (width < 520px) {
-    .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
+    .luke-choice-bar:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
       position: absolute;

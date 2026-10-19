@@ -70,8 +70,10 @@ import {
   type ShortcutChord,
 } from "@luke/settings/shortcuts";
 import {
-  CHIP_LOOK,
-  Chip,
+  CHOICE_BAR_FOCUS,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
   COMBOBOX_LIST_HEIGHT,
   ComboboxListBox,
   ComboboxOptionItem,
@@ -91,7 +93,7 @@ import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -134,7 +136,7 @@ import { taskOf } from "./task-actions.js";
 import { type IssuesRead, useIssues } from "./use-issues.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
-/** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
+/** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
 const PALETTE_FILTER = {
   ALL: "all",
   TASKS: "plans",
@@ -153,7 +155,7 @@ type PaletteKind = Exclude<PaletteFilter, typeof PALETTE_FILTER.ALL>;
 
 const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 
-/** Each filter's chip, which is also each kind's heading under All. */
+/** Each filter's name, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
@@ -1010,8 +1012,31 @@ function PaletteItem({
   );
 }
 
-/** The filters under the field; a press chooses one and leaves the caret in the field. */
-function FilterChips({
+/**
+ * Scrolls the bar in `band` along its own row until its checked option
+ * stands whole in view, and nothing else. Note that the bar's own scroller
+ * is moved rather than the option scrolled into view, which would scroll
+ * every box around it, the dialog's and the window's among them.
+ */
+function revealChecked(band: HTMLElement): void {
+  const bar = band.querySelector<HTMLElement>('[role="radiogroup"]');
+  const checked = bar?.querySelector<HTMLElement>('[aria-checked="true"]');
+  if (bar === null || bar === undefined || checked === null || checked === undefined) return;
+  const start = checked.offsetLeft;
+  const end = start + checked.offsetWidth;
+  if (start < bar.scrollLeft) bar.scrollLeft = start;
+  else if (end > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = end - bar.clientWidth;
+}
+
+/**
+ * The filters under the field, a radio group the palette drives from the
+ * field. Note that it takes no focus, because the caret belongs in the field
+ * and Return there opens the row chosen, not a filter; a press chooses one
+ * and leaves the caret where it was. A row too wide for a narrow window
+ * scrolls sideways, and keeps the filter chosen in view, since no focus
+ * moving there would bring it.
+ */
+function PaletteFilters({
   filters,
   filter,
   onFilter,
@@ -1020,23 +1045,22 @@ function FilterChips({
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
+  const band = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (band.current !== null) revealChecked(band.current);
+  }, [filter]);
   return (
-    <fieldset className="command-palette-filters" aria-label="Filter">
-      {filters.map((each) => (
-        <Chip
-          key={each}
-          look={CHIP_LOOK.FILTER}
-          aria-pressed={each === filter}
-          // Note that a chip takes no focus, because the caret belongs in the
-          // field and Return there opens the row chosen, not the chip.
-          tabIndex={-1}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onFilter(each)}
-        >
-          {FILTER_LABEL[each]}
-        </Chip>
-      ))}
-    </fieldset>
+    <div ref={band} className="command-palette-filters">
+      <ChoiceBar
+        label="Filter"
+        items={filters.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
+        value={filter}
+        onChange={onFilter}
+        look={CHOICE_BAR_LOOK.FILL}
+        size={CHOICE_BAR_SIZE.COMPACT}
+        focus={CHOICE_BAR_FOCUS.NONE}
+      />
+    </div>
   );
 }
 
@@ -1097,7 +1121,7 @@ export function CommandPalette({
     : PALETTE_FILTERS.filter((each) => each !== PALETTE_FILTER.ISSUES);
   if (open && !available) setOpen(false);
   const [chosenFilter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
-  // The filter shown: the one chosen, or All where its chip is gone, as Issues' is once their experiment turns off.
+  // The filter shown: the one chosen, or All where its filter is gone, as Issues' is once their experiment turns off.
   const filter = filters.includes(chosenFilter) ? chosenFilter : PALETTE_FILTER.ALL;
   const [query, setQuery] = useState("");
   // The row chosen, by its place in the list, which a new filter puts back on the first.
@@ -1378,7 +1402,7 @@ export function CommandPalette({
           onValueChange={setQuery}
         />
       </div>
-      <FilterChips filters={filters} filter={filter} onFilter={changeFilter} />
+      <PaletteFilters filters={filters} filter={filter} onFilter={changeFilter} />
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {notice === undefined ? (
