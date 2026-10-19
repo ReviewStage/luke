@@ -55,7 +55,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -127,6 +127,8 @@ interface Standing {
   signedIn: boolean;
   /** The signed-in account's email. */
   account: string;
+  /** The room the panel's stage gives. */
+  room: ShellRoom;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
@@ -165,6 +167,7 @@ function mount(
     inboxTasks: [],
     signedIn: true,
     account: "dev@example.com",
+    room: SHELL_ROOM.WIDE,
     ...initial,
   };
   function Probe() {
@@ -215,7 +218,7 @@ function mount(
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
-      room: SHELL_ROOM.WIDE,
+      room: held.room,
     });
     return null;
   }
@@ -2664,6 +2667,69 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
       [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
     );
   });
+});
+
+test("a channel hidden behind a narrow room's Chat rail is not marked read until it stands on screen again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  /** The chat as one read answers it: the channel, holding one message at `seq`. */
+  const answerAt = (seq: number) => ({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
+    messages: [
+      {
+        id: `d0d0d0d0-0000-4000-8000-00000000000${seq}`,
+        seq,
+        touchedSeq: seq,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [],
+        postedAt: seq,
+      },
+    ],
+    cursor: String(seq),
+  });
+  // The second read waits for the test to post a message, as the service's long read waits for one.
+  const later = Promise.withResolvers<ReturnType<typeof answerAt>>();
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] }, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(answerAt(4));
+        return reads === 2 ? later.promise : new Promise(() => undefined);
+      },
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  const place = { kind: CHAT_PLACE.CHANNEL, channelId };
+  const readTo = () =>
+    tab.payloads.flatMap((each) =>
+      each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST ? [each.payload] : [],
+    );
+  const mark = (seq: number) => ({ workspaceId: PERSONAL.id, write: { readTo: seq, channelId } });
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().chatView.chat, "the chat landed");
+  });
+  act(() => tab.control().chatView.onShow(place));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
+
+  act(() => tab.control().chatView.onList());
+  later.resolve(answerAt(5));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
+
+  act(() => tab.control().chatView.onChoose(place));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 
 test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {

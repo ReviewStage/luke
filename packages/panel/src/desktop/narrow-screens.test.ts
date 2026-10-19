@@ -6,6 +6,7 @@ import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { CHAT_PLACE, type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -17,6 +18,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
@@ -365,6 +367,31 @@ test("a link to a Settings page on a narrow stage opens on that page, with the w
 
   press(the(page, SETTINGS_COLUMNS.page), "Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+});
+
+test("Find on a narrow Settings lands in the search shown: a page with none shows the list for it, and the list takes it from a hidden page's own", async () => {
+  const page = await mount(
+    PHONE,
+    createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.APPEARANCE } }),
+  );
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"], "the list stands for its search");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const integrations = await mount(
+    PHONE,
+    createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.INTEGRATIONS } }),
+  );
+  press(the(integrations, SETTINGS_COLUMNS.page), "Settings");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  const field = document.activeElement;
+  assert.ok(field instanceof HTMLElement, "a field takes the caret");
+  assert.ok(the(integrations, SETTINGS_COLUMNS.list).contains(field), "the list's own field");
 });
 
 const HISTORY_COLUMNS = {

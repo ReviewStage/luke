@@ -127,7 +127,7 @@ import type { ActHandle } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import type { ShellRoom } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
@@ -1346,8 +1346,12 @@ export function useTasksTab(input: {
     account: input.account,
     workspaceId: listedWorkspace?.id,
     active: fixture === undefined && input.signedIn && chatOn,
+    // Note that a narrow room's rail hides the place it stands over, so a channel is read only while it is on screen.
     reading:
-      shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
+      shown &&
+      standIn?.kind === STAND_IN.CHAT &&
+      standIn.place.kind === CHAT_PLACE.CHANNEL &&
+      !(standIn.listed && input.room === SHELL_ROOM.NARROW)
         ? standIn.place.channelId
         : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),

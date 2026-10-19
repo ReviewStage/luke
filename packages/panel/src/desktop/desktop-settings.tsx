@@ -265,10 +265,11 @@ export function DesktopSettings({
   const edge = useSidebarEdge(sidebar);
   const hidden = hiddenColumns(room, step.listed);
   const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
-  // The page with a search of its own takes Command-F while it shows.
+  // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
-    settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
+    settings.account.status === ACCOUNT_STATUS.SIGNED_IN &&
+    !hidden.item;
 
   // The template's version history takes the whole window as a plan's does, and leaves for the template,
   // the call card at the foot of its versions as it was at the page list's.
@@ -300,6 +301,7 @@ export function DesktopSettings({
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
           find={!pageSearched}
+          onFind={hidden.list ? step.onList : undefined}
           query={query}
           onQueryChange={changeQuery}
           onSubmit={() => {
