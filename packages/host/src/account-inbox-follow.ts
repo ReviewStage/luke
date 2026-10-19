@@ -6,7 +6,6 @@ import {
   accountInboxOfLiveRows,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
-import { createRealtimeClient } from "@neon/realtime/client";
 import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "effect";
 
 /**
@@ -53,13 +52,19 @@ export interface LiveClient {
   close(): void;
 }
 
-/** Realtime's own client, at the address the service named. */
-export const openRealtimeClient = (url: string): LiveClient => createRealtimeClient({ url });
+/**
+ * Realtime's own client, at the address the service named, loaded only when
+ * the account is first followed, so its protocol's validators stay out of the
+ * web app's first load.
+ */
+export const openRealtimeClient = (url: string): Promise<LiveClient> =>
+  import("@neon/realtime/client").then(({ createRealtimeClient }) => createRealtimeClient({ url }));
 
 export interface AccountInboxFollowDependencies {
   /** The sealed statements, fetched from the service; a failure where it answered none. */
   readonly live: () => Effect.Effect<AccountInboxLiveAnswer | { readonly failure: string }>;
-  readonly openLive: (url: string) => LiveClient;
+  /** Realtime's client at the address the service named, loaded where it must be. */
+  readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock: when an answer was read, and how far back a failed run is still told. */
   readonly now: () => number;
   /** The answer, each time it changes. */
@@ -101,7 +106,10 @@ function liveAnswers(
   return Stream.callback<AccountInboxAnswer, LiveBroken>((queue) =>
     Effect.gen(function* () {
       const client = yield* Effect.acquireRelease(
-        Effect.sync(() => dependencies.openLive(first.url)),
+        Effect.tryPromise({
+          try: async () => dependencies.openLive(first.url),
+          catch: () => new LiveBroken({ reason: "Realtime's client did not load" }),
+        }),
         (opened) => Effect.sync(() => opened.close()),
       );
       const rows: PartRows = {};

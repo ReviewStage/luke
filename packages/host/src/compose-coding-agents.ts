@@ -158,7 +158,7 @@ export interface CodingAgentsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
   /** Realtime's client at an address, which the account inbox is followed over; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient;
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export interface CodingAgentsComposer extends Composer {
