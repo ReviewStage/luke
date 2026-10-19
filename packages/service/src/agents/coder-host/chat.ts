@@ -156,7 +156,7 @@ export const CHAT_TOOLS = {
     name: CHAT_TOOL.READ,
     description:
       "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each " +
-      "and what a topic channel says it is for, " +
+      "and what a topic channel says it is for, an archived topic last and marked, " +
       "then the messages. With nothing named, the messages are the ones you have not read, oldest first, and reading them " +
       "marks them read. channel (#name, or @handle for your direct messages with that member) reads its latest messages, " +
       "thread (a message's number) reads that message's whole thread, and before (a message's number) reads back from " +
@@ -234,6 +234,8 @@ type ChannelLine = {
   readonly kind: ChannelKind;
   readonly unread: number;
   readonly purpose?: string;
+  /** An archived topic, which takes no post until edit_channel brings it back. */
+  readonly archived?: true;
 };
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
@@ -788,7 +790,15 @@ export function editAsAgent(
     const seat = yield* seatOf(agent);
     if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
     const { organizationId, self } = seat.value;
-    const channel = yield* channelNamed(agent.userId, organizationId, named.slice(1));
+    const standing = yield* channelNamed(agent.userId, organizationId, named.slice(1));
+    // Note that a rename sent again, its first answer lost, finds the old name gone and the new one standing, which it answers as done.
+    const channel =
+      Option.isNone(standing) && change.name !== undefined
+        ? Option.filter(
+            yield* channelNamed(agent.userId, organizationId, change.name),
+            (row) => row.kind === CHANNEL_KIND.TOPIC,
+          )
+        : standing;
     if (Option.isNone(channel)) return chatRejected(CHAT_TOOL_REFUSAL.NO_TOPIC);
     const edited = yield* editTopicChannel(
       agent.userId,
@@ -994,11 +1004,18 @@ export function readAsAgent(
           kind: row.kind,
           ...(row.leftAt === null ? undefined : { left: true as const }),
         })),
-        channels: listed(seen, seat.home, names).map((channel) => ({
+        // An archived topic is listed after the rest, marked, so its name stands to bring it back by.
+        channels: [
+          ...listed(seen, seat.home, names),
+          ...channels.filter(
+            (channel) => channel.kind === CHANNEL_KIND.TOPIC && channel.archivedAt !== null,
+          ),
+        ].map((channel) => ({
           name: names.get(channel.id) ?? "",
           kind: channel.kind,
           unread: unread.get(channel.id) ?? 0,
           ...(channel.purpose === null ? undefined : { purpose: channel.purpose }),
+          ...(channel.archivedAt === null ? undefined : { archived: true as const }),
         })),
         messages: messages.map((message) =>
           lineOf(message, { names, members: byId, roots, handleOf: handlesIn(byId.values()) }),

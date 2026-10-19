@@ -6493,13 +6493,35 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         });
         assert.ok("channel" in archived);
         assert.equal(archived.channel.archived, true);
+        // The archived topic is still listed, marked, so any agent can bring it back by name.
+        const read = yield* chat.read(chat.first);
+        assert.ok("channels" in read);
+        assert.deepEqual(read.channels.at(-1), {
+          name: "#release-train",
+          kind: CHANNEL_KIND.TOPIC,
+          unread: 0,
+          archived: true,
+        });
+        const back = yield* chat.editChannel(chat.first, {
+          channel: "#release-train",
+          archived: false,
+        });
+        assert.ok("channel" in back);
+        assert.equal(back.channel.archived, false);
+        // A rename sent again after its answer was lost finds it done.
+        const rename = { channel: "#design", name: "ux" };
+        assert.ok("channel" in (yield* chat.editChannel(chat.second, rename)));
+        assert.deepEqual(yield* chat.editChannel(chat.second, rename), {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          channel: { name: "#ux", archived: false },
+        });
         const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
         assert.deepEqual(
           yield* chat.editChannel(chat.second, { channel: "#general", purpose: "Everyone" }),
           refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
         );
         assert.deepEqual(
-          yield* chat.editChannel(chat.second, { channel: "#design", name: "general" }),
+          yield* chat.editChannel(chat.second, { channel: "#ux", name: "general" }),
           refused(CHAT_TOOL_REFUSAL.EDIT_NAME_TAKEN),
         );
         assert.deepEqual(
@@ -6507,7 +6529,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
         );
         assert.deepEqual(
-          yield* chat.editChannel(chat.second, { channel: "design", archived: true }),
+          yield* chat.editChannel(chat.second, { channel: "ux", archived: true }),
           refused(CHAT_TOOL_REFUSAL.UNREADABLE_EDIT),
         );
       }),
