@@ -1176,3 +1176,56 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
     [[PLAN_COMMENT_SCOPE.WORDS, words, words]],
   );
 });
+
+test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them", async () => {
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(keys);
+  act(() => keys.render(createElement(Keymap)));
+  const { container } = wide(() => drawn("page", []));
+  const words = "withdraw an invite";
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(words));
+  range.setEnd(text, text.data.indexOf(words) + words.length);
+  const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
+  Range.prototype.getBoundingClientRect = () => new DOMRect(40, 100, 120, 20);
+  answerPointer(false);
+  try {
+    act(() => {
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+  assert.ok(container.querySelector(".comment-bubble"), "the bubble stands by the selection");
+
+  await act(async () => {
+    container.hidden = true;
+    await Promise.resolve();
+  });
+  assert.equal(container.querySelector(".comment-bubble"), null, "the bubble goes with the tab");
+  act(() => {
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "µ",
+        code: "KeyM",
+        metaKey: true,
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  assert.equal(
+    container.querySelector(`.comment-card[data-thread="pending"]`),
+    null,
+    "⌥⌘M starts no thread on the hidden plan",
+  );
+});

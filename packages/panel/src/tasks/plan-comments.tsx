@@ -1327,6 +1327,11 @@ export function PlanCommentLayer({
       letCaretGo();
     };
     const selected = () => {
+      // Note that a plan kept mounted under a hidden tab keeps its selection, but its words are no longer on screen to comment on.
+      if (element.closest("[hidden]") !== null) {
+        setBubble(undefined);
+        return;
+      }
       const selection = window.getSelection();
       if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
         if (editor !== undefined && selection?.isCollapsed === true) caretIn(selection);
@@ -1409,7 +1414,13 @@ export function PlanCommentLayer({
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
+    // Note that hiding the tab the plan stands in changes no selection, so its `hidden` attribute is watched for itself.
+    const hiding = new MutationObserver(() => {
+      if (element.closest("[hidden]") !== null) setBubble(undefined);
+    });
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     return () => {
+      hiding.disconnect();
       element.removeEventListener("pointerover", over);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
