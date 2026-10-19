@@ -23,9 +23,9 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
   // Note that the wait wraps the client's layer too, because Neon refuses the
   // compute as the connection opens, so each attempt needs a client of its own.
   yield* waitingOutNeonComputeLimit(
-    // On a Preview, the step then makes the branch of production's database the
-    // Preview's own; it runs here, on the direct connection, because Neon puts
-    // bulk and admin work there rather than behind the pooler.
+    // On a Preview, the step then switches off the work in flight its copy of
+    // production holds; it runs here, on the direct connection, because Neon
+    // puts bulk and admin work there rather than behind the pooler.
     migrateDeploymentDatabase(process.env).pipe(
       Effect.provide(
         Layer.provideMerge(

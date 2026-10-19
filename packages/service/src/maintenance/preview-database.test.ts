@@ -2,178 +2,62 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { member, organization, user } from "@luke/database/schemas/auth";
+import { user } from "@luke/database/schemas/auth";
+import { macCommand } from "@luke/database/schemas/mac-command";
 import { getTestDB } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
-import { Effect, Exit } from "effect";
-import * as SqlClient from "effect/sql/SqlClient";
-import { migrateDeploymentDatabase, PREVIEW_DATABASE_ENVIRONMENT } from "./preview-database.js";
+import { Effect } from "effect";
+import { migrateDeploymentDatabase } from "./preview-database.js";
 
 /**
- * Whether a deployment's build step, its migrations and then the Preview's
- * own copy, cuts its Preview database down to the team, over a real dialect: only a Preview's build with both variables set, never
- * one whose connection reaches production's endpoint, and never by naming a
- * connection string when it refuses. What the run itself keeps and removes
- * is `preview-fork.test.ts`'s.
+ * A deployment build's database step over a real dialect: every build
+ * migrates, and only a Preview's build, as `VERCEL_ENV` names it, switches off
+ * the work its copy of production holds. A command queued for a Mac stands
+ * for that work here; what the switch-off does to each kind is
+ * `preview-copy.test.ts`'s.
  *
- * Synthetic accounts, workspaces, and connection strings throughout.
+ * Synthetic accounts throughout.
  */
 
-const PRODUCTION_ENDPOINT = "ep-production-123456";
-const BRANCH_ENDPOINT = "ep-preview-654321";
-const PASSWORD = "npg_not-a-real-password";
-
-/** A Neon connection string to the endpoint, pooled or direct. */
-function connection(endpoint: string, pooled: boolean): string {
-  const host = `${endpoint}${pooled ? "-pooler" : ""}.us-east-1.aws.neon.tech`;
-  return `postgresql://neondb_owner:${PASSWORD}@${host}/neondb?sslmode=require`;
-}
-
-/** A Preview build's variables on its own branch's database, keeping the team's workspace by its slug. */
-function previewBuild(teamSlug: string) {
-  return {
-    [PREVIEW_DATABASE_ENVIRONMENT.ENVIRONMENT]: "preview",
-    [PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES]: ` ${teamSlug} ,  `,
-    [PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT]: PRODUCTION_ENDPOINT,
-    [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(BRANCH_ENDPOINT, true),
-    [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL_UNPOOLED]: connection(BRANCH_ENDPOINT, false),
-  };
-}
-
-/** A team workspace with one member, and a customer's account with a workspace of its own; answers the team's slug and the customer's id. */
-const openTeamAndCustomer = Effect.gen(function* () {
+/** A command queued for a new account's Mac, as production would hold one; answers its id. */
+const queueMacCommand = Effect.gen(function* () {
   const db = yield* Database;
-  const at = new Date();
-  const [teamOwner, customer] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
-  const teamSlug = `team-${randomUUID()}`;
-  for (const id of [teamOwner, customer]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
-  }
-  for (const [slug, owner] of [
-    [teamSlug, teamOwner],
-    [`workspace-${randomUUID()}`, customer],
-  ] as const) {
-    const id = randomUUID();
-    yield* db.insert(organization).values({ id, name: "Test Workspace", slug, createdAt: at });
-    yield* db.insert(member).values({
-      id: randomUUID(),
-      organizationId: id,
-      userId: owner,
-      role: "owner",
-      createdAt: at,
-    });
-  }
-  return { teamSlug, customer };
+  const userId = `user-${randomUUID()}`;
+  const id = randomUUID();
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  yield* db
+    .insert(macCommand)
+    .values({ id, userId, command: "git status", timeoutSeconds: 60, queuedAt: new Date() });
+  return id;
 });
 
-/** Whether the account still stands. */
-const stands = (userId: string) =>
+/** Whether the queued command still stands. */
+const stands = (id: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    const rows = yield* db.select({ id: user.id }).from(user).where(eq(user.id, userId));
+    const rows = yield* db
+      .select({ id: macCommand.id })
+      .from(macCommand)
+      .where(eq(macCommand.id, id));
     return rows.length > 0;
   });
 
-it.layer(getTestDB())("a build that must leave its database as it stands", (it) => {
-  it.effect(
-    "leaves it for any build but a Preview's, and for a Preview's without both variables",
-    () =>
-      Effect.gen(function* () {
-        const { teamSlug, customer } = yield* openTeamAndCustomer;
-        const preview = previewBuild(teamSlug);
-        for (const variables of [
-          { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.ENVIRONMENT]: "production" },
-          { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.ENVIRONMENT]: undefined },
-          { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES]: " , " },
-          { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT]: "" },
-        ]) {
-          yield* migrateDeploymentDatabase(variables);
-          assert.ok(yield* stands(customer));
-        }
-      }),
-  );
-
-  it.effect(
-    "refuses a Preview's build whose connection reaches production's endpoint, without naming the connection",
-    () =>
-      Effect.gen(function* () {
-        const { teamSlug, customer } = yield* openTeamAndCustomer;
-        const preview = previewBuild(teamSlug);
-        for (const variables of [
-          {
-            ...preview,
-            [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(PRODUCTION_ENDPOINT, true),
-          },
-          {
-            ...preview,
-            [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL_UNPOOLED]: connection(
-              PRODUCTION_ENDPOINT,
-              false,
-            ),
-          },
-          {
-            ...preview,
-            [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(PRODUCTION_ENDPOINT, true),
-            [PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT]: `${PRODUCTION_ENDPOINT}.us-east-1.aws.neon.tech`,
-          },
-          {
-            ...preview,
-            [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(
-              `${PRODUCTION_ENDPOINT}-sk7`,
-              true,
-            ),
-          },
-          { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: undefined },
-        ]) {
-          const exit = yield* Effect.exit(migrateDeploymentDatabase(variables));
-          assert.ok(Exit.isFailure(exit));
-          assert.ok(!JSON.stringify(exit).includes(PASSWORD), "a refusal names no connection");
-          assert.ok(yield* stands(customer));
-        }
-      }),
-  );
-
-  it.effect(
-    "refuses a Preview's build whose database says it is production's endpoint, whatever name its connection reached it by",
-    () =>
-      Effect.gen(function* () {
-        const client = yield* SqlClient.SqlClient;
-        const { teamSlug, customer } = yield* openTeamAndCustomer;
-        // Note that the setting is the transaction's own, as Neon's is the compute's, so the run reads it on the connection it holds.
-        const exit = yield* Effect.exit(
-          client.withTransaction(
-            Effect.gen(function* () {
-              yield* client`select set_config('neon.endpoint_id', ${PRODUCTION_ENDPOINT}, true)`;
-              yield* migrateDeploymentDatabase(previewBuild(teamSlug));
-            }),
-          ),
-        );
-        assert.ok(Exit.isFailure(exit));
-        assert.ok(yield* stands(customer));
-      }),
-  );
-
-  it.effect("refuses a Preview's build whose database holds no workspace the slugs name", () =>
+it.layer(getTestDB())("a deployment build's database step", (it) => {
+  it.effect("leaves the work in flight as it stands on any build but a Preview's", () =>
     Effect.gen(function* () {
-      const { teamSlug, customer } = yield* openTeamAndCustomer;
-      const exit = yield* Effect.exit(
-        migrateDeploymentDatabase({
-          ...previewBuild(teamSlug),
-          [PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES]: "missing",
-        }),
-      );
-      assert.ok(Exit.isFailure(exit));
-      assert.ok(yield* stands(customer));
+      const queued = yield* queueMacCommand;
+      for (const environment of ["production", "development", undefined, " "]) {
+        yield* migrateDeploymentDatabase({ VERCEL_ENV: environment });
+        assert.ok(yield* stands(queued), `a build with VERCEL_ENV=${String(environment)}`);
+      }
     }),
   );
-});
 
-it.layer(getTestDB())("a Preview's build on its own branch", (it) => {
-  it.effect("cuts the copy down to the workspaces named", () =>
+  it.effect("switches off the work in flight on a Preview's build", () =>
     Effect.gen(function* () {
-      const { teamSlug, customer } = yield* openTeamAndCustomer;
-      yield* migrateDeploymentDatabase(previewBuild(teamSlug));
-      assert.equal(yield* stands(customer), false);
+      const queued = yield* queueMacCommand;
+      yield* migrateDeploymentDatabase({ VERCEL_ENV: "preview" });
+      assert.equal(yield* stands(queued), false);
     }),
   );
 });
