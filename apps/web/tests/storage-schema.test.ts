@@ -89,6 +89,7 @@ const DECLARED_TABLES = [
   "plan_page_version",
   "plan_revision",
   "preview_fork",
+  "pull_request_chapters",
   "repository_pin",
   "sandbox_terminal_lease",
   "session",
