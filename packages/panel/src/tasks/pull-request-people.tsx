@@ -51,7 +51,7 @@ const REVIEW_GLYPHS = {
 } as const satisfies Record<ReviewState, ReactNode>;
 
 /** Names the people as the members around the caller say. */
-function useNamer(): (person: GitHubPerson) => Actor {
+export function useNamer(): (person: GitHubPerson) => Actor {
   const { members, readerId, former } = useMemberDirectory();
   return (person) => githubActor(person, { members, readerId, former });
 }

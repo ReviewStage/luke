@@ -23,6 +23,7 @@ import {
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { DisclosureFind } from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -33,6 +34,7 @@ import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
+import { findRanges, reveal } from "../find-matches.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -231,7 +233,12 @@ let registry = AtomRegistry.make();
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(
-  options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
+  options: {
+    threads?: ChangesThreads;
+    treeOpen?: boolean;
+    beside?: ReactElement;
+    finding?: boolean;
+  } = {},
 ): Promise<DiffListProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab.js");
   const tab = createElement(AgentChangesTab, {
@@ -246,7 +253,13 @@ async function redraw(
     root?.render(
       onRegistry(
         registry,
-        onSideBundles(bundles, createElement("div", null, tab, options.beside ?? null)),
+        onSideBundles(
+          bundles,
+          createElement(DisclosureFind, {
+            finding: options.finding ?? false,
+            children: createElement("div", null, tab, options.beside ?? null),
+          }),
+        ),
       ),
     ),
   );
@@ -256,7 +269,12 @@ async function redraw(
 
 /** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
 async function drawTab(
-  options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
+  options: {
+    threads?: ChangesThreads;
+    treeOpen?: boolean;
+    beside?: ReactElement;
+    finding?: boolean;
+  } = {},
 ): Promise<DiffListProps> {
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -1370,4 +1388,43 @@ test("a refused mark leaves a fold chosen since, as Collapse all chose it", asyn
     ["a.ts", true],
     ["b.ts", true],
   ]);
+});
+
+test("I turns Minimize inline comments on and off inside Files changed, each line's threads then one chip that a find still reads and opens", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const note = () => lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#why-42`);
+  assert.equal(note().querySelector(".drawn-thread")?.textContent, "why-42");
+
+  press(listBox(), { key: "i" });
+  await flush();
+  const chip =
+    note().querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+  assert.equal(chip.getAttribute("aria-label"), "1 comment by octo · 1 open, show");
+  assert.equal(note().querySelector(".drawn-thread"), null, "minimized, the thread is put away");
+  press(document.body, { key: "i" });
+  await flush();
+  assert.ok(note().querySelector(".diff-thread-chip"), "outside the view, I is not the view's");
+
+  // A find looking through the tab reads the put-away thread's words, and opens the line it brings into view.
+  await redraw({ threads, finding: true });
+  const slot = note();
+  document.body.append(slot);
+  const [match] = findRanges(slot, "why-42");
+  assert.ok(match, "the find reads the minimized thread");
+  // Note that jsdom lays nothing out, so a range is measured where the find scrolls it into view as standing nowhere.
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+  act(() => reveal(match, slot));
+  await flush();
+  assert.equal(
+    note().querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, hide",
+  );
+
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(note().querySelector(".diff-thread-chip"), null, "I again draws every thread whole");
 });

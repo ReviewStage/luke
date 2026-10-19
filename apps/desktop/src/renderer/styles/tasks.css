@@ -2414,6 +2414,75 @@
   white-space: normal;
 }
 
+/* A line's review threads minimized to one chip (minimized-threads.tsx), as
+   stage-cli draws them: the chip, its fold's summary, floats up over the end
+   of the line in a row of no height while closed, so the diff reads as if the
+   line held no comments, and a note holding the fold alone keeps no padding
+   of its own. Open, the chip stands at the end of its own row over the
+   threads it shows. */
+.diff-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+  padding-block: 0;
+}
+
+.diff-thread-chip-row {
+  position: relative;
+}
+
+.diff-thread-chip-row:not([open]) {
+  height: 0;
+}
+
+.diff-thread-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  width: fit-content;
+  margin-inline-start: auto;
+  padding: var(--luke-space-2) var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.diff-thread-chip:hover {
+  color: var(--luke-color-text);
+}
+
+.diff-thread-chip-row:not([open]) > .diff-thread-chip {
+  position: absolute;
+  right: 0;
+  bottom: var(--luke-space-2);
+}
+
+.diff-thread-chip-row[open] > .diff-thread-chip {
+  margin-bottom: var(--luke-space-4);
+}
+
+.diff-thread-chip > svg {
+  width: var(--luke-space-12);
+  height: var(--luke-space-12);
+}
+
+.diff-thread-chip-faces {
+  display: inline-flex;
+}
+
+.diff-thread-chip-faces > .actor-mark + .actor-mark {
+  margin-inline-start: calc(-1 * var(--luke-space-4));
+}
+
+.diff-thread-chip-resolved {
+  color: var(--luke-color-complete);
+}
+
+.diff-thread-chip-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
 .diff-inline-thread {
   --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   max-width: 720px;

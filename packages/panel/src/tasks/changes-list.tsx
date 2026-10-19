@@ -30,7 +30,8 @@ import type { DiffListDoor } from "./diff-list.js";
  * next and the previous file, `;` collapses or expands the file stood on,
  * ⇧; collapses every file the filter keeps, or expands them all once all
  * are collapsed, V marks the file stood on viewed on GitHub, or unmarks it,
- * and steps on to the next, and Escape lets go of the file stood on. They answer only
+ * and steps on to the next, I turns Minimize inline comments on or off, as
+ * stage-cli's does, and Escape lets go of the file stood on. They answer only
  * where the press lands inside Files changed and is not typing, and go no
  * further once answered, so J and K keep their meaning everywhere else in
  * the window (the Inbox's next and previous item, `@luke/settings/shortcuts`), an
@@ -57,6 +58,7 @@ const FILE_KEY = {
   TOGGLE_ALL: "toggle-all",
   LET_GO: "let-go",
   VIEWED: "viewed",
+  COMMENTS: "comments",
 } as const;
 
 type FileKey = (typeof FILE_KEY)[keyof typeof FILE_KEY];
@@ -102,6 +104,7 @@ function fileKeyOf(event: React.KeyboardEvent, standing: boolean): FileKey | und
   const key = event.key.toLowerCase();
   if (key === "j") return FILE_KEY.NEXT;
   if (key === "v") return FILE_KEY.VIEWED;
+  if (key === "i") return FILE_KEY.COMMENTS;
   return key === "k" ? FILE_KEY.PREVIOUS : undefined;
 }
 
@@ -174,6 +177,8 @@ export interface ChangesList {
 export function useChangesList(
   files: readonly CodingAgentChangedFile[],
   marks?: ViewedMarks | undefined,
+  /** Turns Minimize inline comments on or off, as I does; none leaves I to the window. */
+  onMinimize?: (() => void) | undefined,
 ): ChangesList {
   const [query, onQuery] = useState("");
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
@@ -285,10 +290,12 @@ export function useChangesList(
     if (key === undefined || current === undefined) return;
     // V is the list's only while the marks are read, so there is something to mark.
     if (key === FILE_KEY.VIEWED && marks === undefined) return;
+    if (key === FILE_KEY.COMMENTS && onMinimize === undefined) return;
     // Note that an answered press goes no further, because the window's keymap would run the Inbox's J and K too.
     event.preventDefault();
     event.stopPropagation();
     if (key === FILE_KEY.LET_GO) return letGo();
+    if (key === FILE_KEY.COMMENTS) return onMinimize?.();
     if (key === FILE_KEY.TOGGLE_ALL) return toggleAll();
     if (key === FILE_KEY.VIEWED) {
       // The file marked folds, and the keys step on to the next, so pressing V again marks it.
