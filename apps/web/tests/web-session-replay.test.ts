@@ -85,7 +85,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-test("a production build with the site's key records the tab under the desktop's masking, and nothing of its words or its address leaves", async () => {
+test("a production build with the site's key records the tab under the desktop's masking, nothing of its words or its address leaves, and a stop leaves the site's own counting alone", async () => {
   vi.useFakeTimers();
   vi.stubEnv("PROD", true);
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "phc_test");
@@ -132,4 +132,14 @@ test("a production build with the site's key records the tab under the desktop's
   const identify = sent.find((event) => event.event === "$identify");
   assert.equal(identify?.properties.app_name, "web");
   assert.equal(identify?.properties.$current_url, `${location.origin}/app`);
+
+  // An account deleted stands the recording down, and leaves the site's own
+  // counting of the same project, which shares this origin's storage, as it was:
+  // neither opted out nor reset.
+  localStorage.setItem("ph_phc_test_posthog", '{"distinct_id":"site-visitor"}');
+  platform.applySessionReplay({ ...bootstrap(false), accountId: undefined });
+  await vi.advanceTimersByTimeAsync(10_000);
+  assert.equal(posthog.sessionRecordingStarted(), false);
+  assert.equal(localStorage.getItem("__ph_opt_in_out_phc_test"), null);
+  assert.equal(localStorage.getItem("ph_phc_test_posthog"), '{"distinct_id":"site-visitor"}');
 });

@@ -27,6 +27,21 @@ const APP_PATH = "/app";
 const OWN_PATH = /^\/(?![/*])\S*$/u;
 
 /**
+ * Where the recording's client keeps its person and its consent, apart from
+ * the site's own counting (`src/analytics.ts`), which runs a client of the
+ * same project on this origin: under the library's names, a stop's opt-out
+ * and reset, on an account's deletion, would silence and forget the site's
+ * counting too.
+ */
+const RECORDING_STORAGE = {
+  persistence: "luke_app_replay",
+  consent: "luke_app_replay_consent",
+} as const;
+
+/** What may follow the origin in an address on it: its path, its query, or its fragment. */
+const AFTER_ORIGIN = new Set(["/", "?", "#"]);
+
+/**
  * The project the recording is filed under: the site's own, the one its
  * counting already uses (`src/analytics.ts`), read only into a production
  * build. A development server, and a build without the key, record nothing,
@@ -38,7 +53,8 @@ function projectApiKey(): string {
 
 /**
  * Whether a value is the tab's address, in either form the library takes
- * it: an address on this origin, or a bare path on it. Note that every
+ * it: an address on this origin, or a bare path on it, and not another
+ * host's whose name merely begins with this one's. Note that every
  * address of the site's is replaced, not only the one the tab is at,
  * because the panel writes each step into the tab's address as it moves, so
  * an event queued before a step names a path the tab has since left, and
@@ -46,7 +62,10 @@ function projectApiKey(): string {
  * may carry a query a link or a sign-in put there.
  */
 function namesThisTab(value: string): boolean {
-  return value.startsWith(location.origin) || OWN_PATH.test(value);
+  if (OWN_PATH.test(value)) return true;
+  if (!value.startsWith(location.origin)) return false;
+  const next = value.charAt(location.origin.length);
+  return next === "" || AFTER_ORIGIN.has(next);
 }
 
 /** The recorder's chunk, imported where the bundler put it; it registers itself as it runs. */
@@ -59,4 +78,5 @@ export const applyWebSessionReplay: ApplySessionReplay = sessionReplay({
   address: `${location.origin}${APP_PATH}`,
   namesOwnAddress: namesThisTab,
   importRecorder: importSessionRecorder,
+  storage: RECORDING_STORAGE,
 });

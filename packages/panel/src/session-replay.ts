@@ -146,6 +146,14 @@ export interface SessionReplayShell {
   readonly namesOwnAddress: (value: string) => boolean;
   /** The recorder's bundle, imported where the shell's bundler put it; it registers itself as it runs. */
   readonly importRecorder: BundleImporter<unknown>;
+  /**
+   * Where the client keeps its person and its consent in the window's
+   * storage, in place of the library's names for them, which are its
+   * project key's. A shell whose origin runs another client of the same
+   * project names its own, so a stop's opt-out and reset never reach that
+   * client; a shell with the origin to itself leaves them as they are.
+   */
+  readonly storage?: { readonly persistence: string; readonly consent: string };
 }
 
 /** Brings recording into line with the run's word on it; a test may stand its own recorder bundle in. */
@@ -335,6 +343,12 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       ...SESSION_REPLAY_MASKING,
       person_profiles: "always",
       persistence: "localStorage",
+      ...(shell.storage
+        ? {
+            persistence_name: shell.storage.persistence,
+            consent_persistence_name: shell.storage.consent,
+          }
+        : undefined),
       debug: false,
       get_current_url: () => shell.address,
       before_send: (event) => {
