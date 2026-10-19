@@ -3006,11 +3006,16 @@ test("the pointer resting on a review thread in Files changed lights the lines i
   assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go");
 
   act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
-  const minimize = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
-    (each) => each.getAttribute("aria-label") === "Minimize inline comments",
-  );
-  act(() => minimize?.click());
   await settle();
+  const minimize =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+      (each) => each.getAttribute("aria-label") === "Minimize inline comments",
+    ) ?? assert.fail("the diff settings offer Minimize inline comments");
+  act(() => minimize.click());
+  // Note that the setting lands through the app's state, a few turns after the press.
+  for (let turn = 0; turn < 10 && note.querySelector(".diff-thread-chip") === null; turn += 1) {
+    await settle();
+  }
   const chip =
     note.querySelector<HTMLElement>(".diff-thread-chip") ??
     assert.fail("the threads are minimized");
