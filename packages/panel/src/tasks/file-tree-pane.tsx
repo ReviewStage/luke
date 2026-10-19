@@ -95,6 +95,7 @@ export function FileTreePane({
   listFolder,
   readWhole,
   onOpen,
+  onViewed,
   pane,
   float,
   leaving = false,
@@ -105,7 +106,7 @@ export function FileTreePane({
   shown?: readonly string[] | undefined;
   /** The only files the tree shows, every folder open, in the filter's place: a change set's. */
   only?: readonly string[] | undefined;
-  /** What became of each file of a change set, lettered on its row. */
+  /** What became of each file of a change set, lettered on its row, with whatever else its mark carries drawn at the row's end. */
   marks?: readonly FileMark[] | undefined;
   /** What the search holds and the door that sets it, where its holder narrows more than the tree by it; none keeps it in the pane. */
   search?: { readonly query: string; readonly onQuery: (query: string) => void } | undefined;
@@ -118,6 +119,8 @@ export function FileTreePane({
   readWhole?: (() => Promise<TasksTreeAnswer>) | undefined;
   /** A file chosen in the tree, to open in the tab, or in a tab of its own where ⌘ was held. */
   onOpen: (path: string, newTab: boolean) => void;
+  /** A file's Viewed toggle pressed on its row, drawn where its mark says whether it is viewed. */
+  onViewed?: ((path: string) => void) | undefined;
   /** The pane's own box, which its slide in and out plays on (`file-view.tsx`). */
   pane?: React.Ref<HTMLElement> | undefined;
   /** What the pane answers while it may float over its tab (`hover-pane.ts`). */
@@ -141,8 +144,8 @@ export function FileTreePane({
     only ?? (onlyShown && shown !== undefined && shown.length > 0 ? shown : undefined);
   // Note that the tree is handed doors that read the latest props, so it is
   // mounted once however often the pane is drawn.
-  const latest = useRef({ listFolder, onOpen, file, query, narrowed, marks });
-  latest.current = { listFolder, onOpen, file, query, narrowed, marks };
+  const latest = useRef({ listFolder, onOpen, onViewed, file, query, narrowed, marks });
+  latest.current = { listFolder, onOpen, onViewed, file, query, narrowed, marks };
 
   useEffect(() => {
     const element = host.current;
@@ -150,6 +153,7 @@ export function FileTreePane({
     const mounted = module.mount(element, {
       readFolder: (path) => latest.current.listFolder(path),
       onOpen: (path, newTab) => latest.current.onOpen(path, newTab),
+      onViewed: (path) => latest.current.onViewed?.(path),
     });
     handle.current = mounted;
     if (everything.current !== undefined) mounted.within(everything.current);

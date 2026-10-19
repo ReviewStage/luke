@@ -141,7 +141,10 @@ import { useViewedFiles } from "./viewed-files.js";
  * and Highlight changed words), and the tree's toggle, which shows and
  * hides the tree for every File and Changes tab alike. The tree is a File
  * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
- * every folder open, each row lettered A, M, D, or R, its search the
+ * every folder open, each row lettered A, M, D, or R, and ending, as
+ * stage-cli's do, in how many review threads stand on its file, the lines
+ * it adds and removes where the tree has room, and a Viewed toggle that
+ * marks it as its header's box does, its row dimmed once viewed; its search the
  * list's filter, narrowing the list to the files whose path holds it as it
  * narrows the rows, said over the list while the tree is hidden, with the
  * pull request's count under it, or under the list while the tree is
@@ -1211,7 +1214,7 @@ export function AgentChangesTab({
   const changed = useMemo(() => {
     const files = pullRequest?.files ?? [];
     const paths = files.map((file) => file.path);
-    return { files, paths, marks: changeMarks(files), folders: changedFolders(paths) };
+    return { files, paths, folders: changedFolders(paths) };
   }, [pullRequest]);
   // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
   const viewedFiles = useViewedFiles(
@@ -1223,6 +1226,10 @@ export function AgentChangesTab({
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
   const list = useChangesList(changed.files, viewedFiles.marks, minimize);
+  const marks = useMemo(
+    () => changeMarks(changed.files, { threads: threads?.list, viewed: list.viewed }),
+    [changed.files, threads?.list, list.viewed],
+  );
   const answered = reads.current.count;
   // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
   const images = useMemo(
@@ -1344,12 +1351,13 @@ export function AgentChangesTab({
           <FileTreePane
             file={shownFile.path}
             only={changed.paths}
-            marks={changed.marks}
+            marks={marks}
             label="Changed files"
             foot={counted}
             listFolder={changed.folders}
             search={{ query: list.query, onQuery: list.onQuery }}
             onOpen={choose}
+            onViewed={list.markViewed}
             pane={room.beside.pane}
             float={room.pane}
             leaving={room.beside.leaving}

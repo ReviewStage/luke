@@ -40,7 +40,7 @@ import { appBridge } from "../app-bridge.js";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
-import type { FileTreeModule } from "../file-tree/contract.js";
+import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
@@ -172,18 +172,23 @@ const standIn: DiffViewModule = {
 
 /** The doors each tree the view mounted opens a chosen file through, the latest last. */
 let treeOpens: Array<(path: string, newTab: boolean) => void> = [];
+/** What each tree the view mounted was handed, the latest last. */
+let treeProps: FileTreeProps[] = [];
+/** The marks the trees were handed, the latest last. */
+let treeMarks: Array<readonly FileMark[]> = [];
 
-/** The tree bundle, stood in for: it draws nothing and keeps the door its tree opens a file through. */
+/** The tree bundle, stood in for: it draws nothing and keeps the doors and the marks it is handed. */
 const treeStandIn: FileTreeModule = {
   mount: (_host, props) => {
     treeOpens.push(props.onOpen);
+    treeProps.push(props);
     const nothing = () => undefined;
     return {
       reveal: nothing,
       search: nothing,
       only: nothing,
       within: nothing,
-      mark: nothing,
+      mark: (marks) => treeMarks.push(marks),
       unmount: nothing,
     };
   },
@@ -205,6 +210,8 @@ beforeEach(() => {
   drawn = [];
   revealed = [];
   treeOpens = [];
+  treeProps = [];
+  treeMarks = [];
   files = [changed("src/seats.ts")];
   commits = {};
   viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
@@ -1293,6 +1300,61 @@ test("V marks the file the keys stand on viewed and steps on to the next, and is
   assert.deepEqual(asked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "a.ts" }]);
   assert.ok(header("b.ts").hasAttribute("data-standing"));
   assert.equal(viewedBox("a.ts").checked, true);
+});
+
+/** The marks the tree was last handed, by path. */
+function lastMarks(): ReadonlyMap<string, FileMark> {
+  return new Map((treeMarks.at(-1) ?? []).map((mark) => [mark.path, mark]));
+}
+
+test("each tree row is handed its file's lines, how many review threads stand on it, resolved or not, and whether it is viewed", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts"), changed("b.ts", { additions: 0, deletions: 7 }), changed("c.ts")];
+  const threads: ChangesThreads = {
+    list: [
+      { ...seatsThread(2, "one"), path: "a.ts" },
+      { ...seatsThread(2, "two"), path: "a.ts", resolved: true },
+      { ...seatsThread(null, "three"), path: "c.ts" },
+    ],
+    draw: () => null,
+  };
+  await drawTab({ threads, treeOpen: true });
+
+  const marks = lastMarks();
+  assert.deepEqual(
+    ["a.ts", "b.ts", "c.ts"].map((path) => {
+      const mark = marks.get(path);
+      return [mark?.threads, mark?.lines, mark?.viewed];
+    }),
+    [
+      [2, { additions: 2, deletions: 1 }, true],
+      [0, { additions: 0, deletions: 7 }, false],
+      [1, { additions: 2, deletions: 1 }, false],
+    ],
+  );
+});
+
+test("a tree row's Viewed toggle marks its file viewed on GitHub as its header's box does, folding it, and the row is handed the mark", async () => {
+  viewedAnswer = MARKED;
+  const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab({ treeOpen: true });
+
+  const onViewed = treeProps.at(-1)?.onViewed ?? assert.fail("the tree is handed a Viewed door");
+  act(() => onViewed("c.ts"));
+  await flush();
+
+  assert.deepEqual(asked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" }]);
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.deepEqual(folds()[2], ["c.ts", true]);
+  assert.equal(lastMarks().get("c.ts")?.viewed, true);
+});
+
+test("no tree row draws a Viewed toggle until the marks are read", async () => {
+  files = [changed("a.ts")];
+  await drawTab({ treeOpen: true });
+
+  assert.equal(lastMarks().get("a.ts")?.viewed, undefined);
 });
 
 test("a member with no GitHub sign-in is offered one, and no Viewed box stands until the marks are read", async () => {
