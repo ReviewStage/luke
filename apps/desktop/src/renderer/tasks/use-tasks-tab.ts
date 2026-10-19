@@ -426,6 +426,34 @@ function agentRequest(idempotencyKey: string, handed: NewTaskAgent) {
   };
 }
 
+/** What one Agent-mode start asked, beside the key it carried. */
+interface AgentTaskStart {
+  readonly name: string;
+  readonly repository: string | null;
+  readonly workspaceId: string | undefined;
+  readonly planning: boolean;
+  readonly from: NewTaskStart;
+  readonly handed: NewTaskAgent;
+}
+
+/** Whether two Agent-mode starts ask the same: the same task, the same words, the same files in the same order, and the same model. */
+function sameAgentTaskStart(a: AgentTaskStart, b: AgentTaskStart): boolean {
+  return (
+    a.name === b.name &&
+    a.repository === b.repository &&
+    a.workspaceId === b.workspaceId &&
+    a.planning === b.planning &&
+    a.from.linearIssueId === b.from.linearIssueId &&
+    a.from.issueId === b.from.issueId &&
+    a.handed.prompt === b.handed.prompt &&
+    a.handed.attachments.length === b.handed.attachments.length &&
+    a.handed.attachments.every((file, index) => file === b.handed.attachments[index]) &&
+    a.handed.choice?.model === b.handed.choice?.model &&
+    a.handed.choice?.effort === b.handed.choice?.effort &&
+    a.handed.choice?.contextWindow === b.handed.choice?.contextWindow
+  );
+}
+
 /**
  * What the press that opened New task chose: a repository (a repository
  * group's +), or the issue the task starts from (an issue's Start task…),
@@ -2398,6 +2426,11 @@ export function useTasksTab(input: {
   // Note that a start whose task was refused, or never answered, is never
   // sent again by itself, because the service keeps no key for a task, so a
   // second start could make a second task; the card says why with Retry.
+  // A press after a start the service never answered carries the key that
+  // start minted while it asks the same, as an agent's own Start does, so a
+  // service that made the task and its agent answers them rather than a
+  // second pair; a press asking anything else mints a key of its own.
+  const unansweredStart = useRef<{ asked: AgentTaskStart; key: string } | undefined>(undefined);
   const startTask = (
     name: string,
     repository: string | null,
@@ -2411,7 +2444,20 @@ export function useTasksTab(input: {
       if (panelWasOpen) sidePanel.onSetOpen(true);
       return note;
     };
-    const agentKey = crypto.randomUUID();
+    const asked: AgentTaskStart | undefined =
+      from.handed === undefined
+        ? undefined
+        : { name, repository, workspaceId, planning, from, handed: from.handed };
+    const held = unansweredStart.current;
+    const agentKey =
+      held !== undefined && asked !== undefined && sameAgentTaskStart(held.asked, asked)
+        ? held.key
+        : crypto.randomUUID();
+    unansweredStart.current = undefined;
+    // Only a start the service never answered is asked again under its key.
+    const unanswered = () => {
+      if (asked !== undefined) unansweredStart.current = { asked, key: agentKey };
+    };
     return act(ACT_KIND.TASKS_START, {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
@@ -2422,7 +2468,10 @@ export function useTasksTab(input: {
       ...(from.handed === undefined ? undefined : { agent: agentRequest(agentKey, from.handed) }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
+        if ("failure" in answer) {
+          if (answer.failure === TASK_CALL_FAILURE.UNANSWERED) unanswered();
+          return refusedWith(startFailureNote(answer.failure));
+        }
         setNewTaskAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
@@ -2439,7 +2488,10 @@ export function useTasksTab(input: {
         }
         return undefined;
       },
-      (refused: Error) => refusedWith(refused.message),
+      (refused: Error) => {
+        unanswered();
+        return refusedWith(refused.message);
+      },
     );
   };
 

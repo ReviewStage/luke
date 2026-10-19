@@ -2757,6 +2757,42 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("a press after an Agent-mode start the service never answered carries that start's key while it asks the same, and mints another once the words change", async () => {
+  const answers: (() => Promise<ActResultFor<typeof ACT_KIND.TASKS_START>>)[] = [
+    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    () => Promise.reject(new Error("Could not start that task on this system.")),
+    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    () => Promise.resolve({ failure: TASK_CALL_FAILURE.NOT_FOUND }),
+    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+  ];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => answers.shift()?.() ?? Promise.reject(new Error("none")) },
+  );
+  const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+  act(() => tab.control().onNewTask());
+  const press = (prompt: string) =>
+    act(async () => {
+      await tab.control().newTask.start("", "acme/web", undefined, false, {
+        handed: { prompt, attachments: [], choice },
+      });
+    });
+  await press("Make the sidebar keep its folds.");
+  await press("Make the sidebar keep its folds.");
+  await press("Make the sidebar keep its folds.");
+  await press("Make the sidebar keep its folds.");
+  await press("Make the sidebar keep its folds.");
+  await press("Keep the folds per workspace.");
+  const keys = tab.payloads
+    .filter(({ kind }) => kind === ACT_KIND.TASKS_START)
+    .map(({ payload }) => Option.getOrUndefined(readAgentNamed(payload))?.agent?.idempotencyKey);
+
+  assert.equal(keys.length, 6);
+  assert.equal(new Set(keys.slice(0, 4)).size, 1, "unanswered presses ask again under one key");
+  assert.notEqual(keys[4], keys[3], "a start the service refused leaves nothing to ask again");
+  assert.notEqual(keys[5], keys[4], "other words are another request");
+});
+
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   // The service holds the agent once its own Start made it.
