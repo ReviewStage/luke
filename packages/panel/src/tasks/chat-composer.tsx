@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
 import {
   ComboboxList,
@@ -17,6 +18,7 @@ import {
   chooseTarget,
   matchingTargets,
 } from "@luke/ui/chat-mention";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import {
   PromptInput,
@@ -24,24 +26,36 @@ import {
   PromptInputSubmit,
   PromptInputTools,
 } from "../ai-elements/prompt-input.js";
+import { useSideBundles } from "../bundle-loader.js";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type PlanEditorModule,
+} from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
+import { useChatMentionPicker } from "./chat-mention-picker.js";
+import { ComposerField } from "./composer-field.js";
+import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 
 /**
- * chat-composer.tsx -- the box a chat message is written in: at a place's foot, or under a thread opened for a reply, with the list an `@` or a `#` opens.
+ * chat-composer.tsx -- the box a chat message is written in: at a place's foot, or under a thread opened for a reply, with the list an `@` or a `#` opens and a dictation laid in at the caret.
  *
- * The box is the shared composer card (`prompt-input.tsx`), as the agent
- * tab's and the Inbox's are: a plain textarea, and under it the card's foot
- * saying what it takes, with the shared round send at its end. Enter sends, Shift-Enter starts a new
- * line, and the box is empty again once the post is taken; a post refused
- * keeps its words and says why under the box. An `@` or a `#` at the
- * start of a word opens the list over the box (`chat-mention.ts`), one row
- * per member or channel, its handle or name and a muted line of what it
- * stands for, narrowed as it is typed: ↑ and ↓ move the highlight, Enter
- * or Tab writes the one highlighted, and Escape closes the list until the
- * caret leaves the word, as the agent composer's `/` list does
- * (`skill-picker.tsx`). The caret stays in the box throughout. What is
- * typed is a person's words, so the box is out of a session recording
- * (`ph-no-capture`) as well as masked.
+ * The box is the shared composer card (`prompt-input.tsx`) around the agent
+ * box's own editor (`composer-field.tsx`), as the agent tab's, the Inbox's,
+ * and a plan comment's are, and under it the card's foot saying what it
+ * takes, the microphone, and the shared round send. Enter sends, Shift-Enter
+ * starts a new line, and the box is empty again once the post is taken; a
+ * post refused keeps its words and says why under the box. An `@` or a `#`
+ * at the start of a word opens the chat's own list over the box
+ * (`chat-mention-picker.tsx`), and the one chosen is written as its word
+ * (`@agent-2`, `#general`), which is how the service reads who a message
+ * names. The microphone records a dictation and lays its words in at the
+ * caret (`use-dictation.ts`), listening for the chat's handles and channel
+ * names (`chatKeywords`). Where the editor's bundle could not be loaded, a
+ * plain textarea stands in with the same list, so a message can always be
+ * written. What is typed is a person's words, so the box is out of a
+ * session recording (`ph-no-capture`) as well as masked.
  */
 
 /** What the send press is called. */
@@ -94,30 +108,193 @@ function MentionMenu({
   );
 }
 
-/** The composer: the box, the list its words open, the bar under it, and why a post was refused. */
-export function ChatComposer({
+/** What a chat box is handed by the place it stands in. */
+interface ChatComposerProps {
+  /** What the box asks for while empty, which names it for assistive technology too. */
+  readonly label: string;
+  /** What the bar says the box takes, each a short line. */
+  readonly hints: readonly string[];
+  /** What an `@` or `#` offers. */
+  readonly targets: readonly ChatTarget[];
+  /** The words a dictation here is likely to say (`chatKeywords`). */
+  readonly keywords: readonly string[];
+  /** Whether it stands under a thread, a line high, rather than at a place's foot. */
+  readonly compact?: boolean;
+  /** Sends the words; answers why they were refused, or nothing once they are taken. */
+  readonly onSend: (text: string) => Promise<string | undefined>;
+}
+
+/** The composer: the agent box's editor once its bundle has loaded, with dictation, and the plain box where the bundle failed, so a message can always be written. */
+export function ChatComposer(props: ChatComposerProps): React.JSX.Element {
+  const bundle = useAtomValue(useSideBundles().planEditor);
+  if (AsyncResult.isFailure(bundle)) return <PlainChatComposer {...props} />;
+  return (
+    <EditorChatComposer
+      {...props}
+      module={AsyncResult.isSuccess(bundle) ? bundle.value : undefined}
+    />
+  );
+}
+
+/** The bar under the box: what it takes, then the parts the box hands it (dictation's), then the round send. */
+function ComposerFoot({
+  hints,
+  sending,
+  empty,
+  children,
+}: {
+  hints: readonly string[];
+  sending: boolean;
+  empty: boolean;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <PromptInputFooter>
+      <PromptInputTools>
+        <Inline gap={GAP.FIELD} wrap={false}>
+          {hints.map((hint) => (
+            <Text
+              key={hint}
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.CAPTION}
+              tone={TEXT_TONE.SUBTLE}
+              truncate
+            >
+              {hint}
+            </Text>
+          ))}
+        </Inline>
+      </PromptInputTools>
+      <Inline gap={GAP.TIGHT} wrap={false}>
+        {children}
+        <Tooltip label={SEND}>
+          <PromptInputSubmit
+            label={SEND}
+            status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+            disabled={!sending && empty}
+            busy={sending}
+            busyLabel={SENDING}
+          />
+        </Tooltip>
+      </Inline>
+    </PromptInputFooter>
+  );
+}
+
+/** Sends the draft once, holding it while it goes: emptied once taken, kept with why where refused. */
+function useChatSend(onSend: ChatComposerProps["onSend"]) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<string | undefined>(undefined);
+  const send = () => {
+    const text = draft.trim();
+    if (text === "" || sending) return;
+    setSending(true);
+    setNote(undefined);
+    onSend(text).then(
+      (refused) => {
+        setSending(false);
+        setNote(refused);
+        if (refused === undefined) setDraft("");
+      },
+      (failed: Error) => {
+        setSending(false);
+        setNote(failed.message);
+      },
+    );
+  };
+  return { draft, setDraft, sending, note, setNote, send };
+}
+
+/** A chat box takes no skills, which are an agent's. */
+const NO_SKILLS: ReadonlySet<string> = new Set();
+
+/** The box on the agent box's editor: `@` and `#` open the chat's list over it, and the microphone lays a dictation in at the caret. */
+function EditorChatComposer({
+  label,
+  hints,
+  targets,
+  keywords,
+  compact,
+  onSend,
+  module,
+}: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
+  const editor = useRef<ComposerEditorHandle | undefined>(undefined);
+  const room = useRef<HTMLDivElement>(null);
+  const { draft, setDraft, sending, note, setNote, send } = useChatSend(onSend);
+  const dictation = useDictation({ editor, keywords, onNote: setNote });
+  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
+  const picker = useChatMentionPicker({
+    targets,
+    onChoose: (words) => editor.current?.chooseWords(words),
+  });
+  return (
+    <div className="chat-composer" data-compact={String(compact === true)}>
+      {picker.menu}
+      <PromptInput onSubmit={send}>
+        <ComposerField
+          module={module}
+          editor={editor}
+          room={room}
+          draft={draft}
+          setDraft={setDraft}
+          placeholder={label}
+          label={label}
+          input={
+            sending
+              ? COMPOSER_INPUT.DISABLED
+              : dictating
+                ? COMPOSER_INPUT.READ_ONLY
+                : COMPOSER_INPUT.EDITABLE
+          }
+          maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
+          skills={NO_SKILLS}
+          aria={picker.aria}
+          onKey={(event) => dictation.onFieldKey(event) || picker.onKey(event)}
+          onEnter={send}
+          onPasteFiles={() => false}
+          onTrigger={() => undefined}
+          chip={() => null}
+          mentions={{
+            onTrigger: picker.onMemberTrigger,
+            onChannelTrigger: picker.onChannelTrigger,
+            chip: (mention) => `@${mention.name}`,
+            pasted: () => undefined,
+          }}
+          // Note that a thread's box is opened by a press, so it takes the caret; a place's foot leaves it where it is.
+          takesFocus={false}
+          focus={compact === true ? true : undefined}
+        />
+        {dictating ? (
+          <PromptInputFooter>
+            <DictationStrip dictation={dictation} />
+          </PromptInputFooter>
+        ) : (
+          <ComposerFoot hints={hints} sending={sending} empty={draft.trim() === ""}>
+            <DictateButton dictation={dictation} disabled={sending || module === undefined} />
+          </ComposerFoot>
+        )}
+      </PromptInput>
+      {note === undefined ? null : (
+        <p className="error-message chat-composer-note" role="alert">
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The plain box a bundle that failed to load leaves: a textarea whose `@` or `#` word opens the same list. */
+function PlainChatComposer({
   label,
   hints,
   targets,
   compact,
   onSend,
-}: {
-  /** What the box asks for while empty, which names it for assistive technology too. */
-  label: string;
-  /** What the bar says the box takes, each a short line. */
-  hints: readonly string[];
-  /** What an `@` or `#` offers. */
-  targets: readonly ChatTarget[];
-  /** Whether it stands under a thread, a line high, rather than at a place's foot. */
-  compact?: boolean;
-  /** Sends the words; answers why they were refused, or nothing once they are taken. */
-  onSend: (text: string) => Promise<string | undefined>;
-}): React.JSX.Element {
+}: ChatComposerProps): React.JSX.Element {
   const listId = useId();
   const field = useRef<HTMLTextAreaElement>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [note, setNote] = useState<string | undefined>(undefined);
+  const { draft, setDraft, sending, note, send } = useChatSend(onSend);
   const [caret, setCaret] = useState<number | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
@@ -152,23 +329,6 @@ export function ChatComposer({
     if (written.text.length > CHAT_BOUNDS.MAX_TEXT_CHARS) return;
     pendingCaret.current = written.caret;
     setDraft(written.text);
-  };
-  const send = () => {
-    const text = draft.trim();
-    if (text === "" || sending) return;
-    setSending(true);
-    setNote(undefined);
-    onSend(text).then(
-      (refused) => {
-        setSending(false);
-        setNote(refused);
-        if (refused === undefined) setDraft("");
-      },
-      (failed: Error) => {
-        setSending(false);
-        setNote(failed.message);
-      },
-    );
   };
   const onCaret = () => {
     const now = field.current;
@@ -246,32 +406,7 @@ export function ChatComposer({
           onKeyDown={onKeyDown}
           onBlur={() => setCaret(undefined)}
         />
-        <PromptInputFooter>
-          <PromptInputTools>
-            <Inline gap={GAP.FIELD} wrap={false}>
-              {hints.map((hint) => (
-                <Text
-                  key={hint}
-                  as={TEXT_ELEMENT.SPAN}
-                  variant={TEXT_VARIANT.CAPTION}
-                  tone={TEXT_TONE.SUBTLE}
-                  truncate
-                >
-                  {hint}
-                </Text>
-              ))}
-            </Inline>
-          </PromptInputTools>
-          <Tooltip label={SEND}>
-            <PromptInputSubmit
-              label={SEND}
-              status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-              disabled={!sending && draft.trim() === ""}
-              busy={sending}
-              busyLabel={SENDING}
-            />
-          </Tooltip>
-        </PromptInputFooter>
+        <ComposerFoot hints={hints} sending={sending} empty={draft.trim() === ""} />
       </PromptInput>
       {note === undefined ? null : (
         <p className="error-message chat-composer-note" role="alert">

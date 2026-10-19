@@ -836,6 +836,13 @@ export const CHANGES_BOUNDS = {
 /** A commit as GitHub names it: forty hex digits. */
 const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
 
+/**
+ * One changed file as GitHub lists it: its path, where it moved from, what
+ * became of it, the lines it adds and removes, its patch or why none, and
+ * the git object its contents after are (`blobSha`), which a reader of the
+ * file whole checks it read the very contents the patch was made against;
+ * absent from a service before it, and for a file with no contents after.
+ */
 const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
@@ -844,6 +851,7 @@ const changedFileSchema = EffectSchema.Struct({
   deletions: countedNumber,
   patch: EffectSchema.NullOr(EffectSchema.String),
   omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
+  blobSha: EffectSchema.optionalKey(commitShaSchema),
 });
 
 export type CodingAgentChangedFile = typeof changedFileSchema.Type;

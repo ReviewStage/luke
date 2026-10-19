@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   CODE_PATH_MAX_CHARS,
+  isSecretFile,
   TASK_FILE_REFUSAL,
   TASK_TREE_BOUNDS,
   TASK_TREE_ENTRY,
@@ -17,7 +18,6 @@ import type { GitHubApp } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
-import { isSecretFile } from "./shown-file.js";
 import { reachTaskRepository, refused } from "./task-file.js";
 
 /**

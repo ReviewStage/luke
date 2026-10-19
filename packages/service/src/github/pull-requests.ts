@@ -212,6 +212,9 @@ const CheckRunsSchema = Schema.Struct({
 /** GitHub pages a pull request's files a hundred to a page. */
 const FILES_PER_PAGE = 100;
 
+/** A git object's name, as GitHub spells one: forty lowercase hex digits. */
+const GIT_OBJECT = /^[0-9a-f]{40}$/u;
+
 /** GitHub's own words for what became of a file; any it adds reads as changed in place. */
 const GITHUB_FILE_STATUS = new Map<string, ChangedFileStatus>([
   ["added", CHANGED_FILE_STATUS.ADDED],
@@ -228,6 +231,7 @@ const PullRequestFilesSchema = Schema.Array(
     deletions: Schema.Number,
     changes: Schema.Number,
     patch: Schema.optionalKey(Schema.String),
+    sha: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
 );
 
@@ -498,7 +502,8 @@ export function checkSummaryOf(
 }
 
 /**
- * One file as GitHub lists it, as the wire carries it. A file GitHub sent
+ * One file as GitHub lists it, as the wire carries it, with the git object
+ * its contents after are. A file GitHub sent
  * no patch for changed no line where it is not text, and was too large to
  * send otherwise; a patch past the bound is left out on the same terms. A
  * file moved and left as it was has no patch either, and changed no line,
@@ -524,6 +529,10 @@ function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): Codi
     deletions: file.deletions,
     patch: omitted === null ? patch : null,
     omitted,
+    // Note that a removed file names no contents after, and a value not shaped as an object's name is left out.
+    ...(status === CHANGED_FILE_STATUS.DELETED || file.sha == null || !GIT_OBJECT.test(file.sha)
+      ? undefined
+      : { blobSha: file.sha }),
   };
 }
 

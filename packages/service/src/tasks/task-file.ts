@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
+  isSecretFile,
   TASK_FILE_REFUSAL,
   type TaskFileAnswer,
   type TaskFileRefusal,
@@ -18,7 +19,6 @@ import { readBranchHead, readRepositoryFile } from "../github/repository-file.js
 import {
   fileLines,
   holdsNul,
-  isSecretFile,
   SHOWN_FILE_REFUSAL,
   type ShownFileRefusal,
   shownFileRefusal,
