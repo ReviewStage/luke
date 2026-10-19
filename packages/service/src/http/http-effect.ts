@@ -134,9 +134,20 @@ export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRe
  * group declares (`apps/web/server/function-dispatch.ts`).
  */
 export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
-  return request.headers.has("authorization")
-    ? Effect.void
-    : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return hostedCarriesBearer(request) ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+}
+
+/**
+ * Whether a request carries an `Authorization`, so its account was read
+ * from that bearer alone and never from a browser's session cookie
+ * (`auth/bearer.ts`'s `requestUserId`, which resolves nobody for one that
+ * does not verify). An endpoint that does on a GET what a link must not
+ * make a browser do asks for this itself, as `hostedBearerOnly` is asked
+ * for, because a Lax cookie rides a top-level navigation and every
+ * function holding a group answers every path the group declares.
+ */
+export function hostedCarriesBearer(request: Request): boolean {
+  return request.headers.has("authorization");
 }
 
 /**
