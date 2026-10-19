@@ -1,3 +1,15 @@
+/**
+ * tasks-procedures.test.ts -- the task list and lifecycle acts, through the act port as a window calls them.
+ *
+ * Only a panel of this build's own renderer asks; the voice and call
+ * windows, and a frame this build does not trust, are refused in each
+ * kind's own words before the host is asked; a panel's ask reaches the host
+ * with its payload as the kind's schema read it, and answers what the host
+ * answered; a started task opens its call where it planned and voice is
+ * ready; a microphone press opens a call about the task the host has open;
+ * and the browser opens only the addresses each kind may open.
+ */
+
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -28,17 +40,6 @@ import {
   type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
-
-/**
- * The task list and lifecycle acts, through the act port as a window calls
- * them: only a panel of this build's own renderer asks; the voice and call
- * windows, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; a panel's ask reaches the host
- * with its payload as the kind's schema read it, and answers what the host
- * answered; a started task opens its call where it planned and voice is
- * ready; a microphone press opens a call about the task the host has open;
- * and the browser opens only the addresses each kind may open.
- */
 
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");

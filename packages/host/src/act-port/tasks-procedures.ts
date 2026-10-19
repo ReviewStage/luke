@@ -1,3 +1,13 @@
+/**
+ * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list and the open task.
+ *
+ * The one check these procedures make is who asked. Only a panel draws the
+ * Tasks tab, and the takeover and the hidden voice window draw no task, so
+ * every one refuses them, in its own sentence. What the host does with an
+ * ask (which task is active, what the service answers) is the host's to
+ * decide, and comes back as the panel's own answer. Nothing is held here.
+ */
+
 import {
   GITHUB_DISCONNECT_FAILURE,
   type TasksArchiveParams,
@@ -25,15 +35,7 @@ import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 
-/**
- * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list and the open task.
- *
- * The one check these procedures make is who asked. Only a panel draws the
- * Tasks tab, and the takeover and the hidden voice window draw no task, so
- * every one refuses them, in its own sentence. What the host does with an
- * ask (which task is active, what the service answers) is the host's to
- * decide, and comes back as the panel's own answer. Nothing is held here.
- */
+/** What the task procedures are handed: the host, and the doors of the window's process they open or read. */
 export interface TasksProceduresDependencies {
   host: {
     tasksRefresh(): Effect.Effect<void>;
