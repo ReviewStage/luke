@@ -266,14 +266,15 @@ const webhookRun = (automation: Automation, payload: string) =>
     Option.getOrThrow,
   );
 
-/** A run fired by a Sentry alert on the issue named, `summary` its event's summary, fired at `firedAt`, queued. */
+/** A run fired by a Sentry alert on the issue named, `summary` its event's summary, fired at the clock's now, queued. */
 const sentryRun = (
   automation: Automation,
   issue: { readonly id: string; readonly title?: string },
-  options: { readonly summary?: string; readonly firedAt?: Date } = {},
+  options: { readonly summary?: string } = {},
 ) =>
-  Effect.map(
-    recordAutomationRun(automation, {
+  Effect.gen(function* () {
+    const firedAt = new Date(yield* Clock.currentTimeMillis);
+    const run = yield* recordAutomationRun(automation, {
       dedupeKey: randomUUID(),
       firing: {
         kind: AUTOMATION_FIRING.INTEGRATION,
@@ -282,10 +283,10 @@ const sentryRun = (
         subject: { ...issue, url: `https://acme.sentry.io/issues/${issue.id}/` },
       },
       payload: options.summary ?? `Title: ${issue.title ?? "TypeError"}`,
-      firedAt: options.firedAt ?? new Date(),
-    }),
-    Option.getOrThrow,
-  );
+      firedAt,
+    });
+    return Option.getOrThrow(run);
+  });
 
 /** A run fired by a pull request opened on the repository under `title`, queued. */
 const pullRequestRun = (automation: Automation, title: string) =>
@@ -1467,7 +1468,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const act = (run: AutomationRun) =>
           executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        // The cooldown is timed from a run's start, so the first run starts three hours before the rest.
+        // The cooldown is timed from a run's start, so the first run fires and starts three hours before the rest.
         const long = yield* act(yield* sentryRun(automation, { id: "7" }));
         yield* TestClock.adjust(Duration.hours(3));
         const first = yield* act(yield* sentryRun(automation, { id: "7" }));
