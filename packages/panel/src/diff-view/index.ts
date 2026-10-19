@@ -76,7 +76,9 @@ import { selectedLines, selectionRect } from "./text-selection.js";
  * A changed line marks what it changed as asked (whole words joined across
  * the spaces between them, words, characters, or nothing), and a line too
  * long to compare is tinted whole. Lines handed as selected, a review
- * thread's, are lit in the code's blue, as a File tab's pointed lines are.
+ * thread's, are lit in the code's blue, as a File tab's pointed lines are,
+ * their rows alone and not the notes under them; the gutter's + stands
+ * inside the numbers' column, never over the code.
  * Between two hunks of a file stands how many unchanged lines they leave
  * out. One diff alone offers no way to show them, since only its patch is
  * at hand; an excerpt, a review thread's lines, says nothing of the lines
@@ -180,6 +182,19 @@ const LOOK_CSS = `
   [data-code],
   [data-gutter] {
     scrollbar-width: thin;
+  }
+  /* The gutter's + stands inside the numbers' column, over a number at
+     most, as GitHub's does; Pierre hangs it a character short of a line's
+     height past the column, over the code's first characters. */
+  [data-utility-button] {
+    margin-right: 0;
+  }
+  /* Lines lit, a comment's or a thread's, light their own rows alone: a
+     note under them, the comment being written or a thread, keeps its own
+     ground rather than standing in the band. */
+  [data-line-annotation][data-selected-line],
+  [data-gutter-buffer="annotation"][data-selected-line] {
+    --diffs-computed-selected-line-bg: var(--diffs-computed-diff-line-bg, transparent);
   }
   /* Note that a line's code scrolls sideways alone, so it keeps no room for a
      scroll bar up and down, which a system that draws its bars in the
