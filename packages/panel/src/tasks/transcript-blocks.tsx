@@ -90,6 +90,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import remarkBreaks from "remark-breaks";
 import {
   type Components,
   defaultRehypePlugins,
@@ -353,6 +354,19 @@ function PictureElement({ node }: ExtraProps): ReactNode {
 const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
 
 /**
+ * The steps a message someone typed is read with: a transcript's, with each
+ * line break typed kept as one. Note that Markdown joins two lines with no
+ * blank line between them into one, which is right for words a model wrote
+ * and wrong for words a person typed line by line into a box whose Enter is
+ * a new line, as GitHub keeps a comment's line breaks for the same reason.
+ */
+const TYPED_REMARK_PLUGINS = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkBreaks,
+  () => markLinks,
+];
+
+/**
  * A link in a transcript's words: the chip that opens what it names
  * (`mention-chip.tsx`) where its target names a mention, read against the
  * task's page it is drawn on, or the window's doors off one; a link as any
@@ -490,17 +504,21 @@ export interface TranscriptElement {
 export function TranscriptWords({
   text,
   element,
+  typed = false,
 }: {
   text: string;
   element?: TranscriptElement | undefined;
+  /** Whether a person typed the words, whose every line break is kept (`TYPED_REMARK_PLUGINS`). */
+  typed?: boolean | undefined;
 }): ReactNode {
+  const remarkPlugins = typed ? TYPED_REMARK_PLUGINS : TRANSCRIPT_REMARK_PLUGINS;
   if (element === undefined) {
     return (
       <TranscriptMarkdownSource markdown={text}>
         <MessageResponse
           mode="static"
           components={TRANSCRIPT_COMPONENTS}
-          remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+          remarkPlugins={remarkPlugins}
           allowedTags={MENTION_TAGS}
         >
           {text}
@@ -514,7 +532,7 @@ export function TranscriptWords({
       <MessageResponse
         mode="static"
         components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
-        remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+        remarkPlugins={remarkPlugins}
         allowedTags={{ ...MENTION_TAGS, [element.tag]: [...element.attributes] }}
         literalTagContent={[element.tag]}
       >
