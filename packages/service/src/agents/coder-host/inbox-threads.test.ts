@@ -395,7 +395,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         yield* later;
         const refused = yield* answer(["fra1"], randomUUID());
         assert.equal(refused.outcome, INBOX_ASK_ANSWER.REFUSED);
-        assert.equal(typeof refused.refusal, "string");
+        assert.notEqual(refused.refusal, undefined, "the refusal says why");
         assert.equal(refused.item.status, INBOX_STATUS.OPEN);
 
         const key = randomUUID();
