@@ -5,7 +5,7 @@ import {
   type RetentionBasis,
 } from "@luke/service/admin/admin-overview-vocabulary";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import { Segmented } from "@luke/ui";
+import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useState } from "react";
@@ -291,10 +291,11 @@ export function DashboardScreen({
 
             <SectionHeading>Retention · weekly cohorts</SectionHeading>
             <div className="mb-3">
-              <Segmented
-                legend="Retained by"
-                options={RETENTION_OPTIONS}
+              <ChoiceBar
+                label="Retained by"
+                items={RETENTION_OPTIONS}
                 value={basis}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
                 onChange={setBasis}
               />
             </div>
