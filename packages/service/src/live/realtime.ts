@@ -1,8 +1,9 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import type { SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { createRealtime, rawSql } from "@neon/realtime/server";
 import { drizzleAdapter } from "@neon/realtime-drizzle";
-import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
+import { SqlClient } from "effect/sql";
 import { databaseUrl } from "../db/index.js";
 
 /**
@@ -16,6 +17,11 @@ import { databaseUrl } from "../db/index.js";
  * desktop can subscribe to it and can neither read nor change it. The
  * secret never leaves this service. A sealed read is itself a short-lived
  * bearer, so it travels in an answer body alone, never a URL or a log.
+ *
+ * A deployment without Realtime (a Preview, or local dev) seals by reading
+ * instead (`pollSealer`): the statement is run now and its rows answered
+ * inline at `LIVE_POLL_URL`, behind the same bearer, and the desktop polls
+ * by sealing again.
  */
 
 /** The variables a deployment turns Realtime on with, both from its branch's Realtime page in Neon's console. */
@@ -35,9 +41,10 @@ export interface LiveSealer {
 }
 
 /**
- * The deployment's Realtime, or none where it is misconfigured, which every
- * live endpoint answers as unavailable. None by default, so a test that
- * follows nothing live need provide nothing.
+ * The deployment's Realtime, or its poll sealer where Realtime is not
+ * configured, or none where Realtime refused its secret, which every live
+ * endpoint answers as unavailable. None by default, so a test that follows
+ * nothing live need provide nothing.
  */
 export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
   "@luke/service/LiveSealing",
@@ -91,10 +98,35 @@ function liveSealer(options: {
 }
 
 /**
+ * The sealer where Realtime is not configured: each statement is run on the
+ * service's own database client and answered with its rows, already
+ * expired, since nothing renews it but a fresh read. Note that no secret
+ * stands here, so the capability and fingerprint say only where to poll.
+ */
+export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
+  return {
+    url: LIVE_POLL_URL,
+    seal: (statement) =>
+      Effect.all({
+        rows: sql.unsafe<object>(statement.sql, statement.params),
+        now: Clock.currentTimeMillis,
+      }).pipe(
+        Effect.map(({ rows, now }) => ({
+          capability: LIVE_POLL_URL,
+          queryFingerprint: LIVE_POLL_URL,
+          expiresAt: now,
+          rows,
+        })),
+        Effect.mapError(() => new SealRefused({ reason: "the statement could not be read" })),
+      ),
+  };
+}
+
+/**
  * Realtime as the deployment's environment configures it: on where both of
- * its variables and the database name stand, off where any is missing or
- * blank, so a deployment turns it on by setting them and off by removing
- * them. A secret Realtime refuses leaves it off, said once in the log.
+ * its variables and the database name stand, polled where any is missing or
+ * blank, so a deployment turns it on by setting them and back to polling by
+ * removing them. A secret Realtime refuses leaves it off, said once in the log.
  */
 export const liveSealingFromEnvironment = Layer.effect(
   LiveSealing,
@@ -108,7 +140,9 @@ export const liveSealingFromEnvironment = Layer.effect(
     const secret = Option.getOrUndefined(read.secret);
     const database = Option.flatMap(read.database, databaseNameOf);
     const secretText = secret === undefined ? "" : Redacted.value(secret).trim();
-    if (!url || secretText === "" || Option.isNone(database)) return Option.none();
+    if (!url || secretText === "" || Option.isNone(database)) {
+      return Option.some(pollSealer(yield* SqlClient.SqlClient));
+    }
     const sealer = yield* Effect.option(
       liveSealer({ url, secret: Redacted.make(secretText), database: database.value }),
     );

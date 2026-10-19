@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Option } from "effect";
+import { Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { lookedUntil } from "../http/held-read.js";
 import {
@@ -13,8 +13,8 @@ import {
 
 /**
  * A wait on a row, woken by Neon Realtime: it looks again as soon as the
- * rows change, and on a safety beat beside; with no wake provided it fails
- * rather than polling; and the wake over Realtime's direct server subscribes
+ * rows change, and on a safety beat beside; with no wake provided it polls
+ * about once a second; and the wake over Realtime's direct server subscribes
  * to each statement for the length of the wait, subscribes again where one
  * moves to error, on a new server where the connection failed, and lets go
  * after.
@@ -57,12 +57,16 @@ function scriptedWatch() {
   };
 }
 
-it.effect("with no wake provided a wait fails rather than looking on a clock", () =>
+it.effect("where Realtime is not configured, a wait looks again about once a second", () =>
   Effect.gen(function* () {
     const script = scriptedLook();
-    const exit = yield* Effect.exit(lookedUntil(script.look, "10 seconds", [STATEMENT]));
-    assert.ok(Exit.isFailure(exit));
-    assert.equal(script.looks(), 0);
+    const waiting = yield* Effect.forkChild(lookedUntil(script.look, "10 seconds", [STATEMENT]));
+    yield* settled;
+    assert.equal(script.looks(), 1);
+    script.find("settled");
+    yield* TestClock.adjust("1 second");
+    assert.deepEqual(yield* Fiber.join(waiting), Option.some("settled"));
+    assert.equal(script.looks(), 2, "it looked on the poll, well before the safety beat");
   }),
 );
 

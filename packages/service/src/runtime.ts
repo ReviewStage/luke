@@ -64,11 +64,12 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  *
  * `LiveSealing` is the one place Neon Realtime's address and secret are read,
  * so a live read is sealed under the same secret on every route
- * (`live/realtime.ts`); without both it stands as none, and every live read
- * answers unavailable. `LiveWake` is the same Realtime seen from the service's
- * side: one socket per instance, which every held read and every wait on a
- * row watches its rows over rather than looking on a clock
- * (`live/live-wake.ts`); without Realtime each fails.
+ * (`live/realtime.ts`); without both it polls, reading each live statement
+ * on the same database client (which layers memoize, so it is the one pool)
+ * and answering its rows inline. `LiveWake` is the same Realtime seen from
+ * the service's side: one socket per instance, which every held read and
+ * every wait on a row watches its rows over rather than looking on a clock
+ * (`live/live-wake.ts`); without Realtime each looks on a short clock.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -89,7 +90,7 @@ export const webServices = Layer.mergeAll(
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,
-  liveSealingFromEnvironment,
+  liveSealingFromEnvironment.pipe(Layer.provide(webSqlClient)),
   liveWakeFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   productAnalyticsFromEnvironment.pipe(

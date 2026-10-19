@@ -22,7 +22,12 @@ import { LiveWake } from "../live/live-wake.js";
  * way (`lookedUntil`).
  */
 
-/** How often a watched wait looks though nothing told it to: what a change the watch missed waits at most. */
+/**
+ * How often a watched wait looks though nothing told it to: what a change the
+ * watch missed waits at most. Note that it is the only recovery from a
+ * Realtime subscription that was refused or dropped, which the wake never
+ * subscribes again, so it stays even where Realtime is configured.
+ */
 const LIVE_SAFETY_POLL = Duration.seconds(5);
 
 /** How many characters of the digest a cursor carries: far more than any two readings of one plan's rows could share by chance. */

@@ -19,6 +19,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -40,6 +43,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -61,6 +67,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -82,6 +91,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -103,6 +115,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -124,6 +139,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [
@@ -145,6 +163,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [

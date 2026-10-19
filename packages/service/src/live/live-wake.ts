@@ -1,6 +1,6 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { createRealtime, type RawSqlQuery, rawSql } from "@neon/realtime/server";
-import { Config, Context, Effect, Layer, Option, Redacted, type Scope } from "effect";
+import { Config, Context, Duration, Effect, Layer, Option, Redacted, type Scope } from "effect";
 import { databaseUrl } from "../db/index.js";
 import { databaseNameOf, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -12,6 +12,8 @@ import { databaseNameOf, REALTIME_ENVIRONMENT } from "./realtime.js";
  * statement, so what the desktop is answered is what the store says and
  * nothing the subscription carried. A watch that misses a change, or one
  * Realtime refused or stopped, costs the read a look on its safety beat.
+ * Where Realtime is not configured, every watch wakes on a short clock
+ * instead, so a held read polls.
  */
 
 /** What a held read waits on, for the length of one hold. */
@@ -30,19 +32,25 @@ export interface LiveWakeShape {
 /** The watch that hears nothing: a wait on no statements, or one Realtime refused, looks on its safety beat alone. */
 const QUIET: LiveWatch = { changed: Effect.never };
 
-/** The wake where Realtime is not configured, which refuses every watch loudly rather than looking on a clock. */
-const UNCONFIGURED: LiveWakeShape = {
-  watch: () => Effect.die(new Error("live-wake: Neon Realtime is not configured")),
+/** How often a wait looks where Realtime is not configured: each hold's own look, about once a second. */
+const LIVE_WAKE_POLL = Duration.seconds(1);
+
+/**
+ * The wake where Realtime is not configured (a Preview, or local dev): every
+ * watch says the rows changed once a second, so a held read polls its own
+ * statement rather than hearing nothing.
+ */
+const pollingWake: LiveWakeShape = {
+  watch: () => Effect.succeed({ changed: Effect.sleep(LIVE_WAKE_POLL) }),
 };
 
 /**
  * The wake a held read waits on: Realtime, where the web runtime provides
- * `liveWakeFromEnvironment`, and a scripted one in a test. With none
- * provided, every watch dies, so a missing wake is heard rather than
- * polled around.
+ * `liveWakeFromEnvironment` and the deployment configures it, and a scripted
+ * one in a test. With none provided, every watch polls.
  */
 export const LiveWake = Context.Reference<LiveWakeShape>("@luke/service/LiveWake", {
-  defaultValue: () => UNCONFIGURED,
+  defaultValue: () => pollingWake,
 });
 
 /** One statement's subscription, the slice of Realtime's raw subscription a watch reads. */
@@ -213,8 +221,8 @@ export const realtimeServers = (
  * The wake as the deployment's environment configures it: Realtime, over one
  * direct server and one socket the instance's every held read shares, closed
  * with the runtime and replaced where its connection failed. Where a variable or the database name is missing, or
- * Realtime refuses its configuration, it is said in the log and every watch
- * dies, since a held read has nothing else to wait on.
+ * Realtime refuses its configuration, every watch polls instead, said once in
+ * the log where Realtime refused.
  */
 export const liveWakeFromEnvironment = Layer.effect(
   LiveWake,
@@ -227,16 +235,13 @@ export const liveWakeFromEnvironment = Layer.effect(
     const url = Option.getOrUndefined(read.url)?.trim();
     const secret = Option.getOrUndefined(read.secret);
     const database = Option.flatMap(read.database, databaseNameOf);
-    if (!url || secret === undefined || Option.isNone(database)) {
-      yield* Effect.logError("live-wake: Neon Realtime is not configured; held reads fail");
-      return UNCONFIGURED;
-    }
+    if (!url || secret === undefined || Option.isNone(database)) return pollingWake;
     const servers = yield* realtimeServers(() =>
       createRealtime({ url, secret: Redacted.value(secret).trim(), db: database.value }),
     ).pipe(Effect.option);
     if (Option.isNone(servers)) {
-      yield* Effect.logError("live-wake: Realtime refused its configuration; held reads fail");
-      return UNCONFIGURED;
+      yield* Effect.logError("live-wake: Realtime refused its configuration; held reads poll");
+      return pollingWake;
     }
     return realtimeWake(servers.value);
   }),

@@ -2,7 +2,8 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { Effect, Layer, Option } from "effect";
+import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "../agents/agent-reach.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -42,7 +43,9 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
- * Nothing else here reads a row: the store is read by Realtime.
+ * Nothing else here reads a row: the store is read by Realtime, or, where
+ * the deployment has none, by the sealer itself (`pollSealer`), whose rows
+ * are answered inline, behind the same bearer.
  */
 
 const HTTP_METHOD = { GET: "GET" } as const;
@@ -88,7 +91,10 @@ const accountInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxLive
       chatAsks: seal(statements.value.chatAsks),
       chatNotices: seal(statements.value.chatNotices),
     }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+    const answer = yield* Effect.orDie(
+      Schema.encodeEffect(accountInboxLiveAnswerSchema)({ url, queries }),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );
 
@@ -107,7 +113,10 @@ const sealedScope = (
       messages: seal(statements.value.messages),
       files: seal(statements.value.files),
     }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
+    const answer = yield* Effect.orDie(
+      Schema.encodeEffect(scopeInboxLiveAnswerSchema)({ url, queries }),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   });
 
 /** The GET a scope's endpoint takes, as the web request it is. */

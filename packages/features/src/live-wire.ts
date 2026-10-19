@@ -44,7 +44,14 @@ import { countedNumber } from "./service-wire.js";
  * statement to select every column under the key the wire reads it by and
  * each instant as epoch milliseconds. Realtime keeps no order, so the
  * reader orders them as the held read does.
+ *
+ * A deployment without Realtime (a Preview, or local dev) answers the same
+ * shape at `LIVE_POLL_URL` instead, each statement already run and its
+ * `rows` inline, and the desktop polls by sealing again.
  */
+
+/** The address a deployment without Realtime answers, which tells the desktop to poll rather than subscribe. */
+export const LIVE_POLL_URL = "luke-poll:";
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
@@ -52,6 +59,14 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */
   expiresAt: countedNumber,
+  /**
+   * The statement's rows as they stand, answered only at `LIVE_POLL_URL`,
+   * where nothing subscribes. They travel as JSON text, since a row has no
+   * wire form until its reader decodes it.
+   */
+  rows: EffectSchema.optionalKey(
+    EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
+  ),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;

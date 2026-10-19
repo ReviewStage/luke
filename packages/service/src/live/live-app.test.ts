@@ -6,20 +6,29 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
+import {
+  accountInboxLiveAnswerSchema,
+  inboxOfLiveRows,
+  LIVE_POLL_URL,
+  scopeInboxLiveAnswerSchema,
+  scopeInboxLiveRowsSchema,
+} from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { postInboxItem, taskInboxItems } from "../inbox/inbox-store.js";
 import { liveApp } from "./live-app.js";
-import { type LiveSealer, LiveSealing, SealRefused } from "./realtime.js";
+import { type LiveSealer, LiveSealing, pollSealer, SealRefused } from "./realtime.js";
 
 /**
  * The reads the desktop follows over Neon Realtime, sealed by the route:
  * refused without a bearer, unavailable where the deployment has no
  * Realtime, and otherwise every part of the account inbox sealed for the
- * bearer's own account, with the address to subscribe at.
+ * bearer's own account, with the address to subscribe at; where the
+ * deployment polls, each statement's rows are answered inline.
  *
  * Synthetic accounts and bearers throughout; the secret is a script that
  * seals a statement as the values it was bound to, so a test can read whose
@@ -192,6 +201,55 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           });
         }
+      }),
+  );
+
+  it.effect(
+    "where the deployment polls, a plan's inbox is answered at the poll address with its rows inline, which read as the held read reads the inbox",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(started));
+        const posted = yield* postInboxItem(
+          { userId: owner, taskId: task.id, agentId: started.value.agent.id },
+          {
+            key: "branch-protection",
+            title: "Require a review on main",
+            response: { type: INBOX_RESPONSE.TODO },
+            needsReply: false,
+          },
+        );
+        assert.ok(Result.isSuccess(posted));
+
+        const polled = yield* ask({
+          bearer: owner,
+          path: `/api/live/task-inbox?id=${task.id}`,
+          sealing: Option.some(pollSealer(yield* SqlClient.SqlClient)),
+        });
+
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(scopeInboxLiveAnswerSchema)(polled.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        const rows = Schema.decodeUnknownSync(scopeInboxLiveRowsSchema)({
+          items: answer.queries.items.rows,
+          messages: answer.queries.messages.rows,
+          files: answer.queries.files.rows,
+        });
+        assert.deepEqual(inboxOfLiveRows(rows), yield* taskInboxItems(owner, task.id));
+        assert.deepEqual(
+          inboxOfLiveRows(rows).map((item) => item.title),
+          ["Require a review on main"],
+        );
       }),
   );
 });
