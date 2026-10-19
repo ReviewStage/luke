@@ -120,7 +120,7 @@ async function settle(): Promise<void> {
  * script, and the names it renamed to; `render` draws another plan, through
  * its own door where given.
  */
-function mount(answers: readonly TasksEditAnswer[] = []) {
+function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
@@ -145,7 +145,7 @@ function mount(answers: readonly TasksEditAnswer[] = []) {
         ),
       ),
     );
-  render(DOCUMENT_TASK);
+  render(first);
   const unmount = () => {
     act(() => root.unmount());
     roots.splice(roots.indexOf(root), 1);
@@ -199,13 +199,13 @@ test("a click into a section opens the whole text in place, the caret where the 
 });
 
 test("the open text wears every class its drawn sections wear, so a list keeps its gutter and nothing moves as it opens or closes", () => {
-  const { container, render } = mount();
-  render({
+  const { container } = mount([], {
     ...DOCUMENT_TASK,
     document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
   });
   const drawn = container.querySelector<HTMLElement>(".plan-document-block .plan-unit");
-  const worn = [...(drawn?.classList ?? [])];
+  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
+  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
   assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
 
   act(() => {
