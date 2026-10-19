@@ -61,7 +61,6 @@
     "./agents/brain-host/relay": "./src/agents/brain-host/relay.js",
     "./agents/brain-host/seed": "./src/agents/brain-host/seed.js",
     "./agents/brain-host/stop-carrier": "./src/agents/brain-host/stop-carrier.js",
-    "./agents/chat-app": "./src/agents/chat-app.js",
     "./agents/coder-host/chat": "./src/agents/coder-host/chat.js",
     "./agents/coder-host/account-keys": "./src/agents/coder-host/account-keys.js",
     "./agents/coder-host/bounds": "./src/agents/coder-host/bounds.js",

@@ -167,6 +167,7 @@ import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq } from "drizzle-orm";
+import type { Context } from "effect";
 import {
   Clock,
   DateTime,
@@ -208,7 +209,9 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
+import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import type { WebServices } from "../runtime.js";
 import { tasksApp } from "../tasks/tasks-app.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
@@ -239,7 +242,6 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
-import { chatApp } from "./chat-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -265,6 +267,7 @@ import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
+import { messagesProcedures } from "./messages-procedures.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -563,17 +566,25 @@ const standing = (
       tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const chat = HttpRouter.toWebHandler(chatApp(seams).pipe(HttpRouter.provideRequest(services)), {
-      disableLogger: true,
-    });
+    // SAFETY: the messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    const webServices = (yield* Effect.context<never>().pipe(
+      Effect.provide(services),
+    )) as Context.Context<WebServices>;
+    const messages = hostedFetch({ messages: messagesProcedures(seams) });
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose(), chat.dispose()])),
+      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, and the chat's on the chat's. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, the transcript and the chat on the hosted oRPC router at their public paths, as their rewrites carry them. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
-        const { pathname } = new URL(request.url);
-        if (pathname === CHAT) return chat.handler(request);
+        const url = new URL(request.url);
+        const { pathname } = url;
+        const id = url.searchParams.get("id");
+        if (pathname === AGENT_MESSAGES && id !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
+          return messages(new Request(url, request), webServices);
+        }
+        if (pathname === CHAT) return messages(request, webServices);
         return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
           ? tasks.handler(request)
           : agents.handler(request);
@@ -620,6 +631,8 @@ function request(
   const headers = new Headers();
   if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,
@@ -8372,7 +8385,10 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         url.searchParams.set("workspaceId", workspace);
         return new Request(url, {
           method,
-          headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+          headers: {
+            ...(bearer === undefined ? undefined : { authorization: `Bearer ${bearer}` }),
+            ...(body === undefined ? undefined : { "content-type": "application/json" }),
+          },
           ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
         });
       };

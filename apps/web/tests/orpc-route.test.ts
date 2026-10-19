@@ -132,3 +132,35 @@ test("an automation's own paths reach the automation procedures through the comm
   assert.equal(changed.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
   assert.equal(await changed.text(), '{"error":"invalid-token"}');
 });
+
+test("the held message reads are reached at their public paths through the committed table, their segments in the path the router matches", async () => {
+  const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
+  const routes = new Map([
+    ["agents/messages", orpcRoute],
+    ["agents/subagent-messages", orpcRoute],
+    ["plans/messages", orpcRoute],
+    ["plans/subagent-messages", orpcRoute],
+    ["workspaces/chat", orpcRoute],
+  ]);
+  for (const path of [
+    `/api/agents/${agent}/messages?after=0:0`,
+    `/api/agents/${agent}/subagents/call-1/messages?after=0:0`,
+    `/api/plans/${agent}/messages`,
+    `/api/plans/${agent}/subagents/call-1/messages?after=0:0`,
+    `/api/workspaces/chat?workspaceId=${agent}&after=0`,
+  ]) {
+    const unsigned = await dispatched(new Request(`${ORIGIN}${path}`), routes);
+    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, path);
+    assert.equal(await unsigned.text(), '{"error":"invalid-token"}', path);
+  }
+  // A worker's transcript takes no write: matched at its public path, it is refused by method rather than not found.
+  const posted = await dispatched(
+    new Request(`${ORIGIN}/api/plans/${agent}/subagents/call-1/messages`, {
+      method: HTTP_METHOD.POST,
+      headers: { authorization: "Bearer t" },
+    }),
+    routes,
+  );
+  assert.equal(posted.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
+  assert.equal(await posted.text(), '{"error":"method-not-allowed"}');
+});
