@@ -10,6 +10,7 @@ import {
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
@@ -34,6 +35,7 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -127,6 +129,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { useExperiment } from "../use-app-state.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
 import {
@@ -765,6 +768,14 @@ export interface TasksControl {
     linearIssuesIn: (
       workspaceId: string | undefined,
     ) => ((ask?: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>) | undefined;
+    /**
+     * The read of a workspace's own issues, the dialog's Issue chip lists
+     * beside Linear's; none while Issues stand off (`EXPERIMENT.ISSUES`) or
+     * no workspace is read. A read that fails answers none.
+     */
+    issuesIn: (
+      workspaceId: string | undefined,
+    ) => (() => Promise<readonly NewTaskIssue[]>) | undefined;
   };
   /** Leaves the open task for the home page; a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -2502,6 +2513,25 @@ export function useTasksTab(input: {
     if (linked?.linear?.active !== true) return undefined;
     return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
   };
+  // The dialog lists the workspace's own issues beside Linear's, while Issues stand on.
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const issuesIn: TasksControl["newTask"]["issuesIn"] = (workspaceId) => {
+    const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
+    if (!issuesOn || workspace === undefined) return undefined;
+    return () =>
+      act(ACT_KIND.ISSUES_LIST, { workspaceId: workspace.id }).then(
+        (read) =>
+          "issues" in read
+            ? read.issues.map((issue) => ({
+                id: issue.id,
+                workspaceId: issue.workspaceId,
+                identifier: issueIdentifier(workspace.name, issue.number),
+                title: issue.title,
+              }))
+            : [],
+        () => [],
+      );
+  };
 
   // New task opens the dialog over whatever stands, an open task and its
   // call included, which stay until a task is started. Note that a press
@@ -3257,6 +3287,7 @@ export function useTasksTab(input: {
       tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
       onShowMention: guard(showMention),
       linearIssuesIn,
+      issuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),
     // Home is the page with no task open, so where none is, only the Inbox, an

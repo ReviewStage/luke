@@ -10,9 +10,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * whatever stood open, and a card holds New task's composer
  * (`new-task-composer.tsx`), which takes focus, with the title handed to it
  * for its head row: "New task", the repository chip after it, and the
- * Linear chip at the row's right end. The task starts in the workspace the
+ * Issue chip at the row's right end. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
- * workspace's repositories and its Linear issues.
+ * workspace's repositories and its issues, its own and Linear's.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
@@ -27,7 +27,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * Opened from one of the workspace's own issues (its Start task…), the card
  * says so in its title, starts in the issue's workspace and no other, names
- * the task by the issue, and offers no Linear chip; the task it starts is
+ * the task by the issue, and offers no Issue chip; the task it starts is
  * linked to that issue, which the issue's page lists it under. Opened from
  * the issue's Start agent…, the card is a new agent's: its composer stands
  * in Agent mode with no Plan toggle, and starts the task and an agent on it

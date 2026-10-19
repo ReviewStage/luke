@@ -233,15 +233,15 @@ test("the owner's workspace changing closes the Linear search, and the chip then
   await settle();
   const openLinear = async () => {
     const chip =
-      document.querySelector<HTMLButtonElement>('[aria-label="Choose from Linear"]') ??
-      assert.fail("the Linear chip stands");
+      document.querySelector<HTMLButtonElement>('[aria-label="Choose an issue"]') ??
+      assert.fail("the Issue chip stands");
     act(() => chip.click());
     await settle();
   };
   const listed = () =>
-    [
-      ...document.querySelectorAll('[role="dialog"][aria-label="Linear issues"] [role="option"]'),
-    ].map((option) => option.textContent);
+    [...document.querySelectorAll('[role="dialog"][aria-label="Issues"] [role="option"]')].map(
+      (option) => option.textContent,
+    );
   await openLinear();
   const before = listed();
 
@@ -283,12 +283,12 @@ test("Linear let go while its search stands closes the search, and its coming ba
         }),
       ),
     );
-  const search = () => document.querySelector('[role="dialog"][aria-label="Linear issues"]');
+  const search = () => document.querySelector('[role="dialog"][aria-label="Issues"]');
   draw(true);
   await settle();
   const chip =
-    document.querySelector<HTMLButtonElement>('[aria-label="Choose from Linear"]') ??
-    assert.fail("the Linear chip stands");
+    document.querySelector<HTMLButtonElement>('[aria-label="Choose an issue"]') ??
+    assert.fail("the Issue chip stands");
   act(() => chip.click());
   await settle();
   const opened = search() !== null;

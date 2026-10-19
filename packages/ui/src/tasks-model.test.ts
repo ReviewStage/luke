@@ -139,6 +139,14 @@ test("an agent New task starts is handed a mention of the issue picked, then a b
     agentPromptOf(undefined, " Make the sidebar keep its folds. "),
     "Make the sidebar keep its folds.",
   );
+  assert.equal(
+    agentPromptOf(
+      { identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" },
+      "",
+    ),
+    "[@ACME-7 Invites expire](https://tryluke.dev/a%28b%29/issue/7)",
+    "one of the workspace's own issues is mentioned by its Luke link, its target kept one target",
+  );
 });
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {
