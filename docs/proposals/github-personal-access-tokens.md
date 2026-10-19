@@ -22,9 +22,10 @@ developer.
 - **What a token-mode task gives up.** No webhooks, so agents are woken by a
   poller in the minute sweep rather than at once (§6). No bot identity, so
   commits, pull requests, and comments are the member's (§5). No
-  GitHub-event automations (§7). Only the token's owner can open a terminal
-  in, steer, or fork a token-mode agent, because the sandbox carries their
-  credential (§4).
+  GitHub-event automations (§7). Only the token's owner can see a
+  token-mode task or open a terminal in, steer, or fork its agents, because
+  its sandbox carries their credential and its transcript quotes code their
+  teammates may have no access to (§4.2).
 - **The credential is held tightly.** Sealed like the provider API keys
   (AES-256-GCM, versioned key ring, §2), never handed to the Mac, a trace, or
   an answer, and put at the sandbox's firewall only on paths under the one
@@ -148,8 +149,18 @@ agent whose reach is `member-token`:
 - **Steer, chat, `message_agent`**: the owner and the owner's own Luke.
   Another member's message is refused with "Only <name> can direct this
   agent; it works through their GitHub token."
-- **Reading** the transcript, plan, and pull request stays open to the
-  workspace, as now.
+- **Reading is private too.** A token repository was never shared with
+  the workspace: the installation is what says a workspace may see a
+  repository's code, and a token says only that its owner may. The
+  transcript (whose tool results quote source), the plan, the shown files,
+  the tree and file routes, and the published pull request's diff would
+  otherwise show a private repository to teammates who have no access to
+  it. So a task on a `member-token` repository, and every agent on it, is
+  visible to its owner alone: `agentReachableBy` and the task read gain
+  "and, where the repository is reached by token, the reader is the
+  owner". The sidebar, task list, inbox, and `list_agents` leave it out
+  for everyone else, and a mention of it reads as "a private task".
+- **Sharing with a teammate** is not in the first version (§9.7).
 
 ### 4.3 The coding agent's sandbox
 
@@ -297,6 +308,12 @@ Each has a recommendation; the plan above assumes it.
 6. **Polling cadence.** *Recommended:* §6.1's (1 min active, 10 min after two
    hours, hourly after a day). Faster costs nothing on quiet PRs but crowds
    the 60-second sweep.
+7. **Who may read a token-mode task.** *Recommended:* the owner alone
+   (§4.2), since nothing tells Luke a teammate may see that repository's
+   code. Alternative: a teammate may read it where their own verified token
+   reaches the repository, checked at each read. It is correct but costs a
+   GitHub read per view and a token per teammate, so it waits until someone
+   asks to share one.
 
 ## 10. Risks
 
