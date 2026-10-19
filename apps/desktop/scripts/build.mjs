@@ -46,8 +46,8 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
-// The panel's imports its build table (`@luke/panel/build-table`) answers
-// differently from the packages' own: Streamdown's HTML parser and Pierre's
+// The imports the panel's build table (`@luke/panel/build-table`) answers
+// differently from how they are written: Streamdown's HTML parser and Pierre's
 // diff writer, each redirected to a module of the panel's own, and the parts
 // of Excalidraw the board never uses, each answered with an empty module.
 // The table says why each is answered as it is; this is esbuild's shape of it.

@@ -20,7 +20,7 @@ import {
   panelStaticDirectories,
   redirectOf,
 } from "@luke/panel/build-table";
-import { build } from "esbuild";
+import { type BuildOptions, build } from "esbuild";
 import type { Plugin } from "vite";
 
 /** Where the web serves the panel's static files from, which the web platform's `assetBase` answers. */
@@ -97,7 +97,8 @@ function panelDefine(): Plugin {
   return {
     name: "panel-define",
     async config() {
-      const worker = await build(HIGHLIGHT_WORKER_BUILD);
+      // SAFETY: the table writes esbuild's own options for the worker, as the desktop's esbuild reads them.
+      const worker = await build(HIGHLIGHT_WORKER_BUILD as BuildOptions & { write: false });
       const { "process.env.NODE_ENV": _mode, ...define } = panelDefines(
         worker.outputFiles?.[0]?.text ?? "",
       );

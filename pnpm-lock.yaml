@@ -161,9 +161,6 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
-      '@excalidraw/excalidraw':
-        specifier: 0.18.1
-        version: 0.18.1(@types/react-dom@19.2.4)(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.8)(react@19.2.8)
       '@keyframelabs/sdk':
         specifier: 0.3.0
         version: 0.3.0(@types/dom-mediacapture-record@1.0.22)
@@ -200,9 +197,6 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
-      '@pierre/diffs':
-        specifier: 1.5.2
-        version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
@@ -853,7 +847,7 @@ importers:
         version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
-        version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+        version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
       '@tiptap/core':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/pm@3.31.4)
@@ -963,9 +957,6 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
-      esbuild:
-        specifier: 0.27.7
-        version: 0.27.7
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
@@ -9314,8 +9305,9 @@ snapshots:
 
   '@pierre/theme@2.0.0': {}
 
-  '@pierre/theming@1.0.0(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
+  '@pierre/theming@1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
     optionalDependencies:
+      '@pierre/theme': 2.0.0
       '@shikijs/themes': 4.5.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -9329,9 +9321,9 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       shiki: 4.5.0
 
-  '@pierre/trees@1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
+  '@pierre/trees@1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)':
     dependencies:
-      '@pierre/theming': 1.0.0(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+      '@pierre/theming': 1.0.0(@pierre/theme@2.0.0)(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
       preact: 11.0.0-beta.0
       preact-render-to-string: 6.6.5(preact@11.0.0-beta.0)
       react: 19.2.8

@@ -3,8 +3,8 @@ import { defineConfig } from "vitest/config";
 
 /**
  * Streamdown's import of `rehype-raw` answered with the module that loads
- * the parser on demand, as the desktop's `scripts/build.mjs`
- * (`markdownHtmlParserOnDemand`) answers it in the bundle, so a test draws a
+ * the parser on demand, as `scripts/build-table.mjs` (`redirectOf`) answers
+ * it in both apps' bundles, so a test draws a
  * reply as the panel does. Streamdown is inlined so that its imports are
  * resolved here at all.
  */
