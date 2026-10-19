@@ -53,6 +53,11 @@ const COST_SHAPES: readonly SkeletonShape[] = [
 /** The figure a dollar amount that has nothing to divide by stands as. */
 const NO_FIGURE = "—";
 
+/** Whole minutes, and a positive part of one as under one rather than a zero that hides it. */
+function wholeMinutes(minutes: number): string {
+  return minutes > 0 && minutes < 1 ? "<1" : formatNumber(Math.round(minutes));
+}
+
 function usdOrNone(value: number | null): string {
   return value === null ? NO_FIGURE : formatUsd(value);
 }
@@ -273,11 +278,11 @@ export function CostScreen({
               />
               <StatCard
                 label="Voice minutes"
-                value={formatNumber(Math.round(cost.voice.minutes))}
+                value={wholeMinutes(cost.voice.minutes)}
                 hint={
                   cost.voice.unpricedMinutes === 0
                     ? `${formatUsd(cost.voice.spendUsd)} · ${cost.prices.voice.model}`
-                    : `${formatUsd(cost.voice.spendUsd)} · ${formatNumber(Math.round(cost.voice.unpricedMinutes))} min on an unpriced model`
+                    : `${formatUsd(cost.voice.spendUsd)} · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`
                 }
                 grouped
               />

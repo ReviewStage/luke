@@ -180,6 +180,12 @@ test("a model the catalog does not price reads as unpriced, never as dollars", a
   ]);
 });
 
+test("a short call on an unpriced Live model still says it is there", async () => {
+  const page = await openCost(cost({ voice: { minutes: 0.2, spendUsd: 0, unpricedMinutes: 0.2 } }));
+
+  expect(cardOf(page, "Voice minutes")).toBe("Voice minutes<1$0.00 · <1 min on an unpriced model");
+});
+
 test("a catalog that could not be read says no model token was priced", async () => {
   const page = await openCost(cost({ catalogAvailable: false }));
 
