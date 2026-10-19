@@ -33,7 +33,7 @@ import type { Composer } from "./composer.js";
 import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, Environment, SignInConsent } from "./effect/seams.js";
+import { AppIdentity, Environment, ServiceOrigin, SignInConsent } from "./effect/seams.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -184,6 +184,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const voiceServiceOrigin = yield* Effect.orDie(
     Config.option(Config.String(VOICE_SERVICE_ORIGIN_VARIABLE)).parse(environment),
   );
+  const serviceOrigin = yield* Effect.serviceOption(ServiceOrigin);
 
   function capabilitiesActive(): boolean {
     return accountGateOpen(runMode, session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN);
@@ -232,10 +233,15 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // The voice functions live on the account service's origin, so its
     // development override reaches them too; a voice override of its own stands
     // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
-    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
-      packaged: identity.packaged,
-      override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
-    }),
+    // A service origin the shell named stands over all of them.
+    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin(
+      Option.isSome(serviceOrigin)
+        ? { packaged: false, override: kernel.hostedServiceBaseUrl }
+        : {
+            packaged: identity.packaged,
+            override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
+          },
+    ),
     openSocket,
     refreshAccount: session.renewOnce,
   });
