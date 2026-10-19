@@ -82,6 +82,7 @@ import { useUpdatedToast } from "./update-toast.js";
 import { useAppState, useExperiment } from "./use-app-state.js";
 import { useCaptionPresentation } from "./use-caption-presentation.js";
 import { useSignIn } from "./use-sign-in.js";
+import { useVisualViewport } from "./use-visual-viewport.js";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
@@ -524,6 +525,9 @@ export function App(): React.JSX.Element {
 
   // Rings and keyboard-only hints follow focus the keyboard actually moved.
   useKeyboardModality();
+  // The stage, its dialogs, and its viewers fit what can be seen of the window,
+  // above a phone's keyboard.
+  useVisualViewport();
 
   /**
    * The report that the window has painted, made once, on the first snapshot

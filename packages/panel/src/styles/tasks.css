@@ -1162,7 +1162,7 @@
 .file-crumb-tree {
   position: fixed;
   z-index: var(--luke-z-menu);
-  max-height: calc(100vh - 16px);
+  max-height: calc(var(--luke-stage-height) - 16px);
 }
 
 [data-luke-profile="desktop"] .file-crumb-tree {
@@ -4758,7 +4758,7 @@ ol.transcript-list {
 
 .attachment-viewer[data-view="text"] {
   width: min(880px, 100vw - 2 * var(--luke-space-24));
-  height: calc(100vh - 2 * var(--luke-space-24));
+  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
@@ -4853,7 +4853,7 @@ ol.transcript-list {
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 2 * var(--luke-space-24) - 50px);
+  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
   object-fit: contain;
   cursor: zoom-in;
   touch-action: none;
@@ -5202,7 +5202,7 @@ ol.transcript-list {
    screen in the shortest window. */
 .agent-servers-scroll {
   display: flex;
-  max-height: clamp(160px, 100vh - 320px, 400px);
+  max-height: clamp(160px, var(--luke-stage-height) - 320px, 400px);
   flex-direction: column;
 }
 
@@ -5330,7 +5330,7 @@ ol.transcript-list {
   display: grid;
   flex: none;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto clamp(200px, 100vh - 280px, 440px);
+  grid-template-rows: auto clamp(200px, var(--luke-stage-height) - 280px, 440px);
 }
 
 /* The context ring beside the MCP button: the window's one icon button

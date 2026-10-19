@@ -157,7 +157,22 @@ body,
   --caption-width-max: 560px;
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
-  inset: 0;
+  /* The stage stands over what is seen of the window: from where a phone
+     panned it to, down to where the on-screen keyboard begins, so what
+     stands at its foot, a composer first of all, stays above the keyboard.
+     The panel writes the top, the inset, and the visible height on the root
+     (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
+     window and what is measured by the stage's height is measured by
+     `100vh` (`@luke/ui`'s `tokens/viewport.css`). It keeps off a phone's
+     notch and home indicator too, where its page is drawn under them
+     (`viewport-fit=cover`); everywhere else those insets are zero. */
+  top: calc(var(--luke-viewport-top) + env(safe-area-inset-top, 0px));
+  right: env(safe-area-inset-right, 0px);
+  bottom: max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px));
+  left: env(safe-area-inset-left, 0px);
+  /* Its edges size it, not base.css's whole-window measure. */
+  width: auto;
+  height: auto;
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
 }
@@ -927,7 +942,7 @@ ul.actor-stack {
    the room's height. */
 .actor-more {
   display: flex;
-  max-height: min(240px, 40vh);
+  max-height: min(240px, calc(var(--luke-stage-height) * 0.4));
   flex-direction: column;
 }
 
@@ -5473,7 +5488,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  padding-bottom: 8vh;
+  padding-bottom: calc(var(--luke-stage-height) * 0.08);
 }
 
 /* The side panel ----------------------------------------------------------- */
@@ -6605,11 +6620,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .command-palette {
   position: fixed;
   z-index: var(--luke-z-dialog);
-  top: 18vh;
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) * 0.18);
   left: 50%;
   display: flex;
   width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
-  max-height: 64vh;
+  max-height: calc(var(--luke-stage-height) * 0.64);
   flex-direction: column;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
@@ -7152,7 +7167,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .new-task .new-task-composer .agent-composer-input {
   min-height: min(
     calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
-    25vh
+    calc(var(--luke-stage-height) * 0.25)
   );
 }
 
@@ -7264,7 +7279,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   position: fixed;
   z-index: var(--luke-z-toast);
   right: var(--luke-space-16);
-  bottom: var(--luke-space-16);
+  /* Above the on-screen keyboard, while it is up. */
+  bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
   pointer-events: none;
 }
