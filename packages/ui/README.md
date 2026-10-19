@@ -135,7 +135,7 @@ What the barrel holds (`src/index.ts`):
 | --- | --- |
 | Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
-| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`) |
+| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
