@@ -30,6 +30,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
@@ -92,6 +93,7 @@ const SETTINGS: SettingsPanelProps = {
 let root: Root | undefined;
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

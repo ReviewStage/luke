@@ -17,6 +17,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -85,6 +86,7 @@ const DONE = agent(
 const roots: Root[] = [];
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
   fakeAppBridge({
