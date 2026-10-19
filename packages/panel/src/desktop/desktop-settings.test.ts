@@ -23,7 +23,7 @@ import { type CallCardInput, callControls } from "../call/call-card.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -645,12 +645,12 @@ test("the plan template's version history keeps a call's card at the foot of its
     ...fakeAppBridgeCalls(),
     act: (request: { kind: string }) => {
       sent.push(request.kind);
-      return Promise.resolve(
-        request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      );
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
   });
   // The card's presses sent as `App` sends them, over the bridge.
   function CallSettings(): React.JSX.Element {
@@ -694,13 +694,11 @@ test("while the plan template is read its page stands its name over placeholder 
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: { kind: string }) =>
-      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-        ? read.then(() => ({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { template: "# Context\n", custom: false },
-          }))
-        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      read.then(() => ({ template: "# Context\n", custom: false })),
   });
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
   const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;

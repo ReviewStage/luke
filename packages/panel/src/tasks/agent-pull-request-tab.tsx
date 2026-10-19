@@ -27,7 +27,6 @@ import {
   type ReactionGroup,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINK_PLACE,
@@ -35,7 +34,6 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
-import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -64,7 +62,6 @@ import {
   linesCount,
   PAGE_FRAME,
   ProviderMark,
-  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Switch,
@@ -99,7 +96,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -144,6 +140,7 @@ import {
   type ReviewOptions,
   useReviewOptions,
 } from "./pull-request-pickers.js";
+import { EntryPictures, useGitHubImageRead, usePictureDrawer } from "./pull-request-pictures.js";
 import { Reactions } from "./pull-request-reactions.js";
 import { PullRequestReview } from "./pull-request-review.js";
 import { PullRequestStack } from "./pull-request-stack.js";
@@ -165,12 +162,7 @@ import {
   useLandedThread,
   useWindowThreadReveal,
 } from "./thread-reveal.js";
-import {
-  type GitHubPictureDrawer,
-  GitHubPictureLink,
-  GitHubWords,
-  TranscriptWords,
-} from "./transcript-blocks.js";
+import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -212,9 +204,9 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * and a quiet count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
  * through the transcript's own markdown drawing (`GitHubWords`), with an
- * image GitHub serves read through the service on the App's token
- * (`GitHubPicture`) and any other drawn as its link, as ReviewStage/stage
- * draws them; Checks, its head's deployments, the newest of each
+ * image GitHub serves read through the service on the App's token and
+ * opened over the window in the file viewer (`pull-request-pictures.tsx`)
+ * and any other drawn as its link, as ReviewStage/stage draws them; Checks, its head's deployments, the newest of each
  * environment, each opening the address it serves, over every check on its
  * head, those that failed first, then those still running, each opening
  * its page, counted in the colour of how they went; and Files changed (`AgentChangesTab`), its own bar and
@@ -598,16 +590,6 @@ function Section({
   );
 }
 
-/** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
-function useGitHubImageRead() {
-  const { act } = useAct();
-  return useCallback(
-    (owner: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
-    [act],
-  );
-}
-
 /** A running check's count since it started, moving each second on the window's own clock; a timer to a reader, never announced. */
 function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | null {
   const now = useWorkingNow();
@@ -846,46 +828,6 @@ function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): 
   );
 }
 
-/**
- * One picture GitHub's rendering names, read through the service on the
- * App's token as the agent's (`githubImageOf`), drawn from its `data:` URL
- * once read, a quiet box while it is, and its link where GitHub answered
- * none the window draws.
- */
-function GitHubPicture({
-  agentId,
-  src,
-  alt,
-}: {
-  agentId: string;
-  src: string;
-  alt: string;
-}): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead());
-  if (state.kind === PICTURE_STATE.READY) {
-    return <img className="pull-request-picture" src={state.url} alt={alt} />;
-  }
-  if (state.kind === PICTURE_STATE.READING) {
-    return (
-      <span className="pull-request-picture-waiting" role="img" aria-label={alt}>
-        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
-      </span>
-    );
-  }
-  return <GitHubPictureLink src={src} alt={alt} />;
-}
-
-/** How the tab draws a picture GitHub's rendering names: one it may read through the service as the agent's, and none else. */
-function usePictureDrawer(agentId: string): GitHubPictureDrawer {
-  return useCallback(
-    (src, alt) =>
-      githubImageOf(src) === undefined ? undefined : (
-        <GitHubPicture agentId={agentId} src={src} alt={alt} />
-      ),
-    [agentId],
-  );
-}
-
 /** The tab's opener for a link to one of its pull request's own comments on GitHub, which opens the comment in the tab (`pull-request-anchors.ts`); none outside the tab. */
 const AnchorsContext = createContext<OpenHere | undefined>(undefined);
 
@@ -906,9 +848,11 @@ function EntryWords({
   if (entry.html !== null) {
     return (
       <div className="pull-request-words">
-        <Anchored>
-          <GitHubWords html={entry.html} picture={picture} />
-        </Anchored>
+        <EntryPictures html={entry.html}>
+          <Anchored>
+            <GitHubWords html={entry.html} picture={picture} />
+          </Anchored>
+        </EntryPictures>
       </div>
     );
   }
@@ -1448,9 +1392,11 @@ function DescriptionPart({
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_DESCRIPTION}</p>
       ) : (
         <div className="pull-request-words">
-          <Anchored>
-            <GitHubWords html={part.value.html} picture={picture} />
-          </Anchored>
+          <EntryPictures html={part.value.html}>
+            <Anchored>
+              <GitHubWords html={part.value.html} picture={picture} />
+            </Anchored>
+          </EntryPictures>
         </div>
       )}
       {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} subject={subject} />}

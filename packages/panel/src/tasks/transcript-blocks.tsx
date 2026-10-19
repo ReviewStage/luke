@@ -416,9 +416,32 @@ const TRANSCRIPT_COMPONENTS: Components = {
 /**
  * How a picture GitHub's rendering names is drawn by the place drawing the
  * words: its own image, read through the service, or nothing where the
- * place draws none, which draws its link instead.
+ * place draws none, which draws its link instead. `linked` says it stands
+ * inside a link the words keep, which a press on it follows, so the place
+ * gives it no press of its own.
  */
-export type GitHubPictureDrawer = (src: string, alt: string) => ReactNode | undefined;
+export type GitHubPictureDrawer = (
+  src: string,
+  alt: string,
+  linked: boolean,
+) => ReactNode | undefined;
+
+/** Whether what is drawn stands inside a link of GitHub's words. */
+const InsideGitHubLink = createContext(false);
+
+/** A picture of GitHub's words, drawn by its place, or as its link where the place draws none. */
+function GitHubImage({
+  src,
+  alt,
+  picture,
+}: {
+  src: string;
+  alt: string;
+  picture: GitHubPictureDrawer;
+}): ReactNode {
+  const linked = useContext(InsideGitHubLink);
+  return picture(src, alt, linked) ?? <GitHubPictureLink src={src} alt={alt} />;
+}
 
 /** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
 export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): ReactNode {
@@ -465,11 +488,16 @@ export function GitHubWords({
   const components = useMemo<Components>(
     () => ({
       ...TRANSCRIPT_COMPONENTS,
-      img: ({ src, alt }) => {
-        const address = String(src ?? "");
-        const words = String(alt ?? "");
-        return picture(address, words) ?? <GitHubPictureLink src={address} alt={words} />;
-      },
+      a: ({ href, children, node }) => (
+        <InsideGitHubLink.Provider value={true}>
+          <TranscriptLink href={href} words={node === undefined ? "" : wordsOf(node)}>
+            {children}
+          </TranscriptLink>
+        </InsideGitHubLink.Provider>
+      ),
+      img: ({ src, alt }) => (
+        <GitHubImage src={String(src ?? "")} alt={String(alt ?? "")} picture={picture} />
+      ),
     }),
     [picture],
   );
