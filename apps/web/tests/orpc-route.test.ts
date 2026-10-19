@@ -108,3 +108,27 @@ test("/api/models refuses through the committed table, the dispatcher and the de
   assert.equal(posted.headers.get("cache-control"), null);
   assert.equal(await posted.text(), '{"error":"method-not-allowed"}');
 });
+
+test("an automation's own paths reach the automation procedures through the committed table and the dispatcher, refusing an unsigned caller as the old group did, its malformed body unread", async () => {
+  const id = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
+  const routes = new Map([
+    ["automations/automation", orpcRoute],
+    ["automations/runs", orpcRoute],
+  ]);
+  const runs = await dispatched(new Request(`${ORIGIN}/api/automations/${id}/runs`), routes);
+  assert.equal(runs.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(runs.headers.get("content-type"), "application/json");
+  assert.equal(runs.headers.get("cache-control"), null);
+  assert.equal(await runs.text(), '{"error":"invalid-token"}');
+
+  const changed = await dispatched(
+    new Request(`${ORIGIN}/api/automations/${id}`, {
+      method: HTTP_METHOD.PATCH,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: "yes", owner: "someone-else" }),
+    }),
+    routes,
+  );
+  assert.equal(changed.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(await changed.text(), '{"error":"invalid-token"}');
+});
