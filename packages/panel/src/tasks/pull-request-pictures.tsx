@@ -4,7 +4,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ProviderMark, SKELETON_SHAPE, Skeleton } from "@luke/ui";
 import { linksToPicture } from "@luke/ui/github-html";
-import { PICTURE_STATE, pictureNow, usePicture } from "@luke/ui/picture-cache";
+import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
 import {
   createContext,
   type ReactNode,
@@ -64,10 +64,7 @@ interface EntryViewerDoor {
 const EntryViewerContext = createContext<EntryViewerDoor | undefined>(undefined);
 
 /** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
-export function useGitHubImageRead(): (
-  owner: string,
-  address: string,
-) => ReturnType<ReturnType<typeof useAct>["act"]> {
+export function useGitHubImageRead(): (owner: string, address: string) => Promise<PictureAnswer> {
   const { act } = useAct();
   return useCallback(
     (owner: string, address: string) =>
