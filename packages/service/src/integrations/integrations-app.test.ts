@@ -18,7 +18,7 @@ import {
 } from "@luke/features/integration-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { fakeHttpClientLayer, noNetwork } from "@luke/wire/testing";
-import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -26,6 +26,8 @@ import { vi } from "vitest";
 import { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { cookieOriginGuard } from "../http/origin-guard.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import {
   GITHUB_APP_SETTINGS,
   openGithubUser,
@@ -55,6 +57,7 @@ import {
   integrationsApp,
   mintIntegrationState,
 } from "./integrations-app.js";
+import { integrationsProcedures } from "./integrations-procedures.js";
 
 /**
  * The integrations an account is offered, as the integrations group answers
@@ -94,6 +97,8 @@ interface Sent {
   readonly cookieOf?: string;
   readonly origin?: string;
   readonly body?: string;
+  /** The length the request states for its body, where it states one. */
+  readonly contentLength?: number;
 }
 
 /** The accounts a statuses answer names, as the wire spells them. */
@@ -174,38 +179,49 @@ const standing = (
       githubApp,
       network,
     );
+    const groupSeams: IntegrationsAppSeams = {
+      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
+      resolveUserId: (incoming) =>
+        Effect.succeed(
+          incoming.headers.has("authorization")
+            ? Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", ""))
+            : Option.fromNullishOr(
+                incoming.headers.get("cookie")?.replace(`${SESSION_COOKIE}=`, ""),
+              ),
+        ),
+      readConnections: readIntegrationConnections,
+      readSignIn: readIntegrationSignIn,
+      beginSignIn: beginIntegrationSignIn,
+      completeSignIn: completeIntegrationSignIn,
+      endSignIn: endIntegrationSignIn,
+      deleteAccount: deleteIntegrationAccount,
+      fillLabel: fillIntegrationLabel,
+      renameConnection: renameIntegrationConnection,
+      mintState: mintIntegrationState,
+      mintSubject: () => {
+        subjects += 1;
+        return `subject-${minted}-${subjects}`;
+      },
+      // The test's own clock, which also stamps a sign-in begun.
+      now: () => clock.currentTimeMillisUnsafe(),
+      ...seams,
+    };
+    // Connect's return to the browser stays on its route group; every other path is a hosted procedure.
     const app = HttpRouter.toWebHandler(
-      integrationsApp({
-        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            incoming.headers.has("authorization")
-              ? Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", ""))
-              : Option.fromNullishOr(
-                  incoming.headers.get("cookie")?.replace(`${SESSION_COOKIE}=`, ""),
-                ),
-          ),
-        readConnections: readIntegrationConnections,
-        readSignIn: readIntegrationSignIn,
-        beginSignIn: beginIntegrationSignIn,
-        completeSignIn: completeIntegrationSignIn,
-        endSignIn: endIntegrationSignIn,
-        deleteAccount: deleteIntegrationAccount,
-        fillLabel: fillIntegrationLabel,
-        renameConnection: renameIntegrationConnection,
-        mintState: mintIntegrationState,
-        mintSubject: () => {
-          subjects += 1;
-          return `subject-${minted}-${subjects}`;
-        },
-        // The test's own clock, which also stamps a sign-in begun.
-        now: () => clock.currentTimeMillisUnsafe(),
-        ...seams,
-      }).pipe(HttpRouter.provideRequest(services)),
+      integrationsApp(groupSeams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
+    // SAFETY: the integrations procedures yield the database, Connect, the GitHub App, the clock, and the network alone, which is all a test provides of the web runtime's services.
+    const procedureServices = (yield* Effect.context<Layer.Success<typeof services>>().pipe(
+      Effect.provide(services),
+    )) as Context.Context<WebServices>;
+    const procedures = hostedFetch({ integrations: integrationsProcedures(groupSeams) });
+    const answer = (request: Request): Promise<Response> =>
+      new URL(request.url).pathname === HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED
+        ? app.handler(request)
+        : procedures(request, procedureServices);
     yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
-    // Every request meets the deployment's origin guard first, as `routeFromHttpRouter` hands it to the group.
+    // Every request meets the deployment's origin guard first, as the web routes hand it on.
     const refuseCrossSite = cookieOriginGuard(DEPLOYMENT);
     const fetch = (path: string, init: Sent = {}) =>
       Effect.promise(() => {
@@ -213,12 +229,17 @@ const standing = (
         if (init.userId !== undefined) headers.set("authorization", `Bearer ${init.userId}`);
         if (init.cookieOf !== undefined) headers.set("cookie", sessionCookieOf(init.cookieOf));
         if (init.origin !== undefined) headers.set("origin", init.origin);
+        // Every client of the service names its body JSON, which is how a procedure is told to read it.
+        if (init.body !== undefined) headers.set("content-type", "application/json");
+        if (init.contentLength !== undefined) {
+          headers.set("content-length", String(init.contentLength));
+        }
         const request = new Request(new URL(path, ORIGIN), {
           method: init.method ?? "GET",
           headers,
           ...(init.body !== undefined ? { body: init.body } : undefined),
         });
-        return Promise.resolve(refuseCrossSite(request) ?? app.handler(request));
+        return Promise.resolve(refuseCrossSite(request) ?? answer(request));
       });
     const ask = (path: string, init: Sent) =>
       Effect.gen(function* () {
@@ -230,6 +251,17 @@ const standing = (
     return {
       /** Any of the group's paths, answered as status and body. */
       ask,
+      /** Any of the group's paths, answered as its status, the two headers a caller reads, and its bytes. */
+      bytes: (path: string, init: Sent) =>
+        Effect.gen(function* () {
+          const response = yield* fetch(path, init);
+          return {
+            status: response.status,
+            contentType: response.headers.get("content-type"),
+            cacheControl: response.headers.get("cache-control"),
+            text: yield* Effect.promise(() => response.text()),
+          };
+        }),
       /** Where Slack stands for the account, and the sign-in failures the read found. */
       slackRead: (userId: string) =>
         Effect.map(ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }), ({ body }) => {
@@ -256,23 +288,23 @@ const standing = (
           ({ body }) => (body as { integrations: Record<string, string> }).integrations[GITHUB],
         ),
       disconnectGithub: (userId: string) =>
-        ask(`/api/account/integrations/disconnect?provider=${GITHUB}`, { method: "POST", userId }),
+        ask(`/api/account/integrations/${GITHUB}/disconnect`, { method: "POST", userId }),
       /** The names of the tools GitHub's server offers the account. */
       githubTools: (userId: string) =>
         Effect.map(
-          ask(`/api/account/integrations/tools?provider=${GITHUB}`, { userId }),
+          ask(`/api/account/integrations/${GITHUB}/tools`, { userId }),
           // SAFETY: a tools answer is a list of named tools.
           ({ body }) => (body as { tools: { name: string }[] }).tools.map((tool) => tool.name),
         ),
       /** A Cancel of the account's Slack sign-in, answering where Slack then stands. */
       cancelSlack: (userId: string) =>
         Effect.map(
-          ask(`/api/account/integrations/cancel?provider=${SLACK}`, { method: "POST", userId }),
+          ask(`/api/account/integrations/${SLACK}/cancel`, { method: "POST", userId }),
           // SAFETY: a cancel answers the one provider's word.
           ({ body }) => (body as { status: string }).status,
         ),
       connectSlack: (userId: string) =>
-        ask(`/api/account/integrations/connect?provider=${SLACK}`, { method: "POST", userId }),
+        ask(`/api/account/integrations/${SLACK}/connect`, { method: "POST", userId }),
       /** Where the browser returning from a Slack sign-in under way for the account lands. */
       slackLanding: (userId: string) =>
         Effect.gen(function* () {
@@ -700,12 +732,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const group = yield* standing(NOTION_CONNECTOR);
         const userId = yield* openAccount("pat@two-notions.example");
         const notion = (suffix: string) => `/api/account/integrations/${suffix}`;
-        const first = yield* group.ask(notion(`connect?provider=${NOTION}`), {
+        const first = yield* group.ask(notion(`${NOTION}/connect`), {
           method: "POST",
           userId,
         });
         assert.deepEqual(first.body, { url: GRANTING_SIGN_IN_URL, connection: NOTION });
-        const second = yield* group.ask(notion(`connect?provider=${NOTION}&add=true`), {
+        const second = yield* group.ask(notion(`${NOTION}/connect?add=true`), {
           method: "POST",
           userId,
         });
@@ -720,7 +752,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.ok(addableIn(settled.body).includes(NOTION));
         assert.equal(statusIn(settled.body, NOTION), INTEGRATION_STATUS.CONNECTED);
 
-        const renamed = yield* group.ask(notion(`rename?provider=${NOTION}&connection=notion-2`), {
+        const renamed = yield* group.ask(notion(`${NOTION}/rename?connection=notion-2`), {
           method: "POST",
           userId,
           body: JSON.stringify({ label: "  Personal " }),
@@ -733,7 +765,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
             status: INTEGRATION_STATUS.CONNECTED,
           },
         });
-        yield* group.ask(notion(`disconnect?provider=${NOTION}&connection=notion-2`), {
+        yield* group.ask(notion(`${NOTION}/disconnect?connection=notion-2`), {
           method: "POST",
           userId,
         });
@@ -752,23 +784,23 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       Effect.gen(function* () {
         const held = yield* standing({ ...NOTION_CONNECTOR, NOTION_MULTIPLE_ACCOUNTS: "off" });
         const userId = yield* openAccount("sam@held.example");
-        const adding = yield* held.ask(
-          `/api/account/integrations/connect?provider=${NOTION}&add=true`,
-          { method: "POST", userId },
-        );
+        const adding = yield* held.ask(`/api/account/integrations/${NOTION}/connect?add=true`, {
+          method: "POST",
+          userId,
+        });
         assert.deepEqual(adding.body, UNAVAILABLE_REFUSAL.body);
         const read = yield* held.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.ok(!addableIn(read.body).includes(NOTION));
 
         const single = yield* standing({ GRANOLA_CONNECTOR_UID: "oauth/granola" });
         const granola = yield* single.ask(
-          `/api/account/integrations/connect?provider=${INTEGRATION_PROVIDER.GRANOLA}&add=true`,
+          `/api/account/integrations/${INTEGRATION_PROVIDER.GRANOLA}/connect?add=true`,
           { method: "POST", userId },
         );
         assert.deepEqual(granola.body, UNAVAILABLE_REFUSAL.body);
 
         const crossed = yield* held.ask(
-          `/api/account/integrations/connect?provider=${NOTION}&connection=linear-2`,
+          `/api/account/integrations/${NOTION}/connect?connection=linear-2`,
           { method: "POST", userId },
         );
         assert.equal(crossed.status, HOSTED_HTTP_STATUS.NOT_FOUND);
@@ -780,17 +812,17 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       const group = yield* standing(NOTION_CONNECTOR);
       const userId = yield* openAccount("max@five-notions.example");
       const add = (query: string) =>
-        group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+        group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
           method: "POST",
           userId,
         });
       yield* add("");
-      for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("&add=true");
+      for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("?add=true");
       const full = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
 
       assert.equal(accountsIn(full.body).length, INTEGRATION_ACCOUNTS_MAX);
       assert.ok(!addableIn(full.body).includes(NOTION));
-      assert.deepEqual((yield* add("&add=true")).body, UNAVAILABLE_REFUSAL.body);
+      assert.deepEqual((yield* add("?add=true")).body, UNAVAILABLE_REFUSAL.body);
     }),
   );
 
@@ -801,19 +833,19 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         const group = yield* standing(NOTION_CONNECTOR, undefined, undefined, { declines: true });
         const userId = yield* openAccount("left@five-notions.example");
         const add = (query: string) =>
-          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+          group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
             method: "POST",
             userId,
           });
         yield* add("");
-        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("&add=true");
+        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("?add=true");
         yield* TestClock.adjust("16 minutes");
         const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
 
         assert.equal(accountsIn(read.body).length, 0);
         assert.ok(addableIn(read.body).includes(NOTION));
         // The sign-ins left behind are let go, so the account added takes the provider's own name and stands first.
-        assert.deepEqual((yield* add("&add=true")).body, {
+        assert.deepEqual((yield* add("?add=true")).body, {
           url: GRANTING_SIGN_IN_URL,
           connection: NOTION,
         });
@@ -846,14 +878,14 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           },
         );
         const add = (query: string) =>
-          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+          group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
             method: "POST",
             userId,
           });
         yield* add("");
         yield* TestClock.adjust("16 minutes");
 
-        assert.deepEqual((yield* add("&add=true")).body, {
+        assert.deepEqual((yield* add("?add=true")).body, {
           url: GRANTING_SIGN_IN_URL,
           connection: "notion-2",
         });
@@ -887,21 +919,21 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           },
         );
         const connect = (query: string) =>
-          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+          group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
             method: "POST",
             userId,
           });
         yield* connect("");
         for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) {
-          yield* connect("&add=true");
+          yield* connect("?add=true");
         }
         yield* TestClock.adjust("16 minutes");
         // Every account but the fifth signs in again, so only the fifth's sign-in is left behind.
         for (let place = 1; place < INTEGRATION_ACCOUNTS_MAX; place += 1) {
-          yield* connect(place === 1 ? "" : `&connection=${NOTION}-${place}`);
+          yield* connect(place === 1 ? "" : `?connection=${NOTION}-${place}`);
         }
 
-        assert.deepEqual((yield* connect("&add=true")).body, UNAVAILABLE_REFUSAL.body);
+        assert.deepEqual((yield* connect("?add=true")).body, UNAVAILABLE_REFUSAL.body);
       }),
   );
 
@@ -934,7 +966,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           },
         });
 
-        const answer = yield* group.ask(`/api/account/integrations/disconnect?provider=${NOTION}`, {
+        const answer = yield* group.ask(`/api/account/integrations/${NOTION}/disconnect`, {
           method: "POST",
           userId,
         });
@@ -956,12 +988,12 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         });
         const userId = yield* openAccount("ended@five-notions.example");
         const add = (query: string) =>
-          group.ask(`/api/account/integrations/connect?provider=${NOTION}${query}`, {
+          group.ask(`/api/account/integrations/${NOTION}/connect${query}`, {
             method: "POST",
             userId,
           });
         yield* add("");
-        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("&add=true");
+        for (let added = 1; added < INTEGRATION_ACCOUNTS_MAX; added += 1) yield* add("?add=true");
         const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
 
         assert.equal(accountsIn(read.body).length, 0);
@@ -1017,7 +1049,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId }),
           ({ body }) => accountsIn(body).map((account) => account.label),
         );
-        yield* group.ask(`/api/account/integrations/connect?provider=${NOTION}`, {
+        yield* group.ask(`/api/account/integrations/${NOTION}/connect`, {
           method: "POST",
           userId,
         });
@@ -1070,7 +1102,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
           grantsOnce: true,
         });
         const userId = yield* openAccount("ana@settles-once.example");
-        yield* group.ask(`/api/account/integrations/connect?provider=${NOTION}`, {
+        yield* group.ask(`/api/account/integrations/${NOTION}/connect`, {
           method: "POST",
           userId,
         });
@@ -1078,6 +1110,80 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         assert.deepEqual(
           accountsIn(read.body).map((account) => [account.status, account.label]),
           [[INTEGRATION_STATUS.CONNECTED, "Acme"]],
+        );
+      }),
+  );
+  it.effect(
+    "a procedure's refusals are byte for byte the old group's: each bare, under no cache header, and the caller read before the provider or the body",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR);
+        const userId = yield* openAccount("bea@bytes.example");
+        const refusal = (status: number, error: string) => ({
+          status,
+          contentType: "application/json",
+          cacheControl: null,
+          text: JSON.stringify({ error }),
+        });
+        assert.deepEqual(
+          yield* group.bytes(`/api/account/integrations/${SLACK}/connect`, { method: "POST" }),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        // An unsigned caller with a body its schema refuses is still told it is unsigned.
+        assert.deepEqual(
+          yield* group.bytes(`/api/account/integrations/${SLACK}/rename?connection=slack`, {
+            method: "POST",
+            body: JSON.stringify({ label: 7, extra: true }),
+          }),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          yield* group.bytes("/api/account/integrations/nowhere/tools", { userId }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* group.bytes(`/api/account/integrations/${SLACK}/connect`, { userId }),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+        assert.deepEqual(
+          yield* group.bytes(`/api/account/integrations/${NOTION}/cancel`, {
+            method: "POST",
+            userId,
+          }),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+      }),
+  );
+
+  it.effect(
+    "a rename past its cap is refused as too large before its body is read, one with a key past the label as an invalid request, and the label stands",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(NOTION_CONNECTOR);
+        const userId = yield* openAccount("ivy@rename-bounds.example");
+        yield* group.ask(`/api/account/integrations/${NOTION}/connect`, { method: "POST", userId });
+        yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        const rename = (body: string, contentLength?: number) =>
+          group.bytes(`/api/account/integrations/${NOTION}/rename`, {
+            method: "POST",
+            userId,
+            body,
+            ...(contentLength !== undefined ? { contentLength } : undefined),
+          });
+        const oversized = JSON.stringify({ label: "x".repeat(4_000) });
+        assert.deepEqual(yield* rename(oversized, oversized.length), {
+          status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+          contentType: "application/json",
+          cacheControl: null,
+          text: JSON.stringify({ error: HOSTED_API_ERROR.REQUEST_TOO_LARGE }),
+        });
+        const excess = yield* rename(JSON.stringify({ label: "Work", color: "red" }));
+        assert.equal(excess.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.equal(excess.text, JSON.stringify({ error: HOSTED_API_ERROR.INVALID_REQUEST }));
+        const read = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
+        assert.deepEqual(
+          accountsIn(read.body).map((account) => account.label),
+          [undefined],
         );
       }),
   );

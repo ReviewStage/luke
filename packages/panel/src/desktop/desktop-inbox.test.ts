@@ -43,9 +43,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -59,7 +57,7 @@ import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -320,12 +318,6 @@ beforeEach(() => {
           },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
@@ -382,6 +374,10 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(members),
+  });
 });
 
 afterEach(() => {
@@ -425,6 +421,8 @@ function mount(
   };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    // Whether the list was asked for, which the window keeps as the Tasks tab does.
+    const [listAsked, setListAsked] = useState(false);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
@@ -455,6 +453,8 @@ function mount(
             asked.closed += 1;
           },
           onChoose: setChosen,
+          listed: listAsked,
+          onListed: setListAsked,
           pages: undefined,
           onRereadPages: () => undefined,
           onTaskAgents: () => undefined,
@@ -544,7 +544,7 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
 /** The tab under the Inbox's title whose name starts with `name`. */
 function showTab(page: HTMLElement, name: string): HTMLButtonElement {
   const found = [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === name,
+    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
   );
   assert.ok(found, `the list offers the ${name} tab`);
   return found;
@@ -553,7 +553,7 @@ function showTab(page: HTMLElement, name: string): HTMLButtonElement {
 /** The tabs under the Inbox's title as a reader sees them: each name and count, the one shown in brackets. */
 function showTabs(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].map((each) => {
-    const words = `${each.querySelector(".luke-tab-label")?.textContent} ${each.querySelector(".luke-tab-count")?.textContent}`;
+    const words = `${each.querySelector(".luke-choice-bar-label")?.textContent} ${each.querySelector(".luke-choice-bar-count")?.textContent}`;
     return each.getAttribute("aria-selected") === "true" ? `[${words}]` : words;
   });
 }
@@ -843,20 +843,15 @@ function optionHeads(page: HTMLElement, settled = false): (string | null)[] {
   return [...pane.querySelectorAll<HTMLElement>(rows)].map((each) => wordsOf(each));
 }
 
-/** The shown item's subject as a reader meets it: its title, and where its line says it stands, with whether it wears the attention mark. */
-function subjectOf(page: HTMLElement): (string | boolean | null | undefined)[] {
+/** The shown item's subject as a reader meets it: everything under the thread's subject, which is its title alone. */
+function subjectOf(page: HTMLElement): string[] {
   const subject =
     page.querySelector(".inbox-view-items:not([hidden]) .inbox-subject") ??
     assert.fail("the thread leads with its subject");
-  const standing = subject.querySelector(".inbox-standing");
-  return [
-    subject.querySelector("h2[data-inbox-title]")?.textContent,
-    wordsOf(standing),
-    standing?.querySelector(".attention-mark") !== null,
-  ];
+  return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-test("a thread leads with its item's title as its subject, and a line saying where it stands: a waiting item needs you by the attention mark, an answered one is answered, and one its agent took back is withdrawn, its agent's comment saying why", async () => {
+test("a thread leads with its item's title alone as its subject, whether the item waits, is answered, or was taken back by its agent, whose comment says why", async () => {
   const WITHDRAWN: InboxItem = {
     ...EXPIRY,
     status: INBOX_STATUS.CLOSED,
@@ -865,10 +860,10 @@ test("a thread leads with its item's title as its subject, and a line saying whe
   inboxes.set(INVITES.id, [WITHDRAWN]);
   const { page } = mount();
   await settle();
-  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Needs you", true]);
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?"]);
   const fold = () =>
     page.querySelector<HTMLDetailsElement>(
       ".inbox-view-items:not([hidden]) details[data-inbox-offered]",
@@ -878,7 +873,7 @@ test("a thread leads with its item's title as its subject, and a line saying whe
   });
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Withdrawn", false]);
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
   assert.equal(fold().open, false, "the fold opened on one item stands closed on the next");
   assert.equal(fold().querySelector("summary")?.textContent, "2 options offered");
   const withdrawn =
@@ -891,22 +886,14 @@ test("a thread leads with its item's title as its subject, and a line saying whe
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
-test("a teammate's open item does not need you: its subject's line says it waits on them, by their face and name, with no attention mark, and its box still takes your answer", async () => {
+test("a teammate's open item leads with its title alone, and its box still takes your answer", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: CHARLES }, RETRY]);
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Waiting on Charles Pan", false]);
-  const standing =
-    page.querySelector(".inbox-view-items:not([hidden]) .inbox-standing") ??
-    assert.fail("the subject says where the item stands");
-  assert.equal(
-    standing.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
-    "person",
-    "the teammate is named by their face",
-  );
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.ok(
     page.querySelector(".inbox-view-items:not([hidden]) .composer-editor"),
     "any member may answer",
@@ -1454,6 +1441,38 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   );
 });
 
+test("a form's select wears the Recommended badge on the option the agent recommends and on no other, and picks nothing for the developer", async () => {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      response: {
+        type: INBOX_RESPONSE.FORM,
+        fields: [
+          {
+            type: INBOX_FIELD.SELECT,
+            label: "Channel",
+            options: ["Email", "Slack"],
+            recommended: "Slack",
+          },
+          { type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] },
+        ],
+      },
+    },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const pane = itemPane(page);
+
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Channel")), {
+    options: ["Email", "SlackRecommended"],
+    checked: [],
+    tabStops: ["Email"],
+  });
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
+});
+
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
   const { page, asked } = mount();
   await settle();
@@ -1568,24 +1587,23 @@ function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-test("the thread names its agent as one button wherever it does, its subject's line, its question's comment, and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
+test("the thread names its agent as one button wherever it does, its question's comment and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
-  const [byline, comment] = threadRefs(page);
-  assert.ok(byline, "the subject's line names the agent");
-  assert.equal(byline.textContent, "Alerts");
-  assert.ok(wearsAgentTile(byline), "the subject's line wears the agent's tile");
-  assert.equal(comment?.textContent, "Alerts", "the question's comment names the agent");
+  const [comment, ...more] = threadRefs(page);
+  assert.ok(comment, "the question's comment names the agent");
+  assert.equal(comment.textContent, "Alerts");
+  assert.deepEqual(more, [], "nothing over the thread names the agent again");
   const asking =
     page.querySelector('[data-inbox-comment="asked"]') ?? assert.fail("the question is a comment");
   assert.ok(
     asking.querySelector('.inbox-comment-face .actor-mark[data-kind="agent"]'),
     "the agent's tile leads its comment",
   );
-  reach(byline);
+  reach(comment);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
-  act(() => byline.click());
+  act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
@@ -1610,10 +1628,10 @@ test("an archived agent is still named by its name, its card saying it was archi
   listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount();
   await settle();
-  let [byline] = threadRefs(page);
-  assert.ok(byline, "the byline names the archived agent");
-  assert.equal(byline.textContent, "Alerts");
-  reach(byline);
+  let [named] = threadRefs(page);
+  assert.ok(named, "the thread names the archived agent");
+  assert.equal(named.textContent, "Alerts");
+  reach(named);
   const [name, corner] = standingCard();
   assert.equal(name, "Alerts");
   assert.match(corner ?? "", /^Archived · /u);
@@ -1626,12 +1644,12 @@ test("an archived agent is still named by its name, its card saying it was archi
   listedAgents = [];
   ({ page, asked } = mount());
   await settle();
-  [byline] = threadRefs(page);
-  assert.ok(byline, "the byline names an agent the plan does not list");
-  assert.equal(byline.textContent, "Coding agent");
-  reach(byline);
+  [named] = threadRefs(page);
+  assert.ok(named, "the thread names an agent the plan does not list");
+  assert.equal(named.textContent, "Coding agent");
+  reach(named);
   assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
-  act(() => byline.click());
+  act(() => named.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
@@ -1796,7 +1814,7 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   act(() => showTab(page, "Archived").click());
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Archived", false]);
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
   const pane =
     page.querySelector<HTMLElement>(".inbox-view-items:not([hidden])") ??
     assert.fail("the item is shown beside the list");
@@ -1824,7 +1842,7 @@ test("a link to an archived task's item opens it on the Archived tab, which list
   act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
   await settle();
   assert.equal(showTab(page, "Archived").getAttribute("aria-selected"), "true");
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Archived", false]);
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
 });
 
 test("a fresh profile opens the Inbox on All open, grouped by task, a settled item left out until Everything is pressed", async () => {
@@ -2894,8 +2912,8 @@ test("what an item's box said of a dictation that failed stays with that item, a
   // The strip draws still under reduced motion, which jsdom has no answer to.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: () => ({
-      matches: true,
+    value: (query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }),
@@ -3335,7 +3353,7 @@ function hoveredCard(control: Element, card: string): string | null {
 }
 
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -4063,7 +4081,7 @@ test("a message written on a settled item's thread from its box goes as a messag
     "You",
     "Page on-call at night too.",
   ]);
-  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?"]);
   assert.equal(composerEditor(pane).textContent, "", "the box lets its words go");
   assert.equal(board.scrollTop, 560, "the board scrolls its own new comment's foot into view");
 });
@@ -4086,7 +4104,7 @@ test("a message refused says why under the box, which keeps its words, and leave
   );
   assert.equal(pane.querySelector('[data-inbox-comment="message"]'), null);
   assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
-  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?"]);
 });
 
 test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
@@ -4694,7 +4712,7 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
     "# Invites",
     "*Expire after 7 days?",
   ]);
-  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Answered", false]);
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
 
   await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));

@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "open": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "open"
+  ],
+  "additionalProperties": false
+}

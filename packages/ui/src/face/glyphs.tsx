@@ -220,6 +220,15 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
+/** Points on, the mirror of `BackIcon`: a calendar's next month. */
+export function ForwardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
 /** An arrow pointing left: back to the place the window stood on before. */
 export function ArrowLeftIcon(): React.JSX.Element {
   return (

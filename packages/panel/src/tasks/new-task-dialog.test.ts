@@ -24,7 +24,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import {
@@ -509,13 +509,9 @@ test("with Issues on, an @ offers the workspace's issues, and the one chosen is 
     updatedAt: 1,
   };
   fakeAppBridge({
-    act: (request: Act) =>
-      Promise.resolve(
-        request.kind === ACT_KIND.ISSUES_LIST
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: { issues: [issue] } }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeActPort({ [ACT_KIND.ISSUES_LIST]: () => Promise.resolve({ issues: [issue] }) });
   handState({ [EXPERIMENT.ISSUES]: true });
   const started: (NewTaskAgent | undefined)[] = [];
   const container = document.createElement("div");

@@ -17,11 +17,11 @@ import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { attachment } from "../schemas/attachment.js";
 import { organization } from "../schemas/auth.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent, type StoredArchive } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { issue } from "../schemas/issue.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
@@ -1107,8 +1107,29 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
     db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.taskId, taskId)),
   );
   yield* Database.use((db) =>
-    db.update(inboxAttachment).set({ organizationId }).where(eq(inboxAttachment.taskId, taskId)),
+    db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
   );
+});
+
+/** The instant an archived task's open calls are stamped detached at: before any grace, so the sweep's next run takes them first. */
+export const HANDED_TO_SWEEP_AT = new Date(0);
+
+/**
+ * Every open call on the task, whichever member opened it, handed to the
+ * voice orphan sweep: stamped detached as of the epoch whether or not a
+ * connection holds it, so the sweep's next run ends it on Luke's key and
+ * each desktop on it hears `session.closed`; a re-attach is refused once
+ * the task is archived, so nothing takes the call back.
+ */
+const handTaskCallsToSweep = SqlSchema.void({
+  Request: Schema.Struct({ taskId: Schema.String, detachedAt: Schema.Date }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: row.detachedAt })
+        .where(and(eq(voiceSessions.taskId, row.taskId), isNull(voiceSessions.closedAt))),
+    ),
 });
 
 /**
@@ -1263,6 +1284,9 @@ export function updateTask<E = never, R = never, RA = never>(
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
         }
         if (changes.archived !== undefined) yield* followTaskArchive(taskId, row.archivedAt);
+        if (changes.archived === true) {
+          yield* handTaskCallsToSweep({ taskId, detachedAt: HANDED_TO_SWEEP_AT });
+        }
         return Option.some(yield* taskOf(userId, row));
       }),
     ),

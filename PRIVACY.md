@@ -600,9 +600,43 @@ beside it, how many seconds you dictated.
 
 Luke's own maintainers can see your name, email address, profile picture,
 sign-in method, whether you are an administrator, when you joined and were
-last active, and your daily counts, on an admin page of our site that only an
-account we have marked as an administrator can open; nothing you type, say,
-or run appears on it.
+last active, and your daily counts, and the names of your workspaces and
+their members, roles, invitations, connected integrations, GitHub
+installation, and activity counts, on an admin page of our site that only an
+account we have marked as an administrator can open. Beside them it shows
+how many tasks you created and minutes of calls you held over a window; your
+coding agents, each with when it started, the repository it works in, its
+model and effort, whether it is running, finished, or failed with the fixed
+word for why, and whether its pull request is open, merged, or closed; which
+providers you saved a key for or connected, and whether each key or
+connection works; your coding-agent model and effort, and the experiments
+you turned on; and when a call of yours dropped or an automation of yours
+failed to start, with the fixed word for why. For the most active accounts it
+also shows how many coding agents you started and pull requests of theirs
+merged, on how many days you created a task, wrote a plan revision, started
+an agent, or held a call, and when you last signed in. Counted across all
+accounts, never named to one, it shows how many plan revisions, inbox
+answers, and automation runs there were, and how many accounts posted in a
+workspace's chat, have GitHub connected on a workspace, have an integration
+connected, or opened or merged a pull request.
+Across every account, the same page counts how many of Luke's turns, coding
+agents' runs, calls, and automation runs ended and how many failed, were
+dropped, or were skipped, each by the fixed word the service records for why.
+Where one of your own API keys stands refused, out of quota, or unreadable,
+one of your integrations stands expired, or a workspace you belong to has its
+GitHub installation suspended or removed, the page lists your account with
+which provider or integration it is and that status, when it last changed,
+and how many of your coding agents failed in the past week; that list names
+no workspace and no repository. The same page shows the service's use at
+public list prices, a figure for comparison and not what we are billed,
+from the model tokens each turn recorded and the seconds of voice,
+dictation, and video avatar it metered: mostly as totals across every
+account, and, for the accounts whose use comes to the most at those prices
+over the days chosen, what each one's use comes to, how many tokens of it
+no price was known for, and how many of its coding agents' pull requests
+merged. Past those names, nothing you
+type, say, or run appears on it: no task's title, plan, prompt, or message,
+no pull request's title, no key, and no error's own words.
 
 Every account also gets a first workspace on our service when it signs in, a
 record named with your name and holding you as its owner, which is otherwise
@@ -1281,7 +1315,9 @@ were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac and each repository's run command for Run
-are kept with that Mac's settings. Our service
+are kept with that Mac's settings. Luke in a browser keeps your settings in
+that browser's own storage for the site, and no sign-in token at all: it is
+signed in by the site's session cookie, which only the browser holds. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and

@@ -6,8 +6,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 /**
  * listed-automations.tsx -- the listed workspace's automations, read around the whole window, so an agent's card on Home's rows or in ⌘K names the automation that started it as the task's own does.
  *
- * They are read only while the Automations experiment is on and an agent
- * the window lists names an automation: one on a listed task's row, one of
+ * They are read only while an agent the window lists names an automation: one on a listed task's row, one of
  * the open task's agents, or one with no task whose question waits in the
  * listed workspace. The open task and the Inbox stand directories of their
  * own, which share this read where they are of the listed workspace
@@ -26,14 +25,12 @@ function namesAutomation(tasks: TasksControl): boolean {
   );
 }
 
-/** The listed workspace's automations for everything inside, while `on` (`EXPERIMENT.AUTOMATIONS`). */
+/** The listed workspace's automations for everything inside. */
 export function ListedAutomations({
   tasks,
-  on,
   children,
 }: {
   tasks: TasksControl;
-  on: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   const { onOpen } = tasks.automationsView;
@@ -44,7 +41,6 @@ export function ListedAutomations({
   return (
     <AutomationDirectory
       workspace={tasks.workspace}
-      on={on}
       wanted={namesAutomation(tasks)}
       onOpen={openAutomation}
     >

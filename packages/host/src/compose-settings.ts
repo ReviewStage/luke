@@ -22,16 +22,19 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
+  accountPreferencesToPush,
+  accountPreferencesToWrite,
   EXPERIMENT_COUNTED_AS,
   type Experiment,
   isAppSettingField,
   isExperiment,
   isSettingsResetScope,
   settingAnalytics,
+  snapshotAccountPreferences,
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -39,7 +42,12 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AccountSource, AppIdentity, type Environment } from "./effect/seams.js";
+import {
+  AccountSource,
+  AppIdentity,
+  type Environment,
+  SettingsChangedElsewhere,
+} from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
@@ -61,6 +69,14 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
 interface SettingsLinks {
   /** What authorizes the counted events and the account preferences on the signed-in account. */
   readonly credential: CallCredential;
+  /**
+   * Who the signed-in account is, as the account's session names it: the
+   * key its synced preferences and experiments are kept under, and nothing
+   * while no account is signed in.
+   */
+  readonly readAccountKey: () => Effect.Effect<string | undefined>;
+  /** Settles on the account the service names now, before a write keyed on the account. */
+  readonly confirmAccount: () => Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -113,6 +129,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
+    const changedElsewhere = yield* Effect.serviceOption(SettingsChangedElsewhere);
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -134,9 +151,16 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       credentialsUsable: runMode.observesProviders,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
+      // Note that the link is peeked, because a read before the merge links the account must read no one rather than wait.
+      sessionAccountEmail: () =>
+        Effect.flatMap(late.peek, (links) =>
+          Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
+        ),
       overrides,
       fileSystem,
       path,
+      // A file another writer shares, as the shell's change signal says, is written through a temporary file of this host's own.
+      ...(Option.isSome(changedElsewhere) ? { writer: kernel.createId() } : undefined),
     });
 
     /**
@@ -183,7 +207,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * answer read before a write would otherwise put back the switch the
      * developer just moved.
      */
-    const experiments = experimentWriter({ client: accountPreferencesClient, store });
+    const experiments = experimentWriter({
+      client: accountPreferencesClient,
+      store,
+      readAccountKey: () => readAccountPreferenceAccountKey(),
+      confirmAccount: () => confirmAccount(),
+    });
 
     /**
      * One account-preferences action and the name its failure is reported
@@ -226,12 +255,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       Effect.forever,
     );
 
-    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
-      Effect.map(store.readAccount(), (account) => account?.email);
+    // Note that the key is the session's, because a cookie session keeps no account in the settings file.
+    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
+      linked((links) => links.readAccountKey());
 
-    function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
-      return Object.keys(preferences).length === 0;
-    }
+    // Note that a write keyed on the account first settles on the one the service names, because another tab may have signed in as someone else.
+    const confirmAccount = (): Effect.Effect<void> => linked((links) => links.confirmAccount());
 
     function accountPreferencesSame(left: AccountPreferences, right: AccountPreferences): boolean {
       return JSON.stringify(left) === JSON.stringify(right);
@@ -240,6 +269,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      // Note that we settle again, because an arrival whose settling failed must not hand this account another's choices.
+      yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
       const preferences = yield* store.accountPreferences();
@@ -273,6 +304,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const hydrateAccountPreferences = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountKey: string,
     ): Effect.fn.Return<boolean, PlatformError> {
+      yield* confirmAccount();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const writesBefore = experiments.writesSent();
@@ -286,24 +319,13 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         emitSettingsSnapshot(yield* store.snapshot());
       }
 
-      if (!remote.hasStoredSnapshot) {
-        const preferences = yield* store.accountPreferences();
-        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        if (!accountPreferencesEmpty(preferences)) {
-          const written = yield* accountPreferencesClient.writePreferences(preferences);
-          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        }
-        if (!(yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
-          return false;
-        }
-        accountPreferencesHydratedAccount = accountKey;
-        return true;
-      }
-
-      const saved = yield* store.applyAccountPreferences(remote.preferences, {
-        accountEmail: accountKey,
-        preferences: baseline,
-      });
+      // Note that a shared part never written is no snapshot to take, so this Mac's own stands in for it, while the link part, written apart, is merged either way.
+      const local = yield* store.accountPreferences();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      const saved = yield* store.applyAccountPreferences(
+        snapshotAccountPreferences(remote.preferences, remote.hasStoredSnapshot, local),
+        { accountEmail: accountKey, preferences: baseline },
+      );
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       accountPreferencesHydratedAccount = accountKey;
       const preferences = yield* store.accountPreferences();
@@ -312,7 +334,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         yield* applyAccountPreferenceSideEffects(saved, saved.changed);
       }
       if (!accountPreferencesSame(preferences, remote.preferences)) {
-        const written = yield* accountPreferencesClient.writePreferences(preferences);
+        const written = yield* accountPreferencesClient.writePreferences(
+          accountPreferencesToWrite(preferences, baseline),
+        );
         if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return true;
       }
       yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
@@ -331,14 +355,18 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           ) {
             return;
           }
+          yield* confirmAccount();
           const preferences = yield* store.accountPreferences();
+          const baseline = yield* store.accountPreferencesSyncBaseline(accountKey);
           if (
             (yield* readAccountPreferenceAccountKey()) !== accountKey ||
             accountPreferencesHydratedAccount !== accountKey
           ) {
             return;
           }
-          const written = yield* accountPreferencesClient.writePreferences(preferences);
+          const written = yield* accountPreferencesClient.writePreferences(
+            accountPreferencesToPush(preferences, baseline),
+          );
           if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return;
           yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
         }),
@@ -380,11 +408,26 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       endLiveSession: linked((links) => links.endLiveSession),
     });
 
+    /**
+     * Each setting's value as its host side effect last carried it, kept
+     * apart from the store's held copy: a write re-reads the file, so the
+     * held copy may already hold a value another tab chose that no side
+     * effect here has carried yet. Kept only where the file has another
+     * writer (`SettingsChangedElsewhere`), and filled when that watch starts.
+     */
+    const carriedValues = new Map<AppSettingField, string>();
+    const carry = (field: AppSettingField, stored: StoredSettings): void => {
+      carriedValues.set(field, JSON.stringify(stored[field]));
+    };
+
     const applyHostSettingSideEffect = (
       field: AppSettingField,
       settings: SettingsUpdateResult["settings"],
     ): Effect.Effect<void> =>
-      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
+      Effect.andThen(
+        sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored }),
+        Effect.sync(() => carry(field, settings.stored)),
+      );
 
     const applyAccountPreferenceSideEffects = /* @__PURE__ */ Effect.fnUntraced(function* (
       result: SettingsUpdateResult,
@@ -394,6 +437,24 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         yield* applyHostSettingSideEffect(field, result.settings);
       }
       emitSettingsSnapshot(result.settings);
+    });
+
+    /**
+     * The file as another writer left it, read again: each setting standing
+     * other than its side effect last carried it has that side effect here,
+     * as a write of this host's own has (a voice another tab chose reaches
+     * this tab's live source), and the panel is sent the settings as they
+     * now stand.
+     */
+    const applyChangedElsewhere = Effect.gen(function* () {
+      yield* store.reload();
+      const after = yield* store.snapshot();
+      for (const field of APP_SETTING_FIELDS) {
+        if (carriedValues.get(field) !== JSON.stringify(after.stored[field])) {
+          yield* applyHostSettingSideEffect(field, after);
+        }
+      }
+      emitSettingsSnapshot(after);
     });
 
     const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
@@ -458,9 +519,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           if (!isExperiment(named)) return yield* invalid("experiment must name one");
           if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
           const experiment: Experiment = named;
-          const accountKey = yield* readAccountPreferenceAccountKey().pipe(
-            Effect.orElseSucceed(() => undefined),
-          );
+          const accountKey = yield* readAccountPreferenceAccountKey();
           if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
           const result = yield* settingsWrite(
             () => experiments.write(accountKey, experiment, on),
@@ -575,6 +634,25 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         // own lifetime scope: the scope closing interrupts it before the stop
         // above gives back what the start took.
         yield* Effect.forkScoped(drainAccountPreferencesSync);
+        // Another writer's change to the file, where the shell can hear one:
+        // read again, and carried as any update is. A read that fails is
+        // written down and the next change is still heard.
+        if (Option.isSome(changedElsewhere)) {
+          // What this host was built on is what its side effects carry until one runs.
+          const built = yield* Effect.option(store.snapshot());
+          if (Option.isSome(built)) {
+            for (const field of APP_SETTING_FIELDS) carry(field, built.value.stored);
+          }
+          yield* Effect.forkScoped(
+            Stream.runForEach(changedElsewhere.value, () =>
+              catchAllButInterrupt(applyChangedElsewhere, (cause) =>
+                Effect.sync(() => {
+                  report(`Reading settings another tab changed failed: ${Cause.pretty(cause)}`);
+                }),
+              ),
+            ),
+          );
+        }
       }),
     };
   },

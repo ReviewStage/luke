@@ -350,6 +350,28 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
   assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Found it in the README." });
 });
 
+test("a form posted to the inbox lists its fields by type, a select's options with the recommended one saying so", () => {
+  const view = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "invite-channel",
+      title: "How are invitations sent?",
+      response: {
+        type: "form",
+        fields: [
+          { type: "select", label: "Channel", options: ["Email", "Slack"], recommended: "Slack" },
+          { type: "boolean", label: "Remind", required: true },
+        ],
+      },
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.deepEqual(view.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "- Channel (select): Email, Slack (recommended)\n- Remind (boolean, required)",
+  });
+});
+
 test("an agent's reply on an inbox thread is its own row, naming the item's key and showing the words and pictures it sent, and one refused says why", () => {
   const view = toolCallView({
     tool: "reply_inbox",

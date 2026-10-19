@@ -13,13 +13,13 @@ const MARKDOWN_HTML_PARSER = fileURLToPath(
 );
 
 /**
- * The panel's own stylesheets, and the shared components' one sheet, which
- * vitest answers as their text where a test imports one `?raw`, or that one
- * `?inline` (`testing/container-width.ts`), rather than as the empty module it
+ * The panel's own stylesheets, and the shared tokens' and components' sheets,
+ * which vitest answers as their text where a test imports one `?raw`, or
+ * those `?inline` (`testing/container-width.ts`), rather than as the empty module it
  * answers any other stylesheet with.
  */
 const PANEL_STYLESHEETS =
-  /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$|\/ui\/src\/styles\.css\?inline$/;
+  /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$|\/ui\/src\/(?:styles|tokens\/tokens)\.css\?inline$/;
 
 export default defineConfig({
   plugins: [
@@ -35,7 +35,7 @@ export default defineConfig({
   test: {
     name: "panel",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["src/testing/resize-observer.ts"],
+    setupFiles: ["src/testing/resize-observer.ts", "src/testing/match-media.ts"],
     css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown"] } },
   },

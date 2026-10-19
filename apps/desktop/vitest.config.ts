@@ -25,7 +25,10 @@ export default defineConfig({
   test: {
     name: "desktop",
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
-    setupFiles: ["../../packages/panel/src/testing/resize-observer.ts"],
+    setupFiles: [
+      "../../packages/panel/src/testing/resize-observer.ts",
+      "../../packages/panel/src/testing/match-media.ts",
+    ],
     server: { deps: { inline: ["streamdown"] } },
   },
 });

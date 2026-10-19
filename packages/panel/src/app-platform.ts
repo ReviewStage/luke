@@ -53,6 +53,12 @@ export interface AppPlatform {
    * transition. A shell that records nothing does nothing.
    */
   applySessionReplay(bootstrap: SessionReplayBootstrap): void;
+  /**
+   * The link that opens the Mac app on where this window stands, which the
+   * sign-in offers beside its ways in: a shell that is not the Mac app
+   * answers one, and the Mac app, which needs none, leaves this out.
+   */
+  macAppLink?(): string;
 }
 
 let installed: AppPlatform | undefined;

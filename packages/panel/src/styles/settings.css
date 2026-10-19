@@ -173,7 +173,7 @@
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
-/* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
+/* A row holding a segmented control (`@luke/ui`'s `ChoiceBar`, segmented) wraps, so a
    narrow page drops the control under its label rather than clipping it or
    running it under the chip column. */
 .settings-row-wrapping {

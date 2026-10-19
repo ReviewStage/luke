@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { LINK_OPEN } from "@luke/features/link-open";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -13,8 +16,11 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  accountPreferencesFromParts,
+  accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  snapshotAccountPreferences,
   THEME,
 } from "@luke/settings";
 import {
@@ -239,6 +245,7 @@ const SAMPLE_VALUE = {
   diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
   diffLigatures: true,
   diffMinimizeComments: true,
+  linkOpen: LINK_OPEN.MAC_APP,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -461,6 +468,103 @@ test("refuses to store an account when encrypted storage is unavailable", async 
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
 
+/** Preferences as they cross the wire: split into the snapshot's parts, through JSON, and joined again. */
+function throughSnapshot(preferences: AccountPreferences): AccountPreferences | undefined {
+  const wire = unparsedWire(JSON.parse(JSON.stringify(accountPreferencesParts(preferences))));
+  return isRecord(wire) ? accountPreferencesFromParts(wire) : undefined;
+}
+
+test("a link choice made on one Mac reaches another through the snapshot, beside the voice", async (t) => {
+  const chooser = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await chooser.setAccount(TEST_ACCOUNT);
+  await chooser.set("voice", LIVE_VOICE.MARIN);
+  await chooser.set("linkOpen", LINK_OPEN.MAC_APP);
+
+  const other = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await other.setAccount(TEST_ACCOUNT);
+  const baseline = await other.accountPreferences();
+  await other.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  const remote = throughSnapshot(await chooser.accountPreferences());
+  assert.ok(remote, "the snapshot's parts did not read back");
+  const applied = await other.applyAccountPreferences(remote, {
+    accountEmail: TEST_ACCOUNT.email,
+    preferences: baseline,
+  });
+
+  assert.ok(applied.changed.includes("linkOpen"));
+  assert.equal(await other.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await other.get("voice"), LIVE_VOICE.MARIN);
+  assert.equal(appSettingsView(await other.snapshot()).linkOpen, LINK_OPEN.MAC_APP);
+});
+
+test("a link choice made on the web, before any voice was synced, reaches a Mac without costing it its voice", async (t) => {
+  const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await mac.setAccount(TEST_ACCOUNT);
+  await mac.set("voice", LIVE_VOICE.CEDAR);
+  const baseline = await mac.accountPreferences();
+  await mac.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  // The service's answer holds the link part alone, and no shared part was ever written.
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+  await mac.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await mac.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
+  );
+
+  assert.equal(await mac.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await mac.get("voice"), LIVE_VOICE.CEDAR);
+});
+
+test("a Mac takes the web's newer link choice over the one it last synced, and keeps one it made since", async (t) => {
+  const synced = { linkOpen: LINK_OPEN.BROWSER };
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+
+  const untouched = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await untouched.setAccount(TEST_ACCOUNT);
+  await untouched.set("linkOpen", LINK_OPEN.BROWSER);
+  await untouched.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await untouched.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: synced },
+  );
+  assert.equal(await untouched.get("linkOpen"), LINK_OPEN.MAC_APP);
+
+  const changed = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await changed.setAccount(TEST_ACCOUNT);
+  await changed.set("linkOpen", LINK_OPEN.BROWSER);
+  await changed.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await changed.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: {} },
+  );
+  assert.equal(await changed.get("linkOpen"), LINK_OPEN.BROWSER);
+});
+
+test("a first link choice made before the first sync is kept to be written, whether or not a voice was synced", async (t) => {
+  for (const sharedWritten of [false, true]) {
+    const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+    await mac.setAccount(TEST_ACCOUNT);
+    await mac.set("linkOpen", LINK_OPEN.MAC_APP);
+    // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
+    const baseline = await mac.accountPreferences();
+
+    const remote = sharedWritten ? { voice: LIVE_VOICE.CEDAR } : {};
+    await mac.applyAccountPreferences(
+      snapshotAccountPreferences(remote, sharedWritten, await mac.accountPreferences()),
+      { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
+    );
+
+    assert.equal(
+      await mac.get("linkOpen"),
+      LINK_OPEN.MAC_APP,
+      `shared part written: ${sharedWritten}`,
+    );
+    assert.deepEqual(
+      accountPreferencesParts(await mac.accountPreferences()).linkOpen,
+      LINK_OPEN.MAC_APP,
+    );
+  }
+});
+
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
@@ -497,3 +601,30 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
   assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });
+
+it.effect("two stores on one file, as two browser tabs are, each keep the other's change", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-tabs-");
+    // A browser tab's store: the cookie session hands it no cipher.
+    const tab = () =>
+      new SettingsStore({
+        directory: () => directory,
+        cipher: undefined,
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+        path: PATH,
+      });
+    const first = tab();
+    const second = tab();
+    // Both tabs have read the file before either writes.
+    yield* first.snapshot();
+    yield* second.snapshot();
+
+    yield* first.set("theme", THEME.DARK);
+    yield* second.set("zoom", 150);
+
+    const reopened = (yield* tab().snapshot()).stored;
+    assert.equal(reopened.theme, THEME.DARK);
+    assert.equal(reopened.zoom, 150);
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);

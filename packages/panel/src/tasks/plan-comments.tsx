@@ -13,6 +13,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -46,6 +47,7 @@ import {
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
@@ -69,7 +71,9 @@ import {
   useState,
 } from "react";
 import { ActorMark, ActorRef } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -112,7 +116,9 @@ import { useOpenLink } from "./use-open-link.js";
  *
  * A thread is started from words selected in the read view, with the
  * bubble that rises over them, or from the button a block shows at its end
- * under the pointer, which comments on the whole block. Its words are
+ * under the pointer, which comments on the whole block; while the bubble
+ * stands, ⌥⌘M starts it as a press on the bubble does
+ * (`APP_COMMAND.COMMENT_ON_SELECTION`). Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -136,6 +142,9 @@ const REVEAL_ROOM = 96;
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
+
+/** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
+const BUBBLE_ROOM_TOUCH = 16 + 48;
 
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
@@ -1141,7 +1150,7 @@ export function PlanCommentLayer({
   // Whether a pointer is down, whose press moves the focus before its own rule says what becomes of the thread.
   const pressing = useRef(false);
   const [bubble, setBubble] = useState<
-    { top: number; left: number; start: () => void } | undefined
+    { top: number; left: number; below: boolean; start: () => void } | undefined
   >(undefined);
   const cards = useRef(new Map<string, HTMLDivElement>());
   // The cards already stood in the margin, which move to their next place rather than land there, so a card arriving lands where it belongs.
@@ -1318,6 +1327,11 @@ export function PlanCommentLayer({
       letCaretGo();
     };
     const selected = () => {
+      // Note that a plan kept mounted under a hidden tab keeps its selection, but its words are no longer on screen to comment on.
+      if (element.closest("[hidden]") !== null) {
+        setBubble(undefined);
+        return;
+      }
       const selection = window.getSelection();
       if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
         if (editor !== undefined && selection?.isCollapsed === true) caretIn(selection);
@@ -1333,11 +1347,16 @@ export function PlanCommentLayer({
       }
       const box = range.getBoundingClientRect();
       const own = element.getBoundingClientRect();
+      // Note that a finger's bubble stands under the words, because the system's own selection menu stands over them, unless the window ends first.
+      const below =
+        coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= visibleViewport().bottom;
+      const top = (below ? box.bottom : box.top) - own.top;
       // In the editor the words are measured through it, and its selection is left as it stands.
       if (editor !== undefined) {
         setBubble({
-          top: box.top - own.top,
+          top,
           left: box.left - own.left,
+          below,
           start: () => {
             const span = editor.current?.selectionSpan();
             if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
@@ -1353,8 +1372,9 @@ export function PlanCommentLayer({
       const from = drawnOffset(start, range.startContainer, range.startOffset);
       const to = drawnOffset(start, range.endContainer, range.endOffset);
       setBubble({
-        top: box.top - own.top,
+        top,
         left: box.left - own.left,
+        below,
         start: () => {
           const begun = pendingOf(start, section, { from, to }, PLAN_COMMENT_SCOPE.WORDS, quote);
           if (begun !== undefined) setPending(begun);
@@ -1394,7 +1414,16 @@ export function PlanCommentLayer({
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
+    // Note that hiding the tab the plan stands in changes no selection, so its `hidden` attribute is watched for itself.
+    // Note that the tab shown again offers the words still selected there, though only a selection, not a caret, is read again, since a caret read opens and closes threads.
+    const hiding = new MutationObserver(() => {
+      if (element.closest("[hidden]") !== null || window.getSelection()?.isCollapsed === false) {
+        selected();
+      }
+    });
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     return () => {
+      hiding.disconnect();
       element.removeEventListener("pointerover", over);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
@@ -1406,6 +1435,9 @@ export function PlanCommentLayer({
       document.removeEventListener("selectionchange", selected);
     };
   }, [body, editor, sections, unitClass, setPending, onActive, active]);
+
+  // While the bubble stands, its command starts the thread as a press on it does.
+  useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, bubble?.start);
 
   const cardRef = (id: string) => (element: HTMLDivElement | null) => {
     if (element === null) cards.current.delete(id);
@@ -1472,10 +1504,16 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div className="comment-bubble menu-surface" style={{ top: bubble.top, left: bubble.left }}>
-        <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
-          {COMMENT_WORDS.COMMENT}
-        </Button>
+      <div
+        className="comment-bubble menu-surface"
+        data-below={bubble.below ? "" : undefined}
+        style={{ top: bubble.top, left: bubble.left }}
+      >
+        <Tooltip label={COMMENT_WORDS.COMMENT} command={APP_COMMAND.COMMENT_ON_SELECTION}>
+          <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
+            {COMMENT_WORDS.COMMENT}
+          </Button>
+        </Tooltip>
       </div>
     );
   if (wide) {

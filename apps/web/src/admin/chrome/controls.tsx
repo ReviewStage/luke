@@ -1,5 +1,5 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
-import { Checkbox, ErrorState, Segmented, Stack } from "@luke/ui";
+import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, Stack } from "@luke/ui";
 
 /** A window by the constant's own name for it, which is how the segmented control keys its options. */
 type WindowName = keyof typeof ADMIN_METRICS_WINDOW;
@@ -53,24 +53,32 @@ export function Refreshing({
 }
 
 /**
- * The window every windowed read answers to, as one control of three fixed
- * lengths. The choice lives in the address bar, so the press hands it up
+ * The window every windowed read answers to, as one control of fixed
+ * lengths, three unless the screen offers fewer. The choice lives in the address bar, so the press hands it up
  * rather than keeping state of its own, and flipping it refetches the way the
  * scope toggle does.
  */
 export function WindowSwitcher({
   value,
   onChange,
+  windows,
 }: {
   value: AdminMetricsWindow;
   onChange: (windowDays: AdminMetricsWindow) => void;
+  /** The lengths a screen offers, where it answers fewer than all three. */
+  windows?: readonly AdminMetricsWindow[] | undefined;
 }): React.JSX.Element {
-  const chosen = WINDOW_OPTIONS.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
+  const options =
+    windows === undefined
+      ? WINDOW_OPTIONS
+      : WINDOW_OPTIONS.filter((option) => windows.includes(ADMIN_METRICS_WINDOW[option.value]));
+  const chosen = options.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
   return (
-    <Segmented
-      legend="Window in days"
-      options={WINDOW_OPTIONS}
+    <ChoiceBar
+      label="Window in days"
+      items={options}
       value={chosen?.value}
+      look={CHOICE_BAR_LOOK.SEGMENTED}
       onChange={(name) => onChange(ADMIN_METRICS_WINDOW[name])}
     />
   );

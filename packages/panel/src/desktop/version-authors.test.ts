@@ -9,8 +9,9 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -50,15 +51,13 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [LEE] });
-      }
+    act: (_request: Act): Promise<ActOutcome> => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([LEE]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
   });
 });
 
@@ -102,6 +101,7 @@ function drawn(): HTMLElement {
           onResize: ignore,
           staged: false,
         },
+        room: SHELL_ROOM.WIDE,
         history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
         subject: taskVersionSubject(tasks),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },

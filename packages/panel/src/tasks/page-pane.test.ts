@@ -7,7 +7,7 @@ import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
@@ -33,6 +33,7 @@ const FUNNEL: PageLine = {
 const roots: Root[] = [];
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
@@ -81,7 +82,11 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
 
 const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version });
 
-beforeEach(() => fakeAppPlatform({ pageFrameUrl }));
+beforeEach(() => {
+  fakeAppPlatform({ pageFrameUrl });
+  // View settings opens its syntax theme on the window's appearance, here the dark one.
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("dark") }));
+});
 
 test("a page is drawn at its newest version in a frame that runs its own scripts alone, left out of the recording", () => {
   const { container, frame } = mount(FUNNEL);
@@ -111,7 +116,7 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
-test("over the source, View settings offers only the two settings its lines follow, and the ⋯ its actions alone", async () => {
+test("over the source, View settings offers the settings its lines follow, and the ⋯ its actions alone", async () => {
   const { container, press } = mount(FUNNEL);
   assert.equal(container.querySelector('button[aria-label="View settings"]'), null);
 
@@ -120,11 +125,20 @@ test("over the source, View settings offers only the two settings its lines foll
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
   assert.deepEqual(
     [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
-      (control) => control.getAttribute("aria-label"),
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
-    ["Word wrap", "Line numbers"],
+    [
+      "Word wrap",
+      "Line numbers",
+      "Syntax theme",
+      "For dark mode",
+      "Font",
+      "Font size",
+      "Line height",
+      "Ligatures",
+    ],
   );
-  assert.equal(popover.querySelector("h3"), null, "its one group stands unnamed");
   await press("View settings");
 
   await press("Source actions");

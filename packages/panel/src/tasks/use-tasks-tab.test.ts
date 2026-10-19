@@ -12,7 +12,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import {
+  LINK_PLACE,
+  PULL_REQUEST_THREAD_VIEW,
+  type PullRequestThreadView,
+} from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
@@ -29,6 +33,7 @@ import {
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
+import { isPortActKind, type PortActKind, type PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -55,15 +60,17 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { SHELL_ROOM } from "../shell-room.js";
+import type { ActHandle } from "../act.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
-import { SIDE_PANEL_TAB } from "./use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,
@@ -127,15 +134,19 @@ interface Standing {
   signedIn: boolean;
   /** The signed-in account's email. */
   account: string;
+  /** The room the panel's stage gives. */
+  room: ShellRoom;
 }
 
-/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
+/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names, an act-port kind among them. */
 function mount(
   initial: Partial<Standing> = {},
-  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } = {},
+  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } & {
+    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
+  } = {},
   registry?: AtomRegistry,
 ) {
-  const told: ActKind[] = [];
+  const told: (ActKind | PortActKind)[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
@@ -147,10 +158,11 @@ function mount(
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
-  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
-  const record = (kind: ActKind) => {
-    (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
+  const record = (kind: ActKind | PortActKind) => {
+    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    else if (!isPortActKind(kind)) agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -165,25 +177,50 @@ function mount(
     inboxTasks: [],
     signedIn: true,
     account: "dev@example.com",
+    room: SHELL_ROOM.WIDE,
     ...initial,
   };
+  const appAnswers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } =
+    answers;
+  const portAnswers: {
+    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
+  } = answers;
+  /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
+  function portAnswer<Kind extends PortActKind>(
+    kind: Kind,
+    ...args: unknown[]
+  ): Promise<PortActResult<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
+    const answer = portAnswers[kind];
+    if (answer !== undefined) return answer(...args);
+    return Promise.reject(new Error("Not answered in this test."));
+  }
+  /** An `app:act` kind's answer as the test gives it, recorded, or a rejection where it gives none. */
+  function appAnswer<Kind extends ActKind>(
+    kind: Kind,
+    ...args: unknown[]
+  ): Promise<ActResultFor<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
+    const answer = appAnswers[kind];
+    if (answer !== undefined) return answer(...args);
+    return Promise.reject(new Error("Not answered in this test."));
+  }
   function Probe() {
     const [held, setHeld] = useState(standing);
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // An act the test does not answer is recorded and refused.
-        act: <Kind extends ActKind>(
-          kind: Kind,
-          ...args: unknown[]
-        ): Promise<ActResultFor<Kind>> => {
-          record(kind);
-          payloads.push({ kind, payload: args[0] });
-          const answer = answers[kind];
-          if (answer !== undefined) return answer(...args);
-          return Promise.reject(new Error("Not answered in this test."));
-        },
-        tell: (kind: ActKind, ...args: unknown[]) => {
+        // A kind the test does not answer is recorded and refused, whichever
+        // side carries it, so a test reads what was asked the same way for both.
+        // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
+        act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
+          isPortActKind(kind)
+            ? portAnswer(kind, ...args)
+            : appAnswer(kind, ...args)) as ActHandle["act"],
+        // SAFETY: a told kind is recorded alike whichever side carries it, the dispatch on the kind the one erasure.
+        tell: ((kind: ActKind | PortActKind, ...args: unknown[]) => {
           record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
@@ -196,7 +233,7 @@ function mount(
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
             voiceCommands.push(voiceCommand.command);
           }
-        },
+        }) as ActHandle["tell"],
       },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
@@ -215,7 +252,7 @@ function mount(
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
-      room: SHELL_ROOM.WIDE,
+      room: held.room,
     });
     return null;
   }
@@ -374,7 +411,7 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
-  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
   kind: ActKind,
 ): (string | undefined)[] {
   return payloads
@@ -1026,6 +1063,50 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
   assert.equal(tab.control().messageReveal, undefined);
 });
 
+test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const link = (view: PullRequestThreadView) =>
+    ({
+      workspace: "acme",
+      place: {
+        kind: LINK_PLACE.PULL_REQUEST_THREAD,
+        planId: TASK.id,
+        agentId: AGENT_ID,
+        threadId: "PRRT_1",
+        view,
+      },
+    }) as const;
+
+  act(() => tab.control().onOpenLink(link(PULL_REQUEST_THREAD_VIEW.FILES)));
+  const first = tab.control().threadReveal;
+  const files = ofPullRequestTab(tab.control().sidePanel.pullRequestViews, { changes: AGENT_ID });
+  act(() => tab.control().onOpenLink(link(PULL_REQUEST_THREAD_VIEW.CONVERSATION)));
+  const second = tab.control().threadReveal;
+  const conversation = ofPullRequestTab(tab.control().sidePanel.pullRequestViews, {
+    changes: AGENT_ID,
+  });
+  act(() => tab.control().onThreadRevealed(1));
+  const stale = tab.control().threadReveal;
+  act(() => tab.control().onThreadRevealed(2));
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+  assert.deepEqual(first, {
+    agentId: AGENT_ID,
+    threadId: "PRRT_1",
+    view: PULL_REQUEST_THREAD_VIEW.FILES,
+    ask: 1,
+  });
+  assert.equal(files, PULL_REQUEST_VIEW.FILES);
+  assert.equal(second?.ask, 2);
+  assert.equal(conversation, PULL_REQUEST_VIEW.CONVERSATION);
+  assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
+  assert.equal(tab.control().threadReveal, undefined);
+});
+
 test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const alerts = "alerts";
@@ -1498,7 +1579,9 @@ test("a person's page opened in another workspace lists it without reopening its
 });
 
 /** The tasks each open the tab asked of main named, in order. */
-function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+function opensAsked(
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
+) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
     .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.taskId);
@@ -2559,6 +2642,21 @@ test("a channel chosen in Chat is the listed workspace's, so another workspace l
   assert.deepEqual(tab.control().chatView.place, FOR_YOU);
 });
 
+test("Chat opened stands on its rail, a place chosen or shown from elsewhere stands on that place, and the way back returns to the rail", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const standing = () => [tab.control().chatView.place, tab.control().chatView.listed];
+  act(() => tab.control().chatView.onOpen());
+  assert.deepEqual(standing(), [FOR_YOU, true]);
+  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+  act(() => tab.control().chatView.onChoose(channel));
+  assert.deepEqual(standing(), [channel, false]);
+  act(() => tab.control().chatView.onList());
+  assert.deepEqual(standing(), [channel, true], "the rail stands with the place still chosen");
+  act(() => tab.control().chatView.onClose());
+  act(() => tab.control().chatView.onShow(channel));
+  assert.deepEqual(standing(), [channel, false]);
+});
+
 test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
@@ -2649,6 +2747,69 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
       [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
     );
   });
+});
+
+test("a channel hidden behind a narrow room's Chat rail is not marked read until it stands on screen again", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  /** The chat as one read answers it: the channel, holding one message at `seq`. */
+  const answerAt = (seq: number) => ({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [{ id: channelId, kind: CHANNEL_KIND.GENERAL, name: "general", archived: false }],
+    messages: [
+      {
+        id: `d0d0d0d0-0000-4000-8000-00000000000${seq}`,
+        seq,
+        touchedSeq: seq,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [],
+        postedAt: seq,
+      },
+    ],
+    cursor: String(seq),
+  });
+  // The second read waits for the test to post a message, as the service's long read waits for one.
+  const later = Promise.withResolvers<ReturnType<typeof answerAt>>();
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] }, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(answerAt(4));
+        return reads === 2 ? later.promise : new Promise(() => undefined);
+      },
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  const place = { kind: CHAT_PLACE.CHANNEL, channelId };
+  const readTo = () =>
+    tab.payloads.flatMap((each) =>
+      each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST ? [each.payload] : [],
+    );
+  const mark = (seq: number) => ({ workspaceId: PERSONAL.id, write: { readTo: seq, channelId } });
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().chatView.chat, "the chat landed");
+  });
+  act(() => tab.control().chatView.onShow(place));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
+
+  act(() => tab.control().chatView.onList());
+  later.resolve(answerAt(5));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
+
+  act(() => tab.control().chatView.onChoose(place));
+  await settle();
+  assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 
 test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {

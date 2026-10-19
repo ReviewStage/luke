@@ -5,15 +5,20 @@ import {
   ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_RELIABILITY_WINDOWS,
   ADMIN_ROUTE_PATH,
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_USERS_SEARCH_PARAM,
+  ADMIN_WORKSPACES_KIND,
+  ADMIN_WORKSPACES_KIND_PARAM,
   type AdminMetricsWindow,
   isUtcDayKey,
 } from "@luke/service/admin/http";
 
 export const METRICS_PATH = ADMIN_ROUTE_PATH.METRICS;
+
+export const COST_PATH = ADMIN_ROUTE_PATH.COST;
 
 const USER_DETAIL_PATH = ADMIN_ROUTE_PATH.USER;
 
@@ -21,7 +26,11 @@ export const USERS_PATH = ADMIN_ROUTE_PATH.USERS;
 
 export const FAVORITE_PATH = ADMIN_ROUTE_PATH.FAVORITE;
 
+const WORKSPACES_PATH = ADMIN_ROUTE_PATH.WORKSPACES;
+
 const DAY_DETAIL_PATH = ADMIN_ROUTE_PATH.DAY;
+
+export const RELIABILITY_PATH = ADMIN_ROUTE_PATH.RELIABILITY;
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted
@@ -38,7 +47,12 @@ const TAB_PARAM = "view";
 
 const USERS_TAB_VALUE = "users";
 
+const COST_TAB_VALUE = "cost";
+const WORKSPACES_TAB_VALUE = "workspaces";
+
 const ANIMATIONS_TAB_VALUE = "animations";
+
+const RELIABILITY_TAB_VALUE = "reliability";
 
 const WINDOW_VIEW_PARAM = "days";
 
@@ -50,12 +64,15 @@ const SEARCH_VIEW_PARAM = "q";
  */
 export const SEARCH_DEBOUNCE_MS = 250;
 
-/** The sidebar's three destinations; an open account highlights Users. */
-export type AdminTab = "dashboard" | "users" | "animations";
+/** The sidebar's destinations; an open account highlights Users. */
+export type AdminTab = "dashboard" | "cost" | "reliability" | "workspaces" | "users" | "animations";
 
 /** Which of the page's views the address bar names. */
 export type AdminView =
   | { kind: "dashboard" }
+  | { kind: "cost" }
+  | { kind: "reliability" }
+  | { kind: "workspaces" }
   | { kind: "users" }
   | { kind: "animations" }
   | { kind: "account"; id: string }
@@ -69,6 +86,9 @@ export function viewFromLocation(): AdminView {
   // broken page, the same reading an out-of-set window gets.
   const day = params.get(DAY_VIEW_PARAM);
   if (day !== null && isUtcDayKey(day)) return { kind: "day", day };
+  if (params.get(TAB_PARAM) === COST_TAB_VALUE) return { kind: "cost" };
+  if (params.get(TAB_PARAM) === RELIABILITY_TAB_VALUE) return { kind: "reliability" };
+  if (params.get(TAB_PARAM) === WORKSPACES_TAB_VALUE) return { kind: "workspaces" };
   if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
   if (params.get(TAB_PARAM) === ANIMATIONS_TAB_VALUE) return { kind: "animations" };
   return { kind: "dashboard" };
@@ -86,6 +106,17 @@ export function windowFromLocation(): AdminMetricsWindow {
     Object.values(ADMIN_METRICS_WINDOW).find((candidate) => String(candidate) === value) ??
     ADMIN_METRICS_WINDOW_DEFAULT
   );
+}
+
+/**
+ * The window the Reliability screen reads: the shared one where the screen
+ * offers it, and the longest it offers otherwise, so a 90-day address opens
+ * the month rather than a read the endpoint refuses.
+ */
+export function reliabilityWindow(windowDays: AdminMetricsWindow): AdminMetricsWindow {
+  return ADMIN_RELIABILITY_WINDOWS.includes(windowDays)
+    ? windowDays
+    : (ADMIN_RELIABILITY_WINDOWS.at(-1) ?? ADMIN_METRICS_WINDOW_DEFAULT);
 }
 
 /**
@@ -146,6 +177,9 @@ export function dayHref(day: string): string {
 
 export function tabHref(tab: AdminTab): string {
   const params = new URLSearchParams();
+  if (tab === "cost") params.set(TAB_PARAM, COST_TAB_VALUE);
+  if (tab === "reliability") params.set(TAB_PARAM, RELIABILITY_TAB_VALUE);
+  if (tab === "workspaces") params.set(TAB_PARAM, WORKSPACES_TAB_VALUE);
   if (tab === "users") params.set(TAB_PARAM, USERS_TAB_VALUE);
   if (tab === "animations") params.set(TAB_PARAM, ANIMATIONS_TAB_VALUE);
   return hrefWithWindow(params);
@@ -201,4 +235,22 @@ export function dayReadPath(day: string, hideAdmins: boolean): string {
   params.set(ADMIN_DAY_PARAM, day);
   if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
   return `${DAY_DETAIL_PATH}?${params.toString()}`;
+}
+
+/**
+ * The Workspaces read's address: the default scope, the shared-only list,
+ * and no search ride as no params. It reads no window, because its activity
+ * counts are always the trailing week.
+ */
+export function workspacesReadPath(
+  hideAdmins: boolean,
+  sharedOnly: boolean,
+  search: string | undefined,
+): string {
+  const params = new URLSearchParams();
+  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
+  if (!sharedOnly) params.set(ADMIN_WORKSPACES_KIND_PARAM, ADMIN_WORKSPACES_KIND.ALL);
+  if (search !== undefined) params.set(ADMIN_USERS_SEARCH_PARAM, search);
+  const query = params.toString();
+  return query ? `${WORKSPACES_PATH}?${query}` : WORKSPACES_PATH;
 }

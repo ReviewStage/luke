@@ -43,13 +43,12 @@ in front. Then look at the list as a set.
 - The plan document is not wallpaper. Show it only where it is the subject;
   elsewhere open another task, another tab, or fold it away.
 - Nothing experimental gets a picture. A feature behind Settings ›
-  Experimental (the Factory, Issues, Automations, video calls, and whatever
+  Experimental (the Factory, Issues, Code review, video calls, and whatever
   joins them) is no section's subject, even where the notes announce it, and
   no shot turns an experiment on (`ShotSpec.experiments` stays empty), so
-  nothing an experiment draws (a sidebar row, a person's Automations
-  section, an automation's chip) shows at the edge of another picture
-  either. 0.15.0's Factory and 0.17.0's Issues pictures were taken and then
-  removed for this.
+  nothing an experiment draws (a sidebar row, the Code review suggestion)
+  shows at the edge of another picture either. 0.15.0's Factory and
+  0.17.0's Issues pictures were taken and then removed for this.
 
 Show the developer the list (and the old releases' pictures it should not
 repeat) before staging; it is cheap to change now and expensive later.

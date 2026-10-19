@@ -1,4 +1,4 @@
-import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -7,15 +7,22 @@ import {
   type FileContents,
   type FileDiffMetadata,
   type FileDiffOptions,
+  getFiletypeFromFileName,
+  getSharedHighlighter,
   getSingularPatch,
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
   parsePatchFiles,
+  renderFileWithHighlighter,
   type SelectedLineRange,
 } from "@pierre/diffs";
+import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
+import { colouredFrom } from "./colour-lines.js";
 import {
+  type ColouredLines,
+  type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
   type DiffListFile,
@@ -33,7 +40,7 @@ import {
   sameLook,
   sameNotes,
 } from "./contract.js";
-import { type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
@@ -114,25 +121,6 @@ import { wholeOf } from "./whole-diff.js";
  * words stand, which the view offers a comment on. A press in the list or a
  * scroll lets the offer go.
  */
-
-/** Each font's stack, ending in the window's own code type should the Mac lack it. */
-const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
-} as const satisfies Record<DiffLook["font"], string>;
-
-/** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */
-const LINE_HEIGHT_RATIO = {
-  [DIFF_LINE_HEIGHT.COMPACT]: "1.45",
-  [DIFF_LINE_HEIGHT.NORMAL]: "1.6",
-  [DIFF_LINE_HEIGHT.SPACIOUS]: "1.85",
-} as const satisfies Record<DiffLook["lineHeight"], string>;
-
-/** The font features ligatures turn on or off. */
-const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as const;
 
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;
@@ -370,7 +358,7 @@ let kept: Highlighting | undefined;
 function listHighlighting(drawn: DiffLook): Highlighting {
   if (kept !== undefined) {
     // A list drawn after the settings changed hands the kept pool its own look.
-    kept.follow(drawn);
+    void kept.follow(drawn);
     return kept;
   }
   const text = highlightWorkerText();
@@ -450,6 +438,14 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
       container.remove();
     },
   };
+}
+
+/** How many lines stand above a line a list is scrolled to, under its file's header, so the lines leading to it are read with it. */
+const REVEAL_LINES_ABOVE = 3;
+
+/** How tall one line of a list stands in a look, in pixels, as Pierre is told to lay it out. */
+function lineHeightOf(look: DiffLook): number {
+  return Number(look.fontSize) * Number(LINE_HEIGHT_RATIO[look.lineHeight]);
 }
 
 /** A note's place as Pierre takes it, its key carried as the note's own. */
@@ -576,7 +572,7 @@ function listOptions(
     hunkSeparators: "line-info-basic",
     stickyHeaders: true,
     itemMetrics: {
-      lineHeight: Number(drawn.fontSize) * Number(LINE_HEIGHT_RATIO[drawn.lineHeight]),
+      lineHeight: lineHeightOf(drawn),
       diffHeaderHeight: LIST_HEADER_HEIGHT,
       hunkSeparatorHeight: LIST_GAP_HEIGHT,
     },
@@ -775,7 +771,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       typeset(host, next.look);
       if (!sameLook(next.look, was.look)) {
         // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the list's own.
-        highlighting.follow(next.look);
+        void highlighting.follow(next.look);
       }
       if (
         !sameLook(next.look, was.look) ||
@@ -790,6 +786,17 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
+    // Note that Pierre resolves the line against its layout again on every frame until the scroll settles, so files measured on the way do not leave it short.
+    revealLine: (path, side, line) =>
+      view.scrollTo({
+        type: "line",
+        id: path,
+        lineNumber: line,
+        side,
+        align: "start",
+        offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
+        behavior: "smooth-auto",
+      }),
     unmount: () => {
       stopWatching();
       unsubscribe();
@@ -800,4 +807,50 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
 }
 
-export const diffView: DiffViewModule = { mount, mountList };
+/**
+ * A run of a file's lines coloured in the look's syntax themes, as a list's
+ * files are: in the kept pool's workers once they hold the look, or on the
+ * window's own thread where the pool settled there; none where the file's
+ * name names no grammar Pierre carries, or the colouring failed.
+ */
+async function colourLines(request: ColourRequest): Promise<ColouredLines | undefined> {
+  colouringsAsked += 1;
+  const file = {
+    name: request.name,
+    contents: request.lines.join("\n"),
+    cacheKey: String(colouringsAsked),
+  };
+  if (getFiletypeFromFileName(file.name) === PLAIN_TEXT) return undefined;
+  const highlighting = listHighlighting(request.look);
+  const { pool } = highlighting;
+  try {
+    if ((await highlighting.settled) === HIGHLIGHT_MODE.POOL && pool !== undefined) {
+      await highlighting.follow(request.look);
+      await pool.primeFileHighlightCache(file);
+      const cached = pool.getFileResultCache(file)?.result;
+      return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
+    }
+    const { dark, light } = request.look.themes;
+    const highlighter = await getSharedHighlighter({
+      themes: [dark, light],
+      langs: [getFiletypeFromFileName(file.name)],
+      preferredHighlighter: "shiki-js",
+    });
+    const drawn = renderFileWithHighlighter(file, highlighter, {
+      theme: request.look.themes,
+      useTokenTransformer: false,
+      tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
+    });
+    return colouredFrom(drawn, request.lines.length);
+  } catch {
+    return undefined;
+  }
+}
+
+/** How many colourings were asked for, which names each in the pool's cache, as `patchesRead` names a list's reads. */
+let colouringsAsked = 0;
+
+/** The name Pierre gives a file whose name names no grammar. */
+const PLAIN_TEXT = "text";
+
+export const diffView: DiffViewModule = { mount, mountList, colourLines };

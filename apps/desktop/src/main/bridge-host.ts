@@ -1,7 +1,9 @@
+import type { ActPortHandler } from "@luke/host/act-port";
 import type { ActRouter, ActSender } from "@luke/host/act-router";
 import { type Act, parsedAct } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import {
+  ACT_PORT,
   BRIDGE,
   type Bridge,
   type BridgeArgumentsFor,
@@ -10,7 +12,7 @@ import {
 } from "@luke/host/bridge";
 import { windowAppState } from "@luke/host/client";
 import type { UnparsedWireValue } from "@luke/wire";
-import type { Effect } from "effect";
+import type { Context, Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
 /** Which window a report came from, which is all a report's handler is told. */
@@ -46,6 +48,10 @@ export interface BridgeHostDependencies {
   router: ActRouter<WebContents>;
   /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /** The act port's server, which every window's port is upgraded with. */
+  actPort: ActPortHandler<WebContents>;
+  /** The desktop runtime's own services, which every act port procedure's effect runs on. */
+  services: Context.Context<never>;
   reports: ReportHandlers;
   /** The document as one window stands, which is the answer to its own bootstrap read, the voice and call windows' without the task's work (`voiceWindowState`). */
   snapshotFor: (sender: WebContents) => Promise<AppStateSnapshot>;
@@ -56,14 +62,16 @@ type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
 
 /**
  * Every channel the sandboxed renderers reach this process through, attached
- * once and in one place. There are three kinds and no fourth: the one act
- * channel, whose router decides everything; the one state read; and the
+ * once and in one place. There are four kinds and no fifth: the one act
+ * channel, whose router decides everything; the act port, whose procedures
+ * answer the kinds that have moved onto it; the one state read; and the
  * reports, each a window saying something only it knows. A window that loaded
  * before this ran would meet an unhandled invoke, so it runs between the
  * composition and its start.
  */
 export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
-  const { ipcMain, trustedSender, senderOf, router, run, reports, snapshotFor } = dependencies;
+  const { ipcMain, trustedSender, senderOf, router, run, actPort, services, reports, snapshotFor } =
+    dependencies;
 
   ipcMain.handle(BRIDGE.act.channel, async (event, ...rawArgs) => {
     // `parsedAct` is this entry's own argument guard, so it is read here for
@@ -73,6 +81,25 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
       rawArgs.length === 1 ? parsedAct(rawArgs[0] as UnparsedWireValue) : undefined;
     if (!trustedSender(event) || !act) throw new Error("Invalid bridge request");
     return run(router.performAct(act, senderOf(event.sender)));
+  });
+
+  // A window's act port, which its preload forwards once per page (oRPC's
+  // Electron adapter). Note that every port is upgraded, a frame this build
+  // does not trust included, and the trust is read again for every call
+  // rather than once here: an untrusted caller hears each act refused in its
+  // own words instead of a port that never answers.
+  ipcMain.on(ACT_PORT.CHANNEL, (event) => {
+    const [port] = event.ports;
+    // Note that we take a top frame's port alone, because a child frame can load a trusted page.
+    if (port === undefined || event.senderFrame?.parent !== null) return;
+    actPort.upgrade(port, {
+      context: () => ({
+        actor: senderOf(event.sender),
+        trusted: trustedSender(event),
+        "effect/context": services,
+      }),
+    });
+    port.start();
   });
 
   ipcMain.handle(BRIDGE.requestAppState.channel, async (event) => {

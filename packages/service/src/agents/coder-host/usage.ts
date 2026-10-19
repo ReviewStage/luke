@@ -43,6 +43,26 @@ function sharesOf(row: TurnUsageRow): readonly UsageShare[] {
   );
 }
 
+/**
+ * The turns' price unrounded, where every share of them has one. Exported
+ * for a caller that sums many such prices, the admin Cost screen's, which
+ * rounds once at the end rather than per summand.
+ */
+export function costOfTurns(
+  rows: readonly TurnUsageRow[],
+  offered: readonly OfferedModel[],
+): number | undefined {
+  let costUsd = 0;
+  for (const row of rows) {
+    for (const share of sharesOf(row)) {
+      const pricing = offered.find((model) => model.id === share.model)?.pricing;
+      if (pricing === undefined) return undefined;
+      costUsd += tokensCostUsd(pricing, share);
+    }
+  }
+  return costUsd;
+}
+
 /** The tokens of every turn summed, and their price where every share of them has one. */
 export function usageOfTurns(
   rows: readonly TurnUsageRow[],
@@ -52,19 +72,12 @@ export function usageOfTurns(
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedInputTokens = 0;
-  let costUsd: number | undefined = 0;
   for (const row of rows) {
     inputTokens += row.usage.inputTokens;
     outputTokens += row.usage.outputTokens;
     cachedInputTokens += row.usage.cachedInputTokens;
-    for (const share of sharesOf(row)) {
-      const pricing = offered.find((model) => model.id === share.model)?.pricing;
-      costUsd =
-        pricing === undefined || costUsd === undefined
-          ? undefined
-          : costUsd + tokensCostUsd(pricing, share);
-    }
   }
+  const costUsd = costOfTurns(rows, offered);
   return {
     inputTokens,
     outputTokens,

@@ -1,3 +1,4 @@
+import type { CodeLines } from "@luke/features/tasks-view";
 import type {
   DIFF_FONT,
   DIFF_FONT_SIZES,
@@ -9,7 +10,7 @@ import type {
 } from "@luke/settings/diff-view";
 
 /**
- * contract.ts -- what the Files changed view and the diff bundle say to each other: a mount for one patch and one for a list of files, and the handles the view redraws them through.
+ * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch and one for a list of files, the handles the view redraws them through, and a door that colours a run of a file's lines as a diff is coloured.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
  * Shiki colouring it, which is too large for the bundle every window parses,
@@ -189,6 +190,19 @@ export interface DiffFileTexts {
   readonly after: string;
 }
 
+/** A run of a file's lines to colour in a look's syntax themes: the file's name, which its grammar is read from, and its lines. */
+export interface ColourRequest {
+  readonly name: string;
+  readonly lines: readonly string[];
+  readonly look: DiffLook;
+}
+
+/** A run of lines coloured, each run of one colour carrying it in both appearances, and each theme's own ground. */
+export interface ColouredLines {
+  readonly lines: CodeLines;
+  readonly ground: { readonly dark: string; readonly light: string };
+}
+
 /** Whether two lists light the same lines of the same file, or both none. */
 export function sameListSelection(
   a: DiffListSelection | undefined,
@@ -204,10 +218,12 @@ export function sameListSelection(
   );
 }
 
-/** The list as mounted: drawn again for new props, scrolled to a file's header, and taken down. */
+/** The list as mounted: drawn again for new props, scrolled to a file's header or to one of its lines, and taken down. */
 export interface DiffListHandle {
   readonly update: (props: DiffListProps) => void;
   readonly reveal: (path: string) => void;
+  /** Scrolls to a line of a file on the side it counts on, a few lines under the file's header, so what stands under the line, a review thread, follows it into view. */
+  readonly revealLine: (path: string, side: DiffSelection["side"], line: number) => void;
   readonly unmount: () => void;
 }
 
@@ -230,4 +246,10 @@ export interface DiffViewModule {
    * drawn at all.
    */
   readonly mountList: (host: HTMLElement, props: DiffListProps) => DiffListHandle;
+  /**
+   * Colours a run of a file's lines in the look's syntax themes, as a diff
+   * is coloured, off the window's thread where the pool's workers run; none
+   * where the file's name names no grammar, or the colouring failed.
+   */
+  readonly colourLines: (request: ColourRequest) => Promise<ColouredLines | undefined>;
 }

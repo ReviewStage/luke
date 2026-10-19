@@ -283,6 +283,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // until this has run rather than reading nothing.
     yield* settings.link({
       credential: account.credential,
+      readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
+      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       endLiveSession: Effect.suspend(() =>

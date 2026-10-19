@@ -73,6 +73,21 @@
     border-radius: var(--luke-radius-6);
   }
 
+  /* A finger's target: on a coarse pointer a button takes a press
+     `--luke-touch-target` across at least, centred on it, while it draws at
+     its own size, so a row's 24px mark keeps its glyph and its place. */
+  @media (pointer: coarse) {
+    .luke-button::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--luke-touch-target));
+      height: max(100%, var(--luke-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+
   /* Compact with words, a row mark's height in the caption's type, its
      glyph nearer its words. */
   .luke-button[data-size="compact"]:not([data-icon-only="true"]) {

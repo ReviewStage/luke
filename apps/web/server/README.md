@@ -623,8 +623,9 @@ reaches eve included: a request that carries a bearer reaches eve over it,
 and one that carries only the cookie reaches eve as the deployment acting
 for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
 `eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
-automation run, and a task's delete and the account's, which retire the eve
-sessions of what they delete, all work in a browser. Note that a route
+automation run, a comment's ask of Luke, which the brain's door admits as
+the member's own principal, and a task's delete and the account's, which
+retire the eve sessions of what they delete, all work in a browser. Note that a route
 file's choice of resolver is not a boundary, because every function holding
 a group answers every path the group declares, the one a client names in the
 dispatcher's `route-path` query among them; whom eve is reached as is chosen
@@ -639,6 +640,19 @@ request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
 `nosniff`, `private, no-store`, and `default-src 'none'; style-src
 'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
 origin.
+
+## The hosted oRPC route
+
+`server/orpc-route.ts` holds `orpcRoute`, the one route every path moved onto
+the hosted oRPC router answers through (`packages/service/src/orpc/`, its
+contract in `@luke/features/contract`); `/api/models` is the first. It meets
+the cookie origin guard, reads the web runtime's services through `runWeb`
+once per instance as `routeFromHttpRouter` does, and hands each request to
+`OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
+of its own (`tools/anti-slop/effect-edges.json`). The router matches the
+public path, so a migrated path with segments is a `SEGMENT_REWRITES` row
+marked `orpc` in `server/function-rewrites.ts`, whose rewrite carries the
+whole path in `route-path` for the dispatcher to restore.
 
 ## Signing in on a Preview deployment
 

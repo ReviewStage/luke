@@ -49,6 +49,15 @@ const SKELETON_ASIDE_WIDTH = "224px";
 /** The legend bone stops short of the line, as a sentence does. */
 const SKELETON_LEGEND_WIDTH = "60%";
 
+/** A trend's move alone, in the ink of its direction: a rise complete, a fall attention. */
+export function TrendMove({ trend }: { trend: AdminTrend }): React.JSX.Element {
+  return (
+    <span className={`font-medium tabular-nums ${TREND_TONE[trendDirection(trend)]}`}>
+      {formatTrendMove(trend)}
+    </span>
+  );
+}
+
 /**
  * How a chart's trailing run moved against the run before it, set as the
  * heading's caption. The comparison sits with the bars rather than on a card
@@ -57,12 +66,34 @@ const SKELETON_LEGEND_WIDTH = "60%";
 export function ChartTrend({ trend }: { trend: AdminTrend }): React.JSX.Element {
   return (
     <>
-      <span className={`font-medium tabular-nums ${TREND_TONE[trendDirection(trend)]}`}>
-        {formatTrendMove(trend)}
-      </span>{" "}
-      {formatNumber(trend.recent)} in the last {trend.days} days, against{" "}
-      {formatNumber(trend.prior)} before
+      <TrendMove trend={trend} /> {formatNumber(trend.recent)} in the last {trend.days} days,
+      against {formatNumber(trend.prior)} before
     </>
+  );
+}
+
+/**
+ * A swatch and a name for each series of a chart drawing more than one, set
+ * as the frame's legend under the plot, in the config's own order.
+ */
+export function SeriesLegend({
+  series,
+}: {
+  series: readonly { key: string; label: string; color: string }[];
+}): React.JSX.Element {
+  return (
+    <span className="flex flex-wrap gap-x-4 gap-y-1">
+      {series.map((entry) => (
+        <span key={entry.key} className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-block size-2.5 rounded-sm"
+            style={{ backgroundColor: entry.color }}
+            aria-hidden="true"
+          />
+          {entry.label}
+        </span>
+      ))}
+    </span>
   );
 }
 

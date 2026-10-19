@@ -52,14 +52,13 @@ import {
   Text,
   TextField,
 } from "@luke/ui";
-import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
+import { type Actor, actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
-import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PictureBlock } from "../picture-block.js";
@@ -99,11 +98,8 @@ import {
   type InboxMissing,
   inboxFileChips,
   itemWorkspaceId,
-  NEEDS_YOU,
-  needsReader,
   numberedPick,
   proposedOptions,
-  readersItem,
   SETTLED_BY,
   sentenceCased,
   settledAt,
@@ -132,9 +128,7 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox.js";
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's question, everything it offered, and its answer, given in place or as it was given.
  *
  * The item reads as a comment thread, as an issue or a pull request does:
- * its title leads as the thread's subject, with a muted line under it of
- * its agent, when it asked, and where it stands, the attention mark on an
- * item waiting on the developer. Each message under it is a comment, its
+ * its title alone leads as the thread's subject. Each message under it is a comment, its
  * writer's face in a column of its own, a line of name and when beside it,
  * and a line down from the face joining it to the next. The agent's
  * question comes first: the blocks of context the agent wrote, Markdown as the
@@ -512,6 +506,9 @@ function Blocks({
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
 
+/** The badge an option the agent recommends wears, a choice's or a form's select's. */
+const RECOMMENDED = "Recommended";
+
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, the one the agent recommends wearing its badge. */
 export function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
@@ -520,7 +517,7 @@ export function choiceOptions(
     value: option.label,
     label: option.label,
     detail: option.detail,
-    badge: option.recommended ? "Recommended" : undefined,
+    badge: option.recommended ? RECOMMENDED : undefined,
   }));
 }
 
@@ -661,8 +658,9 @@ function fieldFrame(field: InboxField) {
  * One field of a form, its name over its control and left-aligned as every
  * field is, "Optional" after the name of one that may be left empty: a
  * text field the caller's own or `@luke/ui`'s, a number a short field, a
- * select its options as pills that wrap, an optional one's pick taken back
- * by pressing it again, and a yes or no a checkbox beside its name.
+ * select its options as pills that wrap, the one the agent recommends
+ * wearing its badge, an optional one's pick taken back by pressing it
+ * again, and a yes or no a checkbox beside its name.
  */
 function InboxFormField({
   field,
@@ -731,7 +729,11 @@ function InboxFormField({
           </span>
           <ChoiceList
             legend={field.label}
-            options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
+            options={(field.options ?? []).map((option) => ({
+              value: option,
+              label: option,
+              badge: field.recommended === option ? RECOMMENDED : undefined,
+            }))}
             value={(field.options ?? []).filter((option) => option === value)}
             look={CHOICE_LOOK.PILL}
             clearable={field.required !== true}
@@ -1519,102 +1521,19 @@ function useScrollToOwnMessage(
   }, [board, item.id, last, own]);
 }
 
-/** What the subject's line says the item stands at, by its status. */
-const STANDING_WORDS = {
-  [INBOX_STATUS.OPEN]: NEEDS_YOU.LABEL,
-  [INBOX_STATUS.ANSWERED]: "Answered",
-  [INBOX_STATUS.CLOSED]: "Withdrawn",
-} as const;
-
-/** What an open item put away with its task says it stands as, needing nobody until the task is back. */
-const ARCHIVED_STANDING = "Archived";
-
 /** What stands in the box's place while the item's task is archived. */
 const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
 
 /**
- * Where the item stands, in the subject's line. An item that needs the
- * reader, open and asked by an agent they started (`needsReader`), wears the
- * attention mark, which only answering it takes away; a teammate's open item
- * waits on the teammate, named by their face and name, which any member may
- * still answer; a settled one says how it was settled.
- */
-function Standing({
-  item,
-  readerId,
-  archived,
-}: {
-  item: InboxItem;
-  readerId: string | undefined;
-  /** Whether the item's task is archived, so an open item waits on nobody. */
-  archived: boolean;
-}): React.JSX.Element {
-  const directory = useMemberDirectory();
-  const reader = directory.readerId ?? readerId;
-  if (archived && item.status === INBOX_STATUS.OPEN) {
-    return (
-      <span className="inbox-standing" data-status={item.status}>
-        {ARCHIVED_STANDING}
-      </span>
-    );
-  }
-  const waitsOn =
-    item.status === INBOX_STATUS.OPEN && !readersItem(item, reader)
-      ? personActor(item.startedBy, directory.members, reader, directory.former)
-      : undefined;
-  if (waitsOn !== undefined) {
-    return (
-      <span className="inbox-standing" data-status={item.status} data-waiting="true">
-        <ActorLine>
-          {"Waiting on "}
-          <ActorRef actor={waitsOn} sentence />
-        </ActorLine>
-      </span>
-    );
-  }
-  return (
-    <span className="inbox-standing" data-status={item.status}>
-      {needsReader(item, reader) ? <AttentionMark /> : null}
-      {STANDING_WORDS[item.status]}
-    </span>
-  );
-}
-
-/**
  * The thread's subject, as a plan or a pull request leads with one: the
- * item's title, and under it a muted line of its agent, which hangs its
- * card and opens its tab, when it asked, and where the item stands: needing
- * the reader, waiting on the teammate whose agent asks it, or settled.
+ * item's title alone, the thread under it.
  */
-function Subject({
-  item,
-  by,
-  readerId,
-  now,
-  archived,
-}: {
-  item: InboxItem;
-  by: ItemAgent;
-  readerId: string | undefined;
-  now: number;
-  archived: boolean;
-}): React.JSX.Element {
+function Subject({ item }: { item: InboxItem }): React.JSX.Element {
   return (
     <header className="inbox-subject">
       <h2 className="inbox-subject-title" data-inbox-title="">
         {cardTitle(item.title)}
       </h2>
-      <p className="inbox-subject-line">
-        <span className="inbox-subject-agent">
-          <AgentName by={by} />
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          asked <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
-        </span>
-        <span aria-hidden="true">·</span>
-        <Standing item={item} readerId={readerId} archived={archived} />
-      </p>
     </header>
   );
 }
@@ -1735,8 +1654,7 @@ function Crumbs({
 
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
- * the item's title as the thread's subject, with its agent, when it asked,
- * and where it stands; then the agent's question as the first comment, its
+ * the item's title alone as the thread's subject; then the agent's question as the first comment, its
  * blocks and what it offers, and what came of it as the comments after.
  * While the item waits, a choice's options and a form's fields are pressed
  * in the question, and the box is docked at the pane's foot. Once it is
@@ -1826,7 +1744,7 @@ export function InboxPane({
         <ScrollArea fade={SCROLL_FADE.BOTH} data-item-id={item.id} ref={board}>
           <div className="inbox-board agent-log-over-composer ph-no-capture">
             <WordsWorkspace value={workspaceId}>
-              <Subject item={item} by={by} readerId={agents.me} now={now} archived={archived} />
+              <Subject item={item} />
               <ol className="inbox-thread" aria-label="Thread">
                 <Comment
                   kind={COMMENT.ASKED}

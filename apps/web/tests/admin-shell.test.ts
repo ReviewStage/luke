@@ -88,15 +88,15 @@ afterEach(() => {
 test("a view whose read is out stands under its title and says it is loading", async () => {
   const page = await openAdmin();
 
-  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
   expect(saysLoading(page)).toBe(true);
   // The rail and the phone's bar are the same navigation, each marking the view.
-  expect(currentSections(page)).toEqual(["Dashboard", "Dashboard"]);
+  expect(currentSections(page)).toEqual(["Overview", "Overview"]);
 });
 
 test("a press on another section makes it the current page", async () => {
   const page = await openAdmin();
-  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
   const users = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Users"]');
   if (!users) throw new Error("No Users link");
@@ -108,6 +108,39 @@ test("a press on another section makes it the current page", async () => {
   expect(currentSections(page)).toEqual(["Users", "Users"]);
   expect(saysLoading(page)).toBe(true);
   expect(window.location.search).toBe("?view=users");
+});
+
+/** The names of a navigation's links, in the order it draws them. */
+function sectionNames(navigation: Element): (string | null)[] {
+  return Array.from(navigation.querySelectorAll("a"), (link) => link.textContent);
+}
+
+test("the rail lists the measures, with Animations after them in its footer at its own address", async () => {
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+
+  const [bar, rail] = Array.from(page.querySelectorAll('nav[aria-label="Admin sections"]'));
+  if (bar === undefined || rail === undefined) throw new Error("No navigation");
+  expect(sectionNames(rail)).toEqual([
+    "Overview",
+    "Cost",
+    "Reliability",
+    "Workspaces",
+    "Users",
+    "Animations",
+  ]);
+  const animations = Array.from(rail.querySelectorAll("a")).find(
+    (link) => link.textContent === "Animations",
+  );
+  expect(animations?.getAttribute("href")).toBe("/admin?view=animations");
+  // The phone's bar carries the measures alone.
+  expect(Array.from(bar.querySelectorAll("a"), (link) => link.getAttribute("aria-label"))).toEqual([
+    "Overview",
+    "Cost",
+    "Reliability",
+    "Workspaces",
+    "Users",
+  ]);
 });
 
 test("the account menu opens on its avatar, and Escape or a press outside closes it", async () => {
@@ -142,4 +175,38 @@ test("the account menu opens on its avatar, and Escape or a press outside closes
     document.querySelector("main h1")?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
   });
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
+});
+
+test("a press on Reliability opens it as the current page, under its own address", async () => {
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+
+  const reliability = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Reliability"]');
+  if (!reliability) throw new Error("No Reliability link");
+  await act(async () => {
+    reliability.click();
+  });
+
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Reliability"));
+  expect(currentSections(page)).toEqual(["Reliability", "Reliability"]);
+  expect(saysLoading(page)).toBe(true);
+  expect(window.location.search).toBe("?view=reliability");
+});
+
+test("a quarter's address opens Reliability on the month, the longest window it reads", async () => {
+  const page = await openAdmin("/admin?view=reliability&days=90");
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Reliability"));
+
+  const asked = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.map(
+      ([input]) =>
+        new URL(input instanceof Request ? input.url : String(input), window.location.href),
+    )
+    .filter((url) => url.pathname === "/api/admin/reliability");
+  expect(asked.map((url) => url.search)).toContain("");
+  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
+  const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
+  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d"]);
+  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
 });

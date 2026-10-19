@@ -30,7 +30,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -150,6 +150,7 @@ function shellProps(
       ...sidebarPatch,
     },
     room: SHELL_ROOM.WIDE,
+    settingsStep: { listed: true, onList: ignore },
     call: undefined,
     captions: {
       caption: { content: undefined, shown: false },
@@ -188,6 +189,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        listed: false,
+        onListed: ignore,
         pages: undefined,
         onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
@@ -593,19 +596,11 @@ test("the side panel's toggle stands over the Issues list once an issue has been
   assert.equal(toggles(peeked), true);
 });
 
-test("the Automations page's sidebar row and its command stand only while the account has its experiment on", async () => {
+test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
   handState({});
-  const off = mount(false);
+  const page = mount(false);
   await settle();
-  assert.equal(placeRow(off, "Automations"), undefined);
-  assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
-  const on = mount(false);
-  await settle();
-  assert.ok(placeRow(on, "Automations"));
+  assert.ok(placeRow(page, "Automations"));
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
@@ -618,7 +613,7 @@ test("while the Automations pages are still loading their frame stands the list 
     onClose: () => closed.push("closed"),
   };
   const registry = AtomRegistry.make();
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   mount(
     false,
     false,
@@ -656,7 +651,7 @@ test("while the Automations pages are still loading their frame stands the list 
   assert.deepEqual(closed, ["closed"]);
 });
 
-test("the Automations page stands in the plan's place, titled for the listed workspace, and gives it back once its experiment is off", async () => {
+test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {
     open: true,
@@ -671,20 +666,12 @@ test("the Automations page stands in the plan's place, titled for the listed wor
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
   };
 
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
-  const on = mount(false, false, overrides);
-  await settle();
-  assert.ok(on.querySelector("section[aria-label=Automations]"));
-  assert.equal(document.title, "Automations — Acme");
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-  closed.length = 0;
-
   handState({});
-  const off = mount(false, false, overrides);
+  const page = mount(false, false, overrides);
   await settle();
-  assert.equal(off.querySelector("section[aria-label=Automations]"), null);
-  assert.deepEqual(closed, ["closed"]);
+  assert.ok(page.querySelector("section[aria-label=Automations]"));
+  assert.equal(document.title, "Automations — Acme");
+  assert.deepEqual(closed, [], "nothing closes it");
 });
 
 /** The task the call in progress is about, which none of the places below shows with its call bar. */
@@ -779,6 +766,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       staged: false,
     },
     room: SHELL_ROOM.WIDE,
+    settingsStep: { listed: true, onList: ignore },
     call: {
       card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
       speakerMuted: false,
@@ -797,12 +785,12 @@ let sentActs: string[] = [];
 
 /**
  * The bridge as the window meets it, every act written down, with Factory
- * and the Automations page on, and Settings' chunk already loaded, as it is
+ * on, and Settings' chunk already loaded, as it is
  * once Settings has opened once, so it stands within a settle.
  */
 async function handBridge(): Promise<void> {
   await import("./desktop-settings.js");
-  handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
+  handState(experimentsOn(EXPERIMENT.FACTORY));
   sentActs = [];
   const bridge = appBridge();
   fakeAppBridge({
@@ -811,6 +799,10 @@ async function handBridge(): Promise<void> {
       sentActs.push(request.kind);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sentActs.push(request.kind);
+    return Promise.resolve(undefined);
   });
 }
 

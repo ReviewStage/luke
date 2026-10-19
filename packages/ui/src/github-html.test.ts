@@ -6,8 +6,9 @@ import { githubShapes, wholeRendering } from "./github-html.js";
  * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
  * whole, and what GitHub dresses its way is reshaped into what the window
  * draws its own: a highlighted block into a fenced one in its language, and
- * a diagram into a fenced mermaid block of its source, and a themed picture
- * into its `<img>` alone. The trees are as the parse leaves them.
+ * a diagram into a fenced mermaid block of its source, a themed picture
+ * into its `<img>` alone, and a picture GitHub links to itself into the
+ * picture alone. The trees are as the parse leaves them.
  */
 
 /** A node of the parsed tree, as the step reads it. */
@@ -85,6 +86,29 @@ test("a themed picture keeps its image alone, so no source names an address the 
   assert.deepEqual(shaped(element("a", { href: "https://example.com/review" }, [picture])), [
     element("a", { href: "https://example.com/review" }, [element("picture", {}, [badge])]),
   ]);
+});
+
+test("a picture GitHub links to itself, or to another of its own image addresses, stands alone; a picture linked anywhere else keeps its link", () => {
+  const upload = "https://github.com/user-attachments/assets/4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
+  const signed = "https://private-user-images.githubusercontent.com/1/2-3.png?jwt=abc";
+  const tracker = "https://tracker.example.com/pixel.png";
+  const picture = (src: string) => element("img", { src, alt: "before and after" });
+  const linked = (href: string, src: string) =>
+    element("a", { href, target: "_blank" }, [text(" "), picture(src), text("\n")]);
+  assert.deepEqual(shaped(linked(upload, upload)), [picture(upload)], "linked to itself");
+  assert.deepEqual(shaped(linked(upload, signed)), [picture(signed)], "linked to its upload");
+  assert.deepEqual(
+    shaped(linked(tracker, tracker)),
+    [picture(tracker)],
+    "any picture linked to itself",
+  );
+  assert.deepEqual(
+    shaped(linked("https://review.example.com", upload)),
+    [linked("https://review.example.com", upload)],
+    "a link elsewhere is kept",
+  );
+  const captioned = element("a", { href: upload }, [picture(upload), text("the screenshot")]);
+  assert.deepEqual(shaped(captioned), [captioned], "a link with words beside its picture is kept");
 });
 
 test("a suggested change becomes a fenced block of its rows in order, a removed line marked - and an added one +, its words as they stand", () => {

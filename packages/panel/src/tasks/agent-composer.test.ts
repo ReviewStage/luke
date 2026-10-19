@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -256,6 +256,25 @@ test("an Enter an input method is composing sends nothing, and Shift+Enter is a 
   assert.deepEqual(box.sent, []);
 });
 
+test("on a coarse pointer Enter is a new line in the box, and Send sends the lines", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const box = await mounted();
+  typeInComposer(box.container, "Fix the bug");
+  pressInComposer(box.container, "Enter");
+  typeInComposer(box.container, "then ship it");
+  await settle();
+  assert.equal(box.sent.length, 0, "Enter sent nothing");
+
+  const send = box.button("Send");
+  assert.ok(send);
+  act(() => send.click());
+  await settle();
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Fix the bug\nthen ship it"],
+  );
+});
+
 test("the box leaves the caret where the developer is typing elsewhere, and Escape gives the caret up", async () => {
   const elsewhere = document.createElement("input");
   document.body.append(elsewhere);
@@ -362,7 +381,7 @@ function stubMicrophone(): void {
   );
 }
 
-/** What main answers a dictation's acts with: the microphone granted, no route to prefer, and the words heard. */
+/** What main answers a dictation's `app:act` acts with: the microphone granted, and no route to prefer. */
 function microphoneAnswer(request: Act): ActOutcome {
   if (request.kind === ACT_KIND.MICROPHONE_REQUEST) {
     return { status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.GRANTED };
@@ -370,22 +389,21 @@ function microphoneAnswer(request: Act): ActOutcome {
   if (request.kind === ACT_KIND.MICROPHONE_ROUTE) {
     return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
   }
-  if (request.kind === ACT_KIND.DICTATION_TRANSCRIBE) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { text: "the bug in" } };
-  }
   return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
 }
 
 test("a dictation's words land where the caret stood as it began, spaced from the words around them", async () => {
   stubMicrophone();
   // The strip draws still under reduced motion, which jsdom has no answer to.
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
-  });
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
   });
+  fakeActPort({ [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the bug in" }) });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");
   const editor = composerEditor(box.container).editor;

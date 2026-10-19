@@ -390,7 +390,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
               }
               return carryStop(
                 {
-                  eve: eve({ origin, caller: { secret, account: target.userId } }),
+                  // Composed to send no message at all: the deployment acting for the
+                  // conversation's owner here cancels a turn and does nothing else.
+                  eve: eve<never>({ origin, caller: { secret, account: target.userId } }),
                   writer,
                   now: seams.now,
                   report: (message) => console.warn(message),
@@ -452,7 +454,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
-          seams.now(),
+          { now: seams.now(), timeZone: admitted.timeZone },
           Option.getOrElse(comments, () => []),
         );
         return chat.through === undefined ? { text } : { text, chatThrough: chat.through };

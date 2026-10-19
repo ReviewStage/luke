@@ -340,6 +340,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -868,6 +871,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -1363,6 +1369,9 @@
                                     },
                                     "minItems": 2,
                                     "maxItems": 6
+                                  },
+                                  "recommended": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -1548,6 +1557,64 @@
           },
           "required": [
             "readSeq"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "channel": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "general",
+                    "plan",
+                    "topic",
+                    "dm"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "planId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "members": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "purpose": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "archived"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "channel"
           ],
           "additionalProperties": false
         }

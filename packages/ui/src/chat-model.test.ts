@@ -23,6 +23,8 @@ import {
   FOR_YOU_REASON,
   forYou,
   postsIn,
+  topicName,
+  topicNameProblem,
 } from "./chat-model.js";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
@@ -344,4 +346,16 @@ test("a person and an agent are offered as the mentions their chips write, an ag
       ["maria", { kind: MENTION_KIND.PERSON, userId: "user-maria" }],
     ],
   );
+});
+
+test("a topic's name is written as a channel's, and refused where it breaks the grammar or another channel, general among them, holds it", () => {
+  const chat = chatOf(0, []);
+  assert.equal(topicName("  Release Train  "), "release-train");
+  assert.deepEqual(
+    ["", "-dash", "ok.name_1", "general", "alpha", "x".repeat(81)].map(
+      (name) => topicNameProblem(chat, name, undefined) === undefined,
+    ),
+    [false, false, true, false, false, false],
+  );
+  assert.equal(topicNameProblem(chat, "alpha", TOPIC.id), undefined, "a topic keeps its own name");
 });

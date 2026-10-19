@@ -79,6 +79,10 @@
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
+  /* The Factory's floating layer bar: the room a fill bar names every option
+     in (`choice-bar.css`'s narrow look starts under 520px), with the box's
+     own padding and hairline around it and a pixel to spare each side. */
+  --world-pipeline-width: calc(520px + 2 * var(--luke-space-4) + 2 * var(--luke-space-2));
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
@@ -157,7 +161,22 @@ body,
   --caption-width-max: 560px;
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
-  inset: 0;
+  /* The stage stands over what is seen of the window: from where a phone
+     panned it to, down to where the on-screen keyboard begins, so what
+     stands at its foot, a composer first of all, stays above the keyboard.
+     The panel writes the top, the inset, and the visible height on the root
+     (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
+     window and what is measured by the stage's height is measured by
+     `100vh` (`@luke/ui`'s `tokens/viewport.css`). It keeps off a phone's
+     notch and home indicator too, where its page is drawn under them
+     (`viewport-fit=cover`); everywhere else those insets are zero. */
+  top: calc(var(--luke-viewport-top) + env(safe-area-inset-top, 0px));
+  right: env(safe-area-inset-right, 0px);
+  bottom: max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px));
+  left: env(safe-area-inset-left, 0px);
+  /* Its edges size it, not base.css's whole-window measure. */
+  width: auto;
+  height: auto;
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
 }
@@ -258,6 +277,36 @@ body,
   width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
 }
 
+/* A narrow room shows a screen's list or the item chosen in it, one at a
+   time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
+   list or its page, a version history's versions or the version, each the
+   shell's one column, and Chat's rail or its place, the view's one column.
+   The one shown stands alone, so no edge parts it from the other. */
+.desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
+.desktop-shell[data-room="narrow"] .chat-view {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktop-shell[data-room="narrow"]
+  :is(.desktop-settings, .desktop-version-history, .chat-view)
+  > [hidden] {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .chat-rail) {
+  border-right: 0;
+}
+
+/* A place standing alone in a narrow room leads its head with the way back,
+   so its name keeps the room left and what is said beside it gives way. */
+.desktop-shell[data-room="narrow"] .chat-head > h2 ~ * {
+  display: none;
+}
+
+.app-stage[data-surface="desktop"]:has(.desktop-shell[data-room="narrow"]) {
+  --work-left: 0px;
+}
+
 /* Where the pointer peeks the folded sidebar out: a strip at the window's
    left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {
@@ -307,7 +356,9 @@ body,
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
+.desktop-shell[data-sidebar-collapsed="true"]:has(
+    .desktop-main > .chat-view > .chat-rail:not([hidden])
+  )
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--luke-color-sidebar);
 }
@@ -927,7 +978,7 @@ ul.actor-stack {
    the room's height. */
 .actor-more {
   display: flex;
-  max-height: min(240px, 40vh);
+  max-height: min(240px, calc(var(--luke-stage-height) * 0.4));
   flex-direction: column;
 }
 
@@ -1415,6 +1466,14 @@ ul.actor-stack {
   border: 0;
 }
 
+/* The panel Icons and Emoji show, its parts spaced as the picker's own. */
+.section-icon-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
 .section-icon-legend {
   margin-bottom: var(--luke-space-4);
   padding: 0;
@@ -1861,7 +1920,7 @@ ul.actor-stack {
 [data-luke-profile="desktop"] .toolbar-button,
 [data-luke-profile="desktop"] .luke-button,
 [data-luke-profile="desktop"] .luke-chip,
-[data-luke-profile="desktop"] .luke-segment,
+[data-luke-profile="desktop"] .luke-choice-bar-option,
 [data-luke-profile="desktop"] .luke-nav-item,
 [data-luke-profile="desktop"] .desktop-toolbar-actions,
 [data-luke-profile="desktop"] .desktop-toolbar .inbox-crumbs,
@@ -3095,6 +3154,14 @@ ul.actor-stack {
   display: none;
 }
 
+/* The band the list's tabs stand in under its title, whose hairline is the
+   band's rather than the tabs'. */
+.inbox-show-tabs {
+  flex: none;
+  padding-block: var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
 /* The chip saying whose items the list holds, under its tabs and over its
    rows, on the rows' inset. */
 .inbox-tasks-chips {
@@ -3314,9 +3381,8 @@ ul.actor-stack {
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
-   as a plan leads with its title: the title at a document heading's size,
-   then a muted line of its agent, when it asked, and where it stands, over a
-   hairline that parts it from the comments. */
+   as a plan leads with its title: the title alone at a document heading's
+   size, over a hairline that parts it from the comments. */
 .inbox-subject {
   display: flex;
   flex-direction: column;
@@ -3332,37 +3398,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;
-}
-
-.inbox-subject-line {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-6);
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.inbox-subject-agent {
-  display: flex;
-  min-width: 0;
-  color: var(--luke-color-text);
-}
-
-/* An item that needs the reader wears the attention mark beside its
-   words, in the primary ink, since it is the one standing that asks for
-   their hand; a teammate's open item names whom it waits on, and a settled
-   one says where it stands, in the line's muted ink. */
-.inbox-standing {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-.inbox-standing[data-status="open"]:not([data-waiting]) {
-  color: var(--luke-color-text);
 }
 
 /* Each message of the thread is a comment (`inbox-pane.tsx`'s `Comment`):
@@ -3964,39 +3999,22 @@ ul.actor-stack {
   box-shadow: 0 12px 32px var(--luke-color-shadow-soft);
 }
 
-/* The pipeline bar: planned → building → shipped, the defects' arrow
-   turning back, each count a filter chip pressed while its layer is the one
-   drawn alone, and none pressed while every layer is. */
+/* The pipeline bar, a fill bar of the layers floating over the scene, the
+   chosen layer's stage filled and none while every layer is drawn. Note
+   that it is handed a width, because a fill bar takes its container's and
+   has none of its own in a box that shrinks to fit it: the narrowest at
+   which a fill bar names every stage, its stages centred in it. Where the
+   scene is narrower, the stages not chosen show their glyphs alone. */
 .factory-world-pipeline {
   top: var(--luke-space-12);
   left: 50%;
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  margin: 0;
+  width: min(var(--world-pipeline-width), calc(100% - 2 * var(--luke-space-12)));
   padding: var(--luke-space-4);
   transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
 }
 
-.factory-world-stage-slot {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.factory-world-flow {
-  display: inline-flex;
-  color: var(--luke-color-text-subtle);
-}
-
-.factory-world-flow[data-back] {
-  color: var(--world-signal, var(--luke-color-text-subtle));
-}
-
-.factory-world-flow svg {
-  width: 14px;
-  height: 14px;
+.factory-world-pipeline > .luke-choice-bar {
+  justify-content: safe center;
 }
 
 .factory-world-signal {
@@ -4007,24 +4025,6 @@ ul.actor-stack {
 .factory-world-signal > svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
-}
-
-.factory-world-stage-count {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
-}
-
-/* While one count is pressed, the others' layers stand undrawn: their glyphs
-   and counts go to the quiet ink, the words staying legible, rather than the
-   chip fading, which would fade the keyboard's ring with it. */
-.factory-world-pipeline .luke-chip[data-faded] .factory-world-signal,
-.factory-world-pipeline .luke-chip[data-faded] .factory-world-stage-count {
-  color: var(--luke-color-text-subtle);
-}
-
-.factory-world-stuck {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
 }
 
 .factory-world-home {
@@ -4916,6 +4916,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--column-inset);
 }
 
+/* A topic's menu stands at the head's end, past its name and purpose. */
+.chat-head-actions {
+  flex: none;
+  margin-inline-start: auto;
+}
+
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
 .chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);
@@ -5473,7 +5479,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  padding-bottom: 8vh;
+  padding-bottom: calc(var(--luke-stage-height) * 0.08);
 }
 
 /* The side panel ----------------------------------------------------------- */
@@ -5898,6 +5904,24 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .sidebar-resize:active,
 .sidebar-resize:focus-visible {
   background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
+}
+
+/* A finger takes an edge across both columns' gutters, centred on the strip
+   it draws, which keeps its width and its place. Note that the edge stops at
+   the gutters rather than reaching a finger's full width, because past them
+   it would stand over the rows and controls either column holds there, and
+   a press on one would start a drag instead. */
+@media (pointer: coarse) {
+  .side-panel-resize::before,
+  .sidebar-resize::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: calc(2 * var(--column-inset));
+    transform: translateX(-50%);
+    content: "";
+  }
 }
 
 /* The panel's top row, level with the plan's toolbar and, like it, the
@@ -6482,6 +6506,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
+/* A close takes a finger's press up and down alone on a coarse pointer,
+   never sideways, because beside it stand the words it would close, and a
+   tap meant for a tab's label that lands near its end must not close it:
+   the tab's ×, and a toast's (`.toast-dismiss`). Every other glyph button
+   keeps its press a finger's width across (`@luke/ui`'s `button.css`). */
+@media (pointer: coarse) {
+  .tab-close .luke-button::before,
+  .toast-dismiss .luke-button::before {
+    width: 100%;
+  }
+}
+
 /* A screen with no hover shows every tab's × at rest, over its label's
    faded end as under the pointer, but a marked tab's, whose mark keeps the
    place, its Close in its menu. Note that a tap leaves its tab matching
@@ -6605,11 +6641,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .command-palette {
   position: fixed;
   z-index: var(--luke-z-dialog);
-  top: 18vh;
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) * 0.18);
   left: 50%;
   display: flex;
   width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
-  max-height: 64vh;
+  max-height: calc(var(--luke-stage-height) * 0.64);
   flex-direction: column;
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
@@ -6671,17 +6707,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one shared filter chip each, in a row that
-   wraps under the field. */
+/* The band under the field the filters stand in. Note that it is a block,
+   because a fill bar takes its container's width and has none of its own
+   in a row that shrinks to fit it. */
 .command-palette-filters {
-  display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
   min-width: 0;
-  margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  border: 0;
   border-bottom: 1px solid var(--luke-color-border);
 }
 
@@ -7152,7 +7184,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .new-task .new-task-composer .agent-composer-input {
   min-height: min(
     calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
-    25vh
+    calc(var(--luke-stage-height) * 0.25)
   );
 }
 
@@ -7264,7 +7296,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   position: fixed;
   z-index: var(--luke-z-toast);
   right: var(--luke-space-16);
-  bottom: var(--luke-space-16);
+  /* Above the on-screen keyboard, while it is up. */
+  bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
   pointer-events: none;
 }

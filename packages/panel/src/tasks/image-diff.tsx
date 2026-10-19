@@ -1,9 +1,9 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
-import { Segmented } from "../segmented.js";
 
 /**
  * image-diff.tsx -- a changed image as Files changed draws it: the picture before and after, side by side, swiped, or one faded over the other, in place of "binary file".
@@ -23,7 +23,8 @@ import { Segmented } from "../segmented.js";
  * land is asked for again when the changes are read again. An image added has no
  * before and one deleted no after; a before whose merge base the service
  * could not read is not drawn at all rather than drawn wrong, and the after
- * stands alone, saying so.
+ * stands alone, saying so. The comparisons are tabs over the one panel that
+ * shows the sides, labelled by the comparison it shows.
  */
 
 /** How an image's two sides are set against each other: beside each other, the after swiped over the before, or faded over it. */
@@ -200,37 +201,52 @@ function BothSides({
     beforeState.kind === PICTURE_STATE.READY && afterState.kind === PICTURE_STATE.READY
       ? { before: beforeState.url, after: afterState.url }
       : undefined;
+  const panelId = useId();
+  const tabIds = {
+    [IMAGE_COMPARE.SIDE_BY_SIDE]: useId(),
+    [IMAGE_COMPARE.SWIPE]: useId(),
+    [IMAGE_COMPARE.ONION_SKIN]: useId(),
+  } satisfies Record<ImageCompare, string>;
   return (
     <>
       <div className="image-diff-modes">
-        <Segmented
-          legend={IMAGE_WORDS.COMPARE}
-          options={COMPARE_OPTIONS}
+        <ChoiceBar<ImageCompare>
+          label={IMAGE_WORDS.COMPARE}
+          items={COMPARE_OPTIONS}
           value={compare}
           disabled={ready === undefined}
           onChange={(next) => onComparison({ compare: next, amount })}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          panels={(each) => ({ tab: tabIds[each], panel: panelId })}
         />
       </div>
-      {ready === undefined || compare === IMAGE_COMPARE.SIDE_BY_SIDE ? (
-        <div className="image-diff-sides">
-          <figure className="image-diff-side">
-            <figcaption>{IMAGE_WORDS.BEFORE}</figcaption>
-            <SidePicture state={beforeState} label={IMAGE_WORDS.BEFORE} />
-          </figure>
-          <figure className="image-diff-side">
-            <figcaption>{IMAGE_WORDS.AFTER}</figcaption>
-            <SidePicture state={afterState} label={IMAGE_WORDS.AFTER} />
-          </figure>
-        </div>
-      ) : (
-        <Stacked
-          before={ready.before}
-          after={ready.after}
-          compare={compare}
-          amount={amount}
-          onAmount={(next) => onComparison({ compare, amount: next })}
-        />
-      )}
+      <div
+        className="image-diff-panel"
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={tabIds[compare]}
+      >
+        {ready === undefined || compare === IMAGE_COMPARE.SIDE_BY_SIDE ? (
+          <div className="image-diff-sides">
+            <figure className="image-diff-side">
+              <figcaption>{IMAGE_WORDS.BEFORE}</figcaption>
+              <SidePicture state={beforeState} label={IMAGE_WORDS.BEFORE} />
+            </figure>
+            <figure className="image-diff-side">
+              <figcaption>{IMAGE_WORDS.AFTER}</figcaption>
+              <SidePicture state={afterState} label={IMAGE_WORDS.AFTER} />
+            </figure>
+          </div>
+        ) : (
+          <Stacked
+            before={ready.before}
+            after={ready.after}
+            compare={compare}
+            amount={amount}
+            onAmount={(next) => onComparison({ compare, amount: next })}
+          />
+        )}
+      </div>
     </>
   );
 }

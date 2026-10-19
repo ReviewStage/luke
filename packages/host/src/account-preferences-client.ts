@@ -6,7 +6,8 @@ import {
 } from "@luke/features";
 import {
   type AccountPreferences,
-  accountPreferencesFromWire,
+  accountPreferencesFromParts,
+  accountPreferencesParts,
   type ExperimentChoices,
   experimentChoicesFrom,
   NO_EXPERIMENTS,
@@ -48,7 +49,8 @@ function accountPreferencesAnswerFromWire(
   value: UnparsedWireValue,
 ): AccountPreferencesAnswer | undefined {
   if (!isRecord(value)) return undefined;
-  const preferences = accountPreferencesFromWire(value.preferences);
+  // Note that the link choice is joined from its own part, which a service that predates it answers none of.
+  const preferences = accountPreferencesFromParts(value);
   if (preferences === undefined) return undefined;
   if (value.updatedAt !== undefined && !isWireNumber(value.updatedAt)) return undefined;
   // Note that experiments are read on their own reader, which passes over a key it does not know,
@@ -120,15 +122,13 @@ export class AccountPreferencesClient {
   writePreferences(
     preferences: AccountPreferences,
   ): Effect.Effect<AccountPreferencesAnswer | undefined> {
-    // SAFETY: AccountPreferences is JSON-compatible; the strict parser protects this runtime boundary.
-    const parsed = accountPreferencesFromWire(preferences as UnparsedWireValue);
-    if (parsed === undefined) return Effect.succeed(undefined);
+    // Note that the link choice is sent as its own part only where this device holds one, so a device that never chose clears no other's.
     return this.#over(
       this.#call.ask(
         {
           method: HTTP_METHOD.PUT,
           path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-          body: JSON.stringify({ preferences: parsed }),
+          body: JSON.stringify(accountPreferencesParts(preferences)),
         },
         accountPreferencesAnswerSchema,
       ),

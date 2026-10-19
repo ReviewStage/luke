@@ -5,10 +5,19 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
+import type { SessionAuthContext } from "eve/context";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { actedForAccount, DEPLOYMENT_PRESENCE } from "../brain-host/auth.js";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+  BRAIN_HOST_TURN,
+  type BrainHostTurn,
+} from "../brain-host/bounds.js";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../brain-host/channel.js";
 import type { SessionOwnership } from "../brain-host/door.js";
 import {
@@ -17,6 +26,7 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMount,
+  eveSessions,
 } from "../brain-host/eve-sessions.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type EveReach, eveFor } from "./stop.js";
@@ -30,7 +40,9 @@ import { type EveReach, eveFor } from "./stop.js";
  * admits only on that account's own sessions and conversations. Nothing the
  * request itself names, its cookie or an account header, reaches eve; a
  * deployment that holds no secret, or names no eve, reaches it for no
- * cookie at all.
+ * cookie at all. A typed ask of Luke, which a comment mentioning him hands
+ * over, is admitted at the brain's door either way, as the account's own
+ * principal, so eve steers and folds it the same whichever carried it.
  *
  * eve answers at a fake HTTP boundary that hands each request to the
  * channel's door over a store in which each account reaches its own session
@@ -101,12 +113,13 @@ const DOORS = {
   }).auth,
 } as const satisfies Readonly<Record<EveMount, EveChannelInput["auth"]>>;
 
-/** One request eve received: the route as its door reads it, the headers naming its caller, and the account the door admitted it for, or nothing for a refusal. */
+/** One request eve received: the route as its door reads it, the headers naming its caller, and the principal the door admitted it as and the account that acts for, or nothing for a refusal. */
 interface Received {
   readonly route: string;
   readonly authorization: string | null;
   readonly account: string | null;
   readonly cookie: string | null;
+  readonly admitted: SessionAuthContext | undefined;
   readonly admittedFor: string | undefined;
 }
 
@@ -146,11 +159,36 @@ function eveOverHttp() {
       authorization: headers.get("authorization"),
       account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
       cookie: headers.get("cookie"),
+      admitted,
       admittedFor: actedForAccount(admitted ?? null),
     });
     return caller instanceof Response ? caller : answerOf(route);
   });
   return { received, layer };
+}
+
+/**
+ * eve's identity of a principal, what it steers a running turn by and folds
+ * messages that waited into one turn by: its authenticator, issuer, type,
+ * and id, its attributes aside.
+ */
+function identityOf(principal: SessionAuthContext | undefined) {
+  if (principal === undefined) return undefined;
+  const { authenticator, issuer, principalType, principalId } = principal;
+  return [authenticator, issuer ?? null, principalType, principalId];
+}
+
+/** The deployment's own identity, which the voice's spoken asks run under. */
+const DEPLOYMENT_IDENTITY = [
+  BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+  null,
+  BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+];
+
+/** A message of the kind given on one of the accounts' conversations. */
+function messageOn<Turn extends BrainHostTurn>(conversationId: string, turn: Turn) {
+  return { conversationId, turn, message: "Expire invitations after a week." };
 }
 
 /** A hosted route's request: a bearer's, a cookie's, or one carrying both an account header it has no say over and its cookie. */
@@ -161,45 +199,64 @@ function routeRequest(headers: Readonly<Record<string, string>>): Request {
 const REACH: EveReach = { eveOrigin: () => ORIGIN };
 
 it.effect(
-  "a request that carries a bearer reaches eve over that bearer as it came, which the door admits as the bearer's account",
+  "a request that carries a bearer reaches eve over that bearer as it came, which the door admits as the bearer's own account, a typed ask of Luke as before",
   () =>
     Effect.gen(function* () {
       const eve = eveOverHttp();
       const reached = yield* Effect.gen(function* () {
         const coder = yield* eveFor(REACH, routeRequest({ authorization: BEARER }), ACCOUNT);
+        const brain = yield* eveFor(
+          REACH,
+          routeRequest({ authorization: BEARER }),
+          ACCOUNT,
+          EVE_MOUNT.TASKS,
+        );
         return [
           (yield* coder.cancel(OWN_SESSION, "turn_0")).outcome,
           (yield* coder.reset(OWN_SESSION)).outcome,
+          (yield* brain.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED))).outcome,
+          (yield* brain.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED)))
+            .outcome,
         ];
       }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
 
-      assert.deepEqual(reached, [EVE_CANCEL_OUTCOME.ACCEPTED, EVE_RESET_OUTCOME.RESET]);
+      assert.deepEqual(reached, [
+        EVE_CANCEL_OUTCOME.ACCEPTED,
+        EVE_RESET_OUTCOME.RESET,
+        EVE_SEND_OUTCOME.ACCEPTED,
+        EVE_SEND_OUTCOME.ACCEPTED,
+      ]);
+      const own = [
+        BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+        null,
+        BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+        ACCOUNT,
+      ];
       assert.deepEqual(
-        eve.received.map(({ authorization, account, admittedFor }) => ({
+        eve.received.map(({ authorization, account, admitted }) => ({
           authorization,
           account,
-          admittedFor,
+          identity: identityOf(admitted),
+          carrier: admitted?.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
         })),
-        [
-          { authorization: BEARER, account: null, admittedFor: ACCOUNT },
-          { authorization: BEARER, account: null, admittedFor: ACCOUNT },
-        ],
+        Array.from({ length: 4 }, () => ({
+          authorization: BEARER,
+          account: null,
+          identity: own,
+          carrier: undefined,
+        })),
       );
     }),
 );
 
 it.effect(
-  "a request that carries only a browser's cookie reaches eve as the deployment acting for the account the route resolved, admitted on that account's own sessions and conversations on both channels and refused on another's, whatever account the request names itself",
+  "a request that carries only a browser's cookie reaches eve as the deployment acting for the account the route resolved, admitted on that account's own sessions and conversations on both channels, a typed ask of Luke among them, and refused on another's, whatever account the request names itself",
   () =>
     Effect.gen(function* () {
       const eve = eveOverHttp();
       // The browser's request names another account in the header the door reads, which it has no say over.
       const cookieRequest = routeRequest({ cookie: COOKIE, [BRAIN_HOST_HEADER.ACCOUNT]: OTHER });
-      const typed = (conversationId: string) => ({
-        conversationId,
-        turn: BRAIN_HOST_TURN.TYPED,
-        message: "Expire invitations after a week.",
-      });
+      const typed = (conversationId: string) => messageOn(conversationId, BRAIN_HOST_TURN.TYPED);
       const outcomes = yield* Effect.gen(function* () {
         const coder = yield* eveFor(REACH, cookieRequest, ACCOUNT);
         const brain = yield* eveFor(REACH, cookieRequest, ACCOUNT, EVE_MOUNT.TASKS);
@@ -216,8 +273,12 @@ it.effect(
             (yield* brain.cancel(OWN_SESSION, "turn_0")).outcome,
             (yield* brain.reset(OWN_SESSION)).outcome,
             (yield* brain.reset(OTHER_SESSION)).outcome,
-            // A typed ask of Luke is the developer's own under their bearer alone, which a cookie carries none of.
+            // A typed ask of Luke, which a comment mentioning him hands over, on the account's own
+            // conversation and session, and never on the account's the request named.
             (yield* brain.open(typed(OWN_CONVERSATION))).outcome,
+            (yield* brain.send(OWN_SESSION, typed(OWN_CONVERSATION))).outcome,
+            (yield* brain.open(typed(OTHER_CONVERSATION))).outcome,
+            (yield* brain.send(OTHER_SESSION, typed(OTHER_CONVERSATION))).outcome,
           ],
         };
       }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
@@ -235,10 +296,13 @@ it.effect(
           EVE_CANCEL_OUTCOME.ACCEPTED,
           EVE_RESET_OUTCOME.RESET,
           EVE_RESET_OUTCOME.FAILED,
+          EVE_SEND_OUTCOME.ACCEPTED,
+          EVE_SEND_OUTCOME.ACCEPTED,
+          EVE_SEND_OUTCOME.FAILED,
           EVE_SEND_OUTCOME.FAILED,
         ],
       });
-      assert.equal(eve.received.length, 10);
+      assert.equal(eve.received.length, 13);
       for (const each of eve.received) {
         assert.deepEqual(
           [each.authorization, each.account, each.cookie],
@@ -258,8 +322,78 @@ it.effect(
           ACCOUNT,
           ACCOUNT,
           undefined,
+          ACCOUNT,
+          ACCOUNT,
+          undefined,
           undefined,
         ],
+      );
+      assert.ok(
+        eve.received.every(({ admitted }) => admitted?.principalId !== OTHER),
+        "nothing was admitted as the account the request named",
+      );
+    }),
+);
+
+it.effect(
+  "a cookie's typed ask of Luke is admitted at the brain's door as the account's own principal, the identity its bearer's ask is admitted as, with the deployment named only as its carrier, so eve steers and folds it as the bearer's and never with the voice's spoken asks, which, like the cookie's Stop and retire, still present the deployment",
+  () =>
+    Effect.gen(function* () {
+      const eve = eveOverHttp();
+      yield* Effect.gen(function* () {
+        const overBearer = yield* eveFor(
+          REACH,
+          routeRequest({ authorization: BEARER }),
+          ACCOUNT,
+          EVE_MOUNT.TASKS,
+        );
+        const overCookie = yield* eveFor(
+          REACH,
+          routeRequest({ cookie: COOKIE }),
+          ACCOUNT,
+          EVE_MOUNT.TASKS,
+        );
+        // The voice function's client, composed as its exchange composes it (`voice/deployment-exchange.ts`).
+        const voice = yield* eveSessions({
+          origin: ORIGIN,
+          caller: { secret: Redacted.make(SECRET), account: ACCOUNT },
+        });
+        yield* overBearer.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
+        yield* overCookie.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
+        yield* overCookie.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
+        yield* voice.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.SPOKEN));
+        yield* voice.send(OWN_SESSION, messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.SPOKEN));
+        yield* overCookie.cancel(OWN_SESSION, "turn_0");
+        yield* overCookie.reset(OWN_SESSION);
+      }).pipe(Effect.provide(Layer.merge(eve.layer, WITH_SECRET)));
+
+      const [bearer, opened, followed, spoken, spokenAgain, cancelled, retired] = eve.received.map(
+        ({ admitted }) => admitted,
+      );
+      assert.equal(eve.received.length, 7);
+      assert.deepEqual(identityOf(bearer), [
+        BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+        null,
+        BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+        ACCOUNT,
+      ]);
+      assert.deepEqual(identityOf(opened), identityOf(bearer));
+      assert.deepEqual(identityOf(followed), identityOf(bearer));
+      assert.deepEqual(
+        [bearer, opened, followed].map(
+          (principal) => principal?.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
+        ),
+        [undefined, BRAIN_HOST_DEPLOYMENT_PRINCIPAL, BRAIN_HOST_DEPLOYMENT_PRINCIPAL],
+      );
+      assert.deepEqual(
+        [spoken, spokenAgain, cancelled, retired].map(identityOf),
+        Array.from({ length: 4 }, () => DEPLOYMENT_IDENTITY),
+      );
+      assert.deepEqual(
+        [spoken, spokenAgain, cancelled, retired].map(
+          (principal) => principal?.attributes[BRAIN_HOST_ATTRIBUTE.ACCOUNT],
+        ),
+        [ACCOUNT, ACCOUNT, ACCOUNT, ACCOUNT],
       );
     }),
 );

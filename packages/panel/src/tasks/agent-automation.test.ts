@@ -19,7 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import { agentActor } from "./coding-agent-model.js";
@@ -27,9 +27,7 @@ import { agentActor } from "./coding-agent-model.js";
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so
  * on its card, "Started by" the automation's clock and name, which hang the
- * automation's card and open its page; while the Automations experiment is
- * off, the card says nothing of an automation and the automations are not
- * read. Synthetic throughout.
+ * automation's card and open its page. Synthetic throughout.
  */
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
@@ -102,11 +100,11 @@ beforeEach(() => {
           value: { automations },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
   });
 });
 
@@ -128,8 +126,8 @@ function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
 }
 
-/** The agent named in a place of the workspace as Dean reads it, the experiment `on` or off, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */
-async function agentCard(on: boolean, nested = false) {
+/** The agent named in a place of the workspace as Dean reads it, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */
+async function agentCard(nested = false) {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Triage", NOTHING_HELD, false, {
     me: DEAN.userId,
@@ -145,7 +143,6 @@ async function agentCard(on: boolean, nested = false) {
   const directory = (children: ReturnType<typeof createElement>) =>
     createElement(AutomationDirectory, {
       workspace: WORKSPACE,
-      on,
       wanted: true,
       onOpen: (automationId: string) => opened.push(automationId),
       children,
@@ -167,7 +164,7 @@ async function agentCard(on: boolean, nested = false) {
 }
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
-  const { card, opened } = await agentCard(true);
+  const { card, opened } = await agentCard();
   const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
   assert.ok(starter, "the card names who started the agent");
   assert.equal(card.querySelector(".actor-words")?.firstChild?.textContent, "Started by ");
@@ -181,7 +178,7 @@ test("an agent an automation started says it was started by the automation, its 
 });
 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
-  const { card, opened } = await agentCard(true);
+  const { card, opened } = await agentCard();
   hover(
     card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
   );
@@ -214,7 +211,7 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
 });
 
 test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
-  const { card } = await agentCard(true, true);
+  const { card } = await agentCard(true);
   assert.equal(
     card.querySelector(".actor-words [data-actor-ref]")?.textContent,
     "Morning Sentry triage",
@@ -233,7 +230,7 @@ test("an automation a GitHub event fires says where on its card, as its row in t
       repositories: ["acme/relay", "acme/ledger"],
     },
   ];
-  const { card } = await agentCard(true);
+  const { card } = await agentCard();
   hover(
     card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
   );
@@ -242,13 +239,4 @@ test("an automation a GitHub event fires says where on its card, as its row in t
     automation?.querySelector(".luke-hover-card-sub")?.textContent,
     "When a pull request by people is opened in acme/relay or acme/ledger",
   );
-});
-
-test("with the Automations experiment off, the card says nothing of the automation, names the teammate who started the agent as before, and the automations go unread", async () => {
-  const { card } = await agentCard(false);
-  const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
-  assert.equal(starter?.dataset.kind, "person");
-  assert.equal(starter?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
-  assert.doesNotMatch(card.textContent ?? "", /Morning Sentry triage/u);
-  assert.deepEqual(listed, []);
 });

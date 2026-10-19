@@ -297,7 +297,7 @@ function inboxPostView(input: WireValue | undefined): InboxPost | undefined {
   return Option.getOrUndefined(readPost(input));
 }
 
-/** What a post asks, as the row's body lists it: a choice's options, the recommended one saying so, or a form's fields with their types. */
+/** What a post asks, as the row's body lists it: a choice's options, the recommended one saying so, or a form's fields with their types, a select's recommended option saying so. */
 function askLines(response: InboxPost["response"]): readonly string[] {
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
@@ -309,7 +309,13 @@ function askLines(response: InboxPost["response"]): readonly string[] {
     case INBOX_RESPONSE.FORM:
       return response.fields.map((field) => {
         const options =
-          field.type === INBOX_FIELD.SELECT ? `: ${(field.options ?? []).join(", ")}` : "";
+          field.type === INBOX_FIELD.SELECT
+            ? `: ${(field.options ?? [])
+                .map((option) =>
+                  option === field.recommended ? `${option} (recommended)` : option,
+                )
+                .join(", ")}`
+            : "";
         const required = field.required === true ? ", required" : "";
         return `- ${field.label} (${field.type}${required})${options}`;
       });

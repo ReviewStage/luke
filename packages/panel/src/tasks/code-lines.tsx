@@ -8,7 +8,8 @@ import {
   type ScrollFade,
 } from "@luke/ui";
 import { isPointed } from "@luke/voice/code-pane-model";
-import { type CSSProperties, Fragment, type ReactNode, type Ref } from "react";
+import { type CSSProperties, Fragment, memo, type ReactNode, type Ref } from "react";
+import { type CodeType, FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
@@ -73,6 +74,35 @@ function isBlank(tokens: CodeLines[number]): boolean {
   return tokens.every((token) => token.text === "");
 }
 
+/**
+ * One line, its number and its runs, drawn again only where its runs or its
+ * lighting changed, so a window of lines coloured anew redraws that window
+ * alone rather than every line held (`themed-lines.tsx`).
+ */
+const CodeLine = memo(function CodeLine({
+  line,
+  tokens,
+  pointed,
+}: {
+  line: number;
+  tokens: CodeLines[number];
+  pointed: boolean;
+}): React.JSX.Element {
+  return (
+    <div className="code-line" data-pointed={String(pointed)}>
+      <CodeLineNumber line={line} />
+      <code className="code-line-text">
+        {isBlank(tokens) ? BLANK_LINE_TEXT : null}
+        {tokens.map((token, at) => (
+          <span key={at} style={runColours(token)}>
+            {token.text}
+          </span>
+        ))}
+      </code>
+    </div>
+  );
+});
+
 /** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
 export function CodeLineRows({
   firstLine,
@@ -94,17 +124,7 @@ export function CodeLineRows({
           // Note that a line's place in the file is its identity: the lines never reorder.
           <Fragment key={line}>
             {before?.(line)}
-            <div className="code-line" data-pointed={String(isPointed(pointed, line))}>
-              <CodeLineNumber line={line} />
-              <code className="code-line-text">
-                {isBlank(tokens) ? BLANK_LINE_TEXT : null}
-                {tokens.map((token, at) => (
-                  <span key={at} style={runColours(token)}>
-                    {token.text}
-                  </span>
-                ))}
-              </code>
-            </div>
+            <CodeLine line={line} tokens={tokens} pointed={isPointed(pointed, line)} />
           </Fragment>
         );
       })}
@@ -112,16 +132,52 @@ export function CodeLineRows({
   );
 }
 
-/** How a run of lines is drawn: its numbers shown or not, wrapped or not. */
+/** How a run of lines is drawn: its numbers shown or not, wrapped or not, and the type it is set in. */
 export interface LinesLook {
   readonly lineNumbers: boolean;
   readonly wrap: boolean;
+  /** The type the lines are set in, as View settings sets it; the window's code type where none is named. */
+  readonly type?: CodeType | undefined;
 }
 
 /** The look every File tab's lines, and a page's source, are drawn in: the File tabs' settings (`file-view-settings.ts`). */
 export function useLinesLook(): LinesLook {
   const { settings } = useFileViewSettings();
-  return { lineNumbers: settings.lineNumbers, wrap: settings.wordWrap };
+  return {
+    lineNumbers: settings.lineNumbers,
+    wrap: settings.wordWrap,
+    type: {
+      font: settings.diffFont,
+      fontSize: settings.diffFontSize,
+      lineHeight: settings.diffLineHeight,
+      ligatures: settings.diffLigatures,
+    },
+  };
+}
+
+/** A run's type as its box's custom properties, which the stylesheet sets its lines in (`.code-lines`); none for the window's own. */
+function typeStyle(type: CodeType | undefined): CSSProperties | undefined {
+  if (type === undefined) return undefined;
+  return cssCustomProperties({
+    "--code-font": FONT_STACK[type.font],
+    "--code-font-size": `${type.fontSize}px`,
+    "--code-line-height": LINE_HEIGHT_RATIO[type.lineHeight],
+    "--code-font-features": type.ligatures ? LIGATURES.ON : LIGATURES.OFF,
+  });
+}
+
+/** A colour in each appearance. */
+interface Appearances {
+  readonly dark: string;
+  readonly light: string;
+}
+
+/** A theme's ground in each appearance as custom properties, which the stylesheet reads (`.code-lines-ground`). */
+function groundStyle(ground: Appearances): CSSProperties {
+  return cssCustomProperties({
+    "--theme-ground-dark": ground.dark,
+    "--theme-ground-light": ground.light,
+  });
 }
 
 /** Lines numbered from `firstLine`, those `pointed` names lit, scrolling in the place they fill as `look` says. */
@@ -135,6 +191,7 @@ export function CodeLinesView({
   below,
   fade = SCROLL_FADE.NONE,
   scrollerRef,
+  ground,
 }: {
   look: LinesLook;
   firstLine: number;
@@ -150,8 +207,15 @@ export function CodeLinesView({
   fade?: ScrollFade | undefined;
   /** Handed the box that scrolls, which a caller centres a line within. */
   scrollerRef?: Ref<HTMLDivElement> | undefined;
+  /**
+   * The syntax theme's ground in each appearance, where the lines are
+   * coloured in one other than the window's own (`themed-lines.tsx`). Note
+   * that its ink is not taken: every run coloured in the theme names its own
+   * colour, and a run the host coloured keeps the host's ink.
+   */
+  ground?: Appearances | undefined;
 }): React.JSX.Element {
-  return (
+  const scroll = (
     <ScrollArea
       ref={scrollerRef}
       axis={look.wrap ? SCROLL_AXIS.VERTICAL : SCROLL_AXIS.BOTH}
@@ -160,6 +224,7 @@ export function CodeLinesView({
       <div className="code-lines-frame">
         <div
           className="code-lines"
+          style={typeStyle(look.type)}
           data-line-numbers={String(look.lineNumbers)}
           data-wrap={String(look.wrap)}
         >
@@ -169,5 +234,12 @@ export function CodeLinesView({
         </div>
       </div>
     </ScrollArea>
+  );
+  if (ground === undefined) return scroll;
+  // Note that the theme's ground stands under the scroll area whole, its bar's gutter among it, so it wraps the area rather than the lines.
+  return (
+    <div className="code-lines-ground" style={groundStyle(ground)}>
+      {scroll}
+    </div>
   );
 }

@@ -41,4 +41,19 @@ describe("writeSettingsFileAtomic", () => {
         }),
       ),
   );
+
+  it.effect("two writers' overlapping writes both land, leaving only the settings file", () =>
+    withDirectory((directory) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const writes = Array.from({ length: 8 }, (_, index) =>
+          writeSettingsFileAtomic(directory, `{"version":${index}}\n`, `tab-${index}`),
+        );
+        yield* Effect.all(writes, { concurrency: "unbounded" });
+
+        const entries = yield* fileSystem.readDirectory(directory);
+        assert.deepEqual([...entries].sort(), [SETTINGS_FILE_NAME]);
+      }),
+    ),
+  );
 });

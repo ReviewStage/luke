@@ -68,6 +68,9 @@ const HOST_TURN_OF_ASK_ORIGIN = {
   [ASK_ORIGIN.SPOKEN]: BRAIN_HOST_TURN.SPOKEN,
 } as const satisfies Record<AskOrigin, BrainHostTurn>;
 
+/** The kind of turn an ask of the origin given opens, which the eve it is handed to must send. */
+type HostTurnOf<Origin extends AskOrigin> = (typeof HOST_TURN_OF_ASK_ORIGIN)[Origin];
+
 /** Where an id stands: the ask it named, where it was an ask's id, and the turn eve started for it, where one has started. */
 type AskStanding =
   | {
@@ -151,23 +154,31 @@ type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
  * conversation it lands in under the member who opened it, whose id the ask
  * is recorded under, and, for a spoken one, the voice session it came from.
  */
-export interface AskInput {
+export interface AskInput<Origin extends AskOrigin = AskOrigin> {
   /** The account asking, which must reach the conversation. */
   readonly accountId: string;
   /** The conversation's owner, the address the ask and its turn are recorded under. */
   readonly userId: string;
   readonly question: string;
-  readonly origin: AskOrigin;
+  readonly origin: Origin;
   readonly clientId: string;
   readonly conversationId: string;
   readonly voice?: AskVoice;
+  /** The asker's time zone, which the turn the ask opens reads the day in; none reads UTC. */
+  readonly timeZone?: string | undefined;
 }
 
-/** What accepting an ask needs: the ask record built over the store's runner, and eve as the caller reaches it. */
-export interface AskSeams {
+/**
+ * What accepting an ask needs: the ask record built over the store's runner,
+ * and eve as the caller reaches it, sending the kinds of turn `Turn` names.
+ * The voice function's client, the deployment acting for the account, sends
+ * a spoken ask alone by its type. The brain's door admits a typed ask from
+ * anything that holds the deployment's secret, so no code path but the
+ * comment hand-over (`tasks/comment-ask.ts`) sends one.
+ */
+export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;
-  /** eve as the voice function reaches it: the deployment acting for the account. */
-  readonly eve: EveSessions;
+  readonly eve: EveSessions<Turn>;
 }
 
 /**
@@ -216,9 +227,11 @@ const unreachableSend = () =>
  * session opened for it. A retry with the same client id finds the record
  * and dispatches again only where the first dispatch never reached eve.
  */
-export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
-  seams: AskSeams,
-  input: AskInput,
+export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
+  Origin extends AskOrigin,
+>(
+  seams: AskSeams<HostTurnOf<Origin>>,
+  input: AskInput<Origin>,
 ): Effect.fn.Return<AskOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const { accountId, userId, question, origin, clientId, conversationId } = input;
   const now = new Date(yield* Clock.currentTimeMillis);
@@ -240,7 +253,12 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
     queuedAt: ask.createdAt.getTime(),
   });
   if (ask.sessionId !== undefined) return accepted;
-  const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
+  const message = {
+    conversationId,
+    turn: HOST_TURN_OF_ASK_ORIGIN[origin],
+    message: question,
+    ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
+  };
 
   // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and
@@ -318,11 +336,11 @@ interface StopAnswer {
 
 export type StopOutcome = Result.Result<StopAnswer, StopRefused>;
 
-/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve as the caller reaches it. */
+/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve's cancel as the caller reaches it, whatever kinds of turn its client sends. */
 interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
-  readonly eve: EveSessions;
+  readonly eve: Pick<EveSessions, "cancel">;
 }
 
 /** A turn as a Stop answers it: its status, and the stamp it carries where one stands. */

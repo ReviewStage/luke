@@ -5,43 +5,43 @@
   },
   {
     "src": "/api/account/integrations/([^/]+)/connect",
-    "dest": "/api/default.js?route=account/integrations/connect&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/connect&route-path=account/integrations/$1/connect&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/tools",
-    "dest": "/api/default.js?route=account/integrations/tools&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/tools&route-path=account/integrations/$1/tools&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/cancel",
-    "dest": "/api/default.js?route=account/integrations/cancel&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/cancel&route-path=account/integrations/$1/cancel&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/disconnect",
-    "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/disconnect&route-path=account/integrations/$1/disconnect&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/rename",
-    "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/rename&route-path=account/integrations/$1/rename&provider=$1"
   },
   {
     "src": "/api/plans/([^/]+)/board",
-    "dest": "/api/default.js?route=plans/board&id=$1"
+    "dest": "/api/default.js?route=plans/board&route-path=plans/$1/board&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/transcript",
-    "dest": "/api/default.js?route=plans/transcript&id=$1"
+    "dest": "/api/default.js?route=plans/transcript&route-path=plans/$1/transcript&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/work",
-    "dest": "/api/default.js?route=plans/work&id=$1"
+    "dest": "/api/default.js?route=plans/work&route-path=plans/$1/work&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
-    "dest": "/api/default.js?route=plans/subagent-messages&id=$1&call=$2"
+    "dest": "/api/default.js?route=plans/subagent-messages&route-path=plans/$1/subagents/$2/messages&id=$1&call=$2"
   },
   {
     "src": "/api/plans/([^/]+)/messages",
-    "dest": "/api/default.js?route=plans/messages&id=$1"
+    "dest": "/api/default.js?route=plans/messages&route-path=plans/$1/messages&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/code",
@@ -61,11 +61,11 @@
   },
   {
     "src": "/api/plans/([^/]+)/edit",
-    "dest": "/api/default.js?route=plans/edit&id=$1"
+    "dest": "/api/default.js?route=plans/edit&route-path=plans/$1/edit&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/stop",
-    "dest": "/api/default.js?route=plans/stop&id=$1"
+    "dest": "/api/default.js?route=plans/stop&route-path=plans/$1/stop&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/comments/([^/]+)",
@@ -93,15 +93,15 @@
   },
   {
     "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
-    "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
+    "dest": "/api/default.js?route=plans/restore&route-path=plans/$1/revisions/$2/restore&id=$1&seq=$2"
   },
   {
     "src": "/api/plans/([^/]+)/revisions/([^/]+)",
-    "dest": "/api/default.js?route=plans/revision&id=$1&seq=$2"
+    "dest": "/api/default.js?route=plans/revision&route-path=plans/$1/revisions/$2&id=$1&seq=$2"
   },
   {
     "src": "/api/plans/([^/]+)/revisions",
-    "dest": "/api/default.js?route=plans/revisions&id=$1"
+    "dest": "/api/default.js?route=plans/revisions&route-path=plans/$1/revisions&id=$1"
   },
   {
     "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
@@ -113,7 +113,7 @@
   },
   {
     "src": "/api/plans/([^/]+)",
-    "dest": "/api/default.js?route=plans/plan&id=$1"
+    "dest": "/api/default.js?route=plans/plan&route-path=plans/$1&id=$1"
   },
   {
     "src": "/api/account/plan-template/revisions/([^/]+)/restore",
@@ -125,7 +125,7 @@
   },
   {
     "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
-    "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
+    "dest": "/api/default.js?route=agents/subagent-messages&route-path=agents/$1/subagents/$2/messages&id=$1&call=$2"
   },
   {
     "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -137,7 +137,7 @@
   },
   {
     "src": "/api/agents/([^/]+)/messages",
-    "dest": "/api/default.js?route=agents/messages&id=$1"
+    "dest": "/api/default.js?route=agents/messages&route-path=agents/$1/messages&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/stop",
@@ -229,15 +229,15 @@
   },
   {
     "src": "/api/automations/([^/]+)/runs",
-    "dest": "/api/default.js?route=automations/runs&id=$1"
+    "dest": "/api/default.js?route=automations/runs&route-path=automations/$1/runs&id=$1"
   },
   {
     "src": "/api/automations/([^/]+)/run",
-    "dest": "/api/default.js?route=automations/run&id=$1"
+    "dest": "/api/default.js?route=automations/run&route-path=automations/$1/run&id=$1"
   },
   {
     "src": "/api/automations/([^/]+)",
-    "dest": "/api/default.js?route=automations/automation&id=$1"
+    "dest": "/api/default.js?route=automations/automation&route-path=automations/$1&id=$1"
   },
   {
     "src": "/api/issues/([^/]+)",
@@ -276,6 +276,10 @@
     "dest": "/api/default.js?route=account/provider-keys"
   },
   {
+    "src": "/api/admin/cost",
+    "dest": "/api/default.js?route=admin/cost"
+  },
+  {
     "src": "/api/admin/day",
     "dest": "/api/default.js?route=admin/day"
   },
@@ -288,12 +292,20 @@
     "dest": "/api/default.js?route=admin/metrics"
   },
   {
+    "src": "/api/admin/reliability",
+    "dest": "/api/default.js?route=admin/reliability"
+  },
+  {
     "src": "/api/admin/user",
     "dest": "/api/default.js?route=admin/user"
   },
   {
     "src": "/api/admin/users",
     "dest": "/api/default.js?route=admin/users"
+  },
+  {
+    "src": "/api/admin/workspaces",
+    "dest": "/api/default.js?route=admin/workspaces"
   },
   {
     "src": "/api/agents",

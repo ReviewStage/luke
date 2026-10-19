@@ -14,6 +14,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
+import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
@@ -32,6 +33,7 @@ import {
   channelsOf,
   chatHead,
   chatPast,
+  editTopicChannel,
   ensureGeneral,
   ensureMember,
   ensureTaskChannel,
@@ -41,6 +43,7 @@ import {
   markNoticed,
   memberNamed,
   messageAt,
+  moveTaskChat,
   openAsksOf,
   openTopicChannel,
   peekUnread,
@@ -276,6 +279,61 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           assert.ok(Result.isSuccess(yield* open(`topic-${topic}`)));
         }
         assert.deepEqual(yield* open("one-too-many"), Result.fail(CHAT_REFUSAL.TOO_MANY_TOPICS));
+      }),
+  );
+
+  it.effect(
+    "a topic opened with a purpose keeps it; a topic is renamed, its purpose said or cleared, archived to free its place under the bound, and brought back only where there is room; no other kind is edited",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount();
+        const workspace = yield* openWorkspace(owner);
+        const ada = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
+        const open = (name: string, purpose: string | null = null) =>
+          Effect.map(openTopicChannel(owner, workspace, name, ada.id, purpose), Result.getOrThrow);
+        const edit = (channelId: string, change: Parameters<typeof editTopicChannel>[4]) =>
+          editTopicChannel(owner, workspace, ada.id, channelId, change);
+
+        const release = yield* open("release", "Friday's cut");
+        assert.equal(release.purpose, "Friday's cut");
+        yield* open("design");
+
+        const renamed = Result.getOrThrow(
+          yield* edit(release.id, { name: "release-train", purpose: "What ships Friday" }),
+        );
+        assert.deepEqual([renamed.name, renamed.purpose], ["release-train", "What ships Friday"]);
+        const cleared = Result.getOrThrow(yield* edit(release.id, { purpose: null }));
+        assert.deepEqual([cleared.name, cleared.purpose], ["release-train", null]);
+        assert.deepEqual(
+          yield* edit(release.id, { name: "design" }),
+          Result.fail(CHAT_REFUSAL.NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* edit(release.id, { name: "general" }),
+          Result.fail(CHAT_REFUSAL.NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* edit(general.id, { purpose: "Everyone" }),
+          Result.fail(CHAT_REFUSAL.NOT_FOUND),
+        );
+
+        const archived = Result.getOrThrow(yield* edit(release.id, { archived: true }));
+        assert.notEqual(archived.archivedAt, null);
+        // The archive freed a place, so the workspace fills the bound again without it.
+        for (let topic = 2; topic <= CHAT_BOUNDS.MAX_TOPIC_CHANNELS; topic += 1) {
+          yield* open(`topic-${topic}`);
+        }
+        assert.deepEqual(
+          yield* edit(release.id, { archived: false }),
+          Result.fail(CHAT_REFUSAL.TOO_MANY_TOPICS),
+        );
+        const design = Option.getOrThrow(yield* channelNamed(owner, workspace, "design"));
+        yield* edit(design.id, { archived: true });
+        const back = Result.getOrThrow(yield* edit(release.id, { archived: false }));
+        assert.equal(back.archivedAt, null);
       }),
   );
 
@@ -1598,6 +1656,68 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
         true,
       );
     }),
+  );
+
+  it.effect(
+    "a message's pictures are rows of the one attachment table, under the ids its blocks name, dropped as the message drops them, and moved with the task's chat",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const room = yield* openRoom;
+        const png = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array([137, 80, 78, 71]),
+        };
+        const webp = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.WEBP,
+          bytes: new Uint8Array([82, 73, 70, 70]),
+        };
+        const message = yield* pictured(room, [png.id, webp.id]);
+        const shared = Effect.map(
+          db
+            .select({
+              id: attachment.id,
+              organizationId: attachment.organizationId,
+              contentType: attachment.contentType,
+              byteCount: attachment.byteCount,
+              bytes: attachment.bytes,
+            })
+            .from(attachment)
+            .where(eq(attachment.chatMessageId, message.id)),
+          (rows) => rows.toSorted((a, b) => a.id.localeCompare(b.id)),
+        );
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [
+          png,
+          webp,
+        ]);
+        assert.deepEqual(
+          (yield* shared).map((row) => [row.id, row.contentType, row.byteCount, [...row.bytes]]),
+          [png, webp]
+            .toSorted((a, b) => a.id.localeCompare(b.id))
+            .map((image) => [
+              image.id,
+              image.contentType,
+              image.bytes.byteLength,
+              [...image.bytes],
+            ]),
+        );
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [webp]);
+        assert.deepEqual(
+          (yield* shared).map((row) => row.id),
+          [webp.id],
+        );
+
+        const elsewhere = yield* openWorkspace(room.owner);
+        yield* moveTaskChat(room.plan, elsewhere);
+        assert.deepEqual(
+          (yield* shared).map((row) => row.organizationId),
+          [elsewhere],
+        );
+      }),
   );
 });
 

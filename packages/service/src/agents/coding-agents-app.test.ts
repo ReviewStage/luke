@@ -103,6 +103,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_FIELD,
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
@@ -168,6 +169,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
+  type Context,
   DateTime,
   Deferred,
   Duration,
@@ -207,8 +209,10 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
+import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
-import { tasksApp } from "../tasks/tasks-app.js";
+import type { WebServices } from "../runtime.js";
+import { tasksProcedures } from "../tasks/tasks-procedures.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -238,7 +242,6 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
-import { chatApp } from "./chat-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -264,6 +267,7 @@ import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { CURSOR_START } from "./coder-host/transcript.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
+import { messagesProcedures } from "./messages-procedures.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -289,12 +293,15 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** One task, served by the tasks group, whose delete stops the task's agents through the same Stop. */
-const TASK = "/api/plans/plan";
-/** The account's tasks, served by the tasks group, each naming its agents in brief. */
+/** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 const TASKS = "/api/plans";
-/** Luke's Stop on a task, served by the tasks group, which reaches the brain's eve as the request's caller. */
-const TASK_STOP = "/api/plans/stop";
+/** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
+const TASK = (taskId: string) => `${TASKS}/${taskId}`;
+/** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
+const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
+/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+const TASK_PATH =
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 
@@ -558,23 +565,28 @@ const standing = (
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const tasks = HttpRouter.toWebHandler(
-      tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const chat = HttpRouter.toWebHandler(chatApp(seams).pipe(HttpRouter.provideRequest(services)), {
-      disableLogger: true,
+    // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    const webServices = (yield* Effect.context<never>().pipe(
+      Effect.provide(services),
+    )) as Context.Context<WebServices>;
+    const routed = hostedFetch({
+      messages: messagesProcedures(seams),
+      plans: tasksProcedures(seams),
     });
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose(), chat.dispose()])),
-    );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, and the chat's on the chat's. */
+    yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
-        const { pathname } = new URL(request.url);
-        if (pathname === CHAT) return chat.handler(request);
-        return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
-          ? tasks.handler(request)
+        const url = new URL(request.url);
+        const { pathname } = url;
+        const id = url.searchParams.get("id");
+        if (pathname === AGENT_MESSAGES && id !== null) {
+          url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
+          return routed(new Request(url, request), webServices);
+        }
+        if (pathname === CHAT) return routed(request, webServices);
+        return pathname === TASKS || TASK_PATH.test(pathname)
+          ? routed(request, webServices)
           : agents.handler(request);
       });
     const ask = (request: Request) =>
@@ -619,6 +631,8 @@ function request(
   const headers = new Headers();
   if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,
@@ -849,7 +863,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         yield* joinWorkspace(task.workspaceId, other);
 
-        const deleted = yield* ask(request(TASK, other, { method: "DELETE", id: task.id }));
+        const deleted = yield* ask(request(TASK(task.id), other, { method: "DELETE" }));
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -1177,7 +1191,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             }),
           ),
         );
-        const opened = yield* ask(request(TASK, owner, { id: started.plan.id }));
+        const opened = yield* ask(request(TASK(started.plan.id), owner));
 
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
@@ -3541,9 +3555,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const taskArchive = yield* withTask.ask(
-          request(TASK, undefined, {
+          request(TASK(withTask.task.id), undefined, {
             method: "PATCH",
-            id: withTask.task.id,
             cookie: sessionCookieOf(withTask.owner),
             body: { archived: true },
           }),
@@ -3573,9 +3586,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const deleted = yield* ask(
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "DELETE",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3598,9 +3610,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const stopped = yield* ask(
-          request(TASK_STOP, undefined, {
+          request(TASK_STOP(task.id), undefined, {
             method: "POST",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3640,10 +3651,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const lukeStop = yield* stopped.ask(
-          request(TASK_STOP, undefined, { method: "POST", id: stopped.task.id, cookie: teammate }),
+          request(TASK_STOP(stopped.task.id), undefined, { method: "POST", cookie: teammate }),
         );
         const deleted = yield* stopped.ask(
-          request(TASK, undefined, { method: "DELETE", id: stopped.task.id, cookie: teammate }),
+          request(TASK(stopped.task.id), undefined, { method: "DELETE", cookie: teammate }),
         );
 
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
@@ -3696,14 +3707,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "PATCH",
-            id: task.id,
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, { method: "DELETE", id: task.id, cookie }),
-          request(TASK_STOP, undefined, { method: "POST", id: task.id, cookie }),
+          request(TASK(task.id), undefined, { method: "DELETE", cookie }),
+          request(TASK_STOP(task.id), undefined, { method: "POST", cookie }),
         ]) {
           const { pathname } = new URL(asked.url);
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
@@ -3750,7 +3760,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         const marked = (archived: boolean) =>
           Effect.map(
-            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            ask(request(TASK(task.id), other, { method: "PATCH", body: { archived } })),
             (answered) => answered.status,
           );
         const archiveNow = () =>
@@ -3785,9 +3795,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* sent("Rename the subject line too.");
 
         assert.deepEqual(
-          yield* ask(
-            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
-          ),
+          yield* ask(request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
@@ -6433,6 +6441,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const topic = yield* chat.post(chat.first, {
           text: "Release notes go here.",
           to: "#releases",
+          purpose: "What ships, and when",
         });
         assert.ok("in" in topic);
         assert.equal(topic.in, "#releases");
@@ -6451,6 +6460,11 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           ["#releases", CHANNEL_KIND.TOPIC],
           ["#teammate-invitations", CHANNEL_KIND.TASK],
         ]);
+        // The topic says what it is for, as its opener wrote it, to every agent that reads.
+        assert.equal(
+          read.channels.find((channel) => channel.name === "#releases")?.purpose,
+          "What ships, and when",
+        );
       }),
   );
 
@@ -6678,6 +6692,31 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           }),
           refused(ASK_REFUSAL.UNKNOWN_RECOMMENDATION),
         );
+        const channel = {
+          type: CHAT_FIELD.SELECT,
+          label: "Channel",
+          options: ["Email", "Slack"],
+          recommended: "Slack",
+        };
+        const form = (key: string, fields: readonly WireBoundaryInput[]) => ({
+          text: "How are invitations sent?",
+          key,
+          ask: { response: { type: CHAT_ASK.FORM, fields } },
+        });
+        for (const fields of [
+          [{ ...channel, recommended: "SMS" }],
+          [channel, { type: CHAT_FIELD.BOOLEAN, label: "Remind", recommended: "Slack" }],
+        ]) {
+          assert.deepEqual(
+            yield* chat.post(chat.first, form("channel-refused", fields)),
+            refused(ASK_REFUSAL.SELECT_RECOMMENDATION),
+          );
+        }
+        assert.equal(
+          (yield* chat.post(chat.first, form("invite-channel", [channel]))).status,
+          ACTION_RESULT_STATUS.ACCEPTED,
+          "a select's recommendation naming one of its options is taken",
+        );
         assert.deepEqual(
           yield* chat.post(chat.first, {
             text: "These lines.",
@@ -6720,7 +6759,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("asks" in read);
         assert.deepEqual(
           read.asks.map((ask) => ask.key),
-          [QUEUE_ASK.key],
+          ["invite-channel", QUEUE_ASK.key],
         );
       }),
   );
@@ -8346,7 +8385,10 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         url.searchParams.set("workspaceId", workspace);
         return new Request(url, {
           method,
-          headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+          headers: {
+            ...(bearer === undefined ? undefined : { authorization: `Bearer ${bearer}` }),
+            ...(body === undefined ? undefined : { "content-type": "application/json" }),
+          },
           ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
         });
       };
@@ -8469,6 +8511,41 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a person opens a topic channel with a purpose, renames it, and archives it from the window; a name another channel holds is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const opened = yield* chat.wrote({
+          open: { name: "release-train", purpose: "Friday's cut" },
+        });
+        assert.ok("channel" in opened);
+        assert.deepEqual(
+          [opened.channel.name, opened.channel.kind, opened.channel.purpose],
+          ["release-train", CHANNEL_KIND.TOPIC, "Friday's cut"],
+        );
+        const read = yield* chat.read;
+        assert.equal(
+          read.channels.find((channel) => channel.id === opened.channel.id)?.purpose,
+          "Friday's cut",
+        );
+        const edited = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, name: "release", purpose: null },
+        });
+        assert.ok("channel" in edited);
+        assert.deepEqual([edited.channel.name, edited.channel.purpose], ["release", undefined]);
+        const archived = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, archived: true },
+        });
+        assert.ok("channel" in archived);
+        assert.equal(archived.channel.archived, true);
+        assert.deepEqual(
+          yield* chat.write({ open: { name: "general" } }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }),
   );
 

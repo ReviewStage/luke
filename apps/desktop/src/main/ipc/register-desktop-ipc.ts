@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
+import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
 import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
-import { startMacTerminal } from "@luke/host/node";
+import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
@@ -24,12 +26,12 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
 import { HOTKEY_RANK } from "../window/hotkey-registrar";
-import { avatarActRows, avatarReports } from "./avatar-acts";
+import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserActRows } from "./browser-acts";
-import { macTerminalActRows } from "./mac-terminal-acts";
+import { macTerminalProcedures } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
-import { terminalActRows, whenPageGone } from "./terminal-acts";
-import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
+import { terminalProcedures, whenPageGone } from "./terminal-acts";
+import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 
 /**
@@ -55,6 +57,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     testNotification,
     avatar,
     run,
+    services: effectServices,
   } = services;
   const { launch } = config;
   const { panels, voiceWindow, callWindow, hotkeys } = windows;
@@ -107,10 +110,26 @@ export function registerDesktopIpc(services: DesktopServices): void {
         return true;
       },
     }),
-    ...voiceRuntimeActRows(voiceRuntime),
-    ...avatarActRows({ avatar }),
-    ...macTerminalActRows({
+    ...browserActRows({
+      views: browserViews,
+      experimentOn: () =>
+        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
+    }),
+    [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
+    [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
+    [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
+    [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
+    [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
+    [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
+  };
+
+  // The acts main answers itself on the act port: its windows', ports', and
+  // system's, as the platform's rows on `app:act` are the rows only it can answer.
+  const platformProcedures: PlatformActProcedures<WebContents> = {
+    ...avatarProcedures({ avatar }),
+    ...macTerminalProcedures({
       host: operator.host,
+      worktreesRoot: worktreesRoot(os.homedir()),
       stateRoot: config.stateRoot,
       ports: {
         open: (sender, ticket) => {
@@ -127,7 +146,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       start: startMacTerminal,
     }),
-    ...terminalActRows({
+    ...terminalProcedures({
       host: operator.host,
       ports: {
         open: (sender, ticket) => {
@@ -145,17 +164,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       createId: randomUUID,
       run,
     }),
-    ...browserActRows({
-      views: browserViews,
-      experimentOn: () =>
-        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
-    }),
-    [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
-    [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
-    [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
-    [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
-    [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
-    [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
+    ...voiceRuntimeProcedures(voiceRuntime),
   };
 
   const router = createHostActRouter<WebContents>(
@@ -198,7 +207,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       codingAgents: { host: operator.host, notices },
       integrations: { host: operator.host },
       automations: { host: operator.host },
-      issues: { host: operator.host },
       factory: { host: operator.host },
     },
     platformRows,
@@ -247,6 +255,15 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     router,
     run,
+    actPort: createActPortHandler(
+      {
+        accountAsks: { host: operator.host },
+        issues: { host: operator.host },
+        workspaces: { host: operator.host, openExternal: config.openExternal },
+      },
+      platformProcedures,
+    ),
+    services: effectServices,
     reports,
     /**
      * The document as one window stands, answered before anything is drawn

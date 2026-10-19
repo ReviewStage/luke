@@ -28,11 +28,23 @@ export interface Rewrite {
  * `?id=` as it was written to, and the few exact paths that must stand ahead
  * of a segment rewrite whose pattern would otherwise take them, which carry
  * no query of their own.
+ *
+ * A row marked `orpc` is a route the hosted oRPC router answers
+ * (`orpc-route.ts`), which matches the public path itself (`/api/x/{id}`)
+ * rather than the flattened route key: its rewrite also carries that whole
+ * path in `route-path`, which the dispatcher restores, as the auth
+ * catch-all's does. Its query parameters are still written, and the router
+ * reads a path parameter over a query parameter of the same name. Note that
+ * the path travels as a query value, so a segment the client escaped (`%2F`,
+ * `+`) reaches the router as the platform's query decoding leaves it, which
+ * is why an oRPC row's segments are ids and slugs, until one oRPC route
+ * matches the public paths itself and the rows go.
  */
-interface SegmentRewrite {
+export interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
   readonly query?: string;
+  readonly orpc?: true;
 }
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
@@ -41,42 +53,48 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/account/integrations/([^/]+)/connect",
     route: "account/integrations/connect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/tools",
     route: "account/integrations/tools",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/cancel",
     route: "account/integrations/cancel",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/disconnect",
     route: "account/integrations/disconnect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/rename",
     route: "account/integrations/rename",
     query: "provider=$1",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/subagents/([^/]+)/messages",
     route: "plans/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/code", route: "plans/code", query: "id=$1" },
   { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1" },
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
   { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/stop", route: "plans/stop", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/stop", route: "plans/stop", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/comments/([^/]+)",
     route: "plans/comment-thread",
@@ -95,16 +113,22 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     route: "plans/restore",
     query: "id=$1&seq=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/revisions/([^/]+)", route: "plans/revision", query: "id=$1&seq=$2" },
-  { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/revisions/([^/]+)",
+    route: "plans/revision",
+    query: "id=$1&seq=$2",
+    orpc: true,
+  },
+  { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
     route: "plans/page",
     query: "id=$1&page=$2&version=$3",
   },
   { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1" },
-  { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
+  { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1", orpc: true },
   {
     src: "/api/account/plan-template/revisions/([^/]+)/restore",
     route: "account/plan-template/restore",
@@ -119,6 +143,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -130,7 +155,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/picture",
     query: "id=$1&picture=$2",
   },
-  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1", orpc: true },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   {
@@ -182,9 +207,9 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
-  { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },
-  { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1" },
-  { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1" },
+  { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1", orpc: true },
+  { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1", orpc: true },
+  { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1", orpc: true },
   { src: "/api/issues/([^/]+)", route: "issues/issue", query: "id=$1" },
 ];
 
@@ -193,13 +218,33 @@ const LITERAL_ROUTE_KEY = /^[a-z0-9/-]+$/;
 
 const API_ROUTE_PREFIX = "/api/";
 
+/** A path segment a rewrite's pattern captures. */
+const CAPTURED_SEGMENT = "([^/]+)";
+
+/** The public path an oRPC row's pattern matches, each captured segment written back as the rewrite's own `$n`. */
+function capturedPath(src: string): string {
+  if (!src.startsWith(API_ROUTE_PREFIX)) throw new Error(`the rewrite ${src} is not under /api/`);
+  const segments = src.slice(API_ROUTE_PREFIX.length).split(CAPTURED_SEGMENT);
+  return segments.reduce((path, literal, index) => `${path}$${index}${literal}`);
+}
+
+/** A segment row's query: an oRPC row's whole public path first, then its own parameters. */
+function segmentQuery(segment: SegmentRewrite): string | undefined {
+  if (segment.orpc !== true) return segment.query;
+  const path = `${DISPATCH_QUERY.PATH}=${capturedPath(segment.src)}`;
+  return segment.query === undefined ? path : `${path}&${segment.query}`;
+}
+
 function dest(definition: FunctionDefinition, route: string, query?: string): string {
   const parameters = `${DISPATCH_QUERY.ROUTE}=${route}${query === undefined ? "" : `&${query}`}`;
   return `/${functionPublicPath(definition)}?${parameters}`;
 }
 
 /** The `/api/` rewrites, in the order they must stand: segment rewrites first, then one exact rule per remaining dispatched route. */
-export function apiRewrites(definitions: readonly FunctionDefinition[]): readonly Rewrite[] {
+export function apiRewrites(
+  definitions: readonly FunctionDefinition[],
+  segments: readonly SegmentRewrite[] = SEGMENT_REWRITES,
+): readonly Rewrite[] {
   const functionOf = new Map(
     definitions.flatMap((definition) =>
       definition.routes.map((route): [string, FunctionDefinition] => [route, definition]),
@@ -207,10 +252,13 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
   );
   const rewrites: Rewrite[] = [];
   const rewritten = new Set<string>();
-  for (const segment of SEGMENT_REWRITES) {
+  for (const segment of segments) {
     const definition = functionOf.get(segment.route);
     if (definition === undefined) throw new Error(`no route behind the rewrite ${segment.src}`);
-    rewrites.push({ src: segment.src, dest: dest(definition, segment.route, segment.query) });
+    rewrites.push({
+      src: segment.src,
+      dest: dest(definition, segment.route, segmentQuery(segment)),
+    });
     rewritten.add(segment.route);
   }
   for (const definition of definitions) {
@@ -236,6 +284,26 @@ const RewriteSchema = Schema.Struct({ src: Schema.String, dest: Schema.String })
 const decodeApiRewrites = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Array(RewriteSchema)),
 );
+
+/**
+ * A route of the web service as `vercel.json` writes it: a rewrite, and the
+ * response headers a page route sends beside it, as the app's routes send
+ * its Content Security Policy; or a redirect, its status and its `Location`
+ * header, as the app's built file name sends the browser to `/app`. A
+ * generated `/api/` rewrite carries neither.
+ */
+const WebRouteSchema = Schema.Union([
+  Schema.Struct({
+    src: Schema.String,
+    dest: Schema.String,
+    headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  }),
+  Schema.Struct({
+    src: Schema.String,
+    status: Schema.Number,
+    headers: Schema.Struct({ Location: Schema.String }),
+  }),
+]);
 
 /** The table as committed. */
 export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
@@ -267,7 +335,7 @@ const WebService = Schema.Struct({
   installCommand: Schema.String,
   buildCommand: Schema.String,
   ignoreCommand: Schema.String,
-  routes: Schema.Array(RewriteSchema),
+  routes: Schema.Array(WebRouteSchema),
 });
 
 const EveService = Schema.Struct({
@@ -348,9 +416,10 @@ async function readVercelConfig(web: string): Promise<VercelConfig> {
   return decodeVercelConfig(source);
 }
 
-const isApiRewrite = (rewrite: Rewrite) => rewrite.src.startsWith(API_ROUTE_PREFIX);
+const isApiRewrite = (rewrite: { readonly src: string }) =>
+  rewrite.src.startsWith(API_ROUTE_PREFIX);
 
-const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
+const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /**

@@ -97,22 +97,6 @@ import {
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   codingAgentWorkspaceListParamsSchema,
-  type DictationTranscribeAnswerView,
-  dictationTranscribeAnswerViewSchema,
-  dictationTranscribeParamsSchema,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionsAnswerView,
-  type ProviderKeysAnswerView,
-  planTemplateAnswerViewSchema,
-  planTemplateRevisionAnswerViewSchema,
-  planTemplateRevisionParamsSchema,
-  planTemplateRevisionsAnswerViewSchema,
-  planTemplateRevisionsParamsSchema,
-  planTemplateWriteParamsSchema,
-  providerKeyRemoveParamsSchema,
-  providerKeySaveParamsSchema,
-  providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FactoryWorldView,
@@ -139,24 +123,7 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
-import {
-  type IssueListView,
-  type IssueView,
-  issueChangeParamsSchema,
-  issueCreateParamsSchema,
-  issueIdParamsSchema,
-  issueListParamsSchema,
-  issueListViewSchema,
-  issueViewSchema,
-} from "@luke/features/issue-view";
-import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
-import {
-  type MacRepositoriesAnswer,
-  macRepositoriesAnswerSchema,
-  macRepositorySchema,
-  macTerminalKeySchema,
-  macTerminalOpenParamsSchema,
-} from "@luke/features/mac-terminal-wire";
+import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -179,7 +146,6 @@ import {
   type TasksSkillsAnswer,
   type TasksStartAnswer,
   type TasksTreeAnswer,
-  type TasksWorkspacePhotoAnswer,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
   tasksCommentActParamsSchema,
@@ -193,7 +159,6 @@ import {
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
-  tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
@@ -224,56 +189,10 @@ import {
   tasksStartRequestSchema,
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
-  tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceInvitationCancelParamsSchema,
-  tasksWorkspaceInviteParamsSchema,
-  tasksWorkspaceLeaveParamsSchema,
-  tasksWorkspaceMemberRemoveParamsSchema,
-  tasksWorkspaceMemberRoleParamsSchema,
-  tasksWorkspaceMembersParamsSchema,
-  tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoAnswerSchema,
-  tasksWorkspacePhotoParamsSchema,
-  tasksWorkspacePhotoSetParamsSchema,
-  tasksWorkspaceRenameParamsSchema,
-  tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
-import {
-  type TerminalCreatedActAnswer,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
-  terminalAgentParamsSchema,
-  terminalAttachParamsSchema,
-  terminalCreatedActAnswerSchema,
-  terminalCreateParamsSchema,
-  terminalRenameParamsSchema,
-  terminalResumedActAnswerSchema,
-  terminalShellParamsSchema,
-  terminalsActAnswerSchema,
-} from "@luke/features/terminal-acts";
-import {
-  type WorkspaceInvitation,
-  workspaceInvitationSchema,
-} from "@luke/features/workspace-invitation-wire";
-import {
-  type FormerMember,
-  formerMemberSchema,
-  type Workspace,
-  type WorkspaceMember,
-  workspaceMemberSchema,
-  workspaceSchema,
-} from "@luke/features/workspace-wire";
-import {
-  type VoiceCreateLiveSessionResult,
-  voiceCreateLiveSessionParamsSchema,
-  voiceCreateLiveSessionResultSchema,
-  voiceEndLiveSessionParamsSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
-  voiceSetVideoParamsSchema,
-} from "@luke/gateway";
-import type { LiveDiagnostics } from "@luke/live";
+import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
+import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -285,8 +204,6 @@ import {
 import type { UpdateSnapshot } from "@luke/settings/update";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
-import { avatarStateSchema } from "@luke/voice/avatar";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -305,6 +222,7 @@ import {
   wireResult,
 } from "@luke/wire/wire-guard";
 import { Schema as EffectSchema, Result } from "effect";
+import { PORT_ACT_KIND, type PortActKind } from "./contract/kinds.js";
 
 /**
  * Every effect a window may ask this build's main process for, named once.
@@ -429,42 +347,6 @@ export const ACT_KIND = {
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
   /**
-   * The account's workspaces: one made under a name, answered as made, which
-   * the account owns; one renamed by its owners and admins, answered under
-   * its new name; one's photo set as a `data:` URL or removed with null by
-   * its owners and admins, answered with the photo's new version or none;
-   * one's pending invitations read, one made, answered
-   * with its accept link, and one canceled, for its owners and admins; a GitHub
-   * organization connected to one, the Luke GitHub App's install address the
-   * service answers opened in the browser, or disconnected from it; one
-   * workspace's members read; one member removed, answered with the members
-   * who remain; another member given a role, or the workspace handed to one
-   * of its admins, by its owner, each answered with the members as they then
-   * stand; and one workspace left. Every write reads the workspaces
-   * again, so they arrive on the document; a write the account's role does
-   * not allow is refused in words that say so. A workspace's photo is read
-   * apart, answered with its bytes in base64 under its media type or why
-   * there are none, since the document never carries them.
-   */
-  WORKSPACE_CREATE: "workspace.create",
-  WORKSPACE_RENAME: "workspace.rename",
-  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
-  WORKSPACE_INVITE: "workspace.invite",
-  WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
-  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
-  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
-  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
-  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
-  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
-  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
-  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
-  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
-  WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
-  WORKSPACE_TRANSFER: "workspace.transfer",
-  WORKSPACE_LEAVE: "workspace.leave",
-  WORKSPACE_PHOTO_READ: "workspace.photoRead",
-  WORKSPACE_PHOTO_SET: "workspace.photoSet",
-  /**
    * A task's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the task's
    * agents with their status, one started under the press's own key, one's
@@ -522,40 +404,8 @@ export const ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** The listed workspace's issues: listed, one read, one filed, and one changed. */
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
   /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
   FACTORY_WORLD: "factory.world",
-  /**
-   * Settings › API keys: the account's own provider keys read as hints and
-   * statuses, one saved, one removed. The save's payload is the one place a
-   * key crosses from the renderer, once, on its way to the service; no
-   * answer carries one back, and nothing on the way keeps it.
-   */
-  PROVIDER_KEYS_READ: "providerKeys.read",
-  PROVIDER_KEYS_SAVE: "providerKeys.save",
-  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
-  /**
-   * A clip dictated into a message box, carried once from the panel that
-   * recorded it to the service and answered with its words. Nothing on the
-   * way keeps it.
-   */
-  DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
    * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
@@ -575,20 +425,6 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
   /**
-   * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
-   * listed, started, named, and ended, its sandbox resumed on the
-   * developer's click, and a shell attached and detached. What a shell
-   * prints travels on the port an attach posts to the asking panel, never on
-   * an act.
-   */
-  TERMINAL_LIST: "terminal.list",
-  TERMINAL_CREATE: "terminal.create",
-  TERMINAL_RENAME: "terminal.rename",
-  TERMINAL_KILL: "terminal.kill",
-  TERMINAL_RESUME: "terminal.resume",
-  TERMINAL_ATTACH: "terminal.attach",
-  TERMINAL_DETACH: "terminal.detach",
-  /**
    * A Browser tab's view, which main owns over the panel that asked
    * (`browser-views.ts`): opened on an address and answered how its page
    * stands, sent to another, stepped back, forward, reloaded or stopped,
@@ -604,17 +440,6 @@ export const ACT_KIND = {
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
   /**
-   * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
-   * each repository's run command read and set; and a terminal of this Mac
-   * opened on the agent's branch for the asking panel, and closed with its
-   * tab. What the terminal prints and what is typed travel on the port an
-   * open posts to that panel, never on an act.
-   */
-  MAC_REPOSITORIES: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
-  MAC_TERMINAL_OPEN: "macTerminal.open",
-  MAC_TERMINAL_CLOSE: "macTerminal.close",
-  /**
    * The workspace's chat: read past a cursor (held open by the service
    * while nothing moved), and written to as the account's own member, a
    * post, an answer to an ask, a resolve, or how far it has read. The
@@ -622,27 +447,6 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
-  VOICE_COMMAND: "voice.command",
-  /** The call card's way back: Luke's window brought forward on the call's own task. */
-  CALL_SHOW_TASK: "call.showTask",
-  /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
-  AVATAR_REPORT: "avatar.report",
-  /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
-  VOICE_SET_VIDEO: "voice.setVideo",
-  /**
-   * The voice window as a GPT Live peer: its SDP offer handed to the host,
-   * which creates the one session and answers the SDP; the hang-up it asks
-   * the host to decide; and the two reports the host reads its transport and
-   * its idle from. No credential travels in any of them.
-   */
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  /** Stop Luke, the stop key's and the Call tab's Stop's one action: on the task named, else the call's, else the open one. */
-  LUKE_STOP: "luke.stop",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
    * Where the developer's voice would be captured from, read afresh: the act
@@ -651,7 +455,6 @@ export const ACT_KIND = {
    * presses.
    */
   MICROPHONE_ROUTE: "microphone.route",
-  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
   NOTIFICATIONS_TEST: "notifications.test",
@@ -661,9 +464,16 @@ export const ACT_KIND = {
   WINDOW_COPY_TEXT: "window.copyText",
   WINDOW_SAVE_FILE: "window.saveFile",
   FEEDBACK_SEND: "feedback.send",
+  /**
+   * The kinds the window's act port answers rather than `app:act`
+   * (`contract/kinds.ts`), spelled here beside the rest so a caller names
+   * every act the same way.
+   */
+  ...PORT_ACT_KIND,
 } as const;
 
-export type ActKind = (typeof ACT_KIND)[keyof typeof ACT_KIND];
+/** A kind `app:act` carries: every kind but the ones the act port answers. */
+export type ActKind = Exclude<(typeof ACT_KIND)[keyof typeof ACT_KIND], PortActKind>;
 
 /**
  * One act payload's parser. The `s` combinators from `@luke/wire` satisfy
@@ -745,12 +555,12 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
 
-const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
-const formerMembersSchema = EffectSchema.Array(formerMemberSchema);
+const _workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
+const _formerMembersSchema = EffectSchema.Array(formerMemberSchema);
 
-const linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
+const _linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
 
-const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
+const _workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
@@ -1059,96 +869,6 @@ export const ACT = {
   [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
   [ACT_KIND.TASKS_TALK]: press("Could not talk about that task on this system."),
-  [ACT_KIND.WORKSPACE_CREATE]: {
-    payload: actSchema(tasksWorkspaceCreateParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not make that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_RENAME]: {
-    payload: actSchema(tasksWorkspaceRenameParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not rename that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITATIONS_READ]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
-    refusal: "Could not read invitations on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITE]: {
-    payload: actSchema(tasksWorkspaceInviteParamsSchema),
-    result: wireResult<WorkspaceInvitation>(isReadable(workspaceInvitationSchema)),
-    refusal: "Could not invite that address on this system.",
-  },
-  [ACT_KIND.WORKSPACE_INVITATION_CANCEL]: {
-    payload: actSchema(tasksWorkspaceInvitationCancelParamsSchema),
-    result: wireResult<readonly WorkspaceInvitation[]>(isReadable(workspaceInvitationsSchema)),
-    refusal: "Could not cancel that invitation on this system.",
-  },
-  [ACT_KIND.WORKSPACE_GITHUB_CONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not connect GitHub to that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not disconnect GitHub from that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not connect Linear to that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: {
-    payload: actSchema(tasksWorkspaceParamsSchema),
-    result: answersNothing,
-    refusal: "Could not disconnect Linear from that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: {
-    payload: actSchema(tasksLinearIssuesParamsSchema),
-    result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
-    refusal: "Could not read that workspace's Linear issues on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
-    payload: actSchema(tasksWorkspaceMembersParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not read that workspace's members on this system.",
-  },
-  [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: {
-    payload: actSchema(tasksWorkspaceMembersParamsSchema),
-    result: wireResult<readonly FormerMember[]>(isReadable(formerMembersSchema)),
-    refusal: "Could not read who left that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
-    payload: actSchema(tasksWorkspaceMemberRemoveParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not remove that member on this system.",
-  },
-  [ACT_KIND.WORKSPACE_MEMBER_ROLE]: {
-    payload: actSchema(tasksWorkspaceMemberRoleParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not change that member's role on this system.",
-  },
-  [ACT_KIND.WORKSPACE_TRANSFER]: {
-    payload: actSchema(tasksWorkspaceTransferParamsSchema),
-    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
-    refusal: "Could not transfer that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_LEAVE]: {
-    payload: actSchema(tasksWorkspaceLeaveParamsSchema),
-    result: answersNothing,
-    refusal: "Could not leave that workspace on this system.",
-  },
-  [ACT_KIND.WORKSPACE_PHOTO_READ]: {
-    payload: actSchema(tasksWorkspacePhotoParamsSchema),
-    result: wireResult<TasksWorkspacePhotoAnswer>(isReadable(tasksWorkspacePhotoAnswerSchema)),
-    refusal: "Could not read that workspace's photo on this system.",
-  },
-  [ACT_KIND.WORKSPACE_PHOTO_SET]: {
-    payload: actSchema(tasksWorkspacePhotoSetParamsSchema),
-    result: wireResult<Workspace>(isReadable(workspaceSchema)),
-    refusal: "Could not change that workspace's photo on this system.",
-  },
   [ACT_KIND.TASKS_BOARD_SAVE]: {
     payload: actSchema(tasksBoardSaveParamsSchema),
     result: answersNothing,
@@ -1461,81 +1181,10 @@ export const ACT = {
     result: wireResult<AutomationView>(isReadable(automationViewSchema)),
     refusal: "Could not make a new webhook secret on this system.",
   },
-  [ACT_KIND.ISSUES_LIST]: {
-    payload: actSchema(issueListParamsSchema),
-    result: wireResult<IssueListView>(isReadable(issueListViewSchema)),
-    refusal: "Could not read the issues on this system.",
-  },
-  [ACT_KIND.ISSUES_READ]: {
-    payload: actSchema(issueIdParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not read the issue on this system.",
-  },
-  [ACT_KIND.ISSUES_CREATE]: {
-    payload: actSchema(issueCreateParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not create the issue on this system.",
-  },
-  [ACT_KIND.ISSUES_CHANGE]: {
-    payload: actSchema(issueChangeParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not change the issue on this system.",
-  },
   [ACT_KIND.FACTORY_WORLD]: {
     payload: actSchema(factoryWorldParamsSchema),
     result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
     refusal: "Could not read the workspace's world on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_READ]: {
-    payload: noPayload,
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not read your API keys on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
-    payload: actSchema(providerKeySaveParamsSchema),
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not save your API key on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
-    payload: actSchema(providerKeyRemoveParamsSchema),
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not remove your API key on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_READ]: {
-    payload: noPayload,
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not read your plan template on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_WRITE]: {
-    payload: actSchema(planTemplateWriteParamsSchema),
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not save your plan template on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: {
-    payload: actSchema(planTemplateRevisionsParamsSchema),
-    result: wireResult<PlanTemplateRevisionsAnswerView>(
-      isReadable(planTemplateRevisionsAnswerViewSchema),
-    ),
-    refusal: "Could not read your plan template's history on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
-    payload: actSchema(planTemplateRevisionParamsSchema),
-    result: wireResult<PlanTemplateRevisionAnswerView>(
-      isReadable(planTemplateRevisionAnswerViewSchema),
-    ),
-    refusal: "Could not read that version on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
-    payload: actSchema(planTemplateRevisionParamsSchema),
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not restore that version on this system.",
-  },
-  [ACT_KIND.DICTATION_TRANSCRIBE]: {
-    payload: actSchema(dictationTranscribeParamsSchema),
-    result: wireResult<DictationTranscribeAnswerView>(
-      isReadable(dictationTranscribeAnswerViewSchema),
-    ),
-    refusal: "Could not transcribe the recording on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),
@@ -1587,61 +1236,6 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's picture on this system.",
   },
-  [ACT_KIND.TERMINAL_LIST]: {
-    payload: actSchema(terminalAgentParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not reach this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_CREATE]: {
-    payload: actSchema(terminalCreateParamsSchema),
-    result: wireResult<TerminalCreatedActAnswer>(isReadable(terminalCreatedActAnswerSchema)),
-    refusal: "Could not start a shell in this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_RENAME]: {
-    payload: actSchema(terminalRenameParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not rename that shell.",
-  },
-  [ACT_KIND.TERMINAL_KILL]: {
-    payload: actSchema(terminalShellParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not end that shell.",
-  },
-  [ACT_KIND.TERMINAL_RESUME]: {
-    payload: actSchema(terminalAgentParamsSchema),
-    result: wireResult<TerminalResumedActAnswer>(isReadable(terminalResumedActAnswerSchema)),
-    refusal: "Could not resume this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_ATTACH]: {
-    payload: actSchema(terminalAttachParamsSchema),
-    result: answersNothing,
-    refusal: "Could not open that shell.",
-  },
-  [ACT_KIND.MAC_REPOSITORIES]: {
-    payload: noPayload,
-    result: wireResult<MacRepositoriesAnswer>(isReadable(macRepositoriesAnswerSchema)),
-    refusal: "Could not read the run commands set on this Mac.",
-  },
-  [ACT_KIND.MAC_REPOSITORY_SET]: {
-    payload: actSchema(macRepositorySchema),
-    result: answersNothing,
-    refusal: "Could not save the repository's run command on this Mac.",
-  },
-  [ACT_KIND.MAC_TERMINAL_OPEN]: {
-    payload: actSchema(macTerminalOpenParamsSchema),
-    result: answersNothing,
-    refusal: "Could not open a terminal on this Mac.",
-  },
-  [ACT_KIND.MAC_TERMINAL_CLOSE]: {
-    payload: actSchema(macTerminalKeySchema),
-    result: answersNothing,
-    refusal: "Could not close the terminal.",
-  },
-  [ACT_KIND.TERMINAL_DETACH]: {
-    payload: actSchema(terminalShellParamsSchema),
-    result: answersNothing,
-    refusal: "Could not close that shell.",
-  },
   [ACT_KIND.BROWSER_OPEN]: {
     payload: actSchema(browserAddressParamsSchema),
     result: wireResult<BrowserPage>(isReadable(browserPageSchema)),
@@ -1685,52 +1279,6 @@ export const ACT = {
     ),
     refusal: "Could not write to the workspace's chat on this system.",
   },
-  [ACT_KIND.VOICE_COMMAND]: {
-    payload: record({
-      command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
-    }),
-    result: answersNothing,
-    refusal: "Could not carry that command on this system.",
-  },
-  [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
-    payload: actSchema(voiceCreateLiveSessionParamsSchema),
-    result: wireResult<VoiceCreateLiveSessionResult | undefined>(
-      (value) => value === undefined || isReadable(voiceCreateLiveSessionResultSchema)(value),
-    ),
-    refusal: "Could not open a voice session on this system.",
-  },
-  [ACT_KIND.VOICE_END_LIVE_SESSION]: {
-    payload: actSchema(voiceEndLiveSessionParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not end the voice session on this system.",
-  },
-  [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
-    payload: actSchema(voiceReportLiveTransportParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not report the voice transport on this system.",
-  },
-  [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
-    payload: actSchema(voiceReportLiveActivityParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not report the voice activity on this system.",
-  },
-  [ACT_KIND.VOICE_STOP_SPEAKING]: {
-    payload: noPayload,
-    result: wireResult<boolean>((value) =>
-      Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
-    ),
-    refusal: "Could not tell Luke to stop speaking on this system.",
-  },
-  [ACT_KIND.LUKE_STOP]: {
-    payload: record({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
-    result: answersNothing,
-    refusal: "Could not stop Luke on this system.",
-  },
-  [ACT_KIND.VOICE_DIAGNOSTICS]: {
-    payload: noPayload,
-    result: wireResult<LiveDiagnostics | undefined>(),
-    refusal: "Could not read the voice diagnostics on this system.",
-  },
   [ACT_KIND.MICROPHONE_REQUEST]: {
     payload: noPayload,
     result: wireResult<MicrophoneStatus>(),
@@ -1741,22 +1289,10 @@ export const ACT = {
     result: wireResult<MicrophoneRoute | undefined>(),
     refusal: "Could not read the microphone route on this system.",
   },
-  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.NOTIFICATIONS_TEST]: press("Could not post a notification on this system."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
-  [ACT_KIND.CALL_SHOW_TASK]: press("Could not bring the call's task forward on this system."),
-  [ACT_KIND.AVATAR_REPORT]: {
-    payload: actSchema(avatarStateSchema),
-    result: answersNothing,
-    refusal: "Could not report the video on this system.",
-  },
-  [ACT_KIND.VOICE_SET_VIDEO]: {
-    payload: actSchema(voiceSetVideoParamsSchema),
-    result: answersNothing,
-    refusal: "Could not turn the video on or off on this system.",
-  },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A task's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service
@@ -1816,7 +1352,7 @@ export type ActOutcome<Kind extends ActKind = ActKind> =
   | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
   | { readonly status: typeof ACT_OUTCOME_STATUS.UNKNOWN_ACT };
 
-const ACT_KINDS: readonly string[] = Object.values(ACT_KIND);
+const ACT_KINDS: readonly string[] = Object.keys(ACT);
 
 function isActKind(value: UnparsedWireValue): value is ActKind {
   return isWireString(value) && ACT_KINDS.includes(value);

@@ -22,7 +22,13 @@ import { runAppCommand } from "../app-commands.js";
 import { type CallCardInput, callControls } from "../call/call-card.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import {
+  fakeActPort,
+  fakeActPortAnswering,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -191,6 +197,8 @@ function SettingsHarness({
       onBack: ignore,
       onForward: ignore,
     },
+    room: SHELL_ROOM.WIDE,
+    step: { listed: true, onList: ignore },
     settings: {
       ...settingsProps(view, setView, capabilities),
       ...(workspace ? { workspace } : undefined),
@@ -642,12 +650,16 @@ test("the plan template's version history keeps a call's card at the foot of its
     ...fakeAppBridgeCalls(),
     act: (request: { kind: string }) => {
       sent.push(request.kind);
-      return Promise.resolve(
-        request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      );
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sent.push(request.kind);
+    return Promise.resolve(
+      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+        ? { template: "# Context\n", custom: false }
+        : undefined,
+    );
   });
   // The card's presses sent as `App` sends them, over the bridge.
   function CallSettings(): React.JSX.Element {
@@ -691,13 +703,11 @@ test("while the plan template is read its page stands its name over placeholder 
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: { kind: string }) =>
-      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
-        ? read.then(() => ({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { template: "# Context\n", custom: false },
-          }))
-        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      read.then(() => ({ template: "# Context\n", custom: false })),
   });
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
   const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;

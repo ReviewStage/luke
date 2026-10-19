@@ -50,6 +50,60 @@ function DashboardIcon(): React.JSX.Element {
   );
 }
 
+function CostIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M10 5.9c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.5 0 2 4 1 4 3 0 .9-.8 1.5-2 1.5-.9 0-1.6-.3-2-.9M8 3.9V5M8 11v1.1" />
+    </svg>
+  );
+}
+
+/** A workspace as a stack of shared layers, apart from the Users glyph's one person. */
+function WorkspacesIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 1.9 14.1 5 8 8.1 1.9 5 8 1.9Z" />
+      <path d="M1.9 8 8 11.1 14.1 8" />
+      <path d="M1.9 11 8 14.1 14.1 11" />
+    </svg>
+  );
+}
+
+/** A pulse line across the glyph: the service's health over time. */
+function ReliabilityIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1.5 8.5h3l1.75-4.5 3.5 8 1.75-3.5h3" />
+    </svg>
+  );
+}
+
 function UsersIcon(): React.JSX.Element {
   return (
     <svg
@@ -109,10 +163,13 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }): React.JSX.Element 
 /**
  * The page's one navigation, wearing the brand the headers used to carry.
  * Each tab is a real anchor to its own address, so a modified click still
- * gets the browser's own gesture. On a phone the rail would eat a fifth of
- * the width for two links, so below the page's breakpoint the same
- * navigation stands as a compact top bar instead, its labels left to the
- * icons' accessible names on the narrowest screens.
+ * gets the browser's own gesture. The metrics stand in the main list;
+ * Animations, a design reference rather than a measure, stands muted in the
+ * rail's footer under a rule, its address unchanged. On a phone the rail
+ * would eat a fifth of the width for two links, so below the page's
+ * breakpoint the metrics stand as a compact top bar instead, its labels left
+ * to the icons' accessible names on the narrowest screens; the reference,
+ * drawn for a wide screen, is left to its address there.
  *
  * The fold is a single width transition on the rail, whose column keeps one
  * inset in both states: the rows narrow with it until each is its glyph's
@@ -170,14 +227,16 @@ export function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(5,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
       >
         <span className="mr-1 inline-flex w-6 shrink-0 text-(--luke-color-text)" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
-        {barItem("dashboard", "Dashboard", <DashboardIcon />)}
+        {barItem("dashboard", "Overview", <DashboardIcon />)}
+        {barItem("cost", "Cost", <CostIcon />)}
+        {barItem("reliability", "Reliability", <ReliabilityIcon />)}
+        {barItem("workspaces", "Workspaces", <WorkspacesIcon />)}
         {barItem("users", "Users", <UsersIcon />)}
-        {barItem("animations", "Animations", <AnimationsIcon />)}
       </nav>
       <nav
         aria-label="Admin sections"
@@ -198,12 +257,23 @@ export function AdminSidebar({
           </span>
         </div>
         <div className="mt-8 grid gap-1 px-4">
-          {item("dashboard", "Dashboard", <DashboardIcon />)}
+          {item("dashboard", "Overview", <DashboardIcon />)}
+          {item("cost", "Cost", <CostIcon />)}
+          {item("reliability", "Reliability", <ReliabilityIcon />)}
+          {item("workspaces", "Workspaces", <WorkspacesIcon />)}
           {item("users", "Users", <UsersIcon />)}
-          {item("animations", "Animations", <AnimationsIcon />)}
         </div>
         <div className="flex-1" />
-        <div className="flex justify-end px-4">
+        <div className="mx-4 border-t border-(--luke-color-border)" />
+        {/* Note that the footer's entry is muted until it is the page shown or
+        under the pointer, because it is a reference, not one of the measures. */}
+        <div
+          className="mt-3 grid gap-1 px-4 opacity-60 transition-opacity hover:opacity-100 focus-within:opacity-100 data-[current=true]:opacity-100"
+          data-current={active === "animations"}
+        >
+          {item("animations", "Animations", <AnimationsIcon />)}
+        </div>
+        <div className="mt-3 flex justify-end px-4">
           <IconButton
             icon={<CollapseIcon collapsed={collapsed} />}
             label={sidebarToggleLabel(collapsed)}

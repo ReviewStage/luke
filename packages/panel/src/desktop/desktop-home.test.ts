@@ -20,9 +20,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -30,7 +28,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
@@ -199,9 +197,6 @@ beforeEach(() => {
           value: { automations: [SWEEP] },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
       }
@@ -211,6 +206,9 @@ beforeEach(() => {
       };
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
   });
 });
 
@@ -280,6 +278,8 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      listed: false,
+      onListed: () => undefined,
       pages: undefined,
       onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
@@ -839,7 +839,7 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
 });
 
 test("a waiting row of an agent with no plan names the automation that started it on its card, the window reading the automations for it alone", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const workspace = {
     id: "workspace-personal",
     name: "Personal",
@@ -875,7 +875,6 @@ test("a waiting row of an agent with no plan names the automation that started i
         AtomRegistry.make(),
         createElement(ListedAutomations, {
           tasks,
-          on: true,
           children: createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
         }),
       ),
@@ -893,7 +892,7 @@ test("a waiting row of an agent with no plan names the automation that started i
 });
 
 test("a question of another workspace's automation, which Home does not list, reads none of the listed workspace's automations", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const tasks = tasksControl({
     tasks: [],
     listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
@@ -929,7 +928,6 @@ test("a question of another workspace's automation, which Home does not list, re
         AtomRegistry.make(),
         createElement(ListedAutomations, {
           tasks,
-          on: true,
           children: createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
         }),
       ),

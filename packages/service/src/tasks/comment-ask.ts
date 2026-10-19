@@ -34,12 +34,13 @@ import {
  * a message from the member who sent it, through the one steer path every
  * message to an agent takes (`coder-host/steer.ts`); Luke hears it as a
  * typed ask on the plan's planning conversation (`brain-host/brain-ask.ts`),
- * under the member's own bearer, which is the only way a typed turn opens.
- * Each reaches eve as the request's own caller (`coder-host/stop.ts`'s
- * `eveFor`), so a member on a browser's session cookie reaches an agent as
- * the deployment acting for them, which the coder channel admits for the
- * message; the brain channel admits the deployment for no typed turn, so
- * that member's ask of Luke is refused at eve and said back unsent.
+ * as the member who sent it. Each reaches eve as the request's own caller
+ * (`coder-host/stop.ts`'s `eveFor`), never as the plan's owner: over the
+ * member's own bearer from the desktop, and from a browser's session cookie
+ * as the deployment acting for the member, which both channels admit for a
+ * typed message and mint as the member's own principal
+ * (`brain-host/auth.ts`'s `DEPLOYMENT_PRESENCE`), so the ask waits behind,
+ * or joins, a turn of Luke's exactly as the bearer's would.
  * Either is sent under a key drawn from the one the member's client made for
  * the comment, so a comment sent again is handed over once. A comment that
  * mentions no one hands nothing to anyone, and an agent's own reply never

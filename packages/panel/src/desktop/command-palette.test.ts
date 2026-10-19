@@ -14,9 +14,10 @@ import {
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
@@ -39,7 +40,12 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -213,17 +219,17 @@ function field(): HTMLInputElement {
   return input;
 }
 
-/** The toggles in the group named Filter. */
-function filterChips(): HTMLButtonElement[] {
-  const group = document.querySelector('fieldset[aria-label="Filter"]');
+/** The options of the radio group named Filter. */
+function filterOptions(): HTMLButtonElement[] {
+  const group = document.querySelector('[role="radiogroup"][aria-label="Filter"]');
   assert.ok(group, "the filters are drawn");
-  return [...group.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
+  return [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
 }
 
 function chooseFilter(name: string): void {
-  const chip = filterChips().find((each) => each.textContent === name);
-  assert.ok(chip, `the ${name} filter is drawn`);
-  act(() => chip.click());
+  const option = filterOptions().find((each) => each.textContent === name);
+  assert.ok(option, `the ${name} filter is drawn`);
+  act(() => option.click());
 }
 
 function type(words: string): void {
@@ -335,9 +341,9 @@ test("choosing a page opens Settings on that page", () => {
   assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
 });
 
-/** The filter whose chip stands pressed. */
+/** The filter standing checked. */
 function chosenFilter(): string | null | undefined {
-  return filterChips().find((each) => each.getAttribute("aria-pressed") === "true")?.textContent;
+  return filterOptions().find((each) => each.getAttribute("aria-checked") === "true")?.textContent;
 }
 
 /** Presses a key in the search field, answering whether the field kept it for itself. */
@@ -406,6 +412,54 @@ test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or n
   key(FORWARD);
   assert.equal(chosenFilter(), "All", "stepping on from the last filter wraps to All");
   assert.equal(field().value, "invite", "the words stay as typed");
+});
+
+test("a press on a filter chooses it and leaves the caret in the field, no filter taking the keyboard", () => {
+  openPalette();
+  type("invite");
+  act(() => field().focus());
+  assert.deepEqual(
+    filterOptions().filter((each) => each.tabIndex >= 0),
+    [],
+    "no filter is a tab stop",
+  );
+  const agents = filterOptions().find((each) => each.textContent === "Agents");
+  assert.ok(agents);
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    agents.dispatchEvent(down);
+  });
+  assert.equal(down.defaultPrevented, true, "the press does not move the keyboard");
+  act(() => agents.click());
+  assert.equal(chosenFilter(), "Agents");
+  assert.equal(document.activeElement, field(), "the caret stays in the field");
+  assert.equal(field().value, "invite");
+});
+
+test("in a row too narrow for every filter, the filter a key chooses is scrolled into view along the row alone", () => {
+  openPalette();
+  const bar = document.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Filter"]');
+  assert.ok(bar);
+  // Note that the test lays the row out itself, a hundred pixels wide with each filter fifty, because jsdom lays nothing out.
+  Object.defineProperty(bar, "clientWidth", { configurable: true, value: 100 });
+  filterOptions().forEach((option, at) => {
+    Object.defineProperty(option, "offsetLeft", { configurable: true, value: at * 50 });
+    Object.defineProperty(option, "offsetWidth", { configurable: true, value: 50 });
+  });
+  key(FORWARD);
+  assert.equal(bar.scrollLeft, 0, "Tasks already stands in view");
+  key(FORWARD);
+  assert.equal(chosenFilter(), "Agents");
+  assert.equal(bar.scrollLeft, 50);
+  key(BACK);
+  key(BACK);
+  key(BACK);
+  assert.equal(chosenFilter(), "Settings");
+  assert.equal(bar.scrollLeft, 250);
+  key(FORWARD);
+  assert.equal(chosenFilter(), "All");
+  assert.equal(bar.scrollLeft, 0);
+  assert.equal(document.activeElement, field(), "the caret stays in the field");
 });
 
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
@@ -545,7 +599,7 @@ test("an archived agent of the open task is still found, after the standing ones
   assert.deepEqual(shown, ["agent-8"]);
 });
 
-test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window while the experiment is on, and none read while it is off", async () => {
+test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window", async () => {
   const automation = {
     id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
     planId: null,
@@ -608,8 +662,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       agentIds: ["agent-7"],
     }),
   });
-  /** The words "Started by" says on the agent's row's card in ⌘K, the experiment `on` or off. */
-  const startedBy = async (on: boolean): Promise<string | null | undefined> => {
+  /** The words "Started by" says on the agent's row's card in ⌘K. */
+  const startedBy = async (): Promise<string | null | undefined> => {
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
     roots.push(root);
@@ -630,7 +684,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
     });
-    act(() => root.render(createElement(ListedAutomations, { tasks, on, children: palette })));
+    act(() => root.render(createElement(ListedAutomations, { tasks, children: palette })));
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
@@ -653,11 +707,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     return words;
   };
 
-  assert.equal(await startedBy(true), "Morning Sentry triage");
+  assert.equal(await startedBy(), "Morning Sentry triage");
   assert.deepEqual(listed, ["workspace-acme"]);
-  listed.length = 0;
-  assert.equal(await startedBy(false), undefined);
-  assert.deepEqual(listed, []);
 });
 
 test("an agent's Pull request row is named as its tab is, by its pull request's number and title, with the agent beside it, and is found by that number, that title, and the agent's name", () => {
@@ -1264,14 +1315,7 @@ test("People lists the listed workspace's members by name and role, the reader a
       role: WORKSPACE_ROLE.MEMBER,
     },
   ];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
-  });
+  membersAnswer(() => Promise.resolve(members));
   const opened: string[] = [];
   const base = tasksControl();
   const sent = openPalette(
@@ -1306,14 +1350,15 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A window whose members read is answered by `members`, every other act refused. */
-function membersAnswer(members: () => Promise<ActOutcome>): void {
+/** A window whose members read is answered on its act port by `members`, every other act refused. */
+function membersAnswer(
+  members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
+): void {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-        ? members()
-        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: members });
 }
 
 const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
@@ -1333,7 +1378,7 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     ],
   });
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -1372,11 +1417,12 @@ test("People says the members are being read until they answer, and a refused re
     email: "charles@example.com",
     role: WORKSPACE_ROLE.MEMBER,
   };
-  let answers: ((outcome: ActOutcome) => void)[] = [];
+  let answers: { resolve: (members: readonly WorkspaceMember[]) => void; refuse: () => void }[] =
+    [];
   membersAnswer(
     () =>
-      new Promise((resolve) => {
-        answers.push(resolve);
+      new Promise((resolve, reject) => {
+        answers.push({ resolve, refuse: () => reject(refusedOnPort("No.")) });
       }),
   );
   openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
@@ -1384,7 +1430,7 @@ test("People says the members are being read until they answer, and a refused re
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members…");
 
-  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No." }));
+  await act(async () => answers.shift()?.refuse());
   await settle();
   const alert = document.querySelector(".command-palette-empty [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
@@ -1398,13 +1444,13 @@ test("People says the members are being read until they answer, and a refused re
   act(() => retry.click());
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members…");
-  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.DONE, value: [member] }));
+  await act(async () => answers.shift()?.resolve([member]));
   await settle();
   assert.deepEqual(rows(), ["Charles Pan · Member"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(tasksControl({ workspace: ACME, listRead: false }));
   chooseFilter("Tasks");
   assert.equal(emptyLine(), "Reading your tasks…");
@@ -1413,7 +1459,7 @@ test("Tasks says the account's tasks are being read before the list first answer
 
 test("Tasks says a refused list with a Retry that reads it again", () => {
   const retried: number[] = [];
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(
     tasksControl({
       workspace: ACME,
@@ -1633,15 +1679,12 @@ function acmeIssue(number: number, title: string, status: Issue["status"]): Issu
   };
 }
 
-/** A window whose issues list answers `issues` for the workspace asked, every other act refused; the workspaces asked for, in order. */
-function issuesAnswer(issues: () => Promise<ActOutcome>): string[] {
+/** A window whose act port lists `issues` for the workspace asked, a rejection standing for a refusal; the workspaces asked for, in order. */
+function issuesAnswer(issues: () => Promise<PortActResult<typeof ACT_KIND.ISSUES_LIST>>): string[] {
   const asked: string[] = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.ISSUES_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      asked.push(request.payload.workspaceId);
+  fakeActPort({
+    [ACT_KIND.ISSUES_LIST]: (payload) => {
+      asked.push(payload.workspaceId);
       return issues();
     },
   });
@@ -1651,10 +1694,7 @@ function issuesAnswer(issues: () => Promise<ActOutcome>): string[] {
 test("with Issues on, ⌘K finds the listed workspace's issues by title or identifier under Issues, and Enter opens the issue's page", async () => {
   const fix = acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.IN_PROGRESS);
   const asked = issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const opened: unknown[] = [];
@@ -1683,27 +1723,24 @@ test("with Issues on, ⌘K finds the listed workspace's issues by title or ident
 
 test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads none", async () => {
   const asked = issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
   );
   handState({});
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();
   type("login redirect");
 
-  assert.ok(!filterChips().some((chip) => chip.textContent === "Issues"));
+  assert.ok(!filterOptions().some((option) => option.textContent === "Issues"));
   assert.deepEqual(rows(), []);
   assert.deepEqual(asked, []);
 });
 
 test("Issues says the issues are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
-  let answer: (outcome: ActOutcome) => void = () => undefined;
+  let refuse: (reason: Error) => void = () => undefined;
   const asked = issuesAnswer(
     () =>
-      new Promise<ActOutcome>((resolve) => {
-        answer = resolve;
+      new Promise((_resolve, reject) => {
+        refuse = reject;
       }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
@@ -1711,7 +1748,7 @@ test("Issues says the issues are being read until they answer, and a refused rea
   chooseFilter("Issues");
   assert.equal(emptyLine(), "Reading the workspace's issues…");
 
-  answer({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+  refuse(new Error("Not here."));
   await settle();
   assert.match(emptyLine() ?? "", /The workspace's issues could not be read\./u);
   const retry = [...document.querySelectorAll("button")].find(
@@ -1724,10 +1761,7 @@ test("Issues says the issues are being read until they answer, and a refused rea
 
 test("an issue chosen over a peek filling the Issues list puts the peek away before opening the issue's page, so going back shows the list", async () => {
   issuesAnswer(() =>
-    Promise.resolve({
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
-    }),
+    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
   );
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const done: string[] = [];
@@ -1758,7 +1792,7 @@ test("an issue chosen over a peek filling the Issues list puts the peek away bef
 });
 
 test("with the Issues filter chosen, Issues turning off shows All again, which finds the rest", async () => {
-  issuesAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [] } }));
+  issuesAnswer(() => Promise.resolve({ issues: [] }));
   let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),

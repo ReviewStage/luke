@@ -1,18 +1,80 @@
 <!doctype html>
-<html lang="en" data-luke-profile="web" data-luke-theme="light">
+<html lang="en" data-luke-profile="web" data-luke-theme="light" data-luke-density="compact">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover draws the page under a phone's notch and home
+         indicator, which the stage keeps off through the safe-area insets
+         (packages/panel/src/styles/desktop.css). interactive-widget has
+         Android shrink the layout viewport for the keyboard, as iOS's
+         visual viewport already does; the stage, measured by the visual
+         viewport (use-visual-viewport.ts), reads a keyboard inset of zero
+         then, so the two never count the keyboard twice. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="robots" content="noindex" />
     <!-- The light ground, as the landing page names it, so mobile browser chrome blends into it. -->
     <meta name="theme-color" content="#fbfbfa" />
     <title>Luke</title>
+
+    <meta
+      name="description"
+      content="Luke is an open-source Mac app for planning a feature out loud before a coding agent builds it."
+    />
+
+    <!-- What Slack, iMessage, X, and every other unfurler shows for a pasted
+         Luke link, which this page is served at: the site's own card, the
+         same for every link. An unfurler fetches the link signed out, so
+         whatever these tags say, anyone holding the link reads; they carry
+         nothing of the thing it opens, not even the workspace its address
+         names, and nothing here is written per link. The tag set is the
+         landing page's, documented in index.html, but for og:url, which is
+         left out: a static one could only name the site, and a service that
+         takes og:url as where its card leads would send the link's reader to
+         the landing page, so each unfurler keeps the link it was handed. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Luke" />
+    <meta property="og:title" content="Luke" />
+    <meta
+      property="og:description"
+      content="Luke is an open-source Mac app for planning a feature out loud before a coding agent builds it."
+    />
+    <meta property="og:image" content="https://tryluke.dev/luke-og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta
+      property="og:image:alt"
+      content="The LUKE wordmark — a smiling L-face followed by U, K, E — on space black."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Luke" />
+    <meta
+      name="twitter:description"
+      content="Luke is an open-source Mac app for planning a feature out loud before a coding agent builds it."
+    />
+    <meta name="twitter:image" content="https://tryluke.dev/luke-og-card.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The LUKE wordmark — a smiling L-face followed by U, K, E — on space black."
+    />
 
     <!-- Luke's app icon, the same icons the landing page carries — the tag set
          is documented there, in index.html. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Installable: added to a phone's Home Screen, the app opens at /app
+         full screen, and on iOS 16.4 and later only such a web app may show
+         notifications. The status bar stays default (dark text on a light
+         bar), because a translucent one would draw white text over the
+         light ground. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Luke" />
   </head>
   <body>
     <div id="root"></div>

@@ -38,9 +38,9 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import {
@@ -243,32 +243,31 @@ beforeEach(() => {
                   ],
                 },
               }
-            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: {
+                    agents: workspaceAnswer(request.payload),
+                  },
+                }
+              : request.kind === ACT_KIND.TASKS_TREE
                 ? {
                     status: ACT_OUTCOME_STATUS.DONE,
                     value: {
-                      agents: workspaceAnswer(request.payload),
+                      folder: {
+                        path: "",
+                        repository: standing,
+                        branch: "main",
+                        entries: TREES.get(standing) ?? [],
+                        truncated: false,
+                      },
                     },
                   }
-                : request.kind === ACT_KIND.TASKS_TREE
-                  ? {
-                      status: ACT_OUTCOME_STATUS.DONE,
-                      value: {
-                        folder: {
-                          path: "",
-                          repository: standing,
-                          branch: "main",
-                          entries: TREES.get(standing) ?? [],
-                          truncated: false,
-                        },
-                      },
-                    }
-                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+                : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       );
     },
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
 });
 
 afterEach(() => {
@@ -699,7 +698,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["Pages", ["Invites by week"]],
     ["Agents", ["Wire the desktop"]],
     ["MCP servers", ["Linear"]],
-    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Linear"]],
+    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
 });
@@ -1044,6 +1043,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Plan", "2 sections"],
     ["Pages", "1 page"],
     ["Agents", "acme"],
+    ["Dates", "A day, a time, or a range"],
     ["Linear", "MCP server"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓ Move", "↵ Mention", "→ Open", "esc Close"]);
@@ -1476,16 +1476,17 @@ function IssuesPage({ children }: { children: ReactNode }): ReactNode {
   return createElement(TaskMentions, { value: { ...taskPage(), readIssues }, children });
 }
 
+/** The workspaces whose issues the window's act port was asked to list, in order. */
+const issuesRead: string[] = [];
+
 /** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
-  const calls = fakeAppBridgeCalls();
-  fakeAppBridge({
-    ...calls,
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.ISSUES_LIST) return calls.act?.(request) ?? Promise.reject();
-      told.push(request);
-      const value = { issues: [...standing] };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  issuesRead.length = 0;
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.ISSUES_LIST]: (payload) => {
+      issuesRead.push(payload.workspaceId);
+      return Promise.resolve({ issues: [...standing] });
     },
   });
   handState({ [EXPERIMENT.ISSUES]: on });
@@ -1585,10 +1586,7 @@ test("with Issues off an @ offers no issue and reads none", async () => {
   await settle();
 
   assert.deepEqual(issuesListed(container), []);
-  assert.equal(
-    told.some((each) => each.kind === ACT_KIND.ISSUES_LIST),
-    false,
-  );
+  assert.deepEqual(issuesRead, []);
 });
 
 test("a sent message's mention of an issue is drawn as the chip that opens the issue, its target on no attribute", async () => {
@@ -1621,4 +1619,68 @@ test("a sent message's mention of an issue is drawn as the chip that opens the i
     { workspace: "acme", place: { kind: LINK_PLACE.ISSUE, issueId: REFRESH_ISSUE.id } },
   ]);
   assert.equal(carryingTarget(container), undefined);
+});
+
+/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+test("words after an @ that read as a date offer it first, said from today, and its pick is drawn from today and sent with the date in full", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, sent } = await box(taskPage());
+
+    typeInComposer(container, "Ship it @tomorrow");
+    await settle();
+    const offered = groupsListed(container)[0];
+    pressInComposer(container, "Enter");
+    await settle();
+    const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
+    pressInComposer(container, "Enter");
+    await settle();
+
+    assert.deepEqual(offered, ["Dates", ["Tomorrow"]]);
+    assert.deepEqual(
+      chips.map((chip) => chip.textContent),
+      ["Tomorrow"],
+    );
+    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ narrowed to dates offers today, tomorrow, and next Monday before a word is typed", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container } = await box(taskPage());
+
+    typeInComposer(container, "Due @dates:");
+    await settle();
+
+    assert.equal(crumb(container), "Dates");
+    assert.deepEqual(groupsListed(container), [["Dates", ["Today", "Tomorrow", "Oct 26"]]]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a sent message's date is drawn as a chip saying it from today that opens nothing, and words that read as no date stay words", () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const container = drawn(
+      createElement(TranscriptWords, {
+        text: "Ready [@Oct 23, 2026](luke://date/2026-10-23), not [@Feb 30](luke://date/2026-02-30).",
+      }),
+      planPage([]),
+    );
+
+    const chips = [...container.querySelectorAll("[data-mention-ref]")];
+
+    assert.deepEqual(
+      chips.map((chip) => [chip.tagName, chip.textContent]),
+      [["SPAN", "Friday"]],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });

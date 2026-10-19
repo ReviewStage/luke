@@ -42,6 +42,7 @@ import { callCard } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
+  type ChatChannelChange,
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
@@ -127,7 +128,7 @@ import type { ActHandle } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import type { ShellRoom } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
@@ -154,6 +155,7 @@ import {
   fixtureSidePanel,
   fixtureTasksView,
 } from "./tasks-fixture.js";
+import type { ThreadReveal } from "./thread-reveal.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
 import { useInboxPages } from "./use-inbox-pages.js";
@@ -254,6 +256,15 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /**
+   * Whether the list stands alone rather than the item chosen, where the
+   * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
+   * Show all, and given up by a row pressed. It is held here rather than in
+   * the Inbox, so the window's history can record it and go back to it.
+   */
+  readonly listed: boolean;
+  /** Stands the list alone, or the item chosen. */
+  readonly onListed: (listed: boolean) => void;
   /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
@@ -306,7 +317,12 @@ const STAND_IN = {
 
 /** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
 type StandIn =
-  | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
+  | {
+      readonly kind: typeof STAND_IN.INBOX;
+      readonly chosen: InboxChoice | undefined;
+      /** Whether the list stands alone rather than the item chosen, where the Inbox shows one column. */
+      readonly listed: boolean;
+    }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | {
       readonly kind: typeof STAND_IN.PERSON;
@@ -317,7 +333,12 @@ type StandIn =
     }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace }
-  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace }
+  | {
+      readonly kind: typeof STAND_IN.CHAT;
+      readonly place: ChatPlace;
+      /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
+      readonly listed: boolean;
+    }
   | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
 
 /** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
@@ -386,6 +407,14 @@ interface ChatViewControl {
   readonly onRetry: () => void;
   /** For you or the channel shown, For you until another is chosen. */
   readonly place: ChatPlace;
+  /**
+   * Whether Chat stands on its rail rather than on the place shown, which
+   * only a narrow room draws apart: Chat opened does, and a place chosen or
+   * shown does not.
+   */
+  readonly listed: boolean;
+  /** Goes back from the place shown to the rail. */
+  readonly onList: () => void;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
@@ -395,6 +424,8 @@ interface ChatViewControl {
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
 }
 
 /** The fixture's staging, as a fixture run imports it. */
@@ -637,6 +668,10 @@ export interface TasksControl {
   messageReveal: MessageReveal | undefined;
   /** The agent's tab answered the ask, so a later visit to the agent does not answer it again. */
   onMessageRevealed: (ask: number) => void;
+  /** The last ask to bring one review thread of an agent's pull request into view, which a link to it makes; let go once its Pull request tab takes it (`thread-reveal.tsx`). */
+  threadReveal: ThreadReveal | undefined;
+  /** The agent's Pull request tab took the ask, so a later visit to the tab does not answer it again. */
+  onThreadRevealed: (ask: number) => void;
   /** The last ask to show a section, under the task it was asked of, so a section of a task not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly taskId: string; readonly reveal: SectionReveal } | undefined;
   /** The task's page showed the section an ask named, so a later visit to the task does not show it again. */
@@ -1139,7 +1174,7 @@ export function useTasksTab(input: {
   const [issuePeek, setIssuePeek] = useState<string | undefined>(undefined);
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
-      ? { kind: STAND_IN.CHAT, place: FOR_YOU }
+      ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
       : undefined,
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
@@ -1185,6 +1220,7 @@ export function useTasksTab(input: {
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
   const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
   const messageAsks = useRef(0);
+  const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
@@ -1324,7 +1360,7 @@ export function useTasksTab(input: {
   if (chatWorkspace !== listedWorkspace?.id) {
     setChatWorkspace(listedWorkspace?.id);
     if (standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL) {
-      setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU });
+      setStandIn({ ...standIn, place: FOR_YOU });
     }
   }
   // The task's Chat tab on screen reads the task's plan channel, which the column below says once it knows its tab.
@@ -1333,8 +1369,12 @@ export function useTasksTab(input: {
     account: input.account,
     workspaceId: listedWorkspace?.id,
     active: fixture === undefined && input.signedIn && chatOn,
+    // Note that a narrow room's rail hides the place it stands over, so a channel is read only while it is on screen.
     reading:
-      shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
+      shown &&
+      standIn?.kind === STAND_IN.CHAT &&
+      standIn.place.kind === CHAT_PLACE.CHANNEL &&
+      !(standIn.listed && input.room === SHELL_ROOM.NARROW)
         ? standIn.place.channelId
         : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
@@ -2680,6 +2720,19 @@ export function useTasksTab(input: {
       case LINK_PLACE.CHANGES:
         showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
+      // A review thread opens its agent's Pull request tab on the view the link names, which takes the ask once drawn; each ask is its own.
+      case LINK_PLACE.PULL_REQUEST_THREAD: {
+        const changes = sharedChangesAgent(place.planId, place.agentId);
+        sidePanel.onPullRequestView({ changes }, place.view);
+        showPanelTab(place.planId, { changes });
+        setThreadReveal((last) => ({
+          agentId: changes,
+          threadId: place.threadId,
+          view: place.view,
+          ask: (last?.ask ?? 0) + 1,
+        }));
+        return;
+      }
       case LINK_PLACE.AGENT:
         if (place.planId === undefined)
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
@@ -2720,6 +2773,7 @@ export function useTasksTab(input: {
             account: input.account,
             workspaceId,
           }),
+          listed: false,
         });
         return;
       }
@@ -2736,6 +2790,7 @@ export function useTasksTab(input: {
             "planId" in place
               ? { taskId: place.planId, itemId: place.itemId, opened: true }
               : { agentId: place.agentId, itemId: place.itemId, opened: true },
+          listed: false,
         });
         return;
       case LINK_PLACE.AUTOMATIONS:
@@ -3103,14 +3158,16 @@ export function useTasksTab(input: {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
+                listed: false,
               },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
-        ),
+        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
+      listed: inboxView?.listed ?? false,
+      onListed: (listed) =>
+        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
       pages: inboxPages.pages,
       onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,
@@ -3123,20 +3180,25 @@ export function useTasksTab(input: {
       failed: liveRun && liveChat.failed,
       onRetry: liveChat.onRetry,
       place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
+      listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
+      onList: () =>
+        setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),
       onOpen: guard(() => {
         setHistoryFor(undefined);
         setStandIn((held) =>
-          held?.kind === STAND_IN.CHAT ? held : { kind: STAND_IN.CHAT, place: FOR_YOU },
+          held?.kind === STAND_IN.CHAT
+            ? held
+            : { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (place) =>
         setStandIn((held) =>
-          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
+          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place, listed: false } : held,
         ),
       onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.CHAT, place });
+        setStandIn({ kind: STAND_IN.CHAT, place, listed: false });
       }),
       onPost: (post) =>
         liveRun
@@ -3146,6 +3208,10 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onAnswer(answer)
           : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
+      onChannel: (change) =>
+        liveRun
+          ? liveChat.onChannel(change)
+          : stage((held, staging) => staging.stagedChannel(held, change)),
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {
@@ -3230,6 +3296,9 @@ export function useTasksTab(input: {
     messageReveal,
     // Only the ask answered is let go; a newer one stands until its agent's tab answers it.
     onMessageRevealed: (ask) => setMessageReveal((last) => (last?.ask === ask ? undefined : last)),
+    threadReveal,
+    // Only the ask taken is let go; a newer one stands until its tab takes it.
+    onThreadRevealed: (ask) => setThreadReveal((last) => (last?.ask === ask ? undefined : last)),
     sectionReveal,
     commentReveal,
     // Only the ask shown is let go; a newer one stands until its own task shows it.

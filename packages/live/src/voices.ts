@@ -47,7 +47,8 @@ export const LIVE_VOICE = {
 
 export type LiveVoice = (typeof LIVE_VOICE)[keyof typeof LIVE_VOICE];
 
-const LiveVoiceSchema = Schema.Literals(Object.values(LIVE_VOICE));
+/** A voice the API offers, as a schema a wire value carrying one is declared with. */
+export const LiveVoiceSchema = Schema.Literals(Object.values(LIVE_VOICE));
 
 /** Settings offers the voices in this order. */
 export const LIVE_VOICE_LIST: readonly LiveVoice[] = Object.values(LIVE_VOICE);

@@ -17,7 +17,7 @@ import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
- * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: a press beside the reviewers and one beside the labels, each a menu of what may be asked for or put on, what stands now checked.
+ * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: two presses side by side after the reviewers, each a menu of what may be asked for or put on, what stands now checked.
  *
  * What the pickers offer is the agent's repository's (`review-options`):
  * its collaborators and the teams that reach it, who may be asked for a

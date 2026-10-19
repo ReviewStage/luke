@@ -1049,6 +1049,24 @@
   container-type: inline-size;
 }
 
+/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
+   stand on the theme's ground, as a diff in that theme does; every run
+   coloured in the theme names its own ink. */
+.code-lines-ground {
+  --code-ground: var(--theme-ground-dark, var(--luke-color-ground));
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+@media (prefers-color-scheme: light) {
+  .code-lines-ground {
+    --code-ground: var(--theme-ground-light, var(--luke-color-ground));
+  }
+}
 .code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
@@ -1162,7 +1180,7 @@
 .file-crumb-tree {
   position: fixed;
   z-index: var(--luke-z-menu);
-  max-height: calc(100vh - 16px);
+  max-height: calc(var(--luke-stage-height) - 16px);
 }
 
 [data-luke-profile="desktop"] .file-crumb-tree {
@@ -1832,6 +1850,16 @@
   justify-content: center;
 }
 
+/* The panel the comparison chosen shows, the sides centred in it as they
+   were in the image's own column. */
+.image-diff-panel {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
 .image-diff-sides {
   display: flex;
   width: 100%;
@@ -2091,18 +2119,18 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
-   bar, wearing the pull request's standing as a pill in its own colour and
-   its branches quiet beside it, over the page read top to bottom in one
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
+   as few rows as it can, the pull request's standing as a pill in its own
+   colour beside its title, over the page read top to bottom in one
    scroller, its sections each under a quiet heading.
 
    It keeps to the panel's top row's two edges, so the tab reads down from
-   the strip above it: whatever is boxed or edged (the pill, the merge box,
-   the checks, a comment) stands at the row's inset, where a tab's chip
-   does, and every word and glyph at the content inset, where a tab's glyph
-   does, a box holding its own at a row's inset within; the bar's last
-   control ends where the row's last control ends, as every tab's bar's
-   does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   the strip above it: whatever is boxed or edged (the pill, the merge
+   control, the checks, a comment) stands at the row's inset, where a tab's
+   chip does, and every word and glyph at the content inset, where a tab's
+   glyph does, a box holding its own at a row's inset within; each row's
+   last control ends where the row's last control ends, as every tab's
+   bar's does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
    (`--boxed-inset`), so what it holds lands on the content inset to the
    pixel. */
 .pull-request-tab {
@@ -2122,16 +2150,84 @@
   display: none;
 }
 
-/* The fixed header under the bar: the title, the branches, who opened it
-   and its reviewers, and whether it merges, standing put while the tab
-   under it scrolls. */
+/* The band the views' tabs stand in under the header, whose hairline is the
+   band's rather than the tabs', with Review at its end while the pull
+   request is open: the tabs give way first, folding to their glyphs. */
+.pull-request-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-6) var(--column-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.side-panel-content .pull-request-tabs {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-tabs > .luke-choice-bar {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.pull-request-tabs > .pull-request-review {
+  flex: none;
+}
+
+/* Too narrow for the tabs' names beside Review's word, Review draws its
+   glyph and its count alone, its word left to its hint, so the tabs keep
+   their names a little longer. */
+@container side-panel (width < 650px) {
+  .pull-request-tabs .pull-request-review-words {
+    display: none;
+  }
+}
+
+/* The fixed header: the pill, the title, and the merge control and ⋯ in
+   one row, then the branches, who opened it and its reviewers in one line,
+   standing put while the tab under it scrolls. It answers its own width,
+   so a narrow header shortens the merge control's words. */
 .pull-request-header {
   flex: none;
-  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
+  container: pull-request-header / inline-size;
+  padding: var(--luke-space-8) var(--column-inset);
 }
 
 .side-panel-content .pull-request-header {
   padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The title's row: the pill at the row's inset, the title taking the room
+   between, wrapping beside the controls rather than under them, and the
+   controls at the row's end, each centred on the row. The title stands at
+   least the controls' height, so one of a single line reads level with
+   them. */
+.pull-request-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-title-row > .luke-chip,
+.pull-request-title-row > .luke-badge {
+  flex: none;
+}
+
+.pull-request-title-row > .pull-request-title,
+.pull-request-title-row > .luke-skeleton-region {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-dialog-leading)) / 2);
+}
+
+.pull-request-title-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-2);
+  margin-inline-start: auto;
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -2172,7 +2268,7 @@
   margin-top: 0;
 }
 
-/* Where GitHub did not take the last change: a line under the bar, at the
+/* Where GitHub did not take the last change: a line over the header, at the
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
@@ -2232,6 +2328,15 @@
 /* The box is the preview's frame, its words scrolling inside it in
    `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
    as the box that scrolled itself did. */
+/* The panel Write and Preview show, as wide as the field so the words
+   and their preview fill it as they did before the tabs held them. */
+.markdown-field-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-self: stretch;
+}
+
 .markdown-field-preview {
   box-sizing: border-box;
   display: flex;
@@ -2275,7 +2380,7 @@
 
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
-  margin: var(--luke-space-2) 0 0;
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
@@ -2290,6 +2395,7 @@
 .pull-request-branch-row {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: var(--luke-space-8);
 }
@@ -2340,18 +2446,11 @@
   }
 }
 
-/* The labels and, at their end, the label picker (`pull-request-pickers.tsx`),
-   wrapping as one row under the title. */
-.pull-request-label-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin: var(--luke-space-6) 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
-}
-
-.pull-request-label-row > .pull-request-labels {
+/* The labels at the end of the header's line of people, after the
+   pickers: they keep to that line while they fit, and wrap onto the next
+   as one compact group where they do not. */
+.changes-people.pull-request-people > .pull-request-labels {
+  min-width: 0;
   margin: 0;
   padding: 0;
 }
@@ -2384,7 +2483,6 @@
    inset. */
 .pull-request-title,
 .pull-request-view .pull-request-branches,
-.pull-request-header .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,
 .pull-request-none,
@@ -2403,9 +2501,39 @@
 
 /* The title edited in place (`pull-request-writes.tsx`): its pencil stands
    faint after the number until the title is hovered or the pencil focused,
-   and the field takes the title's own type and room. */
+   the two wrapping as one. The pencil takes no room on the line, so it
+   never wraps onto a line of its own: it overhangs the title's end into its
+   inset and the header's own (`--column-inset`), the title keeping just
+   enough of an inset that the two hold it. The field takes the title's own
+   type and room. */
+.pull-request-title.pull-request-title-editable {
+  padding-inline-end: max(
+    var(--row-inset),
+    calc(var(--luke-space-2) + var(--luke-space-24) - var(--column-inset))
+  );
+}
+
+/* Beside the pill, the title starts at the row's gap, and the controls
+   after it take the pencil's overhang, so it keeps the pencil's room
+   itself. */
+.pull-request-title-row > .pull-request-title {
+  padding-inline-start: 0;
+}
+
+.pull-request-title-row > .pull-request-title.pull-request-title-editable {
+  padding-inline-end: calc(var(--luke-space-2) + var(--luke-space-24));
+}
+
+.pull-request-title-end {
+  white-space: nowrap;
+}
+
 .pull-request-title-edit {
-  margin-inline-start: var(--luke-space-2);
+  display: inline-block;
+  position: relative;
+  width: 0;
+  overflow: visible;
+  inset-inline-start: var(--luke-space-2);
   vertical-align: middle;
   opacity: 0;
 }
@@ -2424,10 +2552,11 @@
   font-weight: var(--luke-weight-regular);
 }
 
-/* Who opened it and its reviewers, standing on the page rather than
-   across it. */
+/* Its branches, who opened it and its reviewers, one line standing on the
+   page rather than across it, wrapping under the title row. */
 .changes-people.pull-request-people {
-  padding-block: var(--luke-space-6) 0;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-block: var(--luke-space-4) 0;
   border-bottom: 0;
 }
 
@@ -2435,60 +2564,46 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* Whether it would merge as it stands, boxed as GitHub's own box is, its
-   glyph in the colour of what it means: ready green, a wait amber, and
-   something to fix red. */
-.pull-request-merge {
+/* The merge control at the title row's end (`merge-box.tsx`): `@luke/ui`'s
+   Button in the look of where the merge stands, its words then a muted
+   chevron saying it opens a panel, which hangs from it. A narrow header
+   draws its shorter words, its name still the whole. */
+.merge-control {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-12) 0 0;
-  padding: var(--luke-space-8) var(--boxed-inset);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
 }
 
-.pull-request-merge > svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  color: var(--merge-tone);
+.merge-control-short {
+  display: none;
 }
 
-.pull-request-merge-words {
-  min-width: 0;
-  flex: 1 1 auto;
+.merge-control-chevron {
+  margin-inline-start: var(--luke-space-2);
+  opacity: 0.7;
+  vertical-align: middle;
 }
 
-/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
-   of a merge already asked for, quiet, then the one press, `@luke/ui`'s
-   Button, or its SplitButton where a chevron chooses the method. */
-.merge-box-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-8);
-  margin-inline-start: auto;
+@container pull-request-header (max-width: 520px) {
+  .merge-control-words {
+    display: none;
+  }
+
+  .merge-control-short {
+    display: inline;
+  }
 }
 
-.merge-box-note {
+/* The panel's mergeability under GitHub's sentence, and its press at the
+   foot's end, as the review panel's foot stands its own. */
+.merge-panel-words {
+  margin: calc(-1 * var(--luke-space-8)) 0 0;
   color: var(--luke-color-text-muted);
 }
 
-[data-merge-tone="ready"] {
-  --merge-tone: var(--luke-color-complete);
-}
-
-[data-merge-tone="waiting"] {
-  --merge-tone: var(--luke-color-attention);
-}
-
-[data-merge-tone="blocked"] {
-  --merge-tone: var(--luke-color-danger);
+.merge-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-section {
@@ -2530,8 +2645,8 @@
 }
 
 .pull-request-head-skeleton,
-.pull-request-title + .pull-request-failure {
-  margin-top: var(--luke-space-8);
+.pull-request-title-row + .pull-request-failure {
+  margin-top: var(--luke-space-6);
 }
 
 .pull-request-checks-skeleton {
@@ -2851,9 +2966,29 @@
   white-space: nowrap;
 }
 
-.pull-request-thread-head > .pull-request-quiet {
+.pull-request-thread-head > .pull-request-quiet,
+.pull-request-thread-where > .pull-request-quiet {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* A thread's file and lines, which take it to them in Files changed
+   (`ThreadCard`), laid out as the head's own row. */
+.pull-request-thread-where {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+/* A thread's ⋯ stands at the end of its head, before the chevron. */
+.pull-request-thread-menu {
+  display: flex;
+  margin-left: auto;
+}
+
+.pull-request-thread-menu + .pull-request-thread-turn {
+  margin-left: 0;
 }
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's
@@ -3155,12 +3290,15 @@
    feed. Note that they opt back into selection, because the window selects
    nothing by default (`base.css`): a File tab's, a card's, and an inbox
    item's code is read to be copied, the gutter's numbers left out of it. */
+/* A run of lines in the type View settings sets, a File tab's and a page
+   source's alike (`code-lines.tsx`), or the window's code type where its
+   box names none. */
 .code-lines {
   padding: var(--luke-space-6) 0;
   color: var(--code-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
+  font-family: var(--code-font, var(--luke-font-mono));
+  font-size: var(--code-font-size, var(--luke-type-caption-size));
+  line-height: var(--code-line-height, var(--luke-type-reading-leading));
   -webkit-user-select: text;
   user-select: text;
 }
@@ -3192,6 +3330,9 @@
 .code-line-text {
   padding-right: var(--content-inset);
   font: inherit;
+  /* Ligatures are the code's alone, so a note between its lines keeps its
+     prose's own (file-note.tsx). */
+  font-feature-settings: var(--code-font-features, normal);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -4758,7 +4899,7 @@ ol.transcript-list {
 
 .attachment-viewer[data-view="text"] {
   width: min(880px, 100vw - 2 * var(--luke-space-24));
-  height: calc(100vh - 2 * var(--luke-space-24));
+  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
@@ -4853,7 +4994,7 @@ ol.transcript-list {
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 2 * var(--luke-space-24) - 50px);
+  max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24) - 50px);
   object-fit: contain;
   cursor: zoom-in;
   touch-action: none;
@@ -5202,7 +5343,7 @@ ol.transcript-list {
    screen in the shortest window. */
 .agent-servers-scroll {
   display: flex;
-  max-height: clamp(160px, 100vh - 320px, 400px);
+  max-height: clamp(160px, var(--luke-stage-height) - 320px, 400px);
   flex-direction: column;
 }
 
@@ -5330,7 +5471,7 @@ ol.transcript-list {
   display: grid;
   flex: none;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto clamp(200px, 100vh - 280px, 440px);
+  grid-template-rows: auto clamp(200px, var(--luke-stage-height) - 280px, 440px);
 }
 
 /* The context ring beside the MCP button: the window's one icon button
@@ -5470,7 +5611,7 @@ ol.transcript-list {
    the success green, a draft in the muted ink, merged in the merged purple,
    closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
    chip naming it wears the shared palette's tone for it
-   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
+   (`PULL_REQUEST_TONE`). Its checks never change its colour. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--luke-color-complete);
 }
@@ -5497,10 +5638,6 @@ ol.transcript-list {
    class of its own (`.task-mark-glyph`) does not take its colour too. */
 .pull-request-mark[data-pull-request-state] {
   color: var(--pull-request-tone);
-}
-
-.pull-request-mark[data-failing="true"] {
-  color: var(--luke-color-danger);
 }
 
 /* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
@@ -5539,7 +5676,8 @@ ol.transcript-list {
   gap: var(--luke-icon-gap);
 }
 
-/* Too narrow for the checks' word: the mark's red still says they failed. */
+/* Too narrow for the checks' word: it goes, and the mark's words for a
+   reader who cannot see it and the Pull request tab still say they failed. */
 @container published-row (max-width: 359px) {
   .agent-published-checks {
     display: none;
@@ -6073,6 +6211,12 @@ button.picture-frame {
   position: absolute;
   z-index: 3;
   transform: translateY(calc(-100% - var(--luke-space-6)));
+}
+
+/* On a touch screen the system's selection menu stands over the words, so
+   the bubble hangs under them, past the knob of the handle that ends them. */
+.comment-bubble[data-below] {
+  transform: translateY(var(--luke-space-16));
 }
 
 /* Where the margin folds: a line's comments counted at its end, in the

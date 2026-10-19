@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
+import type { AdminSignInMethods } from "./admin-metrics.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -74,11 +75,20 @@ export interface AdminUserList {
   limit: number;
   /** The term the rows and total were filtered by, echoed so the page words the answer it shows. */
   search: string | undefined;
+  /** How the accounts the scope keeps sign in, beside how many there are; no search narrows it. */
+  signIn: AdminSignIn;
   rows: AdminUserListRow[];
+}
+
+/** The sign-in methods chart's whole input: the methods linked, and the accounts they are a share of. */
+interface AdminSignIn {
+  accounts: number;
+  methods: AdminSignInMethods;
 }
 
 export interface AdminUserListSource {
   total: number;
+  signIn: AdminSignIn;
   rows: readonly AdminUserListRow[];
 }
 
@@ -115,6 +125,7 @@ export function buildAdminUserList(
     total: source.total,
     limit: ADMIN_USERS_LIMIT,
     search,
+    signIn: source.signIn,
     rows: [...source.rows],
   };
 }

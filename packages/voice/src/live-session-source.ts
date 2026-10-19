@@ -37,6 +37,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
+import { readerZone } from "@luke/features/date-mention";
 import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
@@ -212,7 +213,8 @@ export interface LiveSessionSource {
 
 /** The launch environment's voice, honoured only when it is one the API speaks. */
 export function environmentLiveVoice(
-  environment: NodeJS.ProcessEnv = process.env,
+  // A browser tab has no `process`, and so no launch environment to read.
+  environment: NodeJS.ProcessEnv = globalThis.process?.env ?? {},
 ): LiveVoice | undefined {
   const value = environment[LIVE_ENVIRONMENT.VOICE]?.trim();
   return isLiveVoice(value) ? value : undefined;
@@ -245,7 +247,8 @@ class OutcomeRecord {
     this.lastOutcome = outcome;
     this.lastDetail = detail;
     if (outcome === LIVE_SESSION_OUTCOME.SUCCEEDED) return;
-    process.stderr.write(`${this.#logLabel}: ${outcome}${detail ? ` (${detail})` : ""}\n`);
+    // The console, which a desktop's main process and a browser tab both have.
+    console.warn(`${this.#logLabel}: ${outcome}${detail ? ` (${detail})` : ""}`);
   }
 
   fields(): Pick<LiveDiagnostics, "lastOutcome" | "lastDetail" | "lastAttemptAt"> {
@@ -319,6 +322,8 @@ interface ServiceSessionOptions {
   authorization: AccountToken;
   voice?: string;
   requestTimeoutMs?: number;
+  /** The developer's time zone as each opening frame names it, read again for each so a moved clock is told; the runtime's own by default. */
+  timeZone?: () => string;
 }
 
 /**
@@ -335,6 +340,7 @@ class ServiceLiveSessionSource {
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
   readonly #requestTimeoutMs: number;
+  readonly #timeZone: () => string;
   readonly #outcome: OutcomeRecord;
   #quota: HostedQuota | undefined;
   #sidebandAttached = false;
@@ -351,6 +357,7 @@ class ServiceLiveSessionSource {
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, SERVICE_REQUEST_TIMEOUT_MS);
+    this.#timeZone = options.timeZone ?? readerZone;
     this.#outcome = new OutcomeRecord(options.logLabel);
   }
 
@@ -423,6 +430,8 @@ class ServiceLiveSessionSource {
         // it with the plan and what was said on the task's earlier calls.
         input: [],
         planId: input.taskId,
+        // The brain's turns on the call count the developer's days and spell their times in it.
+        timeZone: this.#timeZone(),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -487,6 +496,7 @@ class ServiceLiveSessionSource {
       const frame: SessionAttachFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
         sessionId,
+        timeZone: this.#timeZone(),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       if (answer === undefined) {

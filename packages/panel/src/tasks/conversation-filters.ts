@@ -114,18 +114,30 @@ export function conversationHidden(conversation: readonly ConversationEntry[]): 
   return { bots, resolved };
 }
 
-/** The conversation as the filters leave it: an entry left out whole, or a review standing with only its threads still open. */
+/** Nothing brought into view, which the filters leave as they find it. */
+const NONE_KEPT: ReadonlySet<string> = new Set();
+
+/**
+ * The conversation as the filters leave it: an entry left out whole, or a
+ * review standing with only its threads still open. What a link or a View
+ * in Conversation brought into view (`kept`: a thread by its id, an entry by
+ * its page) stands whatever the filters say, a thread with the review it is
+ * on.
+ */
 export function filteredConversation(
   conversation: readonly ConversationEntry[],
   filters: ConversationFilters,
+  kept: ReadonlySet<string> = NONE_KEPT,
 ): readonly ConversationEntry[] {
+  const keeps = (thread: ReviewThread) => thread.id !== undefined && kept.has(thread.id);
   return conversation.flatMap((entry): ConversationEntry[] => {
-    if (filters.hideBots && entry.by.bot) return [];
     const threads = threadsOf(entry);
+    const keptEntry = kept.has(entry.url);
+    if (filters.hideBots && entry.by.bot && !keptEntry && !threads.some(keeps)) return [];
     if (!filters.hideResolved || threads.length === 0) return [entry];
-    const open = threads.filter((thread) => !thread.resolved);
-    // Note that a review whose every thread was resolved goes with them, as stage-cli drops one.
-    if (open.length === 0) return [];
+    const open = threads.filter((thread) => !thread.resolved || keeps(thread));
+    // Note that a review whose every thread was resolved goes with them, as stage-cli drops one, unless it was brought into view.
+    if (open.length === 0) return keptEntry ? [entry] : [];
     return open.length === threads.length ? [entry] : [{ ...entry, threads: open }];
   });
 }

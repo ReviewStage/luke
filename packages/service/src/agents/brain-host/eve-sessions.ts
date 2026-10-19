@@ -257,13 +257,26 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly turn: Turn;
   /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
   readonly message: string | UserContent;
+  /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
+  readonly timeZone?: string;
 }
 
+/**
+ * eve's session routes for one caller, sending the kinds of turn `Turn`
+ * names. Note that the two calls that carry a message are properties rather
+ * than methods, because TypeScript checks a method's parameters both ways: a
+ * client composed for one kind alone, such as the voice function's for a
+ * spoken ask, would pass for one that sends any kind, and the narrowing
+ * would hold nothing.
+ */
 export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
-  open(message: EveMessage<Turn>): Effect.Effect<EveOpened, EveUnreachable>;
+  readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
-  send(sessionId: string, message: EveMessage<Turn>): Effect.Effect<EveSent, EveUnreachable>;
+  readonly send: (
+    sessionId: string,
+    message: EveMessage<Turn>,
+  ) => Effect.Effect<EveSent, EveUnreachable>;
   /**
    * Asks eve to cancel exactly the turn named, by eve's own id for it. A turn
    * no longer under way answers `no_active_turn` and the session's next turn
@@ -316,12 +329,12 @@ interface EvePostBody {
  * own secret, or the account itself, under the bearer its request carried,
  * which the door resolves as a hosted route resolves a bearer
  * (`auth/bearer.ts`'s `hostedUserId`) and never by a session cookie. The
- * brain's asks come from the voice function as the deployment; a coding
- * agent's Start and Stop come from a route and reach eve as its caller
- * (`coder-host/stop.ts`'s `eveFor`): over the developer's own bearer, or,
- * for a route a browser reached on its session cookie alone, as the
- * deployment acting for the account the cookie named, since eve takes no
- * cookie.
+ * brain's spoken asks come from the voice function as the deployment; a
+ * comment's ask of Luke, and a coding agent's Start and Stop, come from a
+ * route and reach eve as its caller (`coder-host/stop.ts`'s `eveFor`): over
+ * the developer's own bearer, or, for a route a browser reached on its
+ * session cookie alone, as the deployment acting for the account the cookie
+ * named, since eve takes no cookie.
  */
 export type EveCaller =
   | {
@@ -494,6 +507,9 @@ function sessionsOver<Turn extends BrainHostTurn>(
   const turnHeaders = (message: EveMessage<Turn>) => ({
     [BRAIN_HOST_HEADER.CONVERSATION]: message.conversationId,
     [BRAIN_HOST_HEADER.TURN]: message.turn,
+    ...(message.timeZone === undefined
+      ? undefined
+      : { [BRAIN_HOST_HEADER.TIME_ZONE]: message.timeZone }),
   });
   return {
     open: (message) =>

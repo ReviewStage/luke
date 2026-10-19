@@ -16,6 +16,8 @@ const SDP_ANSWER =
 const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+/** The developer's zone, other than the machine's so the frame shows it was asked. */
+const TIME_ZONE = "Pacific/Chatham";
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
 
 function createdFrame(overrides: ParsedJsonObject = {}) {
@@ -48,11 +50,11 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
 }
 
 it.live(
-  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its plan and seeding nothing",
+  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its plan and the developer's time zone and seeding nothing",
   () =>
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
-      const source = hosted(script, { voice: LIVE_VOICE.MARIN });
+      const source = hosted(script, { voice: LIVE_VOICE.MARIN, timeZone: () => TIME_ZONE });
 
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID });
 
@@ -71,6 +73,7 @@ it.live(
         voice: LIVE_VOICE.MARIN,
         input: [],
         planId: TASK_ID,
+        timeZone: TIME_ZONE,
       });
       const report = source.diagnostics();
       assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);

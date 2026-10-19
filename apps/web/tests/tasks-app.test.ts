@@ -56,6 +56,7 @@ import {
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EVE_RESET_OUTCOME, type EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
+import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import {
   requestUserId,
   type SessionEndpoint,
@@ -63,10 +64,13 @@ import {
 } from "@luke/service/auth/bearer";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import type { WebServices } from "@luke/service/runtime";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
+import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -89,6 +93,7 @@ import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import {
   Clock,
+  type Context,
   DateTime,
   Duration,
   Effect,
@@ -102,7 +107,6 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { DISPATCH_QUERY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
 /**
@@ -110,8 +114,10 @@ import { dispatched } from "./support/platform-landing";
  * function answers them, over a real dialect: the bearer names the account
  * and nothing else does, a task another account owns answers exactly as one
  * that does not exist, and what the notetaker's notes saved is what the window opens.
- * The path is the one the rewrite hands the group, the task id moved from
- * the path into the `id` query. A task's repository is kept only once the
+ * A plan's own routes are asked at the path a client sends, landed through
+ * the committed rewrites on the hosted oRPC router; the old group's at the
+ * path the rewrite hands it, the task id moved from the path into the `id`
+ * query. A task's repository is kept only once the
  * Luke GitHub App, over a GitHub the test scripts, confirms the
  * installation connected to the task's workspace reaches it.
  *
@@ -120,19 +126,19 @@ import { dispatched } from "./support/platform-landing";
 
 const ORIGIN = "https://luke.test";
 const TASKS = "/api/plans";
-const ONE_TASK = "/api/plans/plan";
-const BOARD = "/api/plans/board";
-const TRANSCRIPT = "/api/plans/transcript";
-const WORK = "/api/plans/work";
+const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
+const BOARD = (taskId: string) => `${ONE_TASK(taskId)}/board`;
+const TRANSCRIPT = (taskId: string) => `${ONE_TASK(taskId)}/transcript`;
+const WORK = (taskId: string) => `${ONE_TASK(taskId)}/work`;
 const MESSAGES = "/api/plans/messages";
 const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
 const CODE = "/api/plans/code";
 const FILE = "/api/plans/file";
-const REVISIONS = "/api/plans/revisions";
-const REVISION = "/api/plans/revision";
-const RESTORE = "/api/plans/restore";
-const EDIT = "/api/plans/edit";
-const STOP = "/api/plans/stop";
+const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
+const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
+const RESTORE = (taskId: string, seq: number) => `${REVISION(taskId, seq)}/restore`;
+const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/edit`;
+const STOP = (taskId: string) => `${ONE_TASK(taskId)}/stop`;
 const PAGE = "/api/plans/page";
 
 const RELAY = {
@@ -239,11 +245,30 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
     Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? "")));
 }
 
+/** The flattened paths the old group still serves, which a request names as the rewrite hands them to it. */
+const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES, CODE, FILE, PAGE]);
+
+/** The route keys the hosted oRPC router answers, as `tasks-procedures.ts` serves them. */
+const TASK_ROUTES = [
+  "plans",
+  "plans/plan",
+  "plans/board",
+  "plans/edit",
+  "plans/revisions",
+  "plans/revision",
+  "plans/restore",
+  "plans/transcript",
+  "plans/work",
+  "plans/stop",
+] as const;
+
 /**
- * The group over the test's own database and the GitHub given, answering
- * one request: at the route's own path, or, where a route key is named, as
- * a client sends it, landed by the platform on a function holding the group
- * under that key.
+ * The routes over the test's own database and the GitHub given, answering
+ * one request: a plan's own routes as a client sends them, landed by the
+ * platform through the committed rewrites and the grouped function's
+ * dispatcher on the hosted oRPC router; the old group's at its own
+ * flattened path, or, where a route key is named, landed on a function
+ * holding the group under that key.
  */
 const answer = (
   signedIn: SignedIn,
@@ -263,22 +288,49 @@ const answer = (
       modelCatalogOf([]),
       integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" }),
     );
+    const seams = {
+      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
+      resolveUserId: (incoming: Request) =>
+        requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
+      workspaces: yield* fakeWorkspaceSeams,
+      eveOrigin: () => ORIGIN,
+      ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
+    };
     const { handler, dispose } = HttpRouter.toWebHandler(
-      tasksApp({
-        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
-        resolveUserId: (incoming) =>
-          requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
-        workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => ORIGIN,
-        ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
-      }).pipe(HttpRouter.provideRequest(services)),
+      tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const response = yield* Effect.promise(() =>
-      landedAs === undefined
-        ? handler(request)
-        : dispatched(request, new Map([[landedAs, { fetch: (each) => handler(each) }]])),
-    );
+    // SAFETY: the plans and transcript procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    const webServices = (yield* Effect.context<never>().pipe(
+      Effect.provide(services),
+    )) as Context.Context<WebServices>;
+    const routed = hostedFetch({
+      messages: messagesProcedures(seams),
+      plans: tasksProcedures(seams),
+    });
+    const tasksRoute = { fetch: (each: Request) => routed(each, webServices) };
+    /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry; the rest of the old group's flattened paths are its own. */
+    const flattened = (each: Request): Promise<Response> => {
+      const url = new URL(each.url);
+      const id = url.searchParams.get("id") ?? "";
+      const call = url.searchParams.get("call") ?? "";
+      if (url.pathname === MESSAGES) {
+        url.pathname = `/api/plans/${encodeURIComponent(id)}/messages`;
+        return routed(new Request(url, each), webServices);
+      }
+      if (url.pathname === SUBAGENT_MESSAGES) {
+        url.pathname = `/api/plans/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
+        return routed(new Request(url, each), webServices);
+      }
+      return handler(each);
+    };
+    const response = yield* Effect.promise(() => {
+      if (landedAs !== undefined) {
+        return dispatched(request, new Map([[landedAs, { fetch: (each) => flattened(each) }]]));
+      }
+      if (GROUP_PATHS.has(new URL(request.url).pathname)) return flattened(request);
+      return dispatched(request, new Map(TASK_ROUTES.map((route) => [route, tasksRoute])));
+    });
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     yield* Effect.promise(() => dispose());
@@ -305,6 +357,8 @@ function request(
   const headers = new Headers();
   if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
   if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+  // Every client sends its JSON body as JSON, which the oRPC routes read the body by.
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   return new Request(url, {
     method: init.method ?? "GET",
     headers,
@@ -503,7 +557,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(TASKS, owner));
-      const opened = yield* ask(request(ONE_TASK, owner, { id: taskId }));
+      const opened = yield* ask(request(ONE_TASK(taskId), owner));
 
       assert.deepEqual(
         readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
@@ -669,7 +723,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const opened = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(ONE_TASK, other, { id: taskId })),
+          yield* ask(request(ONE_TASK(taskId), other)),
         ).plan;
         const creator = { userId: owner, name: "Charles Pan" };
 
@@ -711,23 +765,20 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
       const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
-      assert.deepEqual(yield* ask(request(ONE_TASK, other, { id: taskId })), notFound);
+      assert.deepEqual(yield* ask(request(ONE_TASK(taskId), other)), notFound);
       assert.deepEqual(
-        yield* ask(request(ONE_TASK, other, { id: taskId, method: "DELETE" })),
+        yield* ask(request(ONE_TASK(taskId), other, { method: "DELETE" })),
         notFound,
       );
       assert.deepEqual(yield* ask(request(TASKS, other)), {
         status: HOSTED_HTTP_STATUS.OK,
         body: { plans: [], planlessAgents: [] },
       });
-      assert.equal(
-        (yield* ask(request(ONE_TASK, owner, { id: taskId }))).status,
-        HOSTED_HTTP_STATUS.OK,
-      );
+      assert.equal((yield* ask(request(ONE_TASK(taskId), owner))).status, HOSTED_HTTP_STATUS.OK);
       for (const path of [MESSAGES, CODE]) {
         assert.deepEqual(yield* ask(request(path, other, { id: taskId })), notFound);
       }
-      assert.deepEqual(yield* ask(request(STOP, other, { id: taskId, method: "POST" })), notFound);
+      assert.deepEqual(yield* ask(request(STOP(taskId), other, { method: "POST" })), notFound);
       assert.deepEqual(
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
         notFound,
@@ -740,12 +791,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const { owner, ask } = yield* openAccounts();
       const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
 
-      assert.deepEqual(yield* ask(request(STOP, owner, { id: taskId, method: "POST" })), {
+      assert.deepEqual(yield* ask(request(STOP(taskId), owner, { method: "POST" })), {
         status: HOSTED_HTTP_STATUS.OK,
         body: {},
       });
       assert.deepEqual(
-        yield* ask(request(STOP, owner, { id: taskId })),
+        yield* ask(request(STOP(taskId), owner)),
         refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
       );
     }),
@@ -763,8 +814,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         assert.deepEqual(
           yield* ask(
-            request(ONE_TASK, undefined, {
-              id: taskId,
+            request(ONE_TASK(taskId), undefined, {
               method: "DELETE",
               cookie: sessionCookieOf(owner),
             }),
@@ -772,11 +822,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         assert.equal(
-          (yield* ask(request(ONE_TASK, owner, { id: taskId }))).status,
+          (yield* ask(request(ONE_TASK(taskId), owner))).status,
           HOSTED_HTTP_STATUS.OK,
           "the task stands",
         );
-        assert.deepEqual(yield* ask(request(ONE_TASK, owner, { id: taskId, method: "DELETE" })), {
+        assert.deepEqual(yield* ask(request(ONE_TASK(taskId), owner, { method: "DELETE" })), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { deleted: true },
         });
@@ -795,31 +845,21 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const ledger = yield* started(LEDGER);
         const relaySession = yield* sessionOn(owner, relay);
         const ledgerSession = yield* sessionOn(owner, ledger);
-        // Note that a client may name the one-task path in the query of another path the group's functions serve.
-        const landedElsewhere = (taskId: string, by: string) =>
-          ask(
-            request(`/api/plans/${taskId}/pages`, undefined, {
-              method: "DELETE",
-              cookie: by,
-              query: { [DISPATCH_QUERY.PATH]: "plans/plan" },
-            }),
-            "plans/pages",
-          );
         const deletedBy = (taskId: string, by: string) =>
-          ask(request(ONE_TASK, undefined, { id: taskId, method: "DELETE", cookie: by }));
+          ask(request(ONE_TASK(taskId), undefined, { method: "DELETE", cookie: by }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
         const deleted = { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } };
 
         assert.equal(
-          (yield* ask(request(ONE_TASK, undefined, { id: relay, cookie }))).status,
+          (yield* ask(request(ONE_TASK(relay), undefined, { cookie }))).status,
           HOSTED_HTTP_STATUS.OK,
           "the cookie names the account on a read",
         );
-        assert.deepEqual(yield* landedElsewhere(relay, sessionCookieOf(other)), notFound);
+        assert.deepEqual(yield* deletedBy(relay, sessionCookieOf(other)), notFound);
         assert.deepEqual(yield* deletedBy(ledger, sessionCookieOf(other)), notFound);
         assert.deepEqual(retired, [], "another account's cookie retires nothing");
 
-        assert.deepEqual(yield* landedElsewhere(relay, cookie), deleted);
+        assert.deepEqual(yield* deletedBy(relay, cookie), deleted);
         assert.deepEqual(yield* deletedBy(ledger, cookie), deleted);
         assert.deepEqual(retired, [
           [deploymentFor(owner), relaySession],
@@ -874,13 +914,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         };
 
         assert.deepEqual(
-          yield* ask(request(EDIT, other, { id: taskId, method: "POST", body })),
+          yield* ask(request(EDIT(taskId), other, { method: "POST", body })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(
           yield* ask(
-            request(EDIT, owner, {
-              id: taskId,
+            request(EDIT(taskId), owner, {
               method: "POST",
               body: { field: PLAN_FIELD.OPEN_QUESTIONS, base: [], value: "Not a list." },
             }),
@@ -888,7 +927,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.deepEqual(
-          yield* ask(request(EDIT, owner, { id: taskId, method: "GET" })),
+          yield* ask(request(EDIT(taskId), owner, { method: "GET" })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
@@ -989,8 +1028,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           request(TASKS, owner, { method: "POST", body: { ...RELAY, repository: "acme/ledger" } }),
         );
         const elsewhere = yield* ask(
-          request(ONE_TASK, owner, {
-            id: taskId,
+          request(ONE_TASK(taskId), owner, {
             method: "PATCH",
             body: { name: "Team invites", repository: "octocat/relay" },
           }),
@@ -1009,7 +1047,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const opened = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(ONE_TASK, owner, { id: taskId })),
+          yield* ask(request(ONE_TASK(taskId), owner)),
         );
         assert.deepEqual([opened.plan.name, opened.plan.repository], [RELAY.name, null]);
         assert.equal(
@@ -1031,9 +1069,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
         const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
         const save = (userId: string, body: WireBoundaryInput) =>
-          ask(request(BOARD, userId, { method: "PUT", id: taskId, body }));
+          ask(request(BOARD(taskId), userId, { method: "PUT", body }));
 
-        assert.deepEqual(yield* ask(request(BOARD, other, { id: taskId })), notFound);
+        assert.deepEqual(yield* ask(request(BOARD(taskId), other)), notFound);
         assert.deepEqual(yield* save(other, { elements: [NOTE], appliedDrawing: 0 }), notFound);
         assert.equal(
           (yield* runDrawOnBoard({ userId: other, taskId: taskId }, unparsedWire(DRAW_API))).status,
@@ -1047,7 +1085,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* save(owner, { elements: [NOTE], appliedDrawing: 0, taskId }),
           invalid,
         );
-        assert.deepEqual(yield* ask(request(BOARD, owner, { id: taskId })), {
+        assert.deepEqual(yield* ask(request(BOARD(taskId), owner)), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { board: { elements: [], appliedDrawing: 0 } },
         });
@@ -1064,7 +1102,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         const read = () =>
           Effect.map(
-            ask(request(TRANSCRIPT, owner, { id: taskId })),
+            ask(request(TRANSCRIPT(taskId), owner)),
             (answered) =>
               readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
           );
@@ -1113,11 +1151,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
           earlierOmitted: false,
         });
         assert.deepEqual(
-          yield* ask(request(TRANSCRIPT, other, { id: taskId })),
+          yield* ask(request(TRANSCRIPT(taskId), other)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(
-          yield* ask(request(TRANSCRIPT, owner, { method: "PUT", id: taskId })),
+          yield* ask(request(TRANSCRIPT(taskId), owner, { method: "PUT" })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
@@ -1136,7 +1174,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         yield* joinWorkspace(started.workspaceId, other);
         const read = (userId: string) =>
           Effect.map(
-            ask(request(TRANSCRIPT, userId, { id: started.id })),
+            ask(request(TRANSCRIPT(started.id), userId)),
             (answered) =>
               readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
           );
@@ -1197,9 +1235,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
       yield* joinWorkspace(started.workspaceId, other);
 
       const saved = yield* ask(
-        request(BOARD, other, {
+        request(BOARD(started.id), other, {
           method: "PUT",
-          id: started.id,
+
           body: { elements: [NOTE], appliedDrawing: 0 },
         }),
       );
@@ -1209,7 +1247,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         readAnswer(
           boardAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(BOARD, owner, { id: started.id })),
+          yield* ask(request(BOARD(started.id), owner)),
         ).board.elements,
         [NOTE],
       );
@@ -1229,23 +1267,22 @@ it.layer(getTestDB())("the plan routes", (it) => {
           readAnswer(
             taskWorkAnswerSchema,
             HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(WORK, owner, { id: taskId })),
+            yield* ask(request(WORK(taskId), owner)),
           ),
           { turns: [], code: [] },
         );
-        const older = new URL(WORK, ORIGIN);
-        older.searchParams.set("id", taskId);
+        const older = new URL(WORK(taskId), ORIGIN);
         older.searchParams.set("before", "turn-1");
         assert.deepEqual(
           yield* ask(new Request(older, { headers: { authorization: `Bearer ${owner}` } })),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.deepEqual(
-          yield* ask(request(WORK, other, { id: taskId })),
+          yield* ask(request(WORK(taskId), other)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(
-          yield* ask(request(WORK, owner, { method: "PUT", id: taskId })),
+          yield* ask(request(WORK(taskId), owner, { method: "PUT" })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
@@ -1452,6 +1489,41 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
+  it.effect(
+    "a change whose body passes the change's bound is refused as too large, its plan unchanged, though the change it carries reads",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        // A rename the bound would admit, padded with the whitespace JSON reads past to a body larger than any change.
+        const body = `${JSON.stringify({ name: "Invitation expiry" })}${" ".repeat(16_384)}`;
+        const padded = new Request(new URL(ONE_TASK(taskId), ORIGIN), {
+          method: "PATCH",
+          headers: {
+            authorization: `Bearer ${owner}`,
+            "content-type": "application/json",
+            "content-length": String(Buffer.byteLength(body)),
+          },
+          body,
+        });
+
+        assert.deepEqual(
+          yield* ask(padded),
+          refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+        assert.equal(
+          readAnswer(
+            taskAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ONE_TASK(taskId), owner)),
+          ).plan.name,
+          RELAY.name,
+        );
+      }),
+  );
+
   it.effect("no bearer, a wrong method, and an id that is no UUID are refused", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
@@ -1465,7 +1537,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
       );
       assert.deepEqual(
-        yield* ask(request(ONE_TASK, owner, { id: "not-a-plan" })),
+        yield* ask(request(ONE_TASK("not-a-plan"), owner)),
         refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
       );
     }),
@@ -1496,22 +1568,19 @@ it.layer(getTestDB())("the plan routes", (it) => {
         yield* twoRevisions(owner, taskId);
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
-        assert.deepEqual(yield* ask(request(REVISIONS, other, { id: taskId })), {
+        assert.deepEqual(yield* ask(request(REVISIONS(taskId), other)), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { revisions: [] },
         });
+        assert.deepEqual(yield* ask(request(REVISION(taskId, 1), other)), notFound);
         assert.deepEqual(
-          yield* ask(request(REVISION, other, { id: taskId, query: { seq: "1" } })),
-          notFound,
-        );
-        assert.deepEqual(
-          yield* ask(request(RESTORE, other, { id: taskId, method: "POST", query: { seq: "1" } })),
+          yield* ask(request(RESTORE(taskId, 1), other, { method: "POST" })),
           notFound,
         );
         const page = readAnswer(
           planRevisionsAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(REVISIONS, owner, { id: taskId })),
+          yield* ask(request(REVISIONS(taskId), owner)),
         );
         assert.deepEqual(
           page.revisions.map(({ seq }) => seq),
@@ -1579,8 +1648,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           planEditAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
-            request(EDIT, owner, {
-              id: taskId,
+            request(EDIT(taskId), owner, {
               method: "POST",
               body: { document: { base: INVITATIONS_TEXT, value } },
             }),
@@ -1589,12 +1657,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const page = readAnswer(
           planRevisionsAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(REVISIONS, owner, { id: taskId })),
+          yield* ask(request(REVISIONS(taskId), owner)),
         );
         const { revision } = readAnswer(
           planRevisionAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(REVISION, owner, { id: taskId, query: { seq: "2" } })),
+          yield* ask(request(REVISION(taskId, 2), owner)),
         );
 
         assert.ok("plan" in answered);
@@ -1631,8 +1699,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         yield* makeDocumentTask(taskId, lukes);
         const edit = (id: string, value: string) =>
           ask(
-            request(EDIT, owner, {
-              id,
+            request(EDIT(id), owner, {
               method: "POST",
               body: { document: { base: INVITATIONS_TEXT, value } },
             }),
@@ -1687,7 +1754,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const start = (body: WireBoundaryInput) =>
           ask(request(TASKS, owner, { method: "POST", body }));
         const change = (taskId: string, repository: string) =>
-          ask(request(ONE_TASK, owner, { id: taskId, method: "PATCH", body: { repository } }));
+          ask(request(ONE_TASK(taskId), owner, { method: "PATCH", body: { repository } }));
         const repositoryOf = (status: number, answered: Answer) =>
           readAnswer(taskAnswerSchema, status, answered).plan.repository;
         const ofOtherOwner = unreachable({
@@ -1729,7 +1796,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const opened = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(ONE_TASK, owner, { id: personal })),
+          yield* ask(request(ONE_TASK(personal), owner)),
         );
         assert.equal(opened.plan.repository, null);
         const listed = readAnswer(
@@ -1770,7 +1837,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           repository: "acme/relay",
         });
         const move = (bearer: string, workspaceId: string) =>
-          ask(request(ONE_TASK, bearer, { id: task.id, method: "PATCH", body: { workspaceId } }));
+          ask(request(ONE_TASK(task.id), bearer, { method: "PATCH", body: { workspaceId } }));
 
         const byTeammate = yield* move(other, acme);
         const toStrangers = yield* move(owner, strangers);
@@ -1797,7 +1864,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual([moved.workspaceId, moved.repository], [acme, "acme/relay"]);
         // The teammate was in the workspace the task left, not the one it moved to.
         assert.deepEqual(
-          yield* ask(request(ONE_TASK, other, { id: task.id })),
+          yield* ask(request(ONE_TASK(task.id), other)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),

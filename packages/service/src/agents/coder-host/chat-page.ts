@@ -65,7 +65,7 @@ function memberOnWire(row: ChatMemberRow): ChatMember {
 }
 
 /** A channel as the window reads one, a DM's two members named. */
-function channelOnWire(row: ChatChannelRow): ChatChannel {
+export function channelOnWire(row: ChatChannelRow): ChatChannel {
   const pair =
     row.kind === CHANNEL_KIND.DM && row.dmAMemberId !== null && row.dmBMemberId !== null
       ? { members: [row.dmAMemberId, row.dmBMemberId] }
@@ -77,6 +77,7 @@ function channelOnWire(row: ChatChannelRow): ChatChannel {
     ...(row.taskId === null ? undefined : { planId: row.taskId }),
     ...pair,
     archived: row.archivedAt !== null,
+    ...(row.purpose === null ? undefined : { purpose: row.purpose }),
   };
 }
 

@@ -357,14 +357,21 @@ it always has. The channels'
 door holds the deployment to what its actor admits
 (`src/agents/brain-host/auth.ts`): on the coding agents' channel the typed
 opening and line it already carried for the voice brain, which is an
-agent's Start, a message, an inbox answer, and a manual automation run, and
-on both channels a cancel, which is an agent's Stop, its Archive, a task's
-archive, and Luke's Stop on a plan, and a reset, which is how the two
-deletes, a task's and the account's, retire the eve sessions of what they
-delete (`src/agents/retire-sessions.ts`); each only on a session or a
-conversation the account reaches, as the door holds every caller. A typed ask
-of Luke, which a comment mentioning him hands over, is refused there for the
-deployment, so it reaches Luke over the desktop's bearer alone. What acts for one device rather than the account
+agent's Start, a message, an inbox answer, and a manual automation run, on
+Luke's channel a typed ask, which a comment mentioning him hands over
+(`src/tasks/comment-ask.ts`), and on both channels a cancel, which is an
+agent's Stop, its Archive, a task's archive, and Luke's Stop on a plan, and a
+reset, which is how the two deletes, a task's and the account's, retire the
+eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
+on a session or a conversation the account reaches, as the door holds every
+caller. A typed message is minted at either door as the account's own
+principal, the very identity its bearer would be admitted as, with the
+deployment named only in its `luke:carrier` attribute, because eve steers a
+running turn, and folds the messages that waited into one turn, only by that
+identity: a comment's ask of Luke from a browser waits behind a call's spoken
+turn, which runs as the deployment, and joins the member's own typed turn,
+exactly as the desktop's over the bearer does, and a teammate's runs as the
+teammate, never as the plan's owner. What acts for one device rather than the account
 takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
 eve's channels, which resolve with `hostedUserId`, as the voice and terminal
 relays resolve with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -394,7 +401,8 @@ answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
 
-`src/accounts/models-app.ts` answers `GET /api/models`: the models a coding agent
+`src/accounts/models-procedures.ts` answers `GET /api/models`, the first
+procedure of the hosted oRPC router (`src/orpc/`): the models a coding agent
 may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
 `src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
@@ -428,8 +436,8 @@ catalog id into the id the provider's own API takes — model calls go to
 Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
 catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
-through a scripted gateway and the test clock; `src/accounts/models-app.test.ts`
-answers the route over a fixed catalog.
+through a scripted gateway and the test clock; `src/accounts/models-procedures.test.ts`
+answers the route over a fixed catalog, byte for byte as the old group did.
 
 ## Accounts' own provider keys
 
@@ -591,7 +599,9 @@ lets it go, so its name is free again.
 Deleting the Luke account reads every row's subject before the cascade and
 revokes each.
 
-**The routes** (`src/integrations/integrations-app.ts`). Every route about
+**The routes** (the hosted procedures in
+`src/integrations/integrations-procedures.ts`, and Connect's return to the
+browser in `src/integrations/integrations-app.ts`). Every route about
 one account reads it from a `connection` query beside the provider, and
 without one means the provider's first account, so a desktop that predates
 more than one sees exactly what it saw before:
@@ -1607,7 +1617,8 @@ fails with the start's refusal. A claim left without its agent for ten
 minutes, its function gone, is settled by the sweep as the agent its key
 made where one stands, and failed as `unavailable` where none does.
 
-The routes are `src/automations/automations-app.ts`, under the account bearer, every
+The routes are procedures of the hosted oRPC router
+(`src/automations/automations-procedures.ts`), under the account bearer, every
 row gated by the store on the account owning the automation and still
 reaching its task, so another account's automation, or one on a task of a
 workspace the account left, is `not-found`:
@@ -1656,7 +1667,8 @@ past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
 `@luke/features/automation-wire` declares every body and `service-paths.ts`
-the addresses; `src/automations/automations-app.test.ts` holds the routes over a fake
+the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
+`src/automations/automations-procedures.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Luke App's own webhook
@@ -2542,17 +2554,28 @@ account's by the time a delegation arrives. It calls eve's session routes
 under the deployment's `CRON_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
-account as its attribute — for a message naming a kind of turn its table,
-`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits (a spoken
-turn), for a cancel of a turn in a session, which is how the stop key's
-`stopAsk` and the hook's carried Stop reach eve, and for a GET of a session's
+account as its attribute — for a spoken message, which its table,
+`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits, for a
+cancel of a turn in a session, which is how the stop key's `stopAsk` and
+the hook's carried Stop reach eve, and for a GET of a session's
 event stream, which the live brain listens to from its tail so it reads a
 spoken ask's turn the moment eve tells an event rather than only on its
 250 ms poll (the poll stays, for a stream refused or dropped), and nothing
 else: any other route or kind of turn carrying the secret is refused outright
 rather than passed to the account authenticator behind it. The stream read is
 the brain's channel's alone; the coder channel's deployment, which presents
-the account, is refused it. Which account a request acts
+the account, is refused it. The table admits a typed message too, which a
+hosted route a browser reached on its session cookie alone carries for a
+comment's ask of Luke (`src/tasks/comment-ask.ts`): it is minted as the
+account's own principal instead, the deployment named only as its carrier,
+so it never joins the call's spoken turn, nor a spoken ask its turn. The door
+admits that typed message from anything that holds the secret, since one
+secret proves no more than that something holding it acted, so what keeps
+the deployment's typed asks of Luke to a comment's is the code: no code path
+but the comment hand-over sends one. The voice function's eve client is
+typed to send a spoken ask and nothing else
+(`src/voice/deployment-exchange.ts`), and the brain host's carried Stop and a
+delete's retire are typed to cancel and to reset alone. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
 a turn only on a conversation the named account reaches, and cancel one or

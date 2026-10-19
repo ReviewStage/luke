@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   composerEditor,
   installEditorLayout,
@@ -35,7 +35,15 @@ beforeEach(installEditorLayout);
 afterEach(() => {
   for (const box of boxes.splice(0)) box.handle.destroy();
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
 });
+
+/** The device's pointer as a phone's, a finger, or a mouse's, which the browser's media queries answer. */
+function pointerIs(coarse: boolean): void {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: coarse && query === "(pointer: coarse)",
+  }));
+}
 
 /** A box mounted on the words given, with everything it hands back written down. */
 function mounted(text: string, overrides: Partial<ComposerEditorProps> = {}) {
@@ -144,6 +152,31 @@ test("Enter sends, Shift+Enter breaks the line, and an Enter an input method is 
   pressInComposer(box.host, "Enter", { isComposing: true });
   pressInComposer(box.host, "Enter", { keyCode: 229 });
   assert.equal(box.sends.count, 1, "the Enter that commits a composed word never sends");
+});
+
+test("on a coarse pointer Enter is a new line, ⌘ or Ctrl with Enter sends, and the return key says so", () => {
+  pointerIs(true);
+  const box = mounted("Ship it");
+  assert.equal(composerEditor(box.host).getAttribute("enterkeyhint"), "enter");
+
+  pressInComposer(box.host, "Enter");
+  typeInComposer(box.host, "today");
+  assert.equal(box.sends.count, 0);
+  assert.equal(box.drafts.at(-1), "Ship it\ntoday");
+
+  pressInComposer(box.host, "Enter", { metaKey: true });
+  pressInComposer(box.host, "Enter", { ctrlKey: true });
+  assert.equal(box.sends.count, 2);
+});
+
+test("with a mouse Enter sends, and the return key says Send", () => {
+  pointerIs(false);
+  const box = mounted("Ship it");
+  assert.equal(composerEditor(box.host).getAttribute("enterkeyhint"), "send");
+
+  pressInComposer(box.host, "Enter");
+  assert.equal(box.sends.count, 1);
+  assert.equal(box.drafts.at(-1), undefined, "the words stand as they were");
 });
 
 test("a key the owner takes is the owner's alone", () => {

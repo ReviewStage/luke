@@ -24,6 +24,7 @@
 @import "./components/banner/banner.css";
 @import "./components/breadcrumbs/breadcrumbs.css";
 @import "./components/button/button.css";
+@import "./components/calendar/calendar.css";
 @import "./components/card/card.css";
 @import "./chart/chart.css";
 @import "./components/folding-button/folding-button.css";
@@ -58,8 +59,7 @@
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";
 @import "./components/switch/switch.css";
-@import "./components/tabs/tabs.css";
-@import "./components/segmented/segmented.css";
+@import "./components/choice-bar/choice-bar.css";
 @import "./components/settings-page/settings-page.css";
 @import "./components/settings-section/settings-section.css";
 @import "./components/spinner/spinner.css";

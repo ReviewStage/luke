@@ -239,7 +239,9 @@ export const PRODUCT_EXPERIMENT = {
   BROWSER: "browser",
   CHAT: "chat",
   FACTORY: "factory",
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   AUTOMATIONS: "automations",
+  CODE_REVIEW: "code-review",
   VIDEO_CALLS: "video-calls",
   ISSUES: "issues",
   SECTIONS: "sections",

@@ -21,7 +21,9 @@
     flex-direction: column;
     min-width: 196px;
     max-width: 280px;
-    max-height: calc(100vh - 2 * var(--luke-space-8));
+    /* What can be seen, so a long menu scrolls above a phone's keyboard
+       rather than running on behind it (`tokens/viewport.css`). */
+    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
     overflow-x: hidden;
     overflow-y: auto;
     padding: var(--luke-menu-inset);

@@ -41,6 +41,7 @@ import {
   Stream,
 } from "effect";
 import { SqlClient } from "effect/sql";
+import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_DELEGATION_TOOLS, BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
   ASK_REFUSAL,
@@ -430,8 +431,10 @@ export interface HostedLiveBrainOptions {
   readonly accountId: string;
   /** The conversation every ask lands in: the task's, the same one its record writes, under the member who opened it. */
   readonly conversation: ConversationTarget;
-  /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
-  readonly asks: AskSeams;
+  /** The developer's time zone, handed with every ask so the turn reads the day in it; none reads UTC. */
+  readonly timeZone?: string | undefined;
+  /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask and nothing else. */
+  readonly asks: AskSeams<typeof BRAIN_HOST_TURN.SPOKEN>;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
   /** The writer a cancelled run's turn is stamped through, as every Stop stamps it. */
@@ -1011,7 +1014,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   });
 
   /** Accepts one ask through the door and follows it under the revision given. */
-  function submit(input: AskInput, revision: number): Effect.Effect<LiveBrainSubmission> {
+  function submit(
+    input: AskInput<typeof ASK_ORIGIN.SPOKEN>,
+    revision: number,
+  ): Effect.Effect<LiveBrainSubmission> {
     return Effect.gen(function* () {
       const outcome = yield* acceptAsk(options.asks, input);
       if (Result.isFailure(outcome)) {
@@ -1052,6 +1058,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           clientId: ask.submissionId,
           conversationId: options.conversation.conversationId,
           voice: { sessionId: ask.sessionId, revision: ask.revision },
+          timeZone: options.timeZone,
         },
         ask.revision,
       );
@@ -1079,6 +1086,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
             origin: ASK_ORIGIN.SPOKEN,
             clientId: sessionId,
             conversationId: options.conversation.conversationId,
+            timeZone: options.timeZone,
           },
           0,
         );

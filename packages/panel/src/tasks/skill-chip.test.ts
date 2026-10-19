@@ -168,6 +168,33 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   assert.deepEqual(opened, [RELEASE.path]);
 });
 
+/** The lines a message's first paragraph is drawn on, each line's words as they read. */
+function drawnLines(container: HTMLElement): readonly string[] {
+  const paragraph = container.querySelector("p");
+  assert.ok(paragraph, "the words are drawn as a paragraph");
+  const lines = [""];
+  for (const node of paragraph.childNodes) {
+    if (node.nodeName === "BR") lines.push("");
+    else lines[lines.length - 1] += node.textContent?.replace(/\n/gu, "") ?? "";
+  }
+  return lines;
+}
+
+test("a sent message keeps each line typed on a line of its own, rather than joined into one by a space", async () => {
+  const { container } = await mounted(
+    createElement(SentWords, { text: "First line\nSecond line\nThird line" }),
+  );
+  assert.deepEqual(drawnLines(container), ["First line", "Second line", "Third line"]);
+});
+
+test("a sent message naming a skill keeps its lines too, the skill still its chip", async () => {
+  const { container } = await mounted(
+    createElement(SentWords, { text: "Cut it with /release\nthen tell me." }),
+  );
+  assert.ok(container.querySelector("button[data-skill-ref]"), "the skill is a chip");
+  assert.deepEqual(drawnLines(container), ["Cut it with /release", "then tell me."]);
+});
+
 /** A coding agent's turn that loaded the skill named, as the service stores it. */
 function loadedTurn(skill: string, state = "output-available"): CodingAgentMessage {
   return {

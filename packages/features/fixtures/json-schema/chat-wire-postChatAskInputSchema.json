@@ -14,6 +14,11 @@
       "type": "number",
       "minimum": 0
     },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 250
+    },
     "key": {
       "type": "string",
       "minLength": 1,
@@ -163,6 +168,9 @@
                         },
                         "minItems": 2,
                         "maxItems": 6
+                      },
+                      "recommended": {
+                        "type": "string"
                       }
                     },
                     "required": [

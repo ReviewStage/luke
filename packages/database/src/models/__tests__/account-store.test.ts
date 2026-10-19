@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { EXPERIMENT } from "@luke/settings";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -20,7 +21,9 @@ import {
  * write merges its keys over what stood rather than replacing them, the
  * other parts' writes leave it standing, a key no build lists reads as
  * nothing, it never moves the preferences' instant a Mac reads as a
- * snapshot to take, and one account's choices are no other's.
+ * snapshot to take, and one account's choices are no other's. The link
+ * choice is a part of its own on the same terms: written alone, it moves no
+ * instant, and the shared part's write leaves it standing.
  *
  * Synthetic accounts throughout.
  */
@@ -126,6 +129,22 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       assert.deepEqual((yield* readAccountPreferences(owner))?.experiments, {
         [EXPERIMENT.FACTORY]: true,
       });
+    }),
+  );
+});
+
+it.layer(getTestDB())("the account store's link choice", (it) => {
+  it.effect("is written on its own, stands through a voice write, and moves no instant", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const chosen = yield* writeAccountPreferences(userId, { linkOpen: LINK_OPEN.MAC_APP });
+      assert.deepEqual(chosen.preferences, { linkOpen: LINK_OPEN.MAC_APP });
+      assert.equal(chosen.updatedAt, undefined);
+
+      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      const read = yield* readAccountPreferences(userId);
+      assert.deepEqual(read?.preferences, { voice: "cedar", linkOpen: LINK_OPEN.MAC_APP });
+      assert.deepEqual((yield* readAccountPreferences(yield* openAccount))?.preferences, undefined);
     }),
   );
 });

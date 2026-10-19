@@ -23,7 +23,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortAnswering,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  type SentPortAct,
+} from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -421,13 +427,10 @@ function seen(ref: Element | null): readonly (string | undefined)[] | undefined 
 
 test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
   const drawn = async (caller: PlanEditor | undefined) => {
     const page = mounted(
       createElement(MemberDirectory, {
@@ -526,13 +529,17 @@ test("on the Call tab, a chat call's row opens the task's Chat while the account
 
 test("Luke's working line ends on a Stop that takes the stop key's action on the open task, and a finished turn draws none", async () => {
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, activeTaskId: "task-open" } });
-  const sent: Act[] = [];
+  const sent: (Act | SentPortAct)[] = [];
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const working = workTurn(TASK_WORK_STATE.RUNNING, [words("Reading.")], { startedAt: 5_000 });
   const container = mounted(

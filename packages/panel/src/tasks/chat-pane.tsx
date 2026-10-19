@@ -360,12 +360,18 @@ function whereWords(chat: ChatAnswer, names: ChatNames, entry: ForYouEntry): str
 function PlaceHead({
   title,
   meta,
+  lead,
+  actions,
 }: {
   title: string;
   meta: string | undefined;
+  lead: React.ReactNode;
+  /** The place's own presses at the head's end, a topic's menu. */
+  actions?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-head">
+      {lead}
       <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
         {title}
       </Text>
@@ -374,6 +380,7 @@ function PlaceHead({
           {meta}
         </Text>
       )}
+      {actions === undefined ? null : <span className="chat-head-actions">{actions}</span>}
     </header>
   );
 }
@@ -382,8 +389,9 @@ function PlaceHead({
 function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string | undefined {
   switch (channel.kind) {
     case CHANNEL_KIND.GENERAL:
-    case CHANNEL_KIND.TOPIC:
       return CHANNEL_META[channel.kind];
+    case CHANNEL_KIND.TOPIC:
+      return channel.purpose ?? CHANNEL_META[channel.kind];
     case CHANNEL_KIND.TASK:
       return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
     case CHANNEL_KIND.DM: {
@@ -419,6 +427,9 @@ export function ChatPane({
   openLink,
   onPost,
   onAnswer,
+  lead,
+  channelActions,
+  hidden,
 }: {
   chat: ChatAnswer;
   names: ChatNames;
@@ -431,6 +442,12 @@ export function ChatPane({
   onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask; answers why it was refused, or nothing once it is taken. */
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** What leads the place's head: the way back to the rail, where the place stands alone. */
+  lead?: React.ReactNode;
+  /** The presses a channel's head ends on, a topic's menu; none where the channel offers none. */
+  channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
+  /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
+  hidden?: boolean;
 }): React.JSX.Element {
   const targets = chatTargets(chat, names);
   const keywords = chatKeywords(chat, names);
@@ -449,8 +466,8 @@ export function ChatPane({
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
     return (
-      <section className="chat-stream ph-no-capture" aria-label="For you">
-        <PlaceHead title="For you" meta={FOR_YOU_META} />
+      <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
+        <PlaceHead title="For you" meta={FOR_YOU_META} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (
@@ -475,8 +492,13 @@ export function ChatPane({
   const threads = channelThreads(chat, channel.id);
   const title = channelTitle(chat, names, channel);
   return (
-    <section className="chat-stream ph-no-capture" aria-label={title}>
-      <PlaceHead title={title} meta={channelMeta(chat, names, channel)} />
+    <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
+      <PlaceHead
+        title={title}
+        meta={channelMeta(chat, names, channel)}
+        lead={lead}
+        actions={channelActions?.(channel)}
+      />
       {threads.length === 0 ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
           {NOTHING_POSTED}

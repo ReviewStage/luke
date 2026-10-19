@@ -1,21 +1,25 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type Cause, type Effect, Layer } from "effect";
+import { type Cause, Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, ANY_PATH, type WebRoutes } from "../route.js";
 import type { AdminViewer } from "./admin-access.js";
+import { type AdminCostOptions, handleAdminCost } from "./admin-cost.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin-favorite.js";
 import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js";
+import { type AdminReliabilityOptions, handleAdminReliability } from "./admin-reliability.js";
 import { type AdminUserOptions, handleAdminUser } from "./admin-user.js";
 import { type AdminUsersOptions, handleAdminUsers } from "./admin-users.js";
+import { type AdminWorkspacesOptions, handleAdminWorkspaces } from "./admin-workspaces.js";
 import { adminViewerGate } from "./gate.js";
 import { ADMIN_ROUTE_PATH } from "./http.js";
 import { ADMIN_REFUSAL, adminRefusalResponse } from "./http-effect.js";
 
 /**
- * The dashboard as the one route group its five functions serve: four reads
- * and the Users tab's one star write. Each is its own function and the group
- * declares all five, so a function answers its own address and the admin
+ * The dashboard as the one route group its functions serve: its reads and
+ * the Users tab's one star write. Each is its own function and the group
+ * declares them all, so a function answers its own address and the admin
  * vocabulary's `not-found` anywhere else.
  *
  * What the group owns is the gate, in the order the pages depend on: a method
@@ -33,9 +37,13 @@ export interface AdminSeams {
   /** The browser session the request rides in on; a refusal is an outage, never a sign-out. */
   resolveViewer: (request: Request) => Effect.Effect<AdminViewer | undefined, Cause.UnknownError>;
   readMetrics: AdminMetricsOptions["readMetrics"];
+  /** The Cost screen's read, which prices at the model catalog the instance holds. */
+  readCost: AdminCostOptions<DatabaseServices | ModelCatalog>["readCost"];
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];
   readDay: AdminDayOptions["readDay"];
+  readWorkspaces: AdminWorkspacesOptions["readWorkspaces"];
+  readReliability: AdminReliabilityOptions["readReliability"];
   writeFavorite: AdminFavoriteOptions["writeFavorite"];
 }
 
@@ -59,8 +67,23 @@ function gate(
 }
 
 /**
+ * The cost read behind the same gate. It prices at the model catalog the
+ * instance holds, which is read from the route's own services before the
+ * gate and handed to the read, so the gate stays the database's alone.
+ */
+const costRoute = (seams: AdminSeams) =>
+  Effect.gen(function* () {
+    const catalog = yield* ModelCatalog;
+    return yield* gate(seams, READ_METHOD, (_viewer, request) =>
+      handleAdminCost({ request, readCost: seams.readCost }).pipe(
+        Effect.provideService(ModelCatalog, catalog),
+      ),
+    );
+  });
+
+/**
  * The admin vocabulary's own `not-found`, on the wildcard the router reaches
- * only once all five addresses have failed to match.
+ * only once every address of the group has failed to match.
  */
 const adminNotFoundRoute = HttpRouter.add(
   ANY_METHOD,
@@ -68,8 +91,8 @@ const adminNotFoundRoute = HttpRouter.add(
   adminRefusalResponse(ADMIN_REFUSAL.NOT_FOUND),
 );
 
-/** The group, which is the dashboard's five addresses and the refusal anywhere else. */
-export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
+/** The group, which is the dashboard's addresses and the refusal anywhere else. */
+export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices | ModelCatalog> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,
@@ -78,6 +101,7 @@ export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
         handleAdminMetrics({ request, readMetrics: seams.readMetrics }),
       ),
     ),
+    HttpRouter.add(ANY_METHOD, ADMIN_ROUTE_PATH.COST, costRoute(seams)),
     HttpRouter.add(
       ANY_METHOD,
       ADMIN_ROUTE_PATH.USERS,
@@ -97,6 +121,20 @@ export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
       ADMIN_ROUTE_PATH.DAY,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminDay({ request, readDay: seams.readDay }),
+      ),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ADMIN_ROUTE_PATH.RELIABILITY,
+      gate(seams, READ_METHOD, (_viewer, request) =>
+        handleAdminReliability({ request, readReliability: seams.readReliability }),
+      ),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ADMIN_ROUTE_PATH.WORKSPACES,
+      gate(seams, READ_METHOD, (_viewer, request) =>
+        handleAdminWorkspaces({ request, readWorkspaces: seams.readWorkspaces }),
       ),
     ),
     HttpRouter.add(

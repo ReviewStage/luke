@@ -16,8 +16,8 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  * - a field, a settings row's value, wears an outlined button's hairline,
  *   its words leading, so a picker and the buttons beside it read as one
  *   column.
- * - a filter, one of a row of pills that narrow a list to one kind (⌘K's
- *   All, Tasks, Files), is a quiet capsule until it stands pressed
+ * - a filter, a pill that turns a mode or a kind on (New task's Planning,
+ *   a pull request's reactions), is a quiet capsule until it stands pressed
  *   (`aria-pressed`), when it fills inside the selection's hairline; its
  *   caller holds which one is pressed.
  *

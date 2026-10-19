@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { childTitlesOf } from "@luke/database/models/child-titles";
 import {
   archiveCodingAgent,
   type CodingAgent,
@@ -15,16 +14,11 @@ import { readConversationPicture } from "@luke/database/models/conversation-pict
 import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
-import {
-  type ConversationTarget,
-  type StoreWriter,
-  storeWriter,
-} from "@luke/database/models/writer";
+import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { ACCOUNT_INBOX_ARCHIVED, ACCOUNT_INBOX_QUERY } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
@@ -34,8 +28,6 @@ import {
   type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
-  codingAgentCursorSchema,
-  codingAgentMessageRequestSchema,
   codingAgentPinRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
@@ -72,7 +64,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
+import { unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -184,16 +176,6 @@ import {
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
-  cursorOfWire,
-  cursorToWire,
-  delegationPast,
-  NO_TITLE_AWAITED,
-  type TitleAwaited,
-  type TranscriptPage,
-  titleMayLand,
-  transcriptPast,
-} from "./coder-host/transcript.js";
-import {
   type MemberPullRequest,
   memberPullRequestWrite,
   memberReadToken,
@@ -221,20 +203,9 @@ import {
  * cookie named (`coder-host/stop.ts`'s `eveFor`), which the coder channel
  * mints as the developer's own principal. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
- * status from its newest turn. The transcript
- * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
- * cursor, held open while the agent runs (`packages/service/src/agents/coder-host/transcript.ts`).
- * A message (`POST /api/agents/{id}/messages`) is the developer's words
- * handed to the session the agent runs in, as the request's own caller,
- * with the client's own key for the send, through the one steer
- * path the voice brain's tool shares (`packages/service/src/agents/coder-host/steer.ts`): the
- * words steer the turn under way, or open a turn where none runs, and are
- * written as a user row awaiting its turn, so the transcript shows the
- * line at once and the agent reads as running until the turn that receives
- * the line takes it (`brain-host/relay.ts`). eve answering that the
- * session is still coming up is a conflict the desktop tries again; eve no
- * longer running the session is one it does not, since the agent's sandbox
- * lives with the session. A change of model (`PATCH /api/agents/{id}`) writes the
+ * status from its newest turn. The transcript and a message to the agent
+ * (`/api/agents/{id}/messages`), and a worker's transcript, are the hosted
+ * oRPC router's (`messages-procedures.ts`). A change of model (`PATCH /api/agents/{id}`) writes the
  * choice on the agent's row, checked against the catalog as a Start checks
  * its own; the row is read at every step, so the change is the next step's
  * whether a turn runs or the next one is yet to open, and the account's
@@ -286,24 +257,11 @@ import {
  * those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
- * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
- * is read as the agent's own is, under the agent and eve's id for the
- * delegation call that started the worker, which its tool part in the
- * agent's transcript carries: the child conversation is a function of the
- * two (`@luke/database/models/ids`), and only a delegation recorded under an
- * agent the account reaches answers, so a call of any other agent reads as
- * none. Each worker's title, generated from its task as it starts, is
- * carried on its own page and, for every worker titled so far, on the
- * agent's; a read of an ended agent, or worker, with nothing new waits for a
- * title still due, the agent's own or a worker's, since each can land after
- * the turn ended and a reader stops at that read.
  */
 
 const AGENTS_PATH = {
   /** GET lists the task's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's task id into the `id` query. */
   OF_TASK: "/api/plans/agents",
-  /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
-  MESSAGES: "/api/agents/messages",
   /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, archives it, or pins it for the asking member; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
@@ -325,8 +283,6 @@ const AGENTS_PATH = {
   REVIEW_OPTIONS: "/api/agents/review-options",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
-  /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
-  SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the task's inbox past `after`; the rewrite moves the path's task id into the `id` query. */
   INBOX_OF_TASK: "/api/plans/inbox",
   /** GET reads one agent's inbox past `after`, an agent with no task as much as one on a task; the rewrite moves the path's agent id into the `id` query. */
@@ -389,10 +345,6 @@ const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BOD
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
-/** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
-const MAXIMUM_MESSAGE_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
-
 export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
   /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
@@ -427,53 +379,6 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
-
-/** The cursor the request reads past, or the start where it names none; refused where it names something else. */
-const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const after = readEither(codingAgentCursorSchema)(
-    unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? CODING_AGENT_CURSOR_START),
-  );
-  if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return after.success;
-});
-
-/**
- * What a read of an ended agent, or of its worker, waits on for a title:
- * the worker named, or the agent's own or any of its workers' where none
- * is; nothing on a deployment that generates no titles, which is one
- * without Luke's Anthropic key, the title model's (`coder-host/model.ts`).
- */
-const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  parent: ConversationTarget,
-  childConversationId?: string,
-): Effect.fn.Return<TitleAwaited, never, HostedEnvironment> {
-  const environment = yield* HostedEnvironment;
-  return environment.anthropicKey === undefined
-    ? NO_TITLE_AWAITED
-    : titleMayLand(parent, childConversationId);
-});
-
-/** A page of a transcript as the wire answers it. */
-function transcriptResponse(
-  page: TranscriptPage,
-  title: string | null,
-): HttpServerResponse.HttpServerResponse {
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    messages: page.messages,
-    cursor: cursorToWire(page.cursor),
-    status: page.status,
-    ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
-    ...(page.delegations === undefined ? undefined : { delegations: page.delegations }),
-    ...(page.subagentTitles === undefined ? undefined : { subagentTitles: page.subagentTitles }),
-    ...(page.subagents === undefined ? undefined : { subagents: page.subagents }),
-    title,
-    ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
-    ...(page.usage === undefined ? undefined : { usage: page.usage }),
-    ...(page.context === undefined ? undefined : { context: page.context }),
-  });
-}
 
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
@@ -605,107 +510,6 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
     ),
   });
 });
-
-/** Why a message body was not read as one: its words run past the bound, or it is not a message at all. */
-function messageRefusal(body: UnparsedWireValue): HostedRefusal {
-  if (isRecord(body) && isWireString(body.text)) {
-    if (body.text.trim().length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
-      return HOSTED_REFUSAL.MESSAGE_TOO_LONG;
-    }
-  }
-  return HOSTED_REFUSAL.INVALID_REQUEST;
-}
-
-/**
- * POST sends the agent a message: the developer's words handed to the
- * session the agent runs in as the request's own caller (`eveFor`), through
- * the one steer path the voice brain's tool shares (`coder-host/steer.ts`),
- * with the client's own key for the send.
- */
-const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-  request: Request,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
-  const asked = readEither(codingAgentMessageRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const eve = yield* eveFor(seams, request, userId);
-  yield* steerCodingAgent(eve, writer, userId, agent, {
-    ...asked.success,
-    sender: { kind: MESSAGE_SENDER.MEMBER, userId },
-  });
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-    agent: yield* summaryOf(userId, agent),
-  });
-});
-
-/** GET reads the agent's transcript past the cursor, held open while the agent is starting or runs, with the agent's status as the page was read; POST sends the agent a message. */
-const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  if (incoming.method === HTTP_METHOD.POST) {
-    return yield* sendMessageEndpoint(seams, writer, request);
-  }
-  const after = yield* cursorOf(request);
-  const { userId, agent, target } = yield* reachedAgent(seams, request);
-  const titleAwaited = yield* titleAwaitedOf(target);
-  const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
-  );
-  // The title is read after the page, since it lands after a turn ends, which a held read may span.
-  const titled = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agent.id));
-  return transcriptResponse(
-    page,
-    Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
-  );
-});
-
-/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
-const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
-  function* (
-    seams: CodingAgentsAppSeams,
-  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    if (incoming.method !== HTTP_METHOD.GET) {
-      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    }
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const after = yield* cursorOf(request);
-    const callId = yield* callIdOf(request);
-    const { agent, target } = yield* reachedAgent(seams, request);
-    const conversationId = childConversationId(agent.conversationId, callId);
-    const read = yield* hostedStoreOrUnavailable(delegationPast(target, conversationId, agent));
-    if (read.delegation === undefined) {
-      if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return transcriptResponse(
-        { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
-        null,
-      );
-    }
-    const titleAwaited = yield* titleAwaitedOf(target, conversationId);
-    const page = yield* hostedStoreOrUnavailable(
-      transcriptPast(
-        { userId: agent.userId, conversationId },
-        CODER_TOOL_SET,
-        cursorOfWire(after),
-        { createdAt: read.delegation.createdAt },
-        undefined,
-        titleAwaited,
-      ),
-    );
-    // The title is read after the page, since it lands beside the worker's start, which a held read may span.
-    const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
-    return transcriptResponse(page, titles.get(conversationId) ?? null);
-  },
-);
 
 /**
  * PATCH changes the agent for what follows, and answers it as it then
@@ -1800,11 +1604,6 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.OF_WORKSPACE,
           hostedRefusing(workspaceAgentsEndpoint(seams)),
         ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.MESSAGES,
-          hostedRefusing(messagesEndpoint(seams, writer)),
-        ),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(agentEndpoint(seams, writer))),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
@@ -1851,11 +1650,6 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.REVIEW_OPTIONS,
           hostedRefusing(reviewOptionsEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.SUBAGENT_MESSAGES,
-          hostedRefusing(subagentMessagesEndpoint(seams)),
         ),
         HttpRouter.add(
           ANY_METHOD,

@@ -44,15 +44,9 @@ import {
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { attachment } from "../schemas/attachment.js";
 import { member, organization, user } from "../schemas/auth.js";
-import {
-  chatAttachment,
-  chatChannel,
-  chatMember,
-  chatMessage,
-  chatRead,
-  workspaceChat,
-} from "../schemas/chat.js";
+import { chatChannel, chatMember, chatMessage, chatRead, workspaceChat } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -175,6 +169,7 @@ const ChatChannelRowSchema = Schema.Struct({
   dmAMemberId: Schema.NullOr(Schema.String),
   dmBMemberId: Schema.NullOr(Schema.String),
   createdByMemberId: Schema.NullOr(Schema.String),
+  purpose: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
 });
@@ -298,6 +293,7 @@ const CHANNEL_COLUMNS = {
   dmAMemberId: chatChannel.dmAMemberId,
   dmBMemberId: chatChannel.dmBMemberId,
   createdByMemberId: chatChannel.createdByMemberId,
+  purpose: chatChannel.purpose,
   createdAt: chatChannel.createdAt,
   archivedAt: chatChannel.archivedAt,
 };
@@ -644,6 +640,7 @@ const insertChannel = SqlSchema.findAll({
     dmAMemberId: Schema.NullOr(Schema.String),
     dmBMemberId: Schema.NullOr(Schema.String),
     createdByMemberId: Schema.NullOr(Schema.String),
+    purpose: Schema.optionalKey(Schema.NullOr(Schema.String)),
     archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     now: Schema.Date,
   }),
@@ -654,6 +651,7 @@ const insertChannel = SqlSchema.findAll({
         .insert(chatChannel)
         .values({
           archivedAt: row.archivedAt ?? null,
+          purpose: row.purpose ?? null,
           organizationId: row.organizationId,
           kind: row.kind,
           name: row.name,
@@ -1438,6 +1436,7 @@ export function openTopicChannel(
   organizationId: string,
   name: string,
   openedBy: string,
+  purpose: string | null = null,
 ): ChatStoreEffect<Result.Result<ChatChannelRow, ChatRefusal>> {
   return transaction(
     Effect.gen(function* () {
@@ -1468,9 +1467,98 @@ export function openTopicChannel(
         dmAMemberId: null,
         dmBMemberId: null,
         createdByMemberId: openedBy,
+        purpose,
         now,
       });
       return made === undefined ? Result.fail(CHAT_REFUSAL.NAME_TAKEN) : Result.succeed(made);
+    }),
+  );
+}
+
+/** What an edit of a topic channel changes: its name, its purpose (null to say none), and whether it stands archived; each left out stays as it was. */
+export interface ChatChannelEdit {
+  readonly name?: string;
+  readonly purpose?: string | null;
+  readonly archived?: boolean;
+}
+
+const updateTopicChannel = SqlSchema.findAll({
+  Request: Schema.Struct({
+    channelId: Schema.String,
+    name: Schema.String,
+    purpose: Schema.NullOr(Schema.String),
+    archivedAt: Schema.NullOr(Schema.Date),
+  }),
+  Result: ChatChannelRowSchema,
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(chatChannel)
+        .set({ name: row.name, purpose: row.purpose, archivedAt: row.archivedAt })
+        .where(and(eq(chatChannel.id, row.channelId), eq(chatChannel.kind, CHANNEL_KIND.TOPIC)))
+        .returning(CHANNEL_COLUMNS),
+    ),
+});
+
+/**
+ * A topic channel renamed, its purpose said or cleared, or archived or
+ * brought back, by a member of the workspace who has not left: a person or
+ * an agent alike, since a topic is the room's own. Only a topic is edited
+ * here, because #general's name is the service's, a plan's channel follows
+ * its plan, and a DM has none. A name already standing, the general
+ * channel's included, refuses the rename; an archive frees the topic's
+ * place under the bound and a return takes one, so a workspace at the
+ * bound brings none back. Answers the channel as it then stands.
+ */
+export function editTopicChannel(
+  userId: string,
+  organizationId: string,
+  editorMemberId: string,
+  channelId: string,
+  edit: ChatChannelEdit,
+): ChatStoreEffect<Result.Result<ChatChannelRow, ChatRefusal>> {
+  return transaction(
+    Effect.gen(function* () {
+      if (!(yield* lockedFor(userId, organizationId))) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      const editor = yield* findMemberInWorkspace({ organizationId, memberId: editorMemberId });
+      if (Option.isNone(editor) || !actsAs(userId, editor.value)) {
+        return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      }
+      if (editor.value.leftAt !== null) return Result.fail(CHAT_REFUSAL.AUTHOR_LEFT);
+      const found = yield* findChannelInWorkspace({ organizationId, channelId });
+      if (Option.isNone(found) || found.value.kind !== CHANNEL_KIND.TOPIC) {
+        return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+      }
+      const channel = found.value;
+      const name = edit.name ?? channel.name ?? "";
+      if (name !== channel.name) {
+        if (name === GENERAL_CHANNEL) return Result.fail(CHAT_REFUSAL.NAME_TAKEN);
+        if (Option.isSome(yield* findChannelByName({ organizationId, name }))) {
+          return Result.fail(CHAT_REFUSAL.NAME_TAKEN);
+        }
+      }
+      const returning = edit.archived === false && channel.archivedAt !== null;
+      if (returning) {
+        const { open } = yield* countOpenTopics({ organizationId }).pipe(
+          Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+        );
+        if (open >= CHAT_BOUNDS.MAX_TOPIC_CHANNELS)
+          return Result.fail(CHAT_REFUSAL.TOO_MANY_TOPICS);
+      }
+      const now = yield* DateTime.nowAsDate;
+      const archivedAt =
+        edit.archived === undefined
+          ? channel.archivedAt
+          : edit.archived
+            ? (channel.archivedAt ?? now)
+            : null;
+      const [updated] = yield* updateTopicChannel({
+        channelId,
+        name,
+        purpose: edit.purpose === undefined ? channel.purpose : edit.purpose,
+        archivedAt,
+      });
+      return updated === undefined ? Result.fail(CHAT_REFUSAL.NOT_FOUND) : Result.succeed(updated);
     }),
   );
 }
@@ -2566,12 +2654,12 @@ const insertAttachment = SqlSchema.void({
     bytes: Schema.Uint8Array,
     now: Schema.Date,
   }),
-  execute: ({ now, ...attachment }) =>
+  execute: ({ now, messageId, ...picture }) =>
     // A picture already kept under its id stays as it was kept.
     Database.use((db) =>
       db
-        .insert(chatAttachment)
-        .values({ ...attachment, createdAt: now })
+        .insert(attachment)
+        .values({ ...picture, chatMessageId: messageId, createdAt: now })
         .onConflictDoNothing(),
     ),
 });
@@ -2582,14 +2670,11 @@ const deleteOtherAttachments = SqlSchema.void({
   execute: ({ messageId, kept }) =>
     Database.use((db) =>
       db
-        .delete(chatAttachment)
+        .delete(attachment)
         .where(
           kept.length === 0
-            ? eq(chatAttachment.messageId, messageId)
-            : and(
-                eq(chatAttachment.messageId, messageId),
-                notInArray(chatAttachment.id, [...kept]),
-              ),
+            ? eq(attachment.chatMessageId, messageId)
+            : and(eq(attachment.chatMessageId, messageId), notInArray(attachment.id, [...kept])),
         ),
     ),
 });
@@ -2604,13 +2689,13 @@ const findAttachment = SqlSchema.findOneOption({
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ contentType: chatAttachment.contentType, bytes: chatAttachment.bytes })
-        .from(chatAttachment)
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
         .where(
           and(
-            eq(chatAttachment.organizationId, key.organizationId),
-            eq(chatAttachment.messageId, key.messageId),
-            eq(chatAttachment.id, key.attachmentId),
+            eq(attachment.organizationId, key.organizationId),
+            eq(attachment.chatMessageId, key.messageId),
+            eq(attachment.id, key.attachmentId),
           ),
         ),
     ),
@@ -2673,7 +2758,8 @@ export function attachMessageImages(
       const named = namedPictures(message.value.blocks);
       if (!images.every((image) => named.has(image.id))) return false;
       const now = yield* DateTime.nowAsDate;
-      yield* deleteOtherAttachments({ messageId, kept: images.map((image) => image.id) });
+      const kept = images.map((image) => image.id);
+      yield* deleteOtherAttachments({ messageId, kept });
       yield* Effect.forEach(images, (image) =>
         insertAttachment({
           id: image.id,
@@ -2901,16 +2987,17 @@ const moveMessage = SqlSchema.void({
     ),
 });
 
+/** The channel's pictures moved to the workspace. */
 const moveAttachments = SqlSchema.void({
   Request: Schema.Struct({ channelId: Schema.String, organizationId: Schema.String }),
   execute: ({ channelId, organizationId }) =>
     Database.use((db) =>
       db
-        .update(chatAttachment)
+        .update(attachment)
         .set({ organizationId })
         .where(
           inArray(
-            chatAttachment.messageId,
+            attachment.chatMessageId,
             queryBuilder
               .select({ id: chatMessage.id })
               .from(chatMessage)

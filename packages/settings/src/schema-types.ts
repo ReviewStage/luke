@@ -51,6 +51,8 @@ export const SETTING_SECTION = {
   VIDEO_CALLS: "video-calls",
   /** How code and diffs are drawn, a group of its own under Appearance's own rows. */
   DIFFS: "diffs",
+  /** Where the account's Luke links open, a group of its own on Profile, under who is signed in. */
+  LINKS: "links",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];

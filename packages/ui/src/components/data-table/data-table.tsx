@@ -132,6 +132,7 @@ export function DataTable<Row, Key extends string = string>({
   sort,
   onSort,
   onRowPress,
+  rowPressable,
 }: {
   /** What the table holds, for a reader moving between tables. */
   label: string;
@@ -147,6 +148,8 @@ export function DataTable<Row, Key extends string = string>({
   onSort?: ((key: Key) => void) | undefined;
   /** A press on a row outside its cells' own controls. */
   onRowPress?: ((row: Row) => void) | undefined;
+  /** Whether a row takes `onRowPress`, where some rows have nothing to open; every row does where left out. */
+  rowPressable?: ((row: Row) => boolean) | undefined;
 }): React.JSX.Element {
   if (rows.length === 0) {
     return (
@@ -169,30 +172,33 @@ export function DataTable<Row, Key extends string = string>({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                className="luke-data-table-row"
-                data-pressable={onRowPress ? "true" : undefined}
-                onClick={
-                  onRowPress
-                    ? (event) => {
-                        if (!onOwnControl(event)) onRowPress(row);
-                      }
-                    : undefined
-                }
-              >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className="luke-data-table-cell"
-                    data-kind={column.kind ?? DATA_TABLE_COLUMN_KIND.TEXT}
-                  >
-                    {column.cell(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const press = onRowPress && (rowPressable?.(row) ?? true) ? onRowPress : undefined;
+              return (
+                <tr
+                  key={rowKey(row)}
+                  className="luke-data-table-row"
+                  data-pressable={press ? "true" : undefined}
+                  onClick={
+                    press
+                      ? (event) => {
+                          if (!onOwnControl(event)) press(row);
+                        }
+                      : undefined
+                  }
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className="luke-data-table-cell"
+                      data-kind={column.kind ?? DATA_TABLE_COLUMN_KIND.TEXT}
+                    >
+                      {column.cell(row)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

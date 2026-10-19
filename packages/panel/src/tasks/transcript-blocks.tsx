@@ -90,6 +90,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import remarkBreaks from "remark-breaks";
 import {
   type Components,
   defaultRehypePlugins,
@@ -353,6 +354,19 @@ function PictureElement({ node }: ExtraProps): ReactNode {
 const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
 
 /**
+ * The steps a message someone typed is read with: a transcript's, with each
+ * line break typed kept as one. Note that Markdown joins two lines with no
+ * blank line between them into one, which is right for words a model wrote
+ * and wrong for words a person typed line by line into a box whose Enter is
+ * a new line, as GitHub keeps a comment's line breaks for the same reason.
+ */
+const TYPED_REMARK_PLUGINS = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkBreaks,
+  () => markLinks,
+];
+
+/**
  * A link in a transcript's words: the chip that opens what it names
  * (`mention-chip.tsx`) where its target names a mention, read against the
  * task's page it is drawn on, or the window's doors off one; a link as any
@@ -402,9 +416,32 @@ const TRANSCRIPT_COMPONENTS: Components = {
 /**
  * How a picture GitHub's rendering names is drawn by the place drawing the
  * words: its own image, read through the service, or nothing where the
- * place draws none, which draws its link instead.
+ * place draws none, which draws its link instead. `linked` says it stands
+ * inside a link the words keep, which a press on it follows, so the place
+ * gives it no press of its own.
  */
-export type GitHubPictureDrawer = (src: string, alt: string) => ReactNode | undefined;
+export type GitHubPictureDrawer = (
+  src: string,
+  alt: string,
+  linked: boolean,
+) => ReactNode | undefined;
+
+/** Whether what is drawn stands inside a link of GitHub's words. */
+const InsideGitHubLink = createContext(false);
+
+/** A picture of GitHub's words, drawn by its place, or as its link where the place draws none. */
+function GitHubImage({
+  src,
+  alt,
+  picture,
+}: {
+  src: string;
+  alt: string;
+  picture: GitHubPictureDrawer;
+}): ReactNode {
+  const linked = useContext(InsideGitHubLink);
+  return picture(src, alt, linked) ?? <GitHubPictureLink src={src} alt={alt} />;
+}
 
 /** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
 export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): ReactNode {
@@ -451,11 +488,16 @@ export function GitHubWords({
   const components = useMemo<Components>(
     () => ({
       ...TRANSCRIPT_COMPONENTS,
-      img: ({ src, alt }) => {
-        const address = String(src ?? "");
-        const words = String(alt ?? "");
-        return picture(address, words) ?? <GitHubPictureLink src={address} alt={words} />;
-      },
+      a: ({ href, children, node }) => (
+        <InsideGitHubLink.Provider value={true}>
+          <TranscriptLink href={href} words={node === undefined ? "" : wordsOf(node)}>
+            {children}
+          </TranscriptLink>
+        </InsideGitHubLink.Provider>
+      ),
+      img: ({ src, alt }) => (
+        <GitHubImage src={String(src ?? "")} alt={String(alt ?? "")} picture={picture} />
+      ),
     }),
     [picture],
   );
@@ -490,17 +532,21 @@ export interface TranscriptElement {
 export function TranscriptWords({
   text,
   element,
+  typed = false,
 }: {
   text: string;
   element?: TranscriptElement | undefined;
+  /** Whether a person typed the words, whose every line break is kept (`TYPED_REMARK_PLUGINS`). */
+  typed?: boolean | undefined;
 }): ReactNode {
+  const remarkPlugins = typed ? TYPED_REMARK_PLUGINS : TRANSCRIPT_REMARK_PLUGINS;
   if (element === undefined) {
     return (
       <TranscriptMarkdownSource markdown={text}>
         <MessageResponse
           mode="static"
           components={TRANSCRIPT_COMPONENTS}
-          remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+          remarkPlugins={remarkPlugins}
           allowedTags={MENTION_TAGS}
         >
           {text}
@@ -514,7 +560,7 @@ export function TranscriptWords({
       <MessageResponse
         mode="static"
         components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
-        remarkPlugins={TRANSCRIPT_REMARK_PLUGINS}
+        remarkPlugins={remarkPlugins}
         allowedTags={{ ...MENTION_TAGS, [element.tag]: [...element.attributes] }}
         literalTagContent={[element.tag]}
       >

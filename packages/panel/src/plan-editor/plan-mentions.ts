@@ -21,8 +21,9 @@ import { MENTION_NODE } from "./mention-node.js";
  * plan-mentions.ts -- the plan editor's `@`: the word the caret ends reported to the panel, the mention it picks written in its place, and a mention of a heading the developer renames named again with the new words.
  *
  * An `@` at the start of a word, outside code, opens the panel's list
- * (`onTrigger`): the word runs from the `@` to the caret, up to four words
- * of its own, since a section's heading has spaces in it. A pick replaces the
+ * (`onTrigger`): the word runs from the `@` to the caret, up to six words
+ * of its own, since a section's heading has spaces in it, and a date's
+ * range runs as long as `next fri at 3pm to 5pm`. A pick replaces the
  * word with the mention's node and a space (`chooseMention`), the caret
  * after the space. The keys the list takes are the panel's first
  * (`../plan-editor.ts`'s `handleKeyDown`).
@@ -45,8 +46,8 @@ const SECTION_LEVELS = new Set([1, 2]);
 /** What a change that named mentions again is tagged with, so it names none of its own. */
 const RETARGETED_META = "luke-plan-retargeted";
 
-/** The `@` word the caret ends: `@`, at the start of a word, then up to four words with no bracket, parenthesis, or `@` in them. */
-const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
+/** The `@` word the caret ends: `@`, at the start of a word, then up to six words with no bracket, parenthesis, or `@` in them. */
+const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,5})?)$/u;
 
 /** The character an inline node that is no text stands for in its block's words, one position wide as the node is. */
 const LEAF_CHARACTER = "￼";

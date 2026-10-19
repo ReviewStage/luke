@@ -20,16 +20,14 @@ import {
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -227,14 +225,6 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST && automationsHeld) {
         return new Promise(() => undefined);
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && membersHeld) {
-        return new Promise((resolve) => {
-          answerMembers = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && !membersRefused) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
         const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -245,9 +235,6 @@ beforeEach(() => {
           value: { automations: AUTOMATIONS },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ && !formerRefused) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
         const value: CodingAgentInboxAnswerView = {
           items: INBOXES.get(request.payload.taskId) ?? [],
@@ -257,6 +244,18 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      if (membersHeld) {
+        return new Promise((resolve) => {
+          answerMembers = () => resolve(MEMBERS);
+        });
+      }
+      return membersRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(MEMBERS);
+    },
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () =>
+      formerRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(FORMER),
   });
 });
 
@@ -301,6 +300,8 @@ function mountWith(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      listed: false,
+      onListed: () => undefined,
       pages: undefined,
       onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
@@ -372,6 +373,7 @@ test("a teammate's page names them as the members read does and lists their work
     "Waiting on their answer": ["Retry 429s too?"],
     Created: ["Relay retries on 502", "Retry budget dashboard"],
     Agents: ["Tenant cache keys"],
+    Automations: ["Morning Sentry triage"],
   });
 });
 
@@ -384,6 +386,7 @@ test("the reader's own page says You and what waits on them", async () => {
     "Working now": ["Limiter flag"],
     "Waiting on you": ["Ship the limiter at 10%?"],
     "Created by you": ["Edge cache keys"],
+    Automations: ["Weekly dependency bumps"],
   });
 });
 
@@ -555,6 +558,14 @@ test("Copy link copies their page's link under the slug of the workspace it stan
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
+test("a page whose workspace is not known offers no Copy link, rather than a link naming no workspace", async () => {
+  const { page } = mountWith({ workspace: undefined, workspaces: [] }, CHARLES.userId);
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="More"]')?.click());
+  assert.doesNotMatch(document.body.textContent ?? "", /Copy link/u);
+});
+
 test("a page for someone neither the members nor those who left name, as a link from outside the workspace opens, says it is not found", async () => {
   const { page } = mount("user-stranger");
   await settle();
@@ -571,23 +582,16 @@ test("someone who left heads their page with their own picture", async () => {
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
-test("with Automations on, a person's page lists the workspace's automations they made, never their own personal ones", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+test("a person's page lists the workspace's automations they made, never their own personal ones", async () => {
+  handState({});
   const { page } = mount(CHARLES.userId);
   await settle();
 
   assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
 });
 
-test("with Automations off, a person's page reads no automations and lists none", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-
-  assert.equal(sections(page).Automations, undefined);
-});
-
 test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   automationsRefused = true;
   const { page } = mount("user-sam");
   await settle();
@@ -604,7 +608,7 @@ test("automations that could not be read say so and offer Retry, never passing f
 });
 
 test("automations that could not be read leave the Inbox still being read saying so, each read saying its own state", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   automationsRefused = true;
   inboxHeld = true;
   const { page } = mount("user-sam");
@@ -617,7 +621,7 @@ test("automations that could not be read leave the Inbox still being read saying
 });
 
 test("while the Inbox and the automations are read, placeholder rows stand for each, never a spinner", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   inboxHeld = true;
   automationsHeld = true;
   const { page } = mount("user-sam");

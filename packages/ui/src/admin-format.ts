@@ -20,6 +20,53 @@ export function formatNumber(value: number): string {
   return numberFormat.format(value);
 }
 
+/**
+ * A share of some whole, drawn as a percentage to one place, e.g. "1.4%",
+ * or a dash where there was no whole to take a share of.
+ */
+export function formatShare(share: number | null): string {
+  if (share === null) return "—";
+  return `${(share * 100).toFixed(1)}%`;
+}
+
+const compactFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** A large count drawn short, e.g. "1.9M", where the exact figure would only be noise. */
+export function formatCompact(value: number): string {
+  return compactFormat.format(value);
+}
+
+/** From here a dollar figure drops its cents: they are noise beside the thousands. */
+const WHOLE_DOLLARS_FROM = 1_000;
+
+const centsFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const dollarsFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+/**
+ * Dollars as a maintainer reads a bill, e.g. "$38,210" or "$6.42". A figure
+ * above nothing that rounds to no cent says it is under one, so a real
+ * spend never reads as free.
+ */
+export function formatUsd(value: number): string {
+  if (value > 0 && value < 0.005) return "<$0.01";
+  return Math.abs(value) >= WHOLE_DOLLARS_FROM
+    ? dollarsFormat.format(value)
+    : centsFormat.format(value);
+}
+
 /** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
 export function formatDate(epochMs: number): string {
   return new Date(epochMs).toLocaleDateString("en-US", {

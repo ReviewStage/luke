@@ -1,0 +1,255 @@
+/* choice-bar.css -- a bar of options where you choose one, in its two looks.
+
+   Each option is its glyph, its name, and a quiet count, drawn over the
+   thumb: one element under the chosen option that slides to the next as
+   the choice moves (`choice-bar.tsx` measures it there). Fill is the
+   window's own selected state, a sidebar row's: plain words at the
+   control's height, the thumb a fill under the chosen one, and no hairline,
+   which a header's band draws. Narrower than its options need, a fill bar
+   scrolls sideways, and an option other than the chosen one keeps its
+   glyph and its count, its name left to a reader who cannot see it.
+   Segmented is a trough, the thumb raised in it on a hairline and a soft
+   shadow, its options wrapping inside it when too wide for the row, so the
+   last never stands past the row's edge. */
+
+@layer components {
+  .luke-choice-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .luke-choice-bar-option {
+    /* Note that an option stands over the thumb, which is drawn before it. */
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-6);
+    margin: 0;
+    border: 0;
+    border-radius: var(--luke-control-radius);
+    /* Note that an option draws the keyboard's ring inside itself, because
+       a scrolling row or a trough leaves it no room for one outside. */
+    outline-offset: var(--luke-focus-ring-inset);
+    background: none;
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
+  }
+
+  [data-luke-profile="desktop"] .luke-choice-bar-option {
+    cursor: default;
+  }
+
+  .luke-choice-bar-option:hover:not(:disabled),
+  .luke-choice-bar-option:is([aria-selected="true"], [aria-checked="true"]) {
+    color: var(--luke-color-text);
+  }
+
+  .luke-choice-bar-option:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .luke-choice-bar-icon,
+  .luke-count-glyph {
+    display: inline-flex;
+  }
+
+  .luke-choice-bar-icon > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-choice-bar-count {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-count-part {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+  }
+
+  .luke-count-glyph > svg {
+    width: var(--luke-type-caption-size);
+    height: var(--luke-type-caption-size);
+  }
+
+  /* A part's tone holds whether its option is chosen or not. */
+  .luke-count-part[data-tone="complete"] {
+    color: var(--luke-color-complete);
+  }
+
+  .luke-count-part[data-tone="attention"] {
+    color: var(--luke-color-attention);
+  }
+
+  .luke-count-part[data-tone="danger"] {
+    color: var(--luke-color-danger-text);
+  }
+
+  /* The thumb stands where the row last measured its chosen option, hidden
+     while none is chosen or drawn; it slides only once it has shown, and on
+     its transform alone, its box landing at once (`choice-bar.tsx`). */
+  .luke-choice-bar-thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+    width: var(--luke-choice-bar-thumb-width);
+    height: var(--luke-choice-bar-thumb-height);
+    border-radius: var(--luke-control-radius);
+    transform: translate(var(--luke-choice-bar-thumb-x), var(--luke-choice-bar-thumb-y))
+      scale(var(--luke-choice-bar-thumb-scale-x), var(--luke-choice-bar-thumb-scale-y));
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+
+  .luke-choice-bar[data-thumb] .luke-choice-bar-thumb {
+    display: block;
+  }
+
+  .luke-choice-bar[data-thumb="sliding"] .luke-choice-bar-thumb {
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .luke-choice-bar[data-thumb="sliding"] .luke-choice-bar-thumb {
+      transition: none;
+    }
+  }
+
+  /* Fill ---------------------------------------------------------------- */
+
+  /* Note that a fill bar measures itself against its container for its
+     narrow look, so it takes its container's width, in a column that lines
+     its children up at the start as in any other. */
+  .luke-choice-bar[data-look="fill"] {
+    flex: none;
+    align-self: stretch;
+    gap: var(--luke-space-2);
+    overflow-x: auto;
+    container: luke-choice-bar / inline-size;
+    scrollbar-width: none;
+  }
+
+  .luke-choice-bar[data-look="fill"] .luke-choice-bar-option {
+    height: var(--luke-control-height);
+    padding: 0 var(--luke-space-8);
+  }
+
+  .luke-choice-bar[data-look="fill"]
+    .luke-choice-bar-option:hover:not(:disabled):not(
+      [aria-selected="true"],
+      [aria-checked="true"]
+    ) {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-choice-bar[data-look="fill"] .luke-choice-bar-thumb {
+    background: var(--luke-color-fill-strong);
+  }
+
+  /* Compact is a step smaller, in the caption's type, its options' room
+     taken in around their words, so a narrow column names every one. */
+  .luke-choice-bar[data-look="fill"][data-size="compact"] {
+    gap: 0;
+  }
+
+  .luke-choice-bar[data-look="fill"][data-size="compact"] .luke-choice-bar-option {
+    height: calc(var(--luke-control-height) - var(--luke-space-4));
+    gap: var(--luke-space-4);
+    padding: 0 var(--luke-space-6);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* Note that the room either side of the measure is a share of the row's
+     own width, which is its container's, so the options centre with the
+     page. */
+  .luke-choice-bar[data-look="fill"][data-inset="reading"] {
+    padding-inline: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
+  }
+
+  /* A narrow column's row stands its options in from its edges as far as
+     the column's own rows stand their words. */
+  .luke-choice-bar[data-look="fill"][data-inset="column"] {
+    padding-inline: var(--luke-space-12);
+  }
+
+  /* Narrower than its options need, a fill bar shows an option other than
+     the chosen one by its glyph alone. Note that it does so only while one
+     is chosen, because a clearable bar with none chosen would otherwise
+     name none of its options. */
+  @container luke-choice-bar (width < 520px) {
+    .luke-choice-bar:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
+      .luke-choice-bar-icon
+      + .luke-choice-bar-label {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* Segmented ------------------------------------------------------------ */
+
+  .luke-choice-bar[data-look="segmented"] {
+    display: inline-flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: var(--luke-space-2);
+    width: fit-content;
+    padding: var(--luke-space-2);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-choice-bar[data-look="segmented"] .luke-choice-bar-option {
+    height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+    padding: 0 var(--luke-space-12);
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+  }
+
+  .luke-choice-bar[data-look="segmented"][data-size="compact"] .luke-choice-bar-option {
+    height: calc(var(--luke-control-height) - 2 * var(--luke-space-4));
+    gap: var(--luke-space-4);
+    padding: 0 var(--luke-space-8);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-choice-bar[data-look="segmented"] .luke-choice-bar-thumb {
+    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+    background: var(--luke-color-thumb);
+    box-shadow:
+      0 0 0 0.5px var(--luke-color-border-strong),
+      0 1px 2px var(--luke-color-shadow-soft);
+  }
+
+  /* The site's muted ink holds AA on its page's ground and not on the
+     trough, so its options are drawn in the text's own ink, the chosen one
+     standing out on its thumb. */
+  [data-luke-profile="web"] .luke-choice-bar[data-look="segmented"] .luke-choice-bar-option {
+    color: var(--luke-color-text);
+  }
+}

@@ -1,6 +1,9 @@
 import {
   BUTTON_VARIANT,
   Button,
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   DETAIL_PAGE_INSET,
   DetailPage,
   EllipsisIcon,
@@ -9,8 +12,6 @@ import {
   PAGE_FRAME,
   PencilIcon,
   Stack,
-  TABS_INSET,
-  Tabs,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -155,13 +156,14 @@ function TaskInPanel(): React.JSX.Element {
       label="Conversation"
       inset={DETAIL_PAGE_INSET.READING}
       toolbar={
-        <Tabs
+        <ChoiceBar
           label="Task"
-          tabs={PANEL_TABS}
+          items={PANEL_TABS}
           value="conversation"
           onChange={() => undefined}
-          ids={(value) => ({ tab: `panel-${value}-tab`, panel: `panel-${value}-panel` })}
-          inset={TABS_INSET.READING}
+          look={CHOICE_BAR_LOOK.FILL}
+          panels={(value) => ({ tab: `panel-${value}-tab`, panel: `panel-${value}-panel` })}
+          inset={CHOICE_BAR_INSET.READING}
         />
       }
     >

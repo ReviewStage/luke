@@ -1,14 +1,8 @@
-import { EXCESS_KEYS, HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  type AccountCallEffects,
-  accountCall,
-  type CallAnswer,
-  type CallCredential,
-  callAnswered,
-} from "./account-call.js";
+import { type CallCredential, resolvedCredential } from "./account-call.js";
+import type { integrationStatusesReadSchema } from "./contract/integrations.js";
+import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -27,29 +21,18 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-  integrationAccountAnswerSchema,
   integrationAccountSchema,
-  integrationConnectAnswerSchema,
   integrationProviderSchema,
   integrationSignInFailureSchema,
-  integrationStatusAnswerSchema,
-  integrationToolsAnswerSchema,
 } from "./integration-wire.js";
-import {
-  HOSTED_SERVICE_PATH,
-  integrationCancelPath,
-  integrationConnectPath,
-  integrationDisconnectPath,
-  integrationRenamePath,
-  integrationToolsPath,
-} from "./service-paths.js";
-import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * integration-client.ts -- the window's side of the account's integrations, as the host asks the service for them.
  *
- * Every call is the one account call, so the bearer is read fresh per
- * attempt and a 401 is renewed and retried once. Each call answers what
+ * Every call is a procedure of the hosted contract (`contract/integrations.ts`),
+ * carried by the one account call (`hosted-link.ts`), so the bearer is read
+ * fresh per attempt and a 401 is renewed and retried once. Each call answers what
  * the service said or why there is no answer, never a failure, because
  * every caller does the same with one: says why, and offers to try again.
  */
@@ -65,19 +48,6 @@ export interface HostedIntegrationsClientOptions {
 type Failed = { readonly failure: IntegrationCallFailure };
 
 const UNANSWERED: Failed = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
-
-/**
- * Where every provider's connection stands, as a desktop reads the answer:
- * every status kept in words, because a service older than the desktop names
- * fewer providers and a newer one may name a status this build does not know,
- * and each sign-in failure kept unread until it is read one at a time.
- */
-const integrationStatusesReadSchema = Schema.Struct({
-  integrations: Schema.Record(Schema.String, Schema.String),
-  accounts: Schema.optionalKey(Schema.Array(Schema.Unknown)),
-  addable: Schema.optionalKey(Schema.Array(Schema.Unknown)),
-  signInFailures: Schema.optionalKey(Schema.Array(Schema.Unknown)),
-});
 
 const STATUSES: ReadonlySet<string> = new Set(Object.values(INTEGRATION_STATUS));
 
@@ -145,66 +115,82 @@ function integrationStatusesViewOf(
   };
 }
 
+/** Whether a read holds a sign-in still under way, at a provider's first account or any other. */
+function holdsPending(read: typeof integrationStatusesReadSchema.Type): boolean {
+  return (
+    Object.values(read.integrations).includes(INTEGRATION_STATUS.PENDING) ||
+    accountsFromRead(read).some((account) => account.status === INTEGRATION_STATUS.PENDING)
+  );
+}
+
 /** Which account a call is about, and on a Connect whether it signs in a new one: none named is the provider's first. */
 export interface IntegrationAccountTarget {
   readonly connection?: string | undefined;
   readonly add?: boolean | undefined;
 }
 
-/** A provider's route with the account it is about in its query; the path alone for the provider's first account. */
-function accountPath(path: string, target: IntegrationAccountTarget = {}): string {
-  const query = new URLSearchParams();
-  if (target.connection !== undefined) query.set(INTEGRATION_QUERY.CONNECTION, target.connection);
-  if (target.add === true) query.set(INTEGRATION_QUERY.ADD, INTEGRATION_ADD_ACCOUNT);
-  const spelled = query.toString();
-  return spelled === "" ? path : `${path}?${spelled}`;
+/** The query a provider's procedure names the account in; nothing for the provider's first account. */
+function accountQuery(target: IntegrationAccountTarget = {}) {
+  return {
+    ...(target.connection !== undefined
+      ? { [INTEGRATION_QUERY.CONNECTION]: target.connection }
+      : undefined),
+    ...(target.add === true ? { [INTEGRATION_QUERY.ADD]: INTEGRATION_ADD_ACCOUNT } : undefined),
+  };
 }
 
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
+/** A provider's input in parts: the path's provider, and the query only where it names something. */
+function accountInput(provider: IntegrationProvider, target?: IntegrationAccountTarget) {
+  const query = accountQuery(target);
+  return { params: { provider }, ...(Object.keys(query).length > 0 ? { query } : undefined) };
 }
 
-/** An answer read whole: the body the schema admits, the service's own unavailable, or unanswered for anything else. */
-function readAnswer<Answer, Encoded>(
-  answer: CallAnswer,
-  schema: Schema.Codec<Answer, Encoded>,
-): Effect.Effect<Answer | Failed> {
-  if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonOf(answer.response), (body): Answer | Failed => {
-    const payload = unparsedWire(body);
-    if (!answer.response.ok) {
-      const refusal = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
-      return refusal === HOSTED_API_ERROR.UNAVAILABLE
+/** A procedure's answer, the service's own unavailable as the window's, or unanswered for anything else. */
+function answerOf<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) =>
+    Effect.succeed(
+      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.UNAVAILABLE
         ? { failure: INTEGRATION_CALL_FAILURE.UNAVAILABLE }
-        : UNANSWERED;
-    }
-    const read = Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(payload));
-    return read === undefined ? UNANSWERED : read;
-  });
+        : UNANSWERED,
+    ),
+  );
 }
 
 /** The window's reads and changes of the account's integrations. */
 export class HostedIntegrationsClient {
-  readonly #call: AccountCallEffects;
+  readonly #hosted: HostedClient;
+  readonly #credential: CallCredential;
 
   constructor(options: HostedIntegrationsClientOptions) {
-    this.#call = accountCall({
+    this.#credential = options.credential;
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }
 
-  /** Where every provider's connection stands. */
+  /**
+   * Where every provider's connection stands. Note that a caller with no
+   * bearer, a browser tab on its cookie session, reads a sign-in under way
+   * as stored, because the service settles none on a GET a cookie carries;
+   * so where that read holds one pending, the settling POST is asked as
+   * well and its answer stands. A bearer's GET has settled already.
+   */
   statuses(): Effect.Effect<IntegrationStatusesView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS }),
-      (answer) =>
-        Effect.map(readAnswer(answer, integrationStatusesReadSchema), (read) =>
-          "failure" in read ? read : integrationStatusesViewOf(read),
-        ),
-    );
+    const integrations = this.#hosted.integrations;
+    const credential = this.#credential;
+    return Effect.gen(function* () {
+      const stored = yield* answerOf(askHosted(integrations.statuses, undefined));
+      if ("failure" in stored) return stored;
+      if (!holdsPending(stored)) return integrationStatusesViewOf(stored);
+      const { authorization } = yield* resolvedCredential(credential);
+      if (authorization !== undefined) return integrationStatusesViewOf(stored);
+      const settled = yield* answerOf(askHosted(integrations.settle, undefined));
+      return integrationStatusesViewOf("failure" in settled ? stored : settled);
+    });
   }
 
   /** A browser sign-in to one account at a provider begun, or to a new one: the address the browser opens, which the caller opens and never shows, and the account it signs in. */
@@ -212,13 +198,7 @@ export class HostedIntegrationsClient {
     provider: IntegrationProvider,
     target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationConnectAnswer | Failed, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: accountPath(integrationConnectPath(provider), target),
-      }),
-      (answer) => readAnswer(answer, integrationConnectAnswerSchema),
-    );
+    return answerOf(askHosted(this.#hosted.integrations.connect, accountInput(provider, target)));
   }
 
   /** The tools one account's server offers the account's agents. */
@@ -226,12 +206,13 @@ export class HostedIntegrationsClient {
     provider: IntegrationProvider,
     target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationToolsView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: accountPath(integrationToolsPath(provider), target),
+    return answerOf(
+      askHosted(this.#hosted.integrations.tools, {
+        provider,
+        ...(target?.connection !== undefined
+          ? { [INTEGRATION_QUERY.CONNECTION]: target.connection }
+          : undefined),
       }),
-      (answer) => readAnswer(answer, integrationToolsAnswerSchema),
     );
   }
 
@@ -240,13 +221,7 @@ export class HostedIntegrationsClient {
     provider: IntegrationProvider,
     target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: accountPath(integrationCancelPath(provider), target),
-      }),
-      (answer) => readAnswer(answer, integrationStatusAnswerSchema),
-    );
+    return answerOf(askHosted(this.#hosted.integrations.cancel, accountInput(provider, target)));
   }
 
   /** One account's connection ended, answering where it then stands. */
@@ -254,12 +229,8 @@ export class HostedIntegrationsClient {
     provider: IntegrationProvider,
     target?: IntegrationAccountTarget,
   ): Effect.Effect<IntegrationStatusView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: accountPath(integrationDisconnectPath(provider), target),
-      }),
-      (answer) => readAnswer(answer, integrationStatusAnswerSchema),
+    return answerOf(
+      askHosted(this.#hosted.integrations.disconnect, accountInput(provider, target)),
     );
   }
 
@@ -269,13 +240,11 @@ export class HostedIntegrationsClient {
     connection: string,
     label: string,
   ): Effect.Effect<IntegrationAccountView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: accountPath(integrationRenamePath(provider), { connection }),
-        body: JSON.stringify({ label }),
+    return answerOf(
+      askHosted(this.#hosted.integrations.rename, {
+        ...accountInput(provider, { connection }),
+        body: { label },
       }),
-      (answer) => readAnswer(answer, integrationAccountAnswerSchema),
     );
   }
 }

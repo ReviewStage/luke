@@ -122,6 +122,8 @@ export const CHAT_TOOLS = {
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
       "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or @handle " +
       "for a direct message to one member; leave it out to post in your task's own channel, where its agents post by default. " +
+      `purpose says in one line, at most ${CHAT_BOUNDS.MAX_PURPOSE_CHARS} characters, what a topic channel your to opens is for; ` +
+      "it is shown under the channel's name and in every read, and is ignored where the channel already stands. " +
       "replyTo is a message's number to answer it in its thread, in that message's channel, with no to. " +
       "A direct message, an @handle in the words, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
@@ -140,7 +142,7 @@ export const CHAT_TOOLS = {
       "six options, each a short label and an optional detail; name the label you recommend; multiple lets them pick " +
       "several), approval (a yes or no on one step you propose), text (an open answer in their words), task (something " +
       "only a person can do by hand, such as changing a GitHub setting or adding a secret: say exactly what to do), form " +
-      "(one to eight typed fields, text, number, select with its options, or boolean, each named by its label and " +
+      "(one to eight typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and " +
       "required where it must be filled; never ask for a credential or a secret in a form, since the answer reaches your " +
       "transcript: that is a task done by hand), or none (something the room should know; it is acknowledged). " +
       "ask.title is a one-line heading where your words are not one. ask.needsReply is whether you need to hear the " +
@@ -151,7 +153,8 @@ export const CHAT_TOOLS = {
   READ: {
     name: CHAT_TOOL.READ,
     description:
-      "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each, " +
+      "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each " +
+      "and what a topic channel says it is for, " +
       "then the messages. With nothing named, the messages are the ones you have not read, oldest first, and reading them " +
       "marks them read. channel (#name, or @handle for your direct messages with that member) reads its latest messages, " +
       "thread (a message's number) reads that message's whole thread, and before (a message's number) reads back from " +
@@ -205,11 +208,12 @@ type MemberLine = {
   readonly left?: true;
 };
 
-/** A channel as a read lists it: how a post names it, its kind, and what the reader has not read in it. */
+/** A channel as a read lists it: how a post names it, its kind, what the reader has not read in it, and what a topic says it is for. */
 type ChannelLine = {
   readonly name: string;
   readonly kind: ChannelKind;
   readonly unread: number;
+  readonly purpose?: string;
 };
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
@@ -465,6 +469,7 @@ function channelForPost(
   agent: ChatReader,
   seat: ChatSeat,
   name: string,
+  purpose: string | undefined,
 ): ChatStoreEffect<Result.Result<ChatChannelRow, string>> {
   return Effect.gen(function* () {
     const { userId } = agent;
@@ -477,7 +482,13 @@ function channelForPost(
         ? Result.succeed(standing.value)
         : Result.fail(CHAT_TOOL_REFUSAL.CHANNEL_ARCHIVED);
     }
-    const opened = yield* openTopicChannel(userId, seat.organizationId, name, seat.self.id);
+    const opened = yield* openTopicChannel(
+      userId,
+      seat.organizationId,
+      name,
+      seat.self.id,
+      purpose ?? null,
+    );
     return Result.mapError(opened, (refusal) => TOPIC_REFUSAL[refusal]);
   });
 }
@@ -524,7 +535,7 @@ function placeOf(
   }
   const name = to.slice(1);
   const channel = to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)
-    ? channelForPost(agent, seat, name)
+    ? channelForPost(agent, seat, name, post.purpose)
     : dmWith(agent, seat, name);
   return Effect.map(channel, (found) =>
     Result.map(found, (row) => ({ to: { channelId: row.id }, named: { in: to } })),
@@ -903,6 +914,7 @@ export function readAsAgent(
           name: names.get(channel.id) ?? "",
           kind: channel.kind,
           unread: unread.get(channel.id) ?? 0,
+          ...(channel.purpose === null ? undefined : { purpose: channel.purpose }),
         })),
         messages: messages.map((message) =>
           lineOf(message, { names, members: byId, roots, handleOf: handlesIn(byId.values()) }),

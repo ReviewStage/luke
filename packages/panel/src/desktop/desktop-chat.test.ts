@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
+import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK, CHAT_BOUNDS } from "@luke/features/chat-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -9,14 +9,16 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { ChatComposer } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
   fixtureChat,
   type Staged,
   stagedAnswer,
+  stagedChannel,
   stagedPost,
 } from "../tasks/chat-fixture.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -55,6 +57,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -77,6 +80,7 @@ function mount(
       return Promise.resolve("refused" in landed ? landed.refused : undefined);
     };
     return createElement(DesktopChat, {
+      room: SHELL_ROOM.WIDE,
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
@@ -91,8 +95,11 @@ function mount(
           onClose: () => undefined,
           onChoose: setPlace,
           onShow: setPlace,
+          listed: false,
+          onList: () => undefined,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
+          onChannel: (change) => stage((held) => stagedChannel(held, change)),
         },
       }),
     });
@@ -108,7 +115,7 @@ function mount(
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll("h2, button")].map((node) => {
+  return [...nav.querySelectorAll("h2, li button")].map((node) => {
     if (node.matches("h2")) return `# ${node.textContent}`;
     const count = /(\d+) unread$/u.exec(node.textContent ?? "")?.[1];
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
@@ -541,7 +548,8 @@ test("a # at the start of a word offers the channels, and the one chosen is writ
   assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
 });
 
-test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+/** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */
+async function plainChat() {
   const sent: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -573,15 +581,47 @@ test("where the editor's bundle could not be loaded, the box is a plain field th
     'textarea[aria-label="Message #general"]',
   );
   assert.ok(field, "the plain field stands in");
+  return { container, field, sent };
+}
+
+/** Words written into the plain field, as typing them would leave it. */
+function writeInto(field: HTMLTextAreaElement, words: string): void {
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
-    setValue?.call(field, "@agent-1 ship it");
+    setValue?.call(field, words);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+}
+
+/** A key pressed in the plain field, answering whether its own action was let through. */
+function pressInField(field: HTMLTextAreaElement, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => field.dispatchEvent(event));
+  return !event.defaultPrevented;
+}
+
+test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+  const { container, field, sent } = await plainChat();
+  writeInto(field, "@agent-1 ship it");
+  pressInField(field, { key: "Enter" });
   await settle();
   assert.deepEqual(sent, ["@agent-1 ship it"]);
+  assert.equal(field.getAttribute("enterkeyhint"), "send");
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+});
+
+test("on a coarse pointer the plain field's Enter is a new line, its return key says so, and ⌘+Enter posts", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const { field, sent } = await plainChat();
+  assert.equal(field.getAttribute("enterkeyhint"), "enter");
+  writeInto(field, "ship it");
+  assert.equal(pressInField(field, { key: "Enter" }), true, "the field types its new line");
+  await settle();
+  assert.deepEqual(sent, []);
+
+  pressInField(field, { key: "Enter", metaKey: true });
+  await settle();
+  assert.deepEqual(sent, ["ship it"]);
 });
 
 test("in a listed workspace, an agent chosen from the @ list is written as its chip, sent as its link, and the message names it", async () => {
@@ -607,4 +647,91 @@ test("in a listed workspace, an agent chosen from the @ list is written as its c
     last?.querySelector(".chat-words [data-mention-ref]"),
     "the sent message draws it as its chip",
   );
+});
+
+/** Types into a field the way a person's typing leaves it. */
+function fill(field: HTMLInputElement | HTMLTextAreaElement, words: string): void {
+  const prototype =
+    field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The card a question stands in, whichever role it asks with. */
+function openDialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+}
+
+/** The button in the open dialog whose words are `label`. */
+function dialogButton(label: string): HTMLButtonElement {
+  const button = [...(openDialog()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(button, `no ${label} in the dialog`);
+  return button;
+}
+
+test("New channel opens a topic under the name typed, written as a channel's, with its purpose under its name; its menu archives it out of the rail", async () => {
+  const page = mount();
+  const create = page.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
+  assert.ok(create, "the rail offers a new channel");
+  act(() => create.click());
+  const [name, purpose] = [...(openDialog()?.querySelectorAll<HTMLInputElement>("input") ?? [])];
+  assert.ok(name && purpose);
+  fill(name, "general");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.match(openDialog()?.textContent ?? "", /#general is already a channel\./u);
+  fill(name, "Release Train");
+  fill(purpose, "What ships Friday");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.equal(openDialog(), null);
+  act(() => railRow(page, "release-train").click());
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# release-train");
+  assert.match(page.querySelector(".chat-head")?.textContent ?? "", /What ships Friday/u);
+
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  assert.ok(actions, "a topic's head offers its actions");
+  act(() => actions.click());
+  const archive = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Archive channel",
+  );
+  act(() => archive?.click());
+  act(() => dialogButton("Archive channel").click());
+  await settle();
+  assert.equal(
+    [...page.querySelectorAll(".chat-rail button")].some((row) =>
+      row.textContent?.includes("release-train"),
+    ),
+    false,
+  );
+});
+
+test("a fixture chat opens no topic past the bound, and an archive frees a place for one", () => {
+  const staged = fixtureChat({ fixtureMode: true }, AT);
+  assert.ok(staged);
+  let held: FixtureChat = staged;
+  const open = (name: string) => {
+    const landed = stagedChannel(held, { open: { name } });
+    if ("chat" in landed) held = landed.chat;
+    return landed;
+  };
+  const topics = () =>
+    held.answer.channels.filter(
+      (channel) => channel.kind === CHANNEL_KIND.TOPIC && !channel.archived,
+    );
+  while (topics().length < CHAT_BOUNDS.MAX_TOPIC_CHANNELS) open(`topic-${topics().length}`);
+  assert.ok("refused" in open("one-too-many"));
+  const [first] = topics();
+  assert.ok(first);
+  const archived = stagedChannel(held, { edit: { channelId: first.id, archived: true } });
+  assert.ok("chat" in archived);
+  held = archived.chat;
+  assert.ok("chat" in open("one-more"));
 });

@@ -13,8 +13,8 @@ import {
  * names where the account is in it, so a teammate's link to their
  * workspace's members lands on the reader's own copy of that page, or on
  * the reader's own Workspace page where they are not in it; a page the
- * window does not know opens Settings on its first. Factory's,
- * Automations', and Issues' places stand nowhere while their experiments are off, as
+ * window does not know opens Settings on its first. Factory's and
+ * Issues' places stand nowhere while their experiments are off, as
  * every other door to them does (`renderer/CLAUDE.md`'s "Experiments"), so
  * a link to one says how to turn it on instead. Every other place opens on
  * the Plans tab, whose own door checks nothing: a place the reader may not
@@ -43,7 +43,6 @@ export function linkRoute(
   window: {
     readonly workspaces: readonly Workspace[];
     readonly factoryOn: boolean;
-    readonly automationsOn: boolean;
     readonly issuesOn: boolean;
   },
 ): LinkRoute {
@@ -52,20 +51,19 @@ export function linkRoute(
       const home = window.workspaces.find(
         (each) => each.slug === workspace || each.id === workspace,
       );
-      const page = SETTINGS_PAGE_LIST.find((each) => each === place.page) ?? SETTINGS_VIEW.ACCOUNT;
+      const known = SETTINGS_PAGE_LIST.find((each) => each === place.page);
+      // Note that a link naming no page this window knows names the page list, which stands on its first page.
+      const page =
+        known === undefined
+          ? { page: SETTINGS_VIEW.ACCOUNT, listed: true as const }
+          : { page: known };
       return {
         kind: LINK_ROUTE.SETTINGS,
-        settings: home === undefined ? { page } : { page, workspaceId: home.id },
+        settings: home === undefined ? page : { ...page, workspaceId: home.id },
       };
     }
     case LINK_PLACE.FACTORY:
       return window.factoryOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
-    case LINK_PLACE.AUTOMATIONS:
-    case LINK_PLACE.AUTOMATION:
-    case LINK_PLACE.AUTOMATION_RUN:
-      return window.automationsOn
-        ? { kind: LINK_ROUTE.TASKS }
-        : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     case LINK_PLACE.ISSUE:
       return window.issuesOn ? { kind: LINK_ROUTE.TASKS } : { kind: LINK_ROUTE.EXPERIMENT_OFF };
     default:

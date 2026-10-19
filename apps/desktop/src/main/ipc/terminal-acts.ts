@@ -1,7 +1,7 @@
 /**
- * terminal-acts.ts -- the Terminal tab's act rows: a coding agent's shells listed, started, named, ended, attached, and detached, and its sandbox resumed.
+ * terminal-acts.ts -- the Terminal tab's acts, answered on the act port: a coding agent's shells listed, started, named, ended, attached, and detached, and its sandbox resumed.
  *
- * The rows carry ids, sizes, and names alone. An attach mints a connection
+ * The acts carry ids, sizes, and names alone. An attach mints a connection
  * for the asking panel and that one shell, opens a channel, and posts the
  * channel's other end to that panel alone; what the shell prints arrives as
  * the host's events for that connection and is posted on main's end, and
@@ -11,35 +11,26 @@
  * the host's event to the one port and is let go. A panel that attaches a
  * shell it already holds has the older port closed first, and a panel whose
  * page is gone has every port it held closed and every connection let go.
- * Only a panel draws a Terminal tab, so every row refuses the voice and call
- * windows.
+ * Only a panel draws a Terminal tab, so every procedure refuses the voice and
+ * call windows.
  */
 
 import {
   TERMINAL_PORT_MESSAGE,
-  type TerminalCreatedActAnswer,
   type TerminalPortOutbound,
   type TerminalPortTicket,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
   terminalPortInboundSchema,
 } from "@luke/features/terminal-acts";
-import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
+import type { ActSender } from "@luke/host/act-router";
+import { TERMINAL_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type { WebContents } from "electron";
 
-type TerminalActKind =
-  | typeof ACT_KIND.TERMINAL_LIST
-  | typeof ACT_KIND.TERMINAL_CREATE
-  | typeof ACT_KIND.TERMINAL_RENAME
-  | typeof ACT_KIND.TERMINAL_KILL
-  | typeof ACT_KIND.TERMINAL_RESUME
-  | typeof ACT_KIND.TERMINAL_ATTACH
-  | typeof ACT_KIND.TERMINAL_DETACH;
+type TerminalActKind = (typeof TERMINAL_ACT_KIND)[keyof typeof TERMINAL_ACT_KIND];
 
 /** Main's end of one attached shell's channel. */
 export interface MainTerminalPort {
@@ -117,26 +108,26 @@ interface Attached {
 
 const readInbound = readEither(terminalPortInboundSchema);
 
-/** The refusal a window that draws no Terminal tab hears, in its kind's own words. */
-function refuseUnlessPanel(kind: TerminalActKind, sender: ActSender): void {
-  if (!sender.panel) throw new ActRefused({ message: ACT[kind].refusal });
+const terminalPort = actPortFor<WebContents>();
+
+/** The refusal a window that draws no Terminal tab hears, in its kind's own words, or nothing for a panel. */
+function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect<void, E> {
+  return actor.panel ? Effect.void : Effect.fail(refused());
 }
 
 /** The host's answer, or the kind's own refusal where the host had none. */
-function answeredOr<Answer>(
-  kind: TerminalActKind,
+function answeredOr<Answer, E>(
   answer: Effect.Effect<Answer | undefined>,
-): Effect.Effect<Answer, ActRefused> {
+  refused: () => E,
+): Effect.Effect<Answer, E> {
   return Effect.flatMap(answer, (value) =>
-    value === undefined
-      ? Effect.fail(new ActRefused({ message: ACT[kind].refusal }))
-      : Effect.succeed(value),
+    value === undefined ? Effect.fail(refused()) : Effect.succeed(value),
   );
 }
 
-export function terminalActRows(
+export function terminalProcedures(
   dependencies: TerminalActsDependencies,
-): Pick<ActRows<WebContents>, TerminalActKind> {
+): Pick<PlatformActProcedures<WebContents>, TerminalActKind> {
   const { host, ports, createId, run } = dependencies;
   /** Each panel's attached shells, by agent and then by shell, since a shell's id is its agent's to mint. */
   const panels = new Map<WebContents, Map<string, Map<string, Attached>>>();
@@ -197,67 +188,69 @@ export function terminalActRows(
   };
 
   return {
-    [ACT_KIND.TERMINAL_LIST]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_LIST, sender);
-      return answeredOr<TerminalsActAnswer>(ACT_KIND.TERMINAL_LIST, host.terminalList(params));
-    },
-    [ACT_KIND.TERMINAL_CREATE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_CREATE, sender);
-      return answeredOr<TerminalCreatedActAnswer>(
-        ACT_KIND.TERMINAL_CREATE,
-        host.terminalCreate(params),
-      );
-    },
-    [ACT_KIND.TERMINAL_RENAME]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_RENAME, sender);
-      return answeredOr<TerminalsActAnswer>(ACT_KIND.TERMINAL_RENAME, host.terminalRename(params));
-    },
-    [ACT_KIND.TERMINAL_KILL]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_KILL, sender);
-      return answeredOr<TerminalsActAnswer>(ACT_KIND.TERMINAL_KILL, host.terminalKill(params));
-    },
-    [ACT_KIND.TERMINAL_RESUME]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_RESUME, sender);
-      return answeredOr<TerminalResumedActAnswer>(
-        ACT_KIND.TERMINAL_RESUME,
-        host.terminalResume(params),
-      );
-    },
-    [ACT_KIND.TERMINAL_ATTACH]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_ATTACH, sender);
-      return Effect.gen(function* () {
-        const held = attachedOf(sender.sender, params.agentId);
-        const earlier = held.get(params.terminalId);
+    [TERMINAL_ACT_KIND.TERMINAL_LIST]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_LIST].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* answeredOr(host.terminalList(input), () => errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_CREATE]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_CREATE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* answeredOr(host.terminalCreate(input), () => errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_RENAME]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_RENAME].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* answeredOr(host.terminalRename(input), () => errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_KILL]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_KILL].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* answeredOr(host.terminalKill(input), () => errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_RESUME]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_RESUME].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* answeredOr(host.terminalResume(input), () => errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_ATTACH]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_ATTACH].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const sender = context.actor.sender;
+        const held = attachedOf(sender, input.agentId);
+        const earlier = held.get(input.terminalId);
         if (earlier !== undefined) {
-          held.delete(params.terminalId);
+          held.delete(input.terminalId);
           yield* release(earlier);
         }
         const connectionId = createId();
-        const port = ports.open(sender.sender, {
-          agentId: params.agentId,
-          terminalId: params.terminalId,
-        });
+        const port = ports.open(sender, { agentId: input.agentId, terminalId: input.terminalId });
         const attached = { connectionId, port };
-        held.set(params.terminalId, attached);
+        held.set(input.terminalId, attached);
         byConnection.set(connectionId, port);
         port.onMessage((message) => void run(heard(connectionId, message)));
-        const taken = yield* host.terminalConnect({ connectionId, ...params });
-        if (taken) return undefined;
+        const taken = yield* host.terminalConnect({ connectionId, ...input });
+        if (taken) return;
         // Note that only this attach's own entry goes, because a newer attach of the shell may have taken its place.
-        if (held.get(params.terminalId) === attached) held.delete(params.terminalId);
+        if (held.get(input.terminalId) === attached) held.delete(input.terminalId);
         yield* release(attached);
-        return yield* Effect.fail(
-          new ActRefused({ message: ACT[ACT_KIND.TERMINAL_ATTACH].refusal }),
-        );
-      });
-    },
-    [ACT_KIND.TERMINAL_DETACH]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.TERMINAL_DETACH, sender);
-      const held = panels.get(sender.sender)?.get(params.agentId);
-      const attached = held?.get(params.terminalId);
-      if (held === undefined || attached === undefined) return Effect.void;
-      held.delete(params.terminalId);
-      return release(attached);
-    },
+        return yield* Effect.fail(errors.REFUSED());
+      },
+    ),
+    [TERMINAL_ACT_KIND.TERMINAL_DETACH]: terminalPort[TERMINAL_ACT_KIND.TERMINAL_DETACH].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const held = panels.get(context.actor.sender)?.get(input.agentId);
+        const attached = held?.get(input.terminalId);
+        if (held === undefined || attached === undefined) return;
+        held.delete(input.terminalId);
+        yield* release(attached);
+      },
+    ),
   };
 }

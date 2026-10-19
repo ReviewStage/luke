@@ -6,6 +6,11 @@ export type {
 export { hostAssemblyLayer } from "../compose-host.js";
 export { DuplicateGatewayMethod } from "../composer.js";
 export {
+  type CookieSessionDoor,
+  CookieSessionFailed,
+  cookieAccountSourceLayer,
+} from "../cookie-account-source.js";
+export {
   ALL_HOST_PLATFORM_CONCERNS,
   type ClientCapability,
   HOST_CONCERN,
@@ -28,6 +33,7 @@ export {
   reporterLayer,
   SecretCipher,
   ServiceOrigin,
+  SettingsChangedElsewhere,
   ShutdownSignal,
   SignInConsent,
   StateRoot,

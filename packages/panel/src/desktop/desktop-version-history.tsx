@@ -37,7 +37,9 @@ import { useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
+import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Shortcut } from "../shortcut.js";
 import { BusyLabel } from "../spinner.js";
 import { centreWithin } from "../tasks/code-pane.js";
@@ -530,11 +532,14 @@ function VersionPage({
   subject,
   restore,
   section,
+  lead,
 }: {
   subject: VersionSubject;
   restore: DialogConfirm;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
+  /** What leads the page's bar: the way back to the list, where the page stands alone. */
+  lead: React.ReactNode;
 }): React.JSX.Element {
   const { versions } = subject;
   if (versions.viewing !== undefined) {
@@ -547,6 +552,7 @@ function VersionPage({
         noun={subject.noun}
         section={section}
         task={subject.task}
+        lead={lead}
       />
     );
   }
@@ -557,6 +563,7 @@ function VersionPage({
     return (
       <>
         <header className="desktop-toolbar">
+          {lead}
           <div className="desktop-toolbar-heading version-skeleton-title">
             <Skeleton width="160px" />
           </div>
@@ -571,7 +578,11 @@ function VersionPage({
   }
   return (
     <>
-      <div className="desktop-drag-strip" />
+      {lead === undefined ? (
+        <div className="desktop-drag-strip" />
+      ) : (
+        <header className="desktop-toolbar">{lead}</header>
+      )}
       <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -584,6 +595,9 @@ function VersionPage({
     </>
   );
 }
+
+/** What the way back from a version to the list says, in a narrow room. */
+const VERSION_LIST = "Versions";
 
 /** The open plan's history as the view's subject: its name, whether it is archived, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
@@ -621,10 +635,13 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
  * stands, with the way back at their head and the call card at their foot,
  * as the sidebar holds them, and the version chosen beside them. `onExit`
  * leaves for wherever it was opened from, and `onRestored` for what a
- * restore landed on.
+ * restore landed on. A narrow room shows the list or the version, one at a
+ * time (`hiddenColumns`): a version or a section chosen stands alone the
+ * whole width, under a way back to the list.
  */
 export function DesktopVersionHistory({
   sidebar,
+  room,
   history,
   subject,
   account,
@@ -633,6 +650,7 @@ export function DesktopVersionHistory({
   onRestored,
 }: {
   sidebar: SidebarCollapse;
+  room: ShellRoom;
   history: NavigationHistory;
   subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
@@ -715,10 +733,11 @@ export function DesktopVersionHistory({
         },
   );
   useOpenedRowShown(versions.selected, rows, log);
+  const hidden = hiddenColumns(room, versions.listed);
 
   return (
     <div className="desktop-version-history">
-      <nav className="version-log ph-no-capture" aria-label="Versions">
+      <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
         <NavItem
@@ -824,14 +843,19 @@ export function DesktopVersionHistory({
         </div>
         <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        <SidebarResizeEdge edge={edge} />
+        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
       </nav>
-      <section className="version-page ph-no-capture" aria-label="Version">
+      <section className="version-page ph-no-capture" aria-label="Version" hidden={hidden.item}>
         <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
           <VersionPage
             subject={subject}
             restore={restore}
             section={opened === undefined ? undefined : unit}
+            lead={
+              room === SHELL_ROOM.NARROW ? (
+                <FoldingButton label={VERSION_LIST} icon={<BackIcon />} onClick={versions.onList} />
+              ) : undefined
+            }
           />
         </PageFind>
       </section>

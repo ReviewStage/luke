@@ -12,12 +12,14 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { useAppKeymap } from "../app-commands.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
@@ -42,8 +44,11 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
  * the caret stands and hands the box the caret on a line under it, the
  * message sent holds each quote as a Markdown blockquote set apart, a
  * message that did not go comes back with its quotes as blocks, a quote's
- * way off takes it out, and a typed `>` line alone sends; and on the agent's own
- * tab, Reply stands down while a message is out.
+ * way off takes it out, and a typed `>` line alone sends; on a touch
+ * screen, whose handles may let go with no pointerup, Reply stands under a
+ * selection once it rests, and with a mouse only once the pointer lets it
+ * go; and on the agent's own tab, Reply stands down while a message is out;
+ * and R does what Reply does while it stands, and nothing while it does not.
  */
 
 const AGENT_WORDS = "Option A ships today. Option B waits for review.";
@@ -62,12 +67,28 @@ const TURN: CodingAgentMessage = {
 
 const ignore = () => undefined;
 
+/** How long past its last change a finger's selection is sure to have rested: well past the panel's own settle, a third of a second. */
+const RESTED = Duration.seconds(1);
+
+/** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
+function answerPointer(coarse: boolean): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: coarse && query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
 const roots: Root[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  answerPointer(false);
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
@@ -81,6 +102,8 @@ afterEach(() => {
   document.body.innerHTML = "";
   window.localStorage.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  Reflect.deleteProperty(window, "matchMedia");
 });
 
 async function settle(): Promise<void> {
@@ -89,8 +112,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box. */
+/** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box, under the window's keymap. */
 function Tab({ sender }: { sender: MessageSender }): ReactNode {
+  useAppKeymap(true);
   const tab = useRef<HTMLElement>(null);
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const composer = useAgentComposer({
@@ -137,8 +161,8 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
   return {
     container,
     sent,
-    /** The words of the text drawn as `words`, from `from` through `to`, selected as a drag lets them go. */
-    select: (words: string, from: string, to: string) => {
+    /** The words of the text drawn as `words`, from `from` through `to`, selected as a drag lets them go, or as a finger's handles do where `released` is false: with no pointerup. */
+    select: (words: string, from: string, to: string, released = true) => {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let text: Node | null = walker.nextNode();
       while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
@@ -148,8 +172,12 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
       range.setEnd(text, text.data.indexOf(to) + to.length);
       const selection = window.getSelection();
       assert.ok(selection);
-      selection.removeAllRanges();
-      selection.addRange(range);
+      act(() => {
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      if (!released) return;
       act(() => {
         text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
       });
@@ -207,6 +235,51 @@ test("Reply lays the selected words in where the caret stands, a line under each
   assert.deepEqual(tab.blocks(), [""], "the quotes go with the message");
 });
 
+test("R replies to the words selected as Reply does, and does nothing while no Reply stands", async () => {
+  const tab = await mounted();
+  composerEditor(tab.container).blur();
+  const pressR = () =>
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "r", code: "KeyR", bubbles: true, cancelable: true }),
+      );
+    });
+
+  pressR();
+  await settle();
+  assert.deepEqual(tab.blocks(), [""], "R with nothing selected lays nothing in");
+
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  assert.equal(
+    tab.reply()?.getAttribute("aria-keyshortcuts"),
+    shortcutAria(APP_SHORTCUTS[APP_COMMAND.REPLY_TO_SELECTION].chord),
+    "Reply names its key",
+  );
+  pressR();
+  await settle();
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
+  assert.equal(tab.reply() === undefined, true, "Reply goes once R answers it");
+  assert.equal(document.activeElement, composerEditor(tab.container), "the box takes the caret");
+});
+
+test("words selected in a pane then hidden, as the narrow Inbox hides its item behind the list, take Reply and R with them", async () => {
+  const tab = await mounted();
+  composerEditor(tab.container).blur();
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  assert.ok(tab.reply(), "Reply stands over the selection");
+
+  tab.container.hidden = true;
+  await settle();
+  assert.equal(tab.reply() === undefined, true, "Reply goes with the pane");
+  act(() => {
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "r", code: "KeyR", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+  assert.deepEqual(tab.blocks(), [""], "R lays nothing into the hidden box");
+});
+
 test("a selection outside the agent's words, in its thought or the developer's words, is offered no Reply", async () => {
   const tab = await mounted();
   tab.select(AGENT_THOUGHT, "Weighing", "calendar.");
@@ -252,6 +325,54 @@ test("a message that did not go comes back with its quotes as blocks, a quote's 
     "> Option B waits for review.\n\nShip it",
     "> Ship today?",
   ]);
+});
+
+test("on a touch screen Reply stands under a selection once it rests, though no pointerup lets it go", async () => {
+  answerPointer(true);
+  const tab = await mounted();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  tab.select(AGENT_WORDS, "Option B", "review.", false);
+  assert.equal(tab.reply() === undefined, true, "a selection still being drawn is offered nothing");
+  act(() => {
+    vi.advanceTimersByTime(Duration.toMillis(RESTED));
+  });
+  assert.ok(tab.reply(), "Reply stands once the selection rests");
+  vi.useRealTimers();
+
+  await tab.pressReply();
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
+});
+
+test("on a touch screen Reply stands under the selection, clear of the system's menu over it, or over it where the window ends first", async () => {
+  answerPointer(true);
+  const tab = await mounted();
+  /** Where Reply stands once the words are selected at `top` to `bottom`. */
+  const pressAt = (top: number, bottom: number) => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(40, top, 120, bottom - top);
+    tab.select(AGENT_WORDS, "Option B", "review.");
+    const press = document.body.querySelector<HTMLElement>(".reply-to-selection");
+    assert.ok(press, "Reply stands");
+    return Number.parseFloat(press.style.top);
+  };
+
+  assert.ok(pressAt(300, 320) > 320, "under the words");
+  const end = window.innerHeight;
+  assert.ok(pressAt(end - 30, end - 10) < end - 30, "no room under the words, it stands over them");
+});
+
+test("with a mouse, a selection resting is offered nothing until the pointer lets it go", async () => {
+  const tab = await mounted();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  tab.select(AGENT_WORDS, "Option A", "today.", false);
+  act(() => {
+    vi.advanceTimersByTime(Duration.toMillis(RESTED));
+  });
+  assert.equal(tab.reply() === undefined, true, "a mouse's drag is not let go by resting");
+
+  tab.select(AGENT_WORDS, "Option A", "today.");
+  assert.ok(tab.reply(), "the pointer letting go offers Reply");
 });
 
 /** An agent of the developer's, handed a prompt and answered with one turn. */

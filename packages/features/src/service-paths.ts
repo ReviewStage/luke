@@ -1,5 +1,4 @@
 import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
-import type { IntegrationProvider } from "./integration-wire.js";
 
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
@@ -268,31 +267,6 @@ export const VOICE_SERVICE_PATH = {
   SESSIONS: "/api/voice/sessions",
 } as const;
 
-/** Begins a browser sign-in to one provider for the account (POST), answering the address the browser opens. */
-export function integrationConnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/connect`;
-}
-
-/** The tools one provider's server offers the account's agents (GET), read from the server now or shortly before. */
-export function integrationToolsPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/tools`;
-}
-
-/** Ends the account's sign-in to one provider under way (POST), and nothing else: no grant is revoked. */
-export function integrationCancelPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/cancel`;
-}
-
-/** Ends the account's connection to one provider (POST); what agents already did there stands. */
-export function integrationDisconnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
-}
-
-/** Names one of the account's accounts at a provider (POST), the label it then carries. */
-export function integrationRenamePath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/rename`;
-}
-
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
@@ -324,62 +298,6 @@ export function issuePath(issueId: string): string {
 /** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
-}
-
-/** One task's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
-export function taskBoardPath(taskId: string): string {
-  return `${taskPath(taskId)}/board`;
-}
-
-/** The developer's edit of one task's document (POST). */
-/** Stops the turn Luke is running on one task (POST). */
-export function taskStopPath(taskId: string): string {
-  return `${taskPath(taskId)}/stop`;
-}
-
-export function planEditPath(taskId: string): string {
-  return `${taskPath(taskId)}/edit`;
-}
-
-/** What was said on one task's calls (GET). */
-export function taskTranscriptPath(taskId: string): string {
-  return `${taskPath(taskId)}/transcript`;
-}
-
-/**
- * One task's work (GET): a page of the brain turns of its calls, the
- * newest of all or, with `before`, the newest queued before that turn, and
- * on the newest page every code Luke showed on it.
- */
-export function taskWorkPath(taskId: string, before?: string): string {
-  const path = `${taskPath(taskId)}/work`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before });
-  return `${path}?${query}`;
-}
-
-/**
- * One task's conversation as a coding agent's transcript is read
- * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
- * open while a turn runs; with no cursor, its newest turns; with `before`,
- * the turns queued before that one.
- */
-export function taskMessagesPath(
-  taskId: string,
-  page: { after?: string; before?: string },
-): string {
-  const path = `${taskPath(taskId)}/messages`;
-  const query = new URLSearchParams({
-    ...(page.after === undefined ? undefined : { after: page.after }),
-    ...(page.before === undefined ? undefined : { before: page.before }),
-  });
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `taskMessagesPath`'s read. */
-export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
 /** Every code Luke showed on one task, oldest first (GET). */
@@ -467,24 +385,6 @@ export function repositoryIssuePath(place: RepositoryPlace, number: number): str
   const query = repositoryPlaceQuery(place);
   query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
-}
-
-/** One task's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
-export function planRevisionsPath(taskId: string, before?: number): string {
-  const path = `${taskPath(taskId)}/revisions`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before: String(before) });
-  return `${path}?${query}`;
-}
-
-/** One revision of one plan: its content beside the content before it (GET). */
-export function planRevisionPath(taskId: string, seq: number): string {
-  return `${planRevisionsPath(taskId)}/${seq}`;
-}
-
-/** One revision of one plan put back as its content (POST). */
-export function taskRestorePath(taskId: string, seq: number): string {
-  return `${planRevisionPath(taskId, seq)}/restore`;
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
@@ -580,24 +480,6 @@ export function workspacePhotoPath(workspaceId: string): string {
 /** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
 export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
   return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
-}
-
-/**
- * One agent's messages: its transcript past a cursor (GET), held open while
- * the agent runs, or, with no cursor, a message sent to it (POST).
- * `coding-agent-wire.ts` declares the answer and the request.
- */
-export function agentMessagesPath(agentId: string, after?: string): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One worker's transcript past a cursor (GET), under the agent and the delegation call that started it, held open while the worker runs as the agent's own is; the same answer as `agentMessagesPath`'s read. */
-export function agentSubagentMessagesPath(agentId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
 /** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */

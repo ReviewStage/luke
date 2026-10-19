@@ -30,7 +30,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playMotions } from "../testing/pane-motion.js";
@@ -236,77 +236,72 @@ beforeEach(() => {
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.ISSUES_LIST) {
-        listed.push(request.payload.workspaceId);
-        const value = lists.shift() ?? {
-          issues: standing.filter((each) => each.archivedAt === null),
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.ISSUES_CREATE) {
-        creates.push(request.payload);
-        if (createRefused) {
-          const value = { failure: ISSUE_CALL_FAILURE.INVALID };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        const { title, status, priority } = request.payload;
-        const made = issue(standing.length + 1, {
-          title,
-          updatedAt: 1_000,
-          ...(status === undefined ? undefined : { status }),
-          ...(priority === undefined ? undefined : { priority }),
-        });
-        standing = [made, ...standing];
-        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
-        const held = heldCreates;
-        if (held === undefined) return Promise.resolve(done);
-        return new Promise((resolve) => held.push(() => resolve(done)));
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      }
-      if (request.kind === ACT_KIND.ISSUES_READ) {
-        reads.push(request.payload.issueId);
-        const found = standing.find((each) => each.id === request.payload.issueId);
-        const value =
-          found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.ISSUES_CHANGE) {
-        changes.push(request.payload);
-        const { issueId, change } = request.payload;
-        const was = standing.find((each) => each.id === issueId);
-        if (changeRefused) {
-          const refused = {
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
-          };
-          const held = heldChanges;
-          if (held === undefined) return Promise.resolve(refused);
-          return new Promise((resolve) => held.push(() => resolve(refused)));
-        }
-        if (was === undefined) {
-          const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        const { archived, ...fields } = change;
-        const changed: Issue = {
-          ...was,
-          ...fields,
-          archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
-          updatedAt: was.updatedAt + 1,
-        };
-        standing = standing.map((each) => (each.id === issueId ? changed : each));
-        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
-        const held = heldChanges;
-        if (held === undefined) return Promise.resolve(done);
-        return new Promise((resolve) => held.push(() => resolve(done)));
-      }
+    act: (_request: Act) => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.ISSUES_LIST]: (payload) => {
+      listed.push(payload.workspaceId);
+      const value = lists.shift() ?? {
+        issues: standing.filter((each) => each.archivedAt === null),
+      };
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.ISSUES_READ]: (payload) => {
+      reads.push(payload.issueId);
+      const found = standing.find((each) => each.id === payload.issueId);
+      const value =
+        found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.ISSUES_CREATE]: (payload) => {
+      creates.push(payload);
+      if (createRefused) {
+        const value = { failure: ISSUE_CALL_FAILURE.INVALID };
+        return Promise.resolve(value);
+      }
+      const { title, status, priority } = payload;
+      const made = issue(standing.length + 1, {
+        title,
+        updatedAt: 1_000,
+        ...(status === undefined ? undefined : { status }),
+        ...(priority === undefined ? undefined : { priority }),
+      });
+      standing = [made, ...standing];
+      const done = { issue: made };
+      const held = heldCreates;
+      if (held === undefined) return Promise.resolve(done);
+      return new Promise((resolve) => held.push(() => resolve(done)));
+    },
+    [ACT_KIND.ISSUES_CHANGE]: (payload) => {
+      changes.push(payload);
+      const { issueId, change } = payload;
+      const was = standing.find((each) => each.id === issueId);
+      if (changeRefused) {
+        const refused = { failure: ISSUE_CALL_FAILURE.UNANSWERED };
+        const held = heldChanges;
+        if (held === undefined) return Promise.resolve(refused);
+        return new Promise((resolve) => held.push(() => resolve(refused)));
+      }
+      if (was === undefined) {
+        const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+        return Promise.resolve(value);
+      }
+      const { archived, ...fields } = change;
+      const changed: Issue = {
+        ...was,
+        ...fields,
+        archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+        updatedAt: was.updatedAt + 1,
+      };
+      standing = standing.map((each) => (each.id === issueId ? changed : each));
+      const done = { issue: changed };
+      const held = heldChanges;
+      if (held === undefined) return Promise.resolve(done);
+      return new Promise((resolve) => held.push(() => resolve(done)));
     },
   });
 });
@@ -976,6 +971,21 @@ test("an issue's description is drawn a section at a time, as a plan's text is, 
     ["Fails on CI.", "Steps\nRun it twice.", "Fix\nRetry once."],
   );
   assert.ok(descriptionOf(page).classList.contains("document-sections"));
+});
+
+test("the description's editor wears every class its drawn words wear, so a list keeps its gutter and nothing moves as it opens or closes", async () => {
+  standing = [issue(1, { description: "- reproduce\n  - twice\n- fix" })];
+  const page = await openIssue(issue(1).id);
+  const worn = [...(descriptionOf(page).querySelector(":scope > .plan-unit")?.classList ?? [])];
+  assert.ok(worn.includes("plan-unit"), "the description's words are drawn");
+
+  const editor = openDescription(page);
+
+  const wears = new Set(editor.props.className.split(" "));
+  assert.deepEqual(
+    worn.filter((name) => !wears.has(name)),
+    [],
+  );
 });
 
 test("an issue's document stands in a plan's own scrolling column and body, its title, byline, and description together, as a plan's do", async () => {

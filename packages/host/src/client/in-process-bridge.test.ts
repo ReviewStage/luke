@@ -16,6 +16,7 @@ import {
 } from "../act-router/index.js";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind } from "../acts.js";
 import type { AppStateSnapshot } from "../app-state.js";
+import { isPortActKind } from "../contract/index.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
@@ -94,7 +95,9 @@ function settingsHost(reporterOf: (sender: symbol) => string): SettingsHost {
 /** Every kind the host's rows leave, refused: the table of a shell that carries none of them. */
 function everyPlatformKindRefused(): PlatformActRows<symbol> {
   const hosts = new Set<string>(Object.keys(hostActRows(UNREACHED)));
-  const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter((kind) => !hosts.has(kind));
+  const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter(
+    (kind): kind is ActKind => !hosts.has(kind) && !isPortActKind(kind),
+  );
   // SAFETY: the kinds are exactly those the host's rows leave, each once.
   return refusedRows(kinds) as unknown as PlatformActRows<symbol>;
 }
@@ -158,16 +161,16 @@ it.effect("the document is read on request and every change of it reaches a subs
 );
 
 it.effect(
-  "a voice act is refused in its kind's own words, and a voice subscription ends cleanly",
+  "a microphone act is refused in its kind's own words, and a voice subscription ends cleanly",
   () =>
     Effect.gen(function* () {
       const { bridge } = yield* bridgeFixture;
       const outcome = yield* Effect.promise(() =>
-        bridge.act({ kind: ACT_KIND.VOICE_STOP_SPEAKING }),
+        bridge.act({ kind: ACT_KIND.MICROPHONE_REQUEST }),
       );
       assert.deepEqual(outcome, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.VOICE_STOP_SPEAKING].refusal,
+        reason: ACT[ACT_KIND.MICROPHONE_REQUEST].refusal,
       });
       const unsubscribe = bridge.onVoiceHotkeyPress(() => assert.fail("no talk key in the page"));
       unsubscribe();

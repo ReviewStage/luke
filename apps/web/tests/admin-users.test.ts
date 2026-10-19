@@ -53,6 +53,7 @@ function roster(overrides: Partial<AdminUserList> = {}): AdminUserList {
     total: 2,
     limit: 500,
     search: undefined,
+    signIn: { accounts: 4, methods: { github: 3, google: 1, other: 0 } },
     rows: [ADA, GRACE],
     ...overrides,
   };
@@ -235,4 +236,23 @@ test("clearing the search lists every account again and takes it out of the addr
   expect(searchBox(page).value).toBe("");
   expect(window.location.search).toBe("");
   expect(accounts(page)).toHaveLength(2);
+});
+
+test("under the roster, the sign-in methods count every account, whatever the search", async () => {
+  const page = await openUsers(roster({ search: "ada", total: 1, rows: [ADA] }));
+
+  const headings = Array.from(page.querySelectorAll("h2"), (heading) => heading.textContent);
+  expect(headings).toContain("Sign-in methods");
+  // A method nobody linked draws no bar.
+  expect(page.textContent).toContain("Linked sign-in methods");
+  expect(page.textContent).toContain("GitHubGoogle");
+  expect(page.textContent).not.toContain("Other");
+});
+
+test("a search that finds nobody still shows how every kept account signs in", async () => {
+  const page = await openUsers(roster({ search: "nobody", total: 0, rows: [] }));
+
+  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("Linked sign-in methods");
+  expect(page.textContent).toContain("GitHubGoogle");
 });

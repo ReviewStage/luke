@@ -162,12 +162,14 @@ let boxWidth = 900;
 let root: Root | undefined;
 
 const standIn: DiffViewModule = {
+  colourLines: () => Promise.resolve(undefined),
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
   mountList: (_host, props) => {
     drawn.push(props);
     return {
       update: (next) => drawn.push(next),
       reveal: (path) => revealed.push(path),
+      revealLine: (path, side, line) => revealed.push(`${path}:${side}:${line}`),
       unmount: () => undefined,
     };
   },
@@ -1167,12 +1169,22 @@ test("a changed image is read at the merge base and the head only once it comes 
   );
   assert.equal(pictures[1]?.src, `data:image/png;base64,${btoa(asked[1] ?? "")}`);
 
-  const swipe = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
-    (each) => each.textContent === "Swipe",
-  );
-  act(() => swipe?.click());
-  assert.ok(slot.querySelector('input[aria-label="Swipe between the two"]'));
-  assert.equal(slot.querySelectorAll(".image-diff-stack img").length, 2);
+  const compare =
+    slot.querySelector<HTMLElement>('[role="tablist"][aria-label="Compare images"]') ??
+    assert.fail("the comparisons are tabs over the image");
+  const swipe =
+    [...compare.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (each) => each.textContent === "Swipe",
+    ) ?? assert.fail("Swipe is offered");
+  act(() => swipe.click());
+  assert.equal(swipe.getAttribute("aria-selected"), "true");
+  const panel =
+    document.getElementById(swipe.getAttribute("aria-controls") ?? "") ??
+    assert.fail("Swipe controls a panel");
+  assert.equal(panel.getAttribute("role"), "tabpanel");
+  assert.equal(panel.getAttribute("aria-labelledby"), swipe.id, "the panel is named by Swipe");
+  assert.ok(panel.querySelector('input[aria-label="Swipe between the two"]'));
+  assert.equal(panel.querySelectorAll(".image-diff-stack img").length, 2);
 });
 
 test("a changed image whose merge base the service could not read draws its after alone, saying the before is unavailable", async () => {
@@ -1282,7 +1294,7 @@ test("the comparison chosen for an image, and how far it is faded, outlast Refre
   files = [changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null })];
   await drawTab();
   let slot = await standNearView("logo.png");
-  const onion = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+  const onion = [...slot.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
     (each) => each.textContent === "Onion skin",
   );
   act(() => onion?.click());
