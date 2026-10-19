@@ -118,7 +118,7 @@ export function DayScreen({
           account={account}
           onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
-          back={{ tab: "dashboard", label: "Dashboard", onBack }}
+          back={{ tab: "dashboard", label: "Overview", onBack }}
           shapes={DAY_SHAPES}
         />,
       );
@@ -149,7 +149,7 @@ export function DayScreen({
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
         >
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <BackLink tab="dashboard" label="Dashboard" onBack={onBack} />
+            <BackLink tab="dashboard" label="Overview" onBack={onBack} />
 
             <SectionHeading>Hosted tier · this day</SectionHeading>
             {/* Note that each card shares the row from nothing up but never

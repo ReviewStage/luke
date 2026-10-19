@@ -29,7 +29,6 @@ import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
   type AdminMetricsSource,
-  type AdminTopUser,
   countSignInMethods,
   lastNDayKeys,
   lastNWeekStartKeys,
@@ -45,10 +44,7 @@ import {
 } from "./admin-users.js";
 import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
-/** How many of the most active hosted-tier accounts the overview names. */
-const ADMIN_TOP_USERS_LIMIT = 10;
-
-type AdminQueryFailure = QueryError | Schema.SchemaError;
+export type AdminQueryFailure = QueryError | Schema.SchemaError;
 
 /**
  * An aggregate as a row carries it. `count` and `sum` answer a bigint, which
@@ -145,160 +141,15 @@ const readUserMetrics = /* @__PURE__ */ Effect.fn("web/readUserMetrics")(functio
   fetchStart: Date,
   scope: AdminMetricsScope,
 ): Effect.fn.Return<AdminMetricsSource["users"], AdminQueryFailure, DatabaseServices> {
-  const [total, links, signups] = yield* Effect.all(
-    [findUserTotal(scope), findSignInLinks(scope), findSignupsByDay({ fetchStart, scope })],
+  const [total, signups] = yield* Effect.all(
+    [findUserTotal(scope), findSignupsByDay({ fetchStart, scope })],
     { concurrency: "unbounded" },
   );
 
   const signupsByDay = new Map<string, number>();
   for (const row of signups) signupsByDay.set(row.day, row.value);
 
-  return {
-    total: Option.match(total, { onNone: () => 0, onSome: (row) => row.value }),
-    signInMethods: countSignInMethods(links),
-    signupsByDay,
-  };
-});
-
-const DaySumRowSchema = Schema.Struct({
-  day: Schema.String,
-  calls: NullableAggregateColumnSchema,
-});
-
-/**
- * The daily rows alone read from the wider fetch bound: the builder's trends
- * need both of their runs even when the window is shorter, while every
- * windowed aggregate below stays on the window's own bound.
- */
-const findUsageByDay = SqlSchema.findAll({
-  Request: Schema.Struct({ fetchStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: DaySumRowSchema,
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ day: hostedUsage.day, calls: sum(hostedUsage.calls) })
-        .from(hostedUsage)
-        .innerJoin(user, eq(user.id, hostedUsage.userId))
-        .where(and(gte(hostedUsage.day, request.fetchStartDay), keptByScope(request.scope)))
-        .groupBy(hostedUsage.day),
-    ),
-});
-
-const findActiveUsersOnDay = SqlSchema.findOneOption({
-  Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: CountRowSchema,
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ value: count() })
-        .from(hostedUsage)
-        .innerJoin(user, eq(user.id, hostedUsage.userId))
-        .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
-    ),
-});
-
-/**
- * Distinct rather than a row count: the window holds one row per account per
- * day, so counting rows would answer account-days, not accounts.
- */
-const findActiveUsersInWindow = SqlSchema.findOneOption({
-  Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: CountRowSchema,
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ value: countDistinct(hostedUsage.userId) })
-        .from(hostedUsage)
-        .innerJoin(user, eq(user.id, hostedUsage.userId))
-        .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope))),
-    ),
-});
-
-const TopUserRowSchema = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  email: Schema.String,
-  image: Schema.NullOr(Schema.String),
-  role: UserRoleSchema,
-  activeDays: AggregateColumnSchema,
-  lastActiveDay: Schema.String,
-  calls: NullableAggregateColumnSchema,
-});
-
-/**
- * Ordered by days present before volume spent: the table asks who shows up
- * daily, and thirty quiet days outrank one heavy one. Volume breaks the ties
- * that a short window makes common.
- */
-const findTopUsers = SqlSchema.findAll({
-  Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: TopUserRowSchema,
-  execute: (request) => {
-    const activeDays = count();
-    const calls = sum(hostedUsage.calls);
-    return Database.use((db) =>
-      db
-        .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-          activeDays,
-          lastActiveDay: max(hostedUsage.day),
-          calls,
-        })
-        .from(hostedUsage)
-        .innerJoin(user, eq(user.id, hostedUsage.userId))
-        .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope)))
-        .groupBy(user.id, user.name, user.email, user.image, user.role)
-        .orderBy(desc(activeDays), desc(calls))
-        .limit(ADMIN_TOP_USERS_LIMIT),
-    );
-  },
-});
-
-const readUsageMetrics = /* @__PURE__ */ Effect.fn("web/readUsageMetrics")(function* (
-  todayKey: string,
-  windowStartDay: string,
-  fetchStartDay: string,
-  scope: AdminMetricsScope,
-): Effect.fn.Return<AdminMetricsSource["usage"], AdminQueryFailure, DatabaseServices> {
-  const [usageRows, activeToday, activeWindow, topUserRows] = yield* Effect.all(
-    [
-      findUsageByDay({ fetchStartDay, scope }),
-      findActiveUsersOnDay({ day: todayKey, scope }),
-      findActiveUsersInWindow({ windowStartDay, scope }),
-      findTopUsers({ windowStartDay, scope }),
-    ],
-    { concurrency: "unbounded" },
-  );
-
-  const byDay = new Map<string, number>();
-  for (const row of usageRows) byDay.set(row.day, row.calls ?? 0);
-
-  const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    email: row.email,
-    image: row.image,
-    admin: isAdminRole(row.role),
-    activeDays: row.activeDays,
-    lastActiveDay: row.lastActiveDay,
-    calls: row.calls ?? 0,
-  }));
-
-  const countOf = Option.match({
-    onNone: () => 0,
-    onSome: (row: { value: number }) => row.value,
-  });
-
-  return {
-    byDay,
-    activeUsersToday: countOf(activeToday),
-    activeUsersWindow: countOf(activeWindow),
-    topUsers,
-  };
+  return { total: countOf(total), signupsByDay };
 });
 
 /**
@@ -307,7 +158,7 @@ const readUsageMetrics = /* @__PURE__ */ Effect.fn("web/readUsageMetrics")(funct
  * and the fold name a week identically. A signup instant is a timestamp and
  * a usage day a YYYY-MM-DD string, hence the two shapes of the same cast.
  */
-const SIGNUP_WEEK = sql<string>`to_char(date_trunc('week', ${user.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
+export const SIGNUP_WEEK = sql<string>`to_char(date_trunc('week', ${user.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
 const ACTIVITY_WEEK = sql<string>`to_char(date_trunc('week', ${hostedUsage.day}::date), 'YYYY-MM-DD')`;
 
 const CohortSizeRowSchema = Schema.Struct({
@@ -315,7 +166,7 @@ const CohortSizeRowSchema = Schema.Struct({
   value: AggregateColumnSchema,
 });
 
-const findCohortSizes = SqlSchema.findAll({
+export const findCohortSizes = SqlSchema.findAll({
   Request: Schema.Struct({ oldestWeekStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: CohortSizeRowSchema,
   execute: (request) =>
@@ -395,29 +246,23 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
   return { cohortSizes, activeByCohortWeek };
 });
 
-/** Reads every aggregate the overview shows, from the service's own tables. */
+/** Reads every aggregate the overview shows beside its own, from the service's own tables. */
 export function readAdminMetricsSource(input: {
   now: number;
   scope: AdminMetricsScope;
   windowDays: AdminMetricsWindow;
 }): Effect.Effect<AdminMetricsSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
     const fetchStartDay =
       lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
-    const todayKey = utcDayKey(input.now);
     const fetchStart = new Date(`${fetchStartDay}T00:00:00.000Z`);
 
-    const [users, usage, retention] = yield* Effect.all(
-      [
-        readUserMetrics(fetchStart, input.scope),
-        readUsageMetrics(todayKey, windowStartDay, fetchStartDay, input.scope),
-        readRetentionMetrics(input.now, input.scope),
-      ],
+    const [users, retention] = yield* Effect.all(
+      [readUserMetrics(fetchStart, input.scope), readRetentionMetrics(input.now, input.scope)],
       { concurrency: "unbounded" },
     );
 
-    return { users, usage, retention };
+    return { users, retention };
   });
 }
 
@@ -841,7 +686,9 @@ export function readAdminDaySource(input: {
  * the main read because a second one-to-many join would fan the usage
  * aggregates out across each account's session rows, and the all-time last
  * usage day, which the main read's own usage join cannot say because that
- * join is cut at the window where last-seen must not be.
+ * join is cut at the window where last-seen must not be. The sign-in methods
+ * count every account the scope keeps, searched or not, because the chart
+ * they draw describes the population rather than the rows listed.
  */
 export function readAdminUsersSource(input: {
   now: number;
@@ -854,12 +701,14 @@ export function readAdminUsersSource(input: {
     const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
     const kept = { scope: input.scope, search: nullableSearch(input.search) };
 
-    const [total, sessionSeenRows, usageSeenRows, rows] = yield* Effect.all(
+    const [total, sessionSeenRows, usageSeenRows, rows, accounts, links] = yield* Effect.all(
       [
         findRosterTotal(kept),
         findSessionsSeen(kept),
         findUsageSeen(kept),
         findRosterRows({ ...kept, windowStartDay, viewerId: input.viewerId }),
+        findUserTotal(input.scope),
+        findSignInLinks(input.scope),
       ],
       { concurrency: "unbounded" },
     );
@@ -875,6 +724,7 @@ export function readAdminUsersSource(input: {
 
     return {
       total: countOf(total),
+      signIn: { accounts: countOf(accounts), methods: countSignInMethods(links) },
       rows: rows.map((row) => ({
         id: row.id,
         name: row.name,

@@ -127,7 +127,7 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  hint?: string | undefined;
+  hint?: React.ReactNode;
   title?: string | undefined;
   grouped?: boolean;
 }): React.JSX.Element {
