@@ -248,6 +248,7 @@ import {
   CHAT_TOOL_REFUSAL,
   type ChatAgent,
   chatDigest,
+  editAsAgent,
   postAsAgent,
   readAsAgent,
   resolveAsAgent,
@@ -6278,6 +6279,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         readAsAgent(agent, unparsedWire(value));
       const resolve = (agent: ChatAgent, value: WireBoundaryInput) =>
         resolveAsAgent(agent, unparsedWire(value));
+      const editChannel = (agent: ChatAgent, value: WireBoundaryInput) =>
+        editAsAgent(agent, unparsedWire(value));
       // Note that the handles are read back rather than assumed, because two agents started at one instant mint in either order.
       const handleOf = (agent: ChatAgent) =>
         Effect.map(read(agent, { channel: "#teammate-invitations" }), (answer) => {
@@ -6291,7 +6294,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           memberNamed(opened.owner, opened.task.workspaceId, handle.slice(1)),
           Option.getOrThrow,
         );
-      return { ...opened, first, second, handles, post, read, resolve, memberOf };
+      return { ...opened, first, second, handles, post, read, resolve, editChannel, memberOf };
     });
 
   it.effect(
@@ -6464,6 +6467,48 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.equal(
           read.channels.find((channel) => channel.name === "#releases")?.purpose,
           "What ships, and when",
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent renames a topic, clears its purpose, and archives it with edit_channel; a channel no topic, or a name another holds, is refused by why",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* chat.post(chat.first, { text: "Notes.", to: "#releases", purpose: "What ships" });
+        yield* chat.post(chat.first, { text: "Hi.", to: "#design" });
+        const renamed = yield* chat.editChannel(chat.second, {
+          channel: "#releases",
+          name: "release-train",
+          purpose: null,
+        });
+        assert.deepEqual(renamed, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          channel: { name: "#release-train", archived: false },
+        });
+        const archived = yield* chat.editChannel(chat.second, {
+          channel: "#release-train",
+          archived: true,
+        });
+        assert.ok("channel" in archived);
+        assert.equal(archived.channel.archived, true);
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#general", purpose: "Everyone" }),
+          refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#design", name: "general" }),
+          refused(CHAT_TOOL_REFUSAL.EDIT_NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#nowhere", archived: true }),
+          refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "design", archived: true }),
+          refused(CHAT_TOOL_REFUSAL.UNREADABLE_EDIT),
         );
       }),
   );
