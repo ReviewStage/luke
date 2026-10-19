@@ -149,16 +149,22 @@ export function useSkillOpener(): ((skill: SkillOption) => void) | undefined {
   return useContext(SkillFileContext)?.onOpen;
 }
 
-/** A message the developer sent, as markdown with every line break typed kept, each skill it names drawn as its chip. */
-export function SentWords({ text }: { text: string }): ReactNode {
+/** A message the developer sent, as markdown with every line break typed kept, each skill it names drawn as its chip; `asDocument` draws it as a document, as `TranscriptWords` does. */
+export function SentWords({
+  text,
+  asDocument = false,
+}: {
+  text: string;
+  asDocument?: boolean | undefined;
+}): ReactNode {
   const skills = useKnownSkills(holdsSlashWord(text));
   const tokens = skills === undefined ? [] : skillTokens(text, new Set(skills.keys()));
-  if (tokens.length === 0) return <TranscriptWords text={text} typed />;
+  if (tokens.length === 0) return <TranscriptWords text={text} typed asDocument={asDocument} />;
   const element: TranscriptElement = {
     markdown: withChips(text, tokens),
     tag: SKILL_ELEMENT.TAG,
     attributes: [SKILL_ELEMENT.NAME],
     components: SKILL_COMPONENTS,
   };
-  return <TranscriptWords text={text} element={element} typed />;
+  return <TranscriptWords text={text} element={element} typed asDocument={asDocument} />;
 }

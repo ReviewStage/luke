@@ -1,4 +1,3 @@
-import type { FileChip } from "@luke/features/attachment-model";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   fieldValueWords,
@@ -11,10 +10,8 @@ import {
   INBOX_STATUS,
   type InboxBlock,
   type InboxChoice,
-  type InboxCodeBlock,
   type InboxField,
   type InboxForm,
-  type InboxImageBlock,
   type InboxItem,
   type InboxMessage,
   inboxAnswerHeard,
@@ -22,7 +19,6 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
@@ -53,16 +49,12 @@ import {
   TextField,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
-import { PICTURE_STATE } from "@luke/ui/picture-cache";
-import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { PictureBlock } from "../picture-block.js";
-import { SpinnerRegion } from "../spinner.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -74,19 +66,11 @@ import {
 } from "./agent-ref.js";
 import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
-import { AttachmentViewer } from "./attachment-viewer.js";
-import { CodeCardHeader, CodeLines } from "./code-pane.js";
-import type { ReadFileWindow } from "./file-tab.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
+import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   archivedHolder,
-  CODE_READ,
-  CODE_READ_FAILED,
-  type CodeRead,
-  codeNotice,
-  codeReadOf,
-  codeWindow,
   decidedOf,
   decisionsOf,
   fieldValueOf,
@@ -111,6 +95,8 @@ import {
   withValue,
 } from "./inbox-model.js";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
+import { InboxPicture, InboxPictures } from "./inbox-pictures.js";
+import { LoneLinkCards } from "./lone-link-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -122,7 +108,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 import { opensAsLink } from "./use-open-link.js";
-import type { InboxImage, TaskInboxControl } from "./use-task-inbox.js";
+import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
  * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's question, everything it offered, and its answer, given in place or as it was given.
@@ -204,9 +190,6 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox.js";
 /** What the thread says under its item where the task's inbox could not be read. */
 const INBOX_FAILED_LINE = "The inbox could not be read.";
 
-/** What a card says of an image whose read did not answer. */
-const IMAGE_FAILED_LINE = "The image could not be read.";
-
 /** What an answer says of the files whose read did not answer. */
 const FILES_FAILED_LINE = "Some files could not be read.";
 
@@ -258,160 +241,6 @@ export function LinkBlock({
   );
 }
 
-/** What a code block reads its lines through and opens its file with. */
-export interface InboxCodeDoors {
-  /** The task's repository, `owner/name`, which the lines are read through; none where the task names none. */
-  readonly repository: string | null;
-  /** Reads a window of a file of the task's repository, as the File tab does. */
-  readonly readFile: ReadFileWindow;
-  /** Opens the file in the side panel's File tab at the commit named, the reference's lines lit. */
-  readonly onOpenFile: (ref: CodeRef, commit: string) => void;
-}
-
-/**
- * A code block: a card as the Code tab draws one, headed by the path and
- * the lines, the file opened in the File tab at the block's commit from
- * either, and the lines read from GitHub at that commit with a few around
- * them, the block's own lit; lines the task cannot read say why, and open
- * nothing. Note that the read goes through a ref to the
- * latest door, so a parent drawing a fresh door does not read again, and
- * that an answer landing after the block changed or left is dropped.
- */
-function CodeBlock({
-  block,
-  code,
-}: {
-  block: InboxCodeBlock;
-  code: InboxCodeDoors;
-}): React.JSX.Element {
-  const unread = codeNotice(block, code.repository);
-  const [read, setRead] = useState<CodeRead>({ kind: CODE_READ.READING });
-  const [asked, setAsked] = useState(0);
-  const latest = useRef({ block, readFile: code.readFile });
-  latest.current = { block, readFile: code.readFile };
-  const { path, sha, startLine, endLine } = block;
-  const codeRef = { path, startLine, endLine };
-
-  useEffect(() => {
-    if (unread !== undefined) return;
-    let standing = true;
-    const { block: asking, readFile } = latest.current;
-    setRead({ kind: CODE_READ.READING });
-    readFile(codeWindow(asking)).then(
-      (answer) => {
-        if (standing) setRead(codeReadOf(asking, answer));
-      },
-      () => {
-        if (standing) setRead(CODE_READ_FAILED);
-      },
-    );
-    return () => {
-      standing = false;
-    };
-  }, [unread, path, sha, startLine, endLine, asked]);
-
-  const shown: CodeRead =
-    unread === undefined ? read : { kind: CODE_READ.NOTICE, line: unread, again: false };
-  return (
-    <article
-      className="code-card ph-no-capture"
-      aria-label={fileRefText(codeRef)}
-      data-inbox-code=""
-    >
-      <CodeCardHeader
-        codeRef={codeRef}
-        note={undefined}
-        copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
-        // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
-        onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
-      />
-      {shown.kind === CODE_READ.READY ? (
-        <CodeLines code={shown.code} />
-      ) : shown.kind === CODE_READ.READING ? (
-        <SpinnerRegion label="Loading lines" />
-      ) : (
-        <div className="file-tab-notice">
-          {shown.again ? (
-            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
-          ) : (
-            <p role="alert">{shown.line}</p>
-          )}
-        </div>
-      )}
-    </article>
-  );
-}
-
-/**
- * An image block: the picture drawn as a plan's picture is, at its own size
- * up to the card's width and a screenful's height, once its bytes are held,
- * pressed to open it larger over the window; that block's quiet box while
- * they are read, and a line with Retry where the read did not answer. The
- * block asks for its image as it is first drawn, so a picture inside a card
- * no one opened is never fetched.
- */
-function ImageBlock({
-  itemId,
-  block,
-  image,
-  onImage,
-  onRetryImage,
-}: {
-  itemId: string;
-  block: InboxImageBlock;
-  image: InboxImage | undefined;
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
-}): React.JSX.Element {
-  const [viewing, setViewing] = useState(false);
-  const held = image !== undefined;
-  useEffect(() => {
-    if (!held) onImage(itemId, block.attachmentId);
-  }, [held, itemId, block.attachmentId, onImage]);
-  if (image === undefined) {
-    return (
-      <PictureBlock state={{ kind: PICTURE_STATE.READING }} alt={block.alt} caption={undefined} />
-    );
-  }
-  if ("failed" in image) {
-    return (
-      <div data-inbox-image-failed="">
-        <ErrorState onRetry={() => onRetryImage(block.attachmentId)}>
-          {IMAGE_FAILED_LINE}
-        </ErrorState>
-      </div>
-    );
-  }
-  return (
-    <>
-      <PictureBlock
-        state={{ kind: PICTURE_STATE.READY, url: image.url }}
-        alt={block.alt}
-        caption={undefined}
-        onOpen={() => setViewing(true)}
-      />
-      {viewing ? (
-        <AttachmentViewer
-          files={[viewerFile(block, image.url)]}
-          at={0}
-          onAt={() => undefined}
-          onClose={() => setViewing(false)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/** What a file's name may not spell on the Mac it is saved to. */
-const UNSAVEABLE = /[/\\:]/gu;
-
-/** The image as the viewer takes a file: named by its words under the type's own extension, since the viewer saves it by that name, and its type read off the `data:` URL. */
-function viewerFile(block: InboxImageBlock, url: string): FileChip {
-  const mediaType = url.slice("data:".length, url.indexOf(";"));
-  const name = `${block.alt.replace(UNSAVEABLE, "-")}.${mediaType.slice("image/".length)}`;
-  return { name, mediaType, url };
-}
-
 /** One block this build knows, drawn as its type is. */
 function KnownBlock({
   itemId,
@@ -435,7 +264,7 @@ function KnownBlock({
       // The agent's words, which a selection inside may be replied to.
       return (
         <div data-inbox-markdown="" {...{ [REPLY_SCOPE]: "" }}>
-          <TranscriptWords text={block.text} />
+          <TranscriptWords text={block.text} asDocument />
         </div>
       );
     case INBOX_BLOCK.LINK:
@@ -445,16 +274,15 @@ function KnownBlock({
         </p>
       );
     case INBOX_BLOCK.CODE:
-      return <CodeBlock block={block} code={code} />;
+      return <InboxCodeCard block={block} code={code} />;
     case INBOX_BLOCK.IMAGE:
       return (
         <div data-inbox-image="">
-          <ImageBlock
-            itemId={itemId}
-            block={block}
-            image={images.get(block.attachmentId)}
-            onImage={onImage}
-            onRetryImage={onRetryImage}
+          <InboxPicture
+            door={{ itemId, images, onImage, onRetryImage }}
+            attachmentId={block.attachmentId}
+            alt={block.alt}
+            caption={undefined}
           />
         </div>
       );
@@ -1282,7 +1110,7 @@ function Answered({
       {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
       {settled.note === undefined ? null : (
         <div className="inbox-words" data-inbox-note="">
-          <SentWords text={settled.note} />
+          <SentWords text={settled.note} asDocument />
         </div>
       )}
     </Comment>
@@ -1387,7 +1215,7 @@ function Message({
           // The agent's words alone may be replied to, as in its tab, never a member's.
           {...(fromAgent ? { [REPLY_SCOPE]: "" } : {})}
         >
-          <SentWords text={message.text} />
+          <SentWords text={message.text} asDocument />
         </div>
       )}
     </Comment>
@@ -1722,6 +1550,7 @@ export function InboxPane({
   useOptionNumbers(pane, item, draft, control, answerable);
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
+  const cardDoors = useMemo(() => ({ code: doors.code }), [doors.code]);
   return (
     <section
       ref={pane}
@@ -1744,60 +1573,69 @@ export function InboxPane({
         <ScrollArea fade={SCROLL_FADE.BOTH} data-item-id={item.id} ref={board}>
           <div className="inbox-board agent-log-over-composer ph-no-capture">
             <WordsWorkspace value={workspaceId}>
-              <Subject item={item} />
-              <ol className="inbox-thread" aria-label="Thread">
-                <Comment
-                  kind={COMMENT.ASKED}
-                  face={by.subject.tile}
-                  head={
-                    <>
-                      <CommentName>
-                        <AgentName by={by} nameOnly />
-                      </CommentName>
-                      <span className="inbox-comment-when">
-                        <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
-                      </span>
-                    </>
-                  }
-                >
-                  <Blocks
-                    item={item}
-                    images={control.images}
-                    onImage={control.onImage}
-                    onRetryImage={control.onRetryImage}
-                    openLink={doors.openLink}
-                    code={doors.code}
-                  />
-                  {open ? (
-                    // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
-                    <div
-                      className="inbox-response"
-                      onKeyDown={(event) => onResponseKey(pane, event)}
+              {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
+              <InboxPictures itemId={item.id} control={control}>
+                <LoneLinkCards doors={cardDoors}>
+                  <Subject item={item} />
+                  <ol className="inbox-thread" aria-label="Thread">
+                    <Comment
+                      kind={COMMENT.ASKED}
+                      face={by.subject.tile}
+                      head={
+                        <>
+                          <CommentName>
+                            <AgentName by={by} nameOnly />
+                          </CommentName>
+                          <span className="inbox-comment-when">
+                            <RelativeTime
+                              className={THREAD_TIME_CLASS}
+                              at={item.postedAt}
+                              now={now}
+                            />
+                          </span>
+                        </>
+                      }
                     >
-                      {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
-                      <AnswerMentions value={mentions}>
-                        <ResponseControls
-                          item={item}
-                          draft={draft}
-                          disabled={!answerable || control.sending.has(item.id)}
-                          text={{
-                            self: item.agentId,
-                            agent: by.subject.agent,
-                            skills: agents.readSkills,
-                            keywords: answerKeywords(holder, item),
-                            onEnter: () => sendFromPane(pane.current),
-                          }}
-                          onDraft={(next) => control.onDraft(item, next)}
-                        />
-                      </AnswerMentions>
-                    </div>
-                  ) : (
-                    // Keyed by its item, so the fold opened on one item stands closed on the next.
-                    <Offered key={item.id} item={item} />
-                  )}
-                </Comment>
-                <ThreadAfter item={item} by={by} now={now} control={control} />
-              </ol>
+                      <Blocks
+                        item={item}
+                        images={control.images}
+                        onImage={control.onImage}
+                        onRetryImage={control.onRetryImage}
+                        openLink={doors.openLink}
+                        code={doors.code}
+                      />
+                      {open ? (
+                        // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
+                        <div
+                          className="inbox-response"
+                          onKeyDown={(event) => onResponseKey(pane, event)}
+                        >
+                          {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
+                          <AnswerMentions value={mentions}>
+                            <ResponseControls
+                              item={item}
+                              draft={draft}
+                              disabled={!answerable || control.sending.has(item.id)}
+                              text={{
+                                self: item.agentId,
+                                agent: by.subject.agent,
+                                skills: agents.readSkills,
+                                keywords: answerKeywords(holder, item),
+                                onEnter: () => sendFromPane(pane.current),
+                              }}
+                              onDraft={(next) => control.onDraft(item, next)}
+                            />
+                          </AnswerMentions>
+                        </div>
+                      ) : (
+                        // Keyed by its item, so the fold opened on one item stands closed on the next.
+                        <Offered key={item.id} item={item} />
+                      )}
+                    </Comment>
+                    <ThreadAfter item={item} by={by} now={now} control={control} />
+                  </ol>
+                </LoneLinkCards>
+              </InboxPictures>
             </WordsWorkspace>
             {control.failed ? (
               <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>

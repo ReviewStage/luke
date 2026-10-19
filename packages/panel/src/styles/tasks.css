@@ -5829,6 +5829,30 @@ button.subagent-line:hover {
   margin: 0;
 }
 
+/* Pictures standing alone in a paragraph of words drawn as a document
+   (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
+   by side, sharing the column's width, so a before and an after read as a
+   pair; each still hugs its own picture, and none grows past its own size. */
+.transcript-pictures {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  margin: var(--luke-space-12) 0;
+}
+
+.transcript-pictures > .picture-block {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+/* A link standing alone in a paragraph of a document (lone-link-card.tsx):
+   its card of one row, a pull request's or a page's, or the Code tab's card
+   of the lines it names, standing apart from the words around it. */
+.lone-link-card {
+  margin: var(--luke-space-12) 0;
+}
+
 /* A picture in written words (`picture-block.tsx`): its own block, at its
    own width up to the column's and no taller than a screenful's worth, on
    the section's fill while its bytes are read, a press opening the file

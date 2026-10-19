@@ -34,6 +34,7 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
+import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
 import {
@@ -48,7 +49,7 @@ import {
   taskHolder,
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
-import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane.js";
+import { InboxPane } from "../tasks/inbox-pane.js";
 import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
