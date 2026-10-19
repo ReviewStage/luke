@@ -90,9 +90,7 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
   // own words instead of a port that never answers.
   ipcMain.on(ACT_PORT.CHANNEL, (event) => {
     const [port] = event.ports;
-    // Note that a port is taken from a window's own top frame alone, never a
-    // frame inside it: a child frame that loaded this build's own page would
-    // otherwise pass the URL check and stand as the window it sits in.
+    // Note that we take a top frame's port alone, because a child frame can load a trusted page.
     if (port === undefined || event.senderFrame?.parent !== null) return;
     actPort.upgrade(port, {
       context: () => ({
