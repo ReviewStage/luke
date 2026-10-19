@@ -1,7 +1,7 @@
 import path from "node:path";
 
 /**
- * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Luke: a coding agent's pushed branch checked out in a worktree of Luke's own clone of the repository, and a shell opened there.
+ * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Luke: a coding agent's pushed branch checked out in a worktree of Luke's own clone of the repository, and the repository's run command run there.
  *
  * Nothing is asked of the developer first. Luke keeps one clone of each
  * repository under `~/.luke`, shared by every Luke install, made the first
@@ -24,8 +24,8 @@ import path from "node:path";
  * the developer's own that the fetched head does not hold. The first step that fails
  * ends the bringing there, and is the only failure said. The script runs the repository's
  * run command in the worktree where this Mac has one for it and the branch
- * was brought in, and then opens a login shell there for the developer to
- * run what they like. The script deletes
+ * was brought in, in the developer's login shell, and ends with it; it
+ * opens no shell to type in, and Stop ends it. The script deletes
  * itself as it starts. Every value in it is quoted for the shell, never
  * spliced in bare.
  */
@@ -80,7 +80,7 @@ export function worktreeFolder(stateRoot: string, repository: string, branch: st
   );
 }
 
-/** The script, its values quoted, that brings the branch into a worktree of Luke's clone, runs the command there where there is one, and opens a shell. */
+/** The script, its values quoted, that brings the branch into a worktree of Luke's clone and runs the command there, where there is one; it ends with the command. */
 export function openOnMacScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
   readonly repository: string;
@@ -89,7 +89,7 @@ export function openOnMacScript(input: {
   readonly branch: string;
   /** The pull request from the branch, whose last head is opened where GitHub deleted the branch once it merged; none where it has none. */
   readonly pullRequest?: number | null | undefined;
-  /** The repository's run command on this Mac, run in the worktree before the shell opens; none where it has none. */
+  /** The repository's run command on this Mac, run in the worktree; none where it has none, which the script says. */
   readonly command?: string | null | undefined;
   /** The folder an earlier Luke kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
   readonly earlier?: { readonly worktrees: string } | undefined;
@@ -123,34 +123,36 @@ export function openOnMacScript(input: {
     `earlier_names=${shellQuoted(`${path.basename(input.worktree)} ${encodeURIComponent(input.branch)}`)}`,
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
+    // Note that every Luke install shares the clone, so the whole of bringing a branch in, its clone, fetch, worktree and config, is done under a lock, released however it ends.
     "opened() {",
     '  mkdir -p "$(dirname "$clone")" || return 1',
-    '  if [ ! -e "$clone/.git" ]; then',
-    // Note that every Luke install shares the clone, so it is made under a lock, and one made while this waited is taken as it stands.
-    '    lock="$clone.lock"',
-    "    waited=0",
-    '    until mkdir "$lock" 2>/dev/null; do',
-    '      holder="$(cat "$lock/pid" 2>/dev/null)"',
-    // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long its clone takes.
-    '      if [ -n "$holder" ]; then',
-    '        if ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi',
-    "        waited=0",
-    '      elif [ "$waited" -ge 30 ]; then',
-    '        rm -rf "$lock"',
-    "        continue",
-    "      fi",
-    "      sleep 1",
-    "      waited=$((waited + 1))",
-    "    done",
-    '    echo "$$" > "$lock/pid"',
-    '    if [ ! -e "$clone/.git" ]; then',
-    '      echo "▸ Cloning ${https%.git}"',
-    '      rm -rf "$clone"',
-    '      git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
-    '        { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } ||',
-    '        { rm -rf "$lock"; return 1; }',
+    '  lock="$clone.lock"',
+    "  waited=0",
+    '  until mkdir "$lock" 2>/dev/null; do',
+    '    holder="$(cat "$lock/pid" 2>/dev/null)"',
+    // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
+    '    if [ -n "$holder" ]; then',
+    '      if ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi',
+    "      waited=0",
+    '    elif [ "$waited" -ge 30 ]; then',
+    '      rm -rf "$lock"',
+    "      continue",
     "    fi",
-    '    rm -rf "$lock"',
+    "    sleep 1",
+    "    waited=$((waited + 1))",
+    "  done",
+    '  echo "$$" > "$lock/pid"',
+    "  brought_in",
+    "  ended=$?",
+    '  rm -rf "$lock"',
+    '  return "$ended"',
+    "}",
+    "brought_in() {",
+    '  if [ ! -e "$clone/.git" ]; then',
+    '    echo "▸ Cloning ${https%.git}"',
+    '    rm -rf "$clone"',
+    '    git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
+    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
     "  fi",
     '  cd "$clone" || return 1',
     '  echo "▸ Fetching $branch"',
@@ -220,25 +222,23 @@ export function openOnMacScript(input: {
     '  git config "branch.$branch.merge" "refs/heads/$branch" || return 1',
     '  git update-ref refs/worktree/luke-opened "$head" || return 1',
     "}",
-    // Note that a failed step is said and the shell still opens, in the worktree where it stands and the clone or home where not.
-    "brought=",
-    '( opened ) && brought=1 || echo "▸ Could not bring $branch onto this Mac; the shell is yours to look into it."',
-    'if [ -d "$worktree" ]; then cd "$worktree"; elif [ -d "$clone" ]; then cd "$clone"; fi',
+    // Note that a failed step is said, and the run ends there, never running the command on a stale or missing checkout.
+    "if ! ( opened ); then",
+    '  echo "▸ Could not bring $branch onto this Mac. Open in Terminal to look into it."',
+    "  exit 1",
+    "fi",
+    'cd "$worktree" || exit 1',
     'echo "▸ $branch in $(pwd)"',
     ...(input.command == null
-      ? []
+      ? [
+          'echo "▸ No run command is set for this repository on this Mac. Set one in Settings, under Workspace, Repositories, then press Run."',
+        ]
       : [
-          // Note that the command runs only on the branch as just brought in, never on a stale or missing checkout.
-          'if [ -n "$brought" ]; then',
-          `  command=${shellQuoted(input.command)}`,
-          '  echo "▸ Running $command"',
-          // Note that Ctrl-C ends the command and not this script, so the shell after it still opens.
-          "  trap : INT",
-          '  "${SHELL:-/bin/zsh}" -l -c "$command" || true',
-          "  trap - INT",
-          "fi",
+          `command=${shellQuoted(input.command)}`,
+          'echo "▸ Running $command"',
+          // Note that the command takes the script's place, so its exit is the run's, and Stop reaches it as the terminal's own.
+          'exec "${SHELL:-/bin/zsh}" -l -c "$command"',
         ]),
-    'exec "${SHELL:-/bin/zsh}" -l',
     "",
   ].join("\n");
 }

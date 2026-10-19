@@ -14,15 +14,17 @@ import type { WebContents } from "electron";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 
 /**
- * Open on this Mac's acts as main carries them, over settings, ports, and
+ * Run on this Mac's acts as main carries them, over settings, ports, and
  * terminals that answer from a script: an open asks nothing first, and
- * with no command set starts a terminal on Luke's own clone and a shell
- * alone; with one, its script runs the command in the branch's worktree,
- * its output
- * on the panel's port and the panel's typing and size back on it; the same
- * tab drawn again gets a fresh port with the output so far, the terminal
- * running on; a closed tab and a gone page close their terminals; and only
- * a panel is answered. Synthetic names and bytes throughout.
+ * with no command set brings the branch in alone; with one, its script runs
+ * the command in the branch's worktree, its output on the panel's port and
+ * the panel's size back on it, and nothing typed taken; the same tab drawn
+ * again gets a fresh port with the output so far, the run going on, or
+ * ended as it ended, started anew only by a Run press; Stop ends the run
+ * and keeps the port, so the tab hears it end; Open in Terminal opens the
+ * worktree, or the clone where it is not made, and refuses before any run;
+ * a closed tab and a gone page close their terminals; and only a panel is
+ * answered. Synthetic names and bytes throughout.
  */
 
 /** Every act port a fixture opened, closed once its test is done. */
@@ -74,7 +76,9 @@ interface ScriptedTerminal {
 function fixture(
   repositories: readonly MacRepository[] | undefined,
   read: Effect.Effect<void> = Effect.void,
+  standing: ReadonlySet<string> = new Set(),
 ) {
+  const terminalOpenedIn: string[] = [];
   const opened: ScriptedPort[] = [];
   const started: ScriptedTerminal[] = [];
   const gone = new Map<WebContents, () => void>();
@@ -88,6 +92,8 @@ function fixture(
       },
       worktreesRoot: "/home/.luke",
       stateRoot: "/state",
+      openInTerminal: (folder) => void terminalOpenedIn.push(folder),
+      exists: (folder) => standing.has(folder),
       ports: {
         open: () => {
           let heard: ((message: WireBoundaryInput) => void) | undefined;
@@ -130,7 +136,13 @@ function fixture(
     }),
   );
   ports.push(actPort);
-  return { actPort, opened, started, pageGone: (sender: WebContents) => gone.get(sender)?.() };
+  return {
+    actPort,
+    opened,
+    started,
+    terminalOpenedIn,
+    pageGone: (sender: WebContents) => gone.get(sender)?.(),
+  };
 }
 
 const outputText = (posted: readonly MacTerminalPortOutbound[]) =>
@@ -138,57 +150,57 @@ const outputText = (posted: readonly MacTerminalPortOutbound[]) =>
     each.type === MAC_TERMINAL_PORT_MESSAGE.OUTPUT ? [new TextDecoder().decode(each.data)] : [],
   );
 
-it.effect(
-  "an open asks nothing first: with no command set it opens on Luke's own clone and a shell alone",
-  () =>
-    Effect.gen(function* () {
-      const { actPort, started, opened } = fixture([]);
-      const answer = yield* actPort.perform(
-        { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
-        panelOf(),
-      );
-
-      assert.ok("answer" in answer);
-      assert.equal(opened.length, 1);
-      const script = started[0]?.script ?? "";
-      assert.match(script, /'\/home\/\.luke\/clones\/acme\/app'/u);
-      assert.match(script, /'https:\/\/github\.com\/acme\/app\.git'/u);
-      assert.doesNotMatch(script, /Running/u);
-    }),
-);
-
-it.effect("an open runs the branch's script, its output out on the port and typing back", () =>
+it.effect("an open asks nothing first: with no command set it brings the branch in alone", () =>
   Effect.gen(function* () {
-    const { actPort, started, opened } = fixture([SET]);
+    const { actPort, started, opened } = fixture([]);
     const answer = yield* actPort.perform(
       { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
       panelOf(),
     );
+
     assert.ok("answer" in answer);
-    const [terminal] = started;
-    const [port] = opened;
-    assert.ok(terminal !== undefined && port !== undefined);
-    assert.match(terminal.script, /clone='\/home\/\.luke\/clones\/acme\/app'/u);
-    assert.match(terminal.script, /'luke\/add-thing'/u);
-    assert.match(
-      terminal.script,
-      /worktree='\/home\/\.luke\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
-    );
-    // Note that the worktrees an earlier Luke kept under its application data are named, to be pointed to.
-    assert.match(terminal.script, /earlier_worktrees='\/state\/worktrees\/acme\/app'/u);
-    assert.match(terminal.script, /pnpm dev/u);
-
-    terminal.output("ready");
-    port.send({ type: MAC_TERMINAL_PORT_MESSAGE.INPUT, data: "q" });
-    port.send({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols: 80, rows: 24 });
-    port.send({ type: "something else" });
-    terminal.exit(0);
-
-    assert.deepEqual(outputText(port.posted), ["ready"]);
-    assert.deepEqual(port.posted.at(-1), { type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 0 });
-    assert.deepEqual(terminal.written, ["q"]);
-    assert.deepEqual(terminal.sizes, ["80x24"]);
+    assert.equal(opened.length, 1);
+    const script = started[0]?.script ?? "";
+    assert.match(script, /'\/home\/\.luke\/clones\/acme\/app'/u);
+    assert.match(script, /'https:\/\/github\.com\/acme\/app\.git'/u);
+    assert.doesNotMatch(script, /Running/u);
   }),
+);
+
+it.effect(
+  "an open runs the branch's script, its output out on the port and nothing typed taken",
+  () =>
+    Effect.gen(function* () {
+      const { actPort, started, opened } = fixture([SET]);
+      const answer = yield* actPort.perform(
+        { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN },
+        panelOf(),
+      );
+      assert.ok("answer" in answer);
+      const [terminal] = started;
+      const [port] = opened;
+      assert.ok(terminal !== undefined && port !== undefined);
+      assert.match(terminal.script, /clone='\/home\/\.luke\/clones\/acme\/app'/u);
+      assert.match(terminal.script, /'luke\/add-thing'/u);
+      assert.match(
+        terminal.script,
+        /worktree='\/home\/\.luke\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
+      );
+      // Note that the worktrees an earlier Luke kept under its application data are named, to be pointed to.
+      assert.match(terminal.script, /earlier_worktrees='\/state\/worktrees\/acme\/app'/u);
+      assert.match(terminal.script, /pnpm dev/u);
+
+      terminal.output("ready");
+      port.send({ type: "input", data: "q" });
+      port.send({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols: 80, rows: 24 });
+      port.send({ type: "something else" });
+      terminal.exit(0);
+
+      assert.deepEqual(outputText(port.posted), ["ready"]);
+      assert.deepEqual(port.posted.at(-1), { type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 0 });
+      assert.deepEqual(terminal.written, []);
+      assert.deepEqual(terminal.sizes, ["80x24"]);
+    }),
 );
 
 it.effect(
@@ -207,14 +219,68 @@ it.effect(
       assert.equal(opened[0]?.closed, true);
       assert.deepEqual(outputText(opened[1]?.posted ?? []), ["one ", "two"]);
       // Only the newest port is heard.
-      opened[0]?.send({ type: MAC_TERMINAL_PORT_MESSAGE.INPUT, data: "old" });
-      opened[1]?.send({ type: MAC_TERMINAL_PORT_MESSAGE.INPUT, data: "new" });
-      assert.deepEqual(started[0]?.written, ["new"]);
+      opened[0]?.send({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols: 10, rows: 10 });
+      opened[1]?.send({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols: 20, rows: 20 });
+      assert.deepEqual(started[0]?.sizes.at(-1), "20x20");
+      assert.equal(started[0]?.sizes.includes("10x10"), false);
 
-      // A terminal that ended is started anew.
+      // A run that ended is shown again as it ended, and started anew only by a Run press.
       started[0]?.exit(1);
       yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+      assert.equal(started.length, 1);
+      assert.deepEqual(opened[2]?.posted.at(-1), { type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 1 });
+      yield* actPort.perform(
+        { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: { ...OPEN, again: true } },
+        panel,
+      );
       assert.equal(started.length, 2);
+    }),
+);
+
+it.effect("Stop ends the run and keeps its port, so the tab hears it end", () =>
+  Effect.gen(function* () {
+    const { actPort, started, opened } = fixture([SET]);
+    const panel = panelOf();
+    yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+
+    yield* actPort.perform(
+      { kind: ACT_KIND.MAC_TERMINAL_STOP, payload: { agentId: AGENT_ID } },
+      panel,
+    );
+    started[0]?.exit(143);
+
+    assert.equal(started[0]?.closed, true);
+    assert.equal(opened[0]?.closed, false);
+    assert.deepEqual(opened[0]?.posted.at(-1), { type: MAC_TERMINAL_PORT_MESSAGE.EXIT, code: 143 });
+    // A run stopped is started anew by the next Run.
+    yield* actPort.perform(
+      { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: { ...OPEN, again: true } },
+      panel,
+    );
+    assert.equal(started.length, 2);
+  }),
+);
+
+it.effect(
+  "Open in Terminal opens the worktree, or the clone where it is not made, and refuses before any run",
+  () =>
+    Effect.gen(function* () {
+      const worktree = "/home/.luke/worktrees/acme/app/luke+2Fadd-thing";
+      const clone = "/home/.luke/clones/acme/app";
+      const reveal = { kind: ACT_KIND.MAC_TERMINAL_REVEAL, payload: { agentId: AGENT_ID } };
+      const before = fixture([SET], Effect.void, new Set([worktree, clone]));
+      const refused = yield* before.actPort.perform(reveal, panelOf());
+      assert.ok("refused" in refused);
+
+      const panel = panelOf();
+      yield* before.actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+      yield* before.actPort.perform(reveal, panel);
+      const unmade = fixture([SET], Effect.void, new Set([clone]));
+      yield* unmade.actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
+      yield* unmade.actPort.perform(reveal, panel);
+
+      assert.deepEqual(before.terminalOpenedIn, [worktree]);
+      assert.deepEqual(unmade.terminalOpenedIn, [clone]);
     }),
 );
 

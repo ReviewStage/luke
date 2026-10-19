@@ -24,8 +24,8 @@ import { useAct } from "../act.js";
  * any with a command on this Mac that it no longer lists. The command is
  * saved with Save or Return, and emptied to have none. It is kept in this
  * Mac's settings file alone, never sent to the service. Run, in
- * an agent tab's ⋯, runs it in the branch's worktree before the shell
- * opens; a repository without one opens on the shell alone.
+ * an agent tab's ⋯, runs it in the branch's worktree until it ends or Stop
+ * is pressed; a repository without one has its branch brought in alone.
  */
 
 const NOT_READ = "The repositories could not be read.";
