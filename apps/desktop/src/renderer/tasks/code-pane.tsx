@@ -7,6 +7,7 @@ import {
 } from "@luke/panel/ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "@luke/panel/find-matches";
+import { MarkdownMessage } from "@luke/panel/markdown-message";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import { cssCustomProperties, IconButton, SCROLL_FADE_INSET } from "@luke/ui";
@@ -20,7 +21,6 @@ import {
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
-import { MarkdownMessage } from "../markdown-message";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
 import { useMentionLink } from "./task-mentions";

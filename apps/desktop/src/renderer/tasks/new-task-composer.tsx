@@ -7,7 +7,9 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { PICKER_ALIGN } from "@luke/panel/settings/picker-row";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
+import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
 import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
@@ -31,10 +33,8 @@ import {
   workspaceReaches,
 } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
-import { PICKER_ALIGN } from "../settings/picker-row";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 

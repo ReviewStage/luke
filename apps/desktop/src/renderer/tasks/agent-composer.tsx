@@ -29,11 +29,13 @@ import { imageFiles } from "@luke/panel/feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { AttachedFileChips, attachmentChips } from "@luke/panel/tasks/attached-file-chips";
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
 import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip";
 import { ComposerQuoteView } from "@luke/panel/tasks/reply-to-selection";
 import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
@@ -55,9 +57,7 @@ import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
 import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
-import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { useComposerPickers } from "./composer-pickers";
-import type { SkillSource } from "./skill-picker";
 import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";

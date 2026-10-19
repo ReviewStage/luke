@@ -32,6 +32,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
@@ -54,7 +55,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { AgentComposer } from "./agent-composer";
-import type { SkillSource } from "./skill-picker";
 import {
   mentionablePullRequests,
   TaskMentions,

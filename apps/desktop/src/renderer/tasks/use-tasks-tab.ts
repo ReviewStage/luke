@@ -37,6 +37,7 @@ import {
 import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
+import type { FixtureChat, Staged } from "@luke/panel/tasks/chat-fixture";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
   CLOSED_TAB_STRIP,
@@ -45,6 +46,13 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "@luke/panel/tasks/closed-tabs";
+import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
+import {
+  FIXTURE_TASKS_CALL,
+  fixtureRepositories,
+  fixtureSidePanel,
+  fixtureTasksView,
+} from "@luke/panel/tasks/tasks-fixture";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import {
   MAIN_TAB,
@@ -156,7 +164,6 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import type { FixtureChat, Staged } from "./chat-fixture";
 import {
   startFailureNote as agentStartFailureNote,
   agentTabLabel,
@@ -165,13 +172,6 @@ import {
 import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
-import type { RepositoryChooser } from "./repository-chip";
-import {
-  FIXTURE_TASKS_CALL,
-  fixtureRepositories,
-  fixtureSidePanel,
-  fixtureTasksView,
-} from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastTask } from "./use-last-task";
@@ -397,7 +397,7 @@ interface ChatViewControl {
 }
 
 /** The fixture's staging, as a fixture run imports it. */
-type ChatStager = typeof import("./chat-fixture");
+type ChatStager = typeof import("@luke/panel/tasks/chat-fixture");
 
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
@@ -1141,7 +1141,7 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!fixtureMode) return;
     let live = true;
-    import("./chat-fixture").then((loaded) => {
+    import("@luke/panel/tasks/chat-fixture").then((loaded) => {
       if (!live) return;
       setStager(loaded);
       setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));

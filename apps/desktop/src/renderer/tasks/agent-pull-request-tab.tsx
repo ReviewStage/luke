@@ -43,6 +43,7 @@ import {
   filteredConversation,
   useConversationFilters,
 } from "@luke/panel/tasks/conversation-filters";
+import { PierreDiff, useDiffLook } from "@luke/panel/tasks/file-diff";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { PullRequestLabels } from "@luke/panel/tasks/pull-request-labels";
 import { PullRequestStack } from "@luke/panel/tasks/pull-request-stack";
@@ -109,7 +110,6 @@ import {
   useAgentRead,
 } from "./agent-changes-tab";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
-import { PierreDiff, useDiffLook } from "./file-diff";
 import type { PendingReview } from "./line-comment";
 import { blockedWords, MergeActions } from "./merge-box";
 import {

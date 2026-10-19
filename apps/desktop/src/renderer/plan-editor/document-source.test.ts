@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MarkdownMessage } from "@luke/panel/markdown-message";
 import {
   documentManager,
   documentMarkdown,
@@ -15,7 +16,6 @@ import { diffLines } from "diff";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
-import { MarkdownMessage } from "../markdown-message";
 
 /**
  * A whole plan in the editor keeps every block's exact source but the ones

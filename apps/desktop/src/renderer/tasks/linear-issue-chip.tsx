@@ -3,6 +3,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { type MenuRow, SearchableMenu } from "@luke/panel/searchable-menu";
+import { PICKER_ALIGN, usePickerPlacement } from "@luke/panel/settings/picker-row";
 import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
@@ -11,7 +12,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
-import { PICKER_ALIGN, usePickerPlacement } from "../settings/picker-row";
 import type { TasksControl } from "./use-tasks-tab";
 
 /**

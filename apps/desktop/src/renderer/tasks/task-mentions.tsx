@@ -2,6 +2,7 @@ import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import type { LinkDrawer } from "@luke/panel/markdown-message";
 import type { MentionNode } from "@luke/panel/plan-editor/contract";
 import { useOpenTask } from "@luke/panel/tasks/use-open-link";
 import {
@@ -14,7 +15,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { LinkDrawer } from "../markdown-message";
 import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
 import type {

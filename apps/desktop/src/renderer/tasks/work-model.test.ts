@@ -7,8 +7,7 @@ import {
   type TaskWorkWorker,
 } from "@luke/features/tasks-view";
 import { TURN_ROW, type TurnRow } from "@luke/features/turn-rows";
-import type { WireRecord } from "@luke/wire";
-import { test } from "vitest";
+import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import {
   conversationOf,
   thought,
@@ -17,8 +16,9 @@ import {
   worker,
   workerCall,
   workTurn,
-} from "#testing/task-work";
-import { TOOL_STATE } from "../ai-elements/tool";
+} from "@luke/panel/testing/task-work";
+import type { WireRecord } from "@luke/wire";
+import { test } from "vitest";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
 import { delegationView, toolCallView } from "./tool-call-model";
 import { sidebarCallIds, workerOf, workFailed, workRowsOf } from "./work-model";

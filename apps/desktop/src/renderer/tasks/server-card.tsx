@@ -3,6 +3,7 @@ import { byName } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import { moreText } from "@luke/features/task-agents-model";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { IntegrationToolList } from "@luke/panel/integration-tool-list";
 import { HoverCard, HoverCardNote, HoverCardRule, ProviderMark, SwitchMark } from "@luke/ui";
 import {
   SERVER_HANDED,
@@ -12,7 +13,6 @@ import {
   serverMentionNote,
 } from "@luke/ui/agent-servers-model";
 import { createContext, type ReactNode, useContext } from "react";
-import { IntegrationToolList } from "../integration-tool-list";
 import { ServerRowWords, useServerRows } from "./agent-servers";
 
 /**

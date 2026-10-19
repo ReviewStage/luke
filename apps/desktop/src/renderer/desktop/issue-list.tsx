@@ -4,6 +4,7 @@ import {
   issueListGroups,
 } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
+import { PriorityMark, StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import {
@@ -19,7 +20,6 @@ import {
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
-import { PriorityMark, StatusGlyph } from "./issue-pickers";
 
 /**
  * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, or for each priority, each row its status, its identifier, its title, how much it matters, and when it last changed.

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -18,7 +19,6 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { SentWords, SkillFiles } from "./skill-chip";
-import type { SkillSource } from "./skill-picker";
 
 /**
  * skill-chip.test.ts -- a skill's chip opens its `SKILL.md`, the composer's

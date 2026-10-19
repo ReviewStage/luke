@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { CALL_KIND, callLine } from "@luke/features/turn-rows";
+import { TOOL_BLOCK } from "@luke/panel/ai-elements/tool";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
-import { TOOL_BLOCK } from "../ai-elements/tool";
 import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
 
 const ESCAPE = String.fromCharCode(27);

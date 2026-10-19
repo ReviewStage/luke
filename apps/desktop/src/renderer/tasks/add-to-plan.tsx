@@ -14,11 +14,11 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { encodeImage } from "@luke/panel/feedback-images";
+import type { ViewerAction } from "@luke/panel/tasks/attachment-viewer";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { keepPictureRead } from "@luke/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import type { ViewerAction } from "./attachment-viewer";
 import { useTaskMentions } from "./task-mentions";
 
 /**

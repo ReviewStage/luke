@@ -4,7 +4,9 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { PriorityMenu, StatusMenu } from "@luke/panel/desktop/issue-pickers";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { ExperimentTag } from "@luke/panel/experiment-marks";
 import { usePerson } from "@luke/panel/member-directory";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
@@ -25,7 +27,6 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { ExperimentTag } from "../experiment-marks";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import {
   archiveAnswered,
@@ -34,7 +35,6 @@ import {
   ISSUE_ACTIONS_LABEL,
 } from "./issue-actions";
 import { IssueDescription } from "./issue-description";
-import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import { IssueWorkRow, useStartItems } from "./issue-work";
 
 /**

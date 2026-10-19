@@ -16,6 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { CallTabVideo } from "@luke/panel/call/panel-avatar";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
 import { TabStrip } from "@luke/panel/desktop/tab-strip";
@@ -34,6 +35,9 @@ import {
   glyphStateWords,
   stateEndMark,
 } from "@luke/panel/state-glyph";
+import { BrowserPane, browserTitleOf, useBrowserPages } from "@luke/panel/tasks/browser-pane";
+import { MacTerminalTab } from "@luke/panel/tasks/mac-terminal-tab";
+import { TaskBoard } from "@luke/panel/tasks/task-board";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
 import {
   type DrawnTabs,
@@ -101,7 +105,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { CallTabVideo } from "../call/panel-avatar";
 import { panelTabPlace } from "../links-at-hand";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
@@ -115,17 +118,14 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card";
-import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane";
 import { CodePane, centreWithin } from "../tasks/code-pane";
 import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
-import { MacTerminalTab } from "../tasks/mac-terminal-tab";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
-import { TaskBoard } from "../tasks/task-board";
 import { TaskCall } from "../tasks/task-call";
 import { useOpenTerminal } from "../tasks/terminal-commands";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells";

@@ -8,6 +8,7 @@ import {
   type PlanRevisionLine,
 } from "@luke/features/task-wire";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
+import { MARKDOWN_MARK, type MarkdownMark } from "@luke/panel/markdown-message";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import {
   ACTOR_KIND,
@@ -21,7 +22,6 @@ import {
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { diffArrays } from "diff";
-import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
 
 /**

@@ -1,6 +1,7 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import { Tab, TabStrip } from "@luke/panel/desktop/tab-strip";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { SIDE_PANEL_WIDTH, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
@@ -9,7 +10,6 @@ import type React from "react";
 import { useState } from "react";
 import { DocumentScroll } from "../tasks/document-frame";
 import { IssueDocument, IssueMenu } from "./issue-detail";
-import { StatusGlyph } from "./issue-pickers";
 import { PANEL_LEAVING, PanelFrame, useSidePanelDrawing } from "./side-panel";
 
 /**

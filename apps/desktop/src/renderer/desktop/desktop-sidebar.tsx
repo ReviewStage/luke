@@ -10,6 +10,7 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { type CallCardInput, ColumnFoot } from "@luke/panel/call/call-card";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { type HoverPane, useHoverPane } from "@luke/panel/desktop/hover-pane";
@@ -105,7 +106,6 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
