@@ -74,9 +74,29 @@ test("code over more than one line is a fenced block on lines of its own", () =>
   );
 });
 
+test("code holding backticks of its own is marked with more of them, spaced where it starts or ends with one", () => {
+  assert.equal(press(MARKDOWN_FORMAT.CODE, "Use |"), "Use `[code]`");
+  const embedded = { value: "a x`y b", start: 2, end: 5 };
+  assert.equal(after(embedded, markdownEdit(MARKDOWN_FORMAT.CODE, embedded)), "a ``[x`y]`` b");
+  const edge = { value: "`t`", start: 0, end: 3 };
+  assert.equal(
+    after(edge, markdownEdit(MARKDOWN_FORMAT.CODE, edge)),
+    "[t]",
+    "a span selected whole comes off",
+  );
+  const doubled = { value: "``t``", start: 0, end: 5 };
+  assert.equal(after(doubled, markdownEdit(MARKDOWN_FORMAT.CODE, doubled)), "``` [``t``] ```");
+});
+
 test("a link takes the selection as its words and selects the address to write, or an address selected as where it points", () => {
   assert.equal(press(MARKDOWN_FORMAT.LINK, "See [the docs]"), "See [the docs]([url])");
   assert.equal(press(MARKDOWN_FORMAT.LINK, "See |"), "See [[link text]](url)");
+  const bracketed = { value: "look ] here", start: 0, end: 11 };
+  assert.equal(
+    after(bracketed, markdownEdit(MARKDOWN_FORMAT.LINK, bracketed)),
+    "[look \\] here]([url])",
+    "a bracket in the words is escaped",
+  );
   assert.equal(
     press(MARKDOWN_FORMAT.LINK, "See [https://github.com]"),
     "See [[link text]](https://github.com)",

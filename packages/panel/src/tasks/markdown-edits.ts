@@ -131,7 +131,8 @@ function linkEdit(field: FieldSelection): MarkdownEdit {
     const words = PLACEHOLDER.LINK_TEXT;
     return replacing(start, end, `[${words}](${selected})`, [1, 1 + words.length]);
   }
-  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : selected;
+  // Note that a bracket in the words is escaped, so it cannot end the link's words early.
+  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : selected.replace(/[[\]]/gu, "\\$&");
   const at = words.length + 3;
   return replacing(start, end, `[${words}](${PLACEHOLDER.LINK_URL})`, [
     selected === "" ? 1 : at,
@@ -168,10 +169,14 @@ function prefixEdit(field: FieldSelection, prefix: LinePrefix): MarkdownEdit {
   return replacing(from, to, text, start === end ? [text.length, text.length] : [0, text.length]);
 }
 
+/** The longest run of backticks in `text`, none counting as zero. */
+function longestBackticks(text: string): number {
+  return Math.max(0, ...[...text.matchAll(BACKTICKS)].map(([run]) => run.length));
+}
+
 /** The fence a block holding `content` is written with: longer than any run of backticks in it, and never shorter than three. */
 function fenceFor(content: string): string {
-  const longest = Math.max(0, ...[...content.matchAll(BACKTICKS)].map(([run]) => run.length));
-  return "`".repeat(Math.max(FENCE_LEAST, longest + 1));
+  return "`".repeat(Math.max(FENCE_LEAST, longestBackticks(content) + 1));
 }
 
 /**
@@ -195,10 +200,32 @@ function blockEdit(
   ]);
 }
 
+/**
+ * A code span around a selection holding backticks of its own: marked with
+ * more backticks than any run inside it, and spaced from them where it
+ * starts or ends with one, as CommonMark reads a span.
+ */
+function backtickedSpanEdit(field: FieldSelection): MarkdownEdit {
+  const { value, start, end } = field;
+  const selected = value.slice(start, end);
+  const mark = "`".repeat(longestBackticks(selected) + 1);
+  const space = selected.startsWith("`") || selected.endsWith("`") ? " " : "";
+  const opening = `${mark}${space}`;
+  return replacing(start, end, `${opening}${selected}${space}${mark}`, [
+    opening.length,
+    opening.length + selected.length,
+  ]);
+}
+
 /** Code: a span around a selection on one line, or a fenced block around one over several. */
 function codeEdit(field: FieldSelection): MarkdownEdit {
   const { value, start, end } = field;
   const selected = value.slice(start, end);
+  // Note that a span the selection is, or stands in, is taken off as any wrap is.
+  const spanned = /^`[^`]*`$/u.test(selected) || (value[start - 1] === "`" && value[end] === "`");
+  if (!selected.includes("\n") && selected.includes("`") && !spanned) {
+    return backtickedSpanEdit(field);
+  }
   if (!selected.includes("\n")) return wrapEdit(field, "`", PLACEHOLDER.CODE);
   // Note that a selection of whole lines ends on a newline, which the fence's own line stands for.
   return blockEdit(
