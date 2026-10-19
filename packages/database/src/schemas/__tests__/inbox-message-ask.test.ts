@@ -31,7 +31,7 @@ import { inboxMessage } from "../inbox-message.js";
  * Synthetic accounts and rows throughout.
  */
 
-const MIGRATION = "20261019213121_inbox_message_ask";
+const MIGRATION = "20261019231740_inbox_message_ask";
 
 /** The migration undone, so the database stands as one from before it. */
 const UNDO = [
