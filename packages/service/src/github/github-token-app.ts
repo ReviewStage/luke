@@ -77,19 +77,29 @@ const SAVE_BRAKE = {
 /** How long GitHub is given to answer before the save is answered unreachable. */
 const CHECK_TIMEOUT = Duration.seconds(10);
 
-/** Every fine-grained token's own prefix. */
-const FINE_GRAINED_PREFIX = "github_pat_";
+/**
+ * The prefixes GitHub documents for a personal access token, classic and
+ * fine-grained: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#githubs-token-formats
+ */
+const TOKEN_PREFIX = { CLASSIC: "ghp_", FINE_GRAINED: "github_pat_" } as const;
 
 /** The scope a token is not kept without. */
 const REQUIRED_SCOPE = "repo";
 
-/** The headers GitHub answers a classic token's read with: the scopes it grants, and when it expires where it does. */
+/**
+ * The headers GitHub answers a classic token's read with. `X-OAuth-Scopes`
+ * lists the scopes the token grants, comma-separated:
+ * https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps
+ * `GitHub-Authentication-Token-Expiration` is the token's expiry, sent only
+ * for a token that has one:
+ * https://github.blog/changelog/2021-07-26-expiration-options-for-personal-access-tokens/
+ * Headers are read by their lowercase names, as the HTTP client keys them.
+ */
 const GITHUB_TOKEN_HEADER = {
   SCOPES: "x-oauth-scopes",
   EXPIRATION: "github-authentication-token-expiration",
 } as const;
 
-const HINT_PREFIX = /^[a-z]+_/u;
 const HINT_TAIL_CHARS = 4;
 
 const GitHubUserSchema = Schema.Struct({ id: Schema.Number, login: Schema.String });
@@ -111,14 +121,14 @@ interface CheckedToken {
   readonly expiresAt: Date | null;
 }
 
-/** The hint a member is shown of a token: its prefix and its last four characters, as `ghp_…abcd`. */
+/** The hint a member is shown of a token: the classic prefix where it has it and its last four characters, as `ghp_…abcd`. */
 function tokenHint(token: Redacted.Redacted<string>): string {
   const revealed = Redacted.value(token);
-  const prefix = HINT_PREFIX.exec(revealed)?.[0] ?? "";
+  const prefix = revealed.startsWith(TOKEN_PREFIX.CLASSIC) ? TOKEN_PREFIX.CLASSIC : "";
   return `${prefix}…${revealed.slice(-HINT_TAIL_CHARS)}`;
 }
 
-/** GitHub's expiry header as an instant, or null where it sent none it spells as one. */
+/** GitHub's expiry header as an instant, as `2021-03-31 21:46:14 UTC`, or null where it sent none or one that spells no instant. */
 function expiryOf(header: string | undefined): Date | null {
   const parsed = header === undefined ? Number.NaN : Date.parse(header);
   return Number.isNaN(parsed) ? null : new Date(parsed);
@@ -129,6 +139,13 @@ function expiryOf(header: string | undefined): Date | null {
  * a token it accepted, or why it is not kept. Never fails, since every
  * outcome is an answer; the body is read only on a 200, and nothing of the
  * exchange is logged.
+ *
+ * The one read is GitHub's "Get the authenticated user", `GET /user` under
+ * `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`,
+ * and `X-GitHub-Api-Version: 2022-11-28` (`githubRead`), which answers 401
+ * for a token GitHub does not accept:
+ * https://docs.github.com/en/rest/users/users#get-the-authenticated-user
+ * https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
  */
 const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   token: Redacted.Redacted<string>,
@@ -138,7 +155,7 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   never,
   HttpClient.HttpClient
 > {
-  if (Redacted.value(token).startsWith(FINE_GRAINED_PREFIX)) {
+  if (Redacted.value(token).startsWith(TOKEN_PREFIX.FINE_GRAINED)) {
     return Result.fail(GITHUB_TOKEN_REJECTION.FINE_GRAINED);
   }
   if (linked.length === 0) return Result.fail(GITHUB_TOKEN_REJECTION.NO_GITHUB_ACCOUNT);

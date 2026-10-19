@@ -154,7 +154,7 @@ it.layer(getTestDB())("the GitHub token route", (it) => {
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        const { owner, ask } = yield* openMembers;
+        const { owner, ask, checks } = yield* openMembers;
 
         const saved = yield* ask(owner, "PUT", { token: TOKEN.GOOD });
         const read = yield* ask(owner);
@@ -176,6 +176,25 @@ it.layer(getTestDB())("the GitHub token route", (it) => {
           expiresAt: Date.parse("2026-12-01T12:00:00Z"),
         });
         assert.deepEqual(answerOf(read), answerOf(saved));
+        assert.deepEqual(
+          checks.map((check) => [
+            check.method,
+            check.url,
+            check.authorization,
+            check.accept,
+            check.headers.get("x-github-api-version"),
+          ]),
+          [
+            [
+              "GET",
+              "https://api.github.com/user",
+              `Bearer ${TOKEN.GOOD}`,
+              "application/vnd.github+json",
+              "2022-11-28",
+            ],
+          ],
+          "the save asks GitHub once, the documented way",
+        );
         for (const text of [saved.text, read.text, JSON.stringify(rows)]) {
           assert.ok(!text.includes(TOKEN.GOOD), "no answer or column holds the token");
         }
