@@ -1,5 +1,3 @@
-import { useCallback, useState } from "react";
-
 /**
  * use-inbox-task-agents.ts -- the agents of the task whose item the window's Inbox shows, as the Inbox read them, for the panel beside it.
  *
@@ -12,6 +10,8 @@ import { useCallback, useState } from "react";
  * an archived agent's kept from the task's page, standing in for the one
  * closed.
  */
+
+import { useCallback, useState } from "react";
 
 /** The chosen task's agents: none until the Inbox read them, and the door it tells them through. */
 export interface InboxTaskAgents {
