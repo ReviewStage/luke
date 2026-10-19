@@ -716,9 +716,10 @@ test(
   GIT_DEADLINE,
 );
 
-test(
-  "an earlier Luke's clone holding a file of the developer's is kept",
-  async (t) => {
+test.for(["notes.txt", ".git\n"])(
+  "an earlier Luke's clone holding a file of the developer's, %j, is kept",
+  { timeout: GIT_DEADLINE },
+  async (file: string, t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
     const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
@@ -740,9 +741,8 @@ test(
       "--force",
       worktreeFolder(earlierRoot, "acme/app", "luke/fix-relay"),
     ]);
-    writeFileSync(path.join(earlierClone, "notes.txt"), "mine\n");
-    // Note that a name ending in a newline, beside the `.git` it imitates, is kept too.
-    writeFileSync(path.join(earlierClone, ".git\n"), "mine\n");
+    // Note that a name ending in a newline, beside the `.git` it imitates, is the developer's as much as any.
+    writeFileSync(path.join(earlierClone, file), "mine\n");
     const root = path.join(state, ".luke");
 
     run(
@@ -762,10 +762,8 @@ test(
       }),
     );
 
-    assert.equal(readFileSync(path.join(earlierClone, "notes.txt"), "utf8"), "mine\n");
-    assert.equal(readFileSync(path.join(earlierClone, ".git\n"), "utf8"), "mine\n");
+    assert.equal(readFileSync(path.join(earlierClone, file), "utf8"), "mine\n");
   },
-  GIT_DEADLINE,
 );
 
 test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
