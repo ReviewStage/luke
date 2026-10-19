@@ -583,7 +583,7 @@ test("a message or a start another agent was sent shows its words whole under it
   );
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
 
-  const onPlan = drawn(
+  const sentNothing = drawn(
     assistant([
       toolPart(
         "start_agent",
@@ -593,7 +593,7 @@ test("a message or a start another agent was sent shows its words whole under it
     ]),
   );
   assert.equal(
-    onPlan.container.querySelector(".tool-opening-row"),
+    sentNothing.container.querySelector(".tool-opening-row"),
     null,
     "nothing was sent to show",
   );
