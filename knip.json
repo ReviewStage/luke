@@ -41,6 +41,7 @@
       "entry": [
         "server/routes/**/*.ts",
         "src/*.tsx",
+        "src/app/main.tsx",
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",

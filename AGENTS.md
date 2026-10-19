@@ -189,7 +189,8 @@ in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/
 (the layer that runtime is built from), the renderer root
 `apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
 window's own entry, the panels' and the voice window's alike, so no two windows
-share a browser registry),
+share a browser registry), and the web app's root `apps/web/src/app/web-root.tsx`,
+on the same terms for a browser tab: its entry (`app.html`) loads it once per tab,
 `packages/panel/src/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than

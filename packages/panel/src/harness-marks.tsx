@@ -41,7 +41,7 @@ function ClaudeCodeMark(): React.JSX.Element {
  * OpenAI's own Codex extension for VS Code (publisher openai, version
  * 26.51007.21434), scaled down whole to the 16-pixel box a mark is drawn
  * in at one, two, and three device pixels to the pixel, and losslessly
- * recompressed (`marks/`). Files beside the bundle rather than inlined, so
+ * recompressed (the panel's `marks/`). Files beside the bundle rather than inlined, so
  * the renderer bundle carries none of their bytes.
  */
 function CodexMark(): React.JSX.Element {
