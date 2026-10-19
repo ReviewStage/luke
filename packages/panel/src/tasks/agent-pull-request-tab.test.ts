@@ -60,6 +60,7 @@ import {
   type DiffViewModule,
   type DiffViewProps,
 } from "../diff-view/contract.js";
+import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -228,11 +229,30 @@ const DIFF_STAND_IN: DiffViewModule = {
   },
 };
 
+/** The file tree's bundle, stood in for: it draws nothing, so its search field, the panel's own, is what narrows the files. */
+const TREE_STAND_IN: FileTreeModule = {
+  mount: () => {
+    const nothing = () => undefined;
+    return {
+      reveal: nothing,
+      search: nothing,
+      only: nothing,
+      within: nothing,
+      mark: nothing,
+      unmount: nothing,
+    };
+  },
+  fileIcon: () => ({ symbol: "", type: "" }),
+};
+
 let bundles: SideBundles;
 
 beforeAll(async () => {
   bundles = await Effect.runPromise(
-    landedBundles({ diffView: () => Promise.resolve(DIFF_STAND_IN) }),
+    landedBundles({
+      diffView: () => Promise.resolve(DIFF_STAND_IN),
+      fileTree: () => Promise.resolve(TREE_STAND_IN),
+    }),
   );
 });
 /** Every change to the pull request the tab asked for, by agent, in order. */
@@ -4130,7 +4150,7 @@ test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn i
   ]);
 });
 
-test("a thread on a changed image drawn as its picture lands above the picture, the list scrolled to the file's header rather than a line the picture draws none of", async () => {
+test("a thread on a changed image a filter left out lands above its picture once the filter is cleared, the list scrolled to the file's header rather than a line the picture draws none of", async () => {
   const logo = {
     path: "assets/logo.svg",
     previousPath: null,
@@ -4157,28 +4177,48 @@ test("a thread on a changed image drawn as its picture lands above the picture, 
       disconnect(): void {}
     },
   );
-  const tab = await draw(
-    controlAnswering(
-      { conversation: () => Promise.resolve({ pullRequest: reviewWith([onLogo]) }) },
-      PULL_REQUEST_STATE.OPEN,
-      () =>
-        Promise.resolve({
-          pullRequest: {
-            url: PAGE,
-            headSha: READ_HEAD,
-            baseSha: READ_HEAD,
-            truncated: false,
-            files: [logo],
-          },
-        }),
-    ),
+  function WithTree() {
+    const [view, setView] = useState<PullRequestView>(PULL_REQUEST_VIEW.FILES);
+    return createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      control: jumpControl([onLogo], [INVITE_FILE, logo]),
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: true, onToggle: () => undefined },
+      view,
+      onView: setView,
+    });
+  }
+  const tab = await drawn(createElement(WithTree));
+  const field =
+    tab.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "src");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(
+    lists.at(-1)?.files.map((file) => file.path),
+    [INVITE_FILE.path],
+    "the filter leaves the image out",
   );
+  await choose(tab, "Conversation");
 
   act(() => headPress(tab).click());
   await settle();
 
-  assert.equal(lists.at(-1)?.files[0]?.lead, true, "the image is drawn as its picture");
   assert.deepEqual(listReveals, [logo.path]);
+  const list = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.ok(
+    list.files.some((file) => file.path === logo.path),
+    "the filter is cleared",
+  );
+  const holding = (list.files.find((file) => file.path === logo.path)?.annotations ?? []).find(
+    (note) =>
+      list.renderAnnotation(logo.path, note.key).querySelector(".diff-inline-thread") !== null,
+  );
+  assert.equal(holding?.line, 0, "the thread stands above the picture, on no line of it");
 });
 
 test("a landing waits for the panel to be visible before it takes the focus, as a panel still arriving refuses it", async () => {
