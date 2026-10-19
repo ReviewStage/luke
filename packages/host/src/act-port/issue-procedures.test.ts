@@ -14,6 +14,7 @@ import {
   type PortActResult,
 } from "../contract/index.js";
 import {
+  type AccountAskProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
   type WorkspaceProceduresDependencies,
@@ -94,7 +95,13 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  const handler = createActPortHandler({ issues: { host }, workspaces: NO_WORKSPACES });
+  // SAFETY: no account ask is called here, so the account asks' host is never reached.
+  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
+  const handler = createActPortHandler({
+    accountAsks,
+    issues: { host },
+    workspaces: NO_WORKSPACES,
+  });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

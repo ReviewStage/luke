@@ -1,5 +1,9 @@
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import {
+  type AccountAskProceduresDependencies,
+  accountAskProcedures,
+} from "./account-ask-procedures.js";
 import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import {
@@ -15,6 +19,7 @@ import {
  * context `ActPortContext` names.
  */
 
+export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
@@ -23,6 +28,7 @@ export type ActPortHandler = RPCHandler<ActPortContext>;
 
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
+  readonly accountAsks: AccountAskProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
@@ -37,6 +43,7 @@ export interface ActPortDependencies {
  */
 export function createActPortHandler(dependencies: ActPortDependencies): ActPortHandler {
   const router = {
+    ...accountAskProcedures(dependencies.accountAsks),
     ...issueProcedures(dependencies.issues),
     ...workspaceProcedures(dependencies.workspaces),
   };

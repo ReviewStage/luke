@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import { createActPortHandler, type WorkspaceProceduresDependencies } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
@@ -27,7 +28,22 @@ afterEach(() => {
 /** This window's act port, opened onto the port's server as the bridge opens it, standing as `actor`. */
 function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
+  const noKeys = () => Effect.succeed({ keys: [] });
+  const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   const handler = createActPortHandler({
+    accountAsks: {
+      host: {
+        providerKeysRead: noKeys,
+        providerKeySave: noKeys,
+        providerKeyRemove: noKeys,
+        planTemplateRead: notTemplated,
+        planTemplateWrite: notTemplated,
+        planTemplateRevisions: notTemplated,
+        planTemplateRevision: notTemplated,
+        planTemplateRestore: notTemplated,
+        dictationTranscribe: notTemplated,
+      },
+    },
     issues: {
       host: {
         issueList: unanswered,
@@ -67,4 +83,10 @@ it("a kind the port answers resolves the caller with the host's answer", async (
   assert.deepEqual(await askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }), {
     failure: ISSUE_CALL_FAILURE.UNANSWERED,
   });
+});
+
+it("a kind the port answers that carries nothing is asked with nothing and resolves the caller with the host's answer", async () => {
+  openActPort(PANEL);
+
+  assert.deepEqual(await askAct(ACT_KIND.PROVIDER_KEYS_READ), { keys: [] });
 });

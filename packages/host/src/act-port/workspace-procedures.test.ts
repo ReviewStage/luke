@@ -22,6 +22,7 @@ import {
   WORKSPACE_ACT_KIND,
 } from "../contract/index.js";
 import {
+  type AccountAskProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
   type WorkspaceProceduresDependencies,
@@ -281,7 +282,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
   };
+  // SAFETY: no account ask is called here, so the account asks' host is never reached.
+  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
   const handler = createActPortHandler({
+    accountAsks,
     issues: NO_ISSUES,
     workspaces: {
       host,

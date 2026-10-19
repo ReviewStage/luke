@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   createAutomation,
   listAutomationRuns,
@@ -20,14 +20,18 @@ import {
 } from "@luke/features/automation-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { modelCatalogOf } from "../providers/model-catalog.js";
+import { hostedFetch } from "../orpc/handler.js";
+import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
+import type { WebServices } from "../runtime.js";
 import { githubReaching, openGithubUser } from "../testing/github-app-fake.js";
 import { automationWebhookApp } from "./automation-webhook-app.js";
-import { automationsApp } from "./automations-app.js";
+import { automationsProcedures } from "./automations-procedures.js";
 
 /**
  * An automation's webhook address, answered by its group the way a function
@@ -48,7 +52,7 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The webhook group and the automation routes over the test's own database, a bearer naming its account directly. */
+/** The webhook group and the automation procedures over the test's own database, a bearer naming its account directly. */
 const standing = Effect.gen(function* () {
   const services = Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -61,27 +65,31 @@ const standing = Effect.gen(function* () {
     automationWebhookApp().pipe(HttpRouter.provideRequest(services)),
     { disableLogger: true },
   );
-  const automations = HttpRouter.toWebHandler(
-    automationsApp({
+  const automationServices = yield* Effect.context<
+    DatabaseServices | GitHubApp | HttpClient.HttpClient | ModelCatalog
+  >().pipe(Effect.provide(services));
+  // SAFETY: the automation procedures yield the database, the clock, GitHub, its HTTP client, and the catalog alone, which is all a test provides of the web runtime's services.
+  const webServices = automationServices as Context.Context<WebServices>;
+  const automations = hostedFetch({
+    automations: automationsProcedures({
       resolveUserId: (incoming: Request) =>
         Effect.succeed(
           Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
         ),
       eveOrigin: () => undefined,
-    }).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
-  yield* Effect.addFinalizer(() =>
-    Effect.promise(() => Promise.all([webhook.dispose(), automations.dispose()])),
-  );
-  /** A request as the rewrite hands it on: the path's id moved into the `id` query. */
+    }),
+  });
+  yield* Effect.addFinalizer(() => Effect.promise(() => webhook.dispose()));
+  /** A request as the platform hands it on: the webhook's path's id moved into the `id` query by its rewrite, the automation routes' public path as it is. */
   const ask = (path: string, init: RequestInit & { readonly query?: string } = {}) =>
     Effect.gen(function* () {
       const [, id, tail] = /^\/api\/automations\/([^/]+)(?:\/(.+))?$/u.exec(path) ?? [];
-      const routed = `/api/automations/${tail ?? "automation"}?id=${id}${init.query ?? ""}`;
-      const handler = tail === "webhook" ? webhook.handler : automations.handler;
       const response = yield* Effect.promise(() =>
-        handler(new Request(`${ORIGIN}${routed}`, init)),
+        tail === "webhook"
+          ? webhook.handler(
+              new Request(`${ORIGIN}/api/automations/webhook?id=${id}${init.query ?? ""}`, init),
+            )
+          : automations(new Request(`${ORIGIN}${path}`, init), webServices),
       );
       // SAFETY: the groups answer JSON; the test reads it as the wire value it is.
       const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
