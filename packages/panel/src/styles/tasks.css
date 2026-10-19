@@ -3163,7 +3163,6 @@
   color: var(--code-text);
   font-family: var(--code-font, var(--luke-font-mono));
   font-size: var(--code-font-size, var(--luke-type-caption-size));
-  font-feature-settings: var(--code-font-features, normal);
   line-height: var(--code-line-height, var(--luke-type-reading-leading));
   -webkit-user-select: text;
   user-select: text;
@@ -3196,6 +3195,9 @@
 .code-line-text {
   padding-right: var(--content-inset);
   font: inherit;
+  /* Ligatures are the code's alone, so a note between its lines keeps its
+     prose's own (file-note.tsx). */
+  font-feature-settings: var(--code-font-features, normal);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
