@@ -61,7 +61,7 @@ type AdminQueryFailure = QueryError | Schema.SchemaError;
  * range, so every one of those readings decodes to the same number. A `sum`
  * over no rows is null, which is the zero the dashboard shows.
  */
-const AggregateColumnSchema = Schema.Union([
+export const AggregateColumnSchema = Schema.Union([
   Schema.Number,
   Schema.NumberFromString,
   NumberFromBigIntColumn,
