@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "./contract.js";
-import { selectedLines } from "./text-selection.js";
+import { pressedOnCode, selectedLines } from "./text-selection.js";
 
 /**
  * text-selection.test.ts -- code selected as text in a diff Pierre drew is
@@ -130,4 +130,20 @@ test("a selection ending outside every row, in a note under a line, runs over no
     }),
     undefined,
   );
+});
+
+test("only a press on a file's code begins a drag over it; one on its header or a note does not", () => {
+  const host = drawn(
+    `<div class="head"><button>Fold</button></div><div data-code>${row(4, "context", "a")}</div>`,
+  );
+  const words = wordsOf(host, 4);
+  const button = host.querySelector("button");
+  assert.ok(button !== null);
+
+  // The path a press takes, from where it landed up through its ancestors.
+  const pathFrom = (node: Node): Node[] =>
+    node.parentNode === null ? [node] : [node, ...pathFrom(node.parentNode)];
+
+  assert.equal(pressedOnCode(pathFrom(words)), true);
+  assert.equal(pressedOnCode(pathFrom(button)), false);
 });

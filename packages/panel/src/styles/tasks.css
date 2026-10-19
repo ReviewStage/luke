@@ -2666,8 +2666,12 @@
    line held no comments, and a note holding the fold alone keeps no padding
    of its own. Open, the chip stands at the end of its own row over the
    threads it shows; so does the chip of threads on no line, above the diff
-   or under a file's picture, which has no line to float over. */
-.diff-note:has(> .diff-thread-chip-row:only-child:not([open], [data-above])) {
+   or under a file's picture, which has no line to float over. The chip may
+   stand in the hover that lights its threads' lines (`ThreadLines`). */
+.diff-note:has(> .diff-thread-chip-row:only-child:not([open], [data-above])),
+.diff-note:has(
+  > .diff-thread-lines:only-child > .diff-thread-chip-row:only-child:not([open], [data-above])
+) {
   padding-block: 0;
 }
 

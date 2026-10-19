@@ -2952,6 +2952,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     url: `${PAGE}#pullrequestreview-9`,
     threads: [thread()],
   } as const;
+  handSettings();
   const tab = await draw(
     controlAnswering(
       {
@@ -2993,6 +2994,23 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go");
+
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+  const minimize = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+    (each) => each.getAttribute("aria-label") === "Minimize inline comments",
+  );
+  act(() => minimize?.click());
+  await settle();
+  const chip =
+    note.querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("the thread is minimized");
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  assert.equal(
+    lists.at(-1)?.selected?.selection.end,
+    13,
+    "the minimized chip lights its thread's lines too",
+  );
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {

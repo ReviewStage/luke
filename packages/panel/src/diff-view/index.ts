@@ -35,7 +35,7 @@ import {
 } from "./contract.js";
 import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
-import { selectedLines, selectionRect } from "./text-selection.js";
+import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
@@ -591,12 +591,16 @@ function watchTextSelection(
     tell({ picked: { path, selection }, rect });
   };
   const press = (event: PointerEvent) => {
-    origin = event
-      .composedPath()
-      .find(
-        (target): target is HTMLElement =>
-          target instanceof HTMLElement && pathOf(target) !== undefined,
-      );
+    const path = event.composedPath();
+    // Note that only a press on the code begins a drag over it; one on a
+    // file's header or a note leaves the selection standing, which a let-go
+    // would otherwise read again and offer anew.
+    origin = pressedOnCode(path)
+      ? path.find(
+          (target): target is HTMLElement =>
+            target instanceof HTMLElement && pathOf(target) !== undefined,
+        )
+      : undefined;
     tell(undefined);
   };
   const letGo = () => {

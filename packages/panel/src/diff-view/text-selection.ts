@@ -12,7 +12,9 @@ import { DIFF_SELECTION_SIDE, type DiffSelection, type DiffTextRect } from "./co
  * end stands outside every row, in a note under a line or past the code,
  * runs over no lines. A drag that ends at the very start of a row, as a
  * triple-click's does, ends on the row before it, found in the column
- * rather than counted, since the row before may stand across a gap.
+ * rather than counted, since the row before may stand across a gap. Only a
+ * press on the code begins a drag (`pressedOnCode`), so a press on a file's
+ * header, which leaves a selection standing, never offers it again.
  */
 
 /** The ends of a selection's range, as a live range and a static one both have them. */
@@ -57,6 +59,11 @@ function lineOf(row: Element): { line: number; side: DiffSelection["side"] } | u
       ? DIFF_SELECTION_SIDE.ADDITIONS
       : DIFF_SELECTION_SIDE.DELETIONS);
   return { line, side };
+}
+
+/** Whether a press landed on a file's code, where a drag over its words begins, along the path it took through the shadow roots; one on a file's header or a note under a line begins none. */
+export function pressedOnCode(path: readonly EventTarget[]): boolean {
+  return path.some((target) => target instanceof Element && target.matches(COLUMN));
 }
 
 /** The lines a selection of code runs over, from its first row to its last; none where an end stands outside every row. */

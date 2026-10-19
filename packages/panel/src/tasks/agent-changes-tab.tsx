@@ -385,7 +385,11 @@ function ThreadLines({
   if (hover === undefined) return <>{children}</>;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread only lights the lines it is on; nothing is pressed.
-    <div onMouseEnter={() => hover(thread, true)} onMouseLeave={() => hover(thread, false)}>
+    <div
+      className="diff-thread-lines"
+      onMouseEnter={() => hover(thread, true)}
+      onMouseLeave={() => hover(thread, false)}
+    >
       {children}
     </div>
   );
@@ -436,13 +440,16 @@ function minimizedNotes(
               side,
               line,
               content: (
-                <MinimizedThreads
-                  threads={threads.map((each) => each.thread)}
-                  shown={minimized.shown(side, line)}
-                  onShown={(shown) => minimized.show(side, line, shown)}
-                >
-                  {drawn}
-                </MinimizedThreads>
+                // The chip lights the lines its threads stand on, as each thread does once shown.
+                <ThreadLines thread={first.thread} hover={hover}>
+                  <MinimizedThreads
+                    threads={threads.map((each) => each.thread)}
+                    shown={minimized.shown(side, line)}
+                    onShown={(shown) => minimized.show(side, line, shown)}
+                  >
+                    {drawn}
+                  </MinimizedThreads>
+                </ThreadLines>
               ),
             },
           ];
