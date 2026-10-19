@@ -366,6 +366,14 @@
   padding: var(--luke-space-6) calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
+/* A touch screen picks a row with a finger, so the keys the foot names say
+   nothing there, and the foot goes. */
+@media (pointer: coarse) {
+  .mention-menu .mention-menu-foot {
+    display: none;
+  }
+}
+
 /* The editor of a plan's text is the room its @ list hangs in. */
 .plan-document-editor {
   position: relative;
