@@ -1,13 +1,13 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "app": 890116,
-    "app.css": 70277,
-    "plan-editor": 169843,
-    "whiteboard": 383760,
+    "app": 936415,
+    "app.css": 70881,
+    "plan-editor": 169841,
+    "whiteboard": 383762,
     "file-tree": 74719,
-    "terminal": 133117,
-    "diagram": 168296,
-    "diff-view": 244054
+    "terminal": 133116,
+    "diagram": 168293,
+    "diff-view": 244095
   }
 }
