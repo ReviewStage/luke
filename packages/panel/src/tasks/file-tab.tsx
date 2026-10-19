@@ -33,6 +33,7 @@ import {
   withWindow,
 } from "./file-tab-model.js";
 import { useMentionDrop, useTaskMentions } from "./task-mentions.js";
+import { ThemedCodeLinesView } from "./themed-lines.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -184,7 +185,9 @@ function FileLinesView({
   });
 
   return (
-    <CodeLinesView
+    <ThemedCodeLinesView
+      name={file.path}
+      runKey={`${file.path}@${held.commit ?? held.branch}`}
       look={look}
       fade={SCROLL_FADE.START}
       scrollerRef={scroller}

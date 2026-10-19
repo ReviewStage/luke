@@ -1049,6 +1049,26 @@
   container-type: inline-size;
 }
 
+/* Lines in a syntax theme other than the window's own (themed-lines.tsx)
+   stand on the theme's ground in its ink, as a diff in that theme does. */
+.code-lines-palette {
+  --code-ground: var(--palette-ground-dark, var(--luke-color-ground));
+  --code-text: var(--palette-ink-dark, var(--luke-color-text));
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+@media (prefers-color-scheme: light) {
+  .code-lines-palette {
+    --code-ground: var(--palette-ground-light, var(--luke-color-ground));
+    --code-text: var(--palette-ink-light, var(--luke-color-text));
+  }
+}
+
 .code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;

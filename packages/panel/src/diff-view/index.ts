@@ -7,16 +7,22 @@ import {
   type FileContents,
   type FileDiffMetadata,
   type FileDiffOptions,
+  getFiletypeFromFileName,
+  getSharedHighlighter,
   getSingularPatch,
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
   parsePatchFiles,
+  renderFileWithHighlighter,
   type SelectedLineRange,
 } from "@pierre/diffs";
 import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
+import { colouredFrom } from "./colour-lines.js";
 import {
+  type ColouredLines,
+  type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
   type DiffListFile,
@@ -34,7 +40,7 @@ import {
   sameLook,
   sameNotes,
 } from "./contract.js";
-import { type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
@@ -352,7 +358,7 @@ let kept: Highlighting | undefined;
 function listHighlighting(drawn: DiffLook): Highlighting {
   if (kept !== undefined) {
     // A list drawn after the settings changed hands the kept pool its own look.
-    kept.follow(drawn);
+    void kept.follow(drawn);
     return kept;
   }
   const text = highlightWorkerText();
@@ -757,7 +763,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       typeset(host, next.look);
       if (!sameLook(next.look, was.look)) {
         // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the list's own.
-        highlighting.follow(next.look);
+        void highlighting.follow(next.look);
       }
       if (
         !sameLook(next.look, was.look) ||
@@ -782,4 +788,42 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
 }
 
-export const diffView: DiffViewModule = { mount, mountList };
+/**
+ * A run of a file's lines coloured in the look's syntax themes, as a list's
+ * files are: in the kept pool's workers once they hold the look, or on the
+ * window's own thread where the pool settled there; none where the file's
+ * name names no grammar Pierre carries, or the colouring failed.
+ */
+async function colourLines(request: ColourRequest): Promise<ColouredLines | undefined> {
+  const file = { name: request.name, contents: request.lines.join("\n"), cacheKey: request.key };
+  if (getFiletypeFromFileName(file.name) === PLAIN_TEXT) return undefined;
+  const highlighting = listHighlighting(request.look);
+  const { pool } = highlighting;
+  try {
+    if ((await highlighting.settled) === HIGHLIGHT_MODE.POOL && pool !== undefined) {
+      await highlighting.follow(request.look);
+      await pool.primeFileHighlightCache(file);
+      const cached = pool.getFileResultCache(file)?.result;
+      return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
+    }
+    const { dark, light } = request.look.themes;
+    const highlighter = await getSharedHighlighter({
+      themes: [dark, light],
+      langs: [getFiletypeFromFileName(file.name)],
+      preferredHighlighter: "shiki-js",
+    });
+    const drawn = renderFileWithHighlighter(file, highlighter, {
+      theme: request.look.themes,
+      useTokenTransformer: false,
+      tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
+    });
+    return colouredFrom(drawn, request.lines.length);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The name Pierre gives a file whose name names no grammar. */
+const PLAIN_TEXT = "text";
+
+export const diffView: DiffViewModule = { mount, mountList, colourLines };
