@@ -102,7 +102,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     route: "plans/restore",
@@ -173,7 +173,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/review-options",
     query: "id=$1",
   },
-  { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1", orpc: true },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",
     route: "agents/terminal",
@@ -187,11 +187,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
-  { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1" },
-  { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1" },
+  { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1", orpc: true },
+  { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1", orpc: true },
   // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.
-  { src: "/api/inbox/read", route: "inbox/read" },
-  { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
+  { src: "/api/inbox/read", route: "inbox/read", orpc: true },
+  { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1", orpc: true },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
   { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },

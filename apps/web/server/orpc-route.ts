@@ -1,5 +1,6 @@
 /** orpc-route.ts -- the route every path moved onto the hosted oRPC router answers through. */
 
+import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
@@ -44,7 +45,10 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
   };
 }
 
-const DEPLOYMENT_SEAMS: HostedRouterSeams = { resolveUserId: resolveHostedUserId };
+const DEPLOYMENT_SEAMS: HostedRouterSeams = {
+  eveOrigin: deploymentEveOrigin,
+  resolveUserId: resolveHostedUserId,
+};
 
 /** The deployment's hosted oRPC route. */
 export const orpcRoute: Route = routeFromHostedFetch(hostedFetch(hostedRouter(DEPLOYMENT_SEAMS)));

@@ -15,6 +15,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIMatcher } from "@orpc/openapi/standard";
 import type { Router } from "@orpc/server";
+import { RequestLimitHandlerPlugin } from "@orpc/server/plugins";
 import type { Context } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
@@ -32,6 +33,14 @@ export type HostedFetch = (
 ) => Promise<Response>;
 
 const HOSTED_CACHE_CONTROL = "private, no-store";
+
+/**
+ * The most any request's body may carry, in bytes: Vercel's own limit on a
+ * function's request body (4.5 MB), which no hosted request passes anyway,
+ * and above the largest cap any hosted endpoint holds (a task's Start, about
+ * 4.2 MB, which carries an agent's Start with its files).
+ */
+const HOSTED_BODY_CEILING_BYTES = 4_500_000;
 
 const HTTP_METHOD_HEAD = "HEAD";
 
@@ -67,6 +76,7 @@ export function hostedFetch(router: HostedRouter): HostedFetch {
   const handler = new OpenAPIHandler<HostedContext>(router, {
     errorStatusMap: HOSTED_ERROR_STATUS,
     customErrorResponseBodyEncoder: encodeHostedError,
+    plugins: [new RequestLimitHandlerPlugin({ maxBodySize: HOSTED_BODY_CEILING_BYTES })],
   });
   const matcher = new OpenAPIMatcher(router);
   const servedUnderAnotherMethod = async (request: Request): Promise<boolean> => {

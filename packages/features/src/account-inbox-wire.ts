@@ -20,7 +20,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * few. An archived task's items wait
  * nowhere, since the developer put the task out of the way: none of its open
  * items is carried, so neither the Dock nor a toast counts one. A reader
- * that asks with `archived=include` (`ACCOUNT_INBOX_QUERY`) is listed the
+ * that asks with `archived=include` (the `inbox.account` procedure's
+ * query, `contract/inbox.ts`) is listed the
  * archived tasks holding items beside the rest in `plans`, which its
  * Inbox's Archived tab reads, so an item is put away with its task and
  * comes back as it stood when the task is brought back; a build from
@@ -50,15 +51,6 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * channel it stands in, and none of its words, which the window reads
  * from the chat itself. A build that predates it reads none.
  */
-
-/**
- * The account's read's query (GET): `after` the cursor read past, and
- * `archived=include` to be listed the archived tasks holding items too.
- */
-export const ACCOUNT_INBOX_QUERY = {
-  AFTER: "after",
-  ARCHIVED: "archived",
-} as const;
 
 /** What the read's `archived` query may say. */
 export const ACCOUNT_INBOX_ARCHIVED = {

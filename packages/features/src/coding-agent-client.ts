@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -14,11 +14,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import {
-  ACCOUNT_INBOX_ARCHIVED,
-  ACCOUNT_INBOX_QUERY,
-  accountInboxAnswerSchema,
-} from "./account-inbox-wire.js";
+import { ACCOUNT_INBOX_ARCHIVED } from "./account-inbox-wire.js";
 import {
   CHAT_QUERY,
   type ChatWriteRequest,
@@ -95,21 +91,22 @@ import {
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import {
+  askHosted,
+  HOSTED_DEADLINE,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
-  inboxAnsweredSchema,
   inboxAnswerRequestSchema,
-  inboxAnswerSchema,
   inboxImageTypeSchema,
-  inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
-  inboxReadAllSchema,
-  inboxReadStateSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -138,7 +135,6 @@ import { type RepositoryUnreached, repositoryNotReachableSchema } from "./reposi
 import {
   agentChangesPath,
   agentGitHubImagePath,
-  agentInboxPath,
   agentMessagesPath,
   agentOverviewChecksPath,
   agentOverviewConversationPath,
@@ -153,13 +149,9 @@ import {
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
-  inboxItemPath,
-  inboxItemReadPath,
-  inboxMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
   taskAgentsPath,
-  taskInboxPath,
   taskMessagesPath,
   taskSubagentMessagesPath,
 } from "./service-paths.js";
@@ -331,6 +323,21 @@ function hostedAnswer<Answer>(
   named: NamedRefusals,
 ): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
   return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
+}
+
+/**
+ * A request as the service reads it: checked as the service would check it,
+ * so one it would refuse by shape never travels, and then encoded back into
+ * the value the wire carries (a trimmed text trimmed); nothing where it is
+ * refused.
+ */
+function wireRequestOf<Request, Encoded>(
+  schema: Schema.Codec<Request, Encoded>,
+  request: UnparsedWireValue,
+): Encoded | undefined {
+  const admitted = Result.getOrUndefined(readEither(schema)(request));
+  if (admitted === undefined) return undefined;
+  return Option.getOrUndefined(Schema.encodeOption(schema)(admitted));
 }
 
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
@@ -834,9 +841,9 @@ export class HostedCodingAgentClient {
     taskId: string,
     after: string,
   ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: taskInboxPath(taskId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.task, { id: taskId, after }, HOSTED_DEADLINE.HELD),
+      ROW_REFUSALS,
     );
   }
 
@@ -845,9 +852,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     after: string,
   ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: agentInboxPath(agentId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD),
+      ROW_REFUSALS,
     );
   }
 
@@ -855,15 +862,13 @@ export class HostedCodingAgentClient {
   accountInbox(
     after: string,
   ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
-          [ACCOUNT_INBOX_QUERY.AFTER]: after,
-          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
-        })}`,
-      }),
-      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.inbox.account,
+        { after, archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE },
+        HOSTED_DEADLINE.HELD,
+      ),
+      {},
     );
   }
 
@@ -1037,15 +1042,11 @@ export class HostedCodingAgentClient {
     itemId: string,
     request: InboxAnswerRequest,
   ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(inboxAnswerRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: inboxItemPath(itemId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    const body = wireRequestOf(inboxAnswerRequestSchema, request);
+    if (body === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.answer, { params: { id: itemId }, body }),
+      INBOX_ANSWER_REFUSALS,
     );
   }
 
@@ -1059,15 +1060,11 @@ export class HostedCodingAgentClient {
     itemId: string,
     request: InboxMessageRequest,
   ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(inboxMessageRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: inboxMessagesPath(itemId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, inboxMessagedSchema, INBOX_ANSWER_REFUSALS),
+    const body = wireRequestOf(inboxMessageRequestSchema, request);
+    if (body === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.message, { params: { id: itemId }, body }),
+      INBOX_ANSWER_REFUSALS,
     );
   }
 
@@ -1080,20 +1077,14 @@ export class HostedCodingAgentClient {
   markInboxItemRead(
     itemId: string,
   ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.PUT, path: inboxItemReadPath(itemId) }),
-      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
-    );
+    return hostedAnswer(askHosted(this.#hosted.inbox.markItemRead, { id: itemId }), ROW_REFUSALS);
   }
 
   /** One item marked unread for the account until it reads the item again: its id and its read state; not found where the item is not one the account reaches. */
   markInboxItemUnread(
     itemId: string,
   ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.DELETE, path: inboxItemReadPath(itemId) }),
-      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
-    );
+    return hostedAnswer(askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }), ROW_REFUSALS);
   }
 
   /**
@@ -1105,15 +1096,8 @@ export class HostedCodingAgentClient {
   markInboxRead(
     request: InboxReadAllRequest = {},
   ): Effect.Effect<CodingAgentInboxReadAllView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(inboxReadAllRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.INBOX_READ,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, inboxReadAllSchema, {}),
-    );
+    const body = wireRequestOf(inboxReadAllRequestSchema, request);
+    if (body === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.inbox.markAllRead, body), {});
   }
 }

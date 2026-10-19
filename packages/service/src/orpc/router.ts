@@ -6,14 +6,16 @@
  */
 
 import { type ModelsProcedureSeams, modelsProcedures } from "../accounts/models-procedures.js";
+import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment. */
-export type HostedRouterSeams = ModelsProcedureSeams;
+export type HostedRouterSeams = InboxProcedureSeams & ModelsProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
+    inbox: inboxProcedures(seams),
     models: modelsProcedures(seams),
   });
 }

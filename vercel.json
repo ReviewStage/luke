@@ -103,7 +103,7 @@
         },
         {
           "src": "/api/plans/([^/]+)/inbox",
-          "dest": "/api/default.js?route=plans/inbox&id=$1"
+          "dest": "/api/default.js?route=plans/inbox&route-path=plans/$1/inbox&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
@@ -195,7 +195,7 @@
         },
         {
           "src": "/api/agents/([^/]+)/inbox",
-          "dest": "/api/default.js?route=agents/inbox&id=$1"
+          "dest": "/api/default.js?route=agents/inbox&route-path=agents/$1/inbox&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/terminals/([^/]+)",
@@ -219,19 +219,19 @@
         },
         {
           "src": "/api/inbox/([^/]+)/messages",
-          "dest": "/api/default.js?route=inbox/messages&id=$1"
+          "dest": "/api/default.js?route=inbox/messages&route-path=inbox/$1/messages&id=$1"
         },
         {
           "src": "/api/inbox/([^/]+)/read",
-          "dest": "/api/default.js?route=inbox/read&id=$1"
+          "dest": "/api/default.js?route=inbox/read&route-path=inbox/$1/read&id=$1"
         },
         {
           "src": "/api/inbox/read",
-          "dest": "/api/default.js?route=inbox/read"
+          "dest": "/api/default.js?route=inbox/read&route-path=inbox/read"
         },
         {
           "src": "/api/inbox/([^/]+)",
-          "dest": "/api/default.js?route=inbox/item&id=$1"
+          "dest": "/api/default.js?route=inbox/item&route-path=inbox/$1&id=$1"
         },
         {
           "src": "/api/workspaces/([^/]+)/photo",

@@ -5,11 +5,13 @@
  * reads the contract resolves no service code behind it.
  */
 
+import { inboxContract } from "./inbox.js";
 import { modelsContract } from "./models.js";
 
 export { HOSTED_ERRORS } from "./errors.js";
 
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
+  inbox: inboxContract,
   models: modelsContract,
 };
