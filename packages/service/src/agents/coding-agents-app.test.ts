@@ -184,6 +184,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, type TestContext, vi } from "vitest";
+import { requestUserId } from "../auth/bearer.js";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -292,6 +293,8 @@ const AGENT_OVERVIEW = [
 const TASK = "/api/plans/plan";
 /** The account's tasks, served by the tasks group, each naming its agents in brief. */
 const TASKS = "/api/plans";
+/** Luke's Stop on a task, served by the tasks group, which reaches the brain's eve as the request's caller. */
+const TASK_STOP = "/api/plans/stop";
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 
@@ -391,7 +394,17 @@ type SendAnswer =
   | typeof EVE_SEND_OUTCOME.RETIRED
   | typeof EVE_SEND_OUTCOME.FAILED;
 
-/** eve as the group reaches it, answering from a script and writing down every open, send, and cancel. */
+/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
+function sessionCookieOf(userId: string): string {
+  return `better-auth.session_token=${userId}`;
+}
+
+/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
+function deploymentFor(account: string): string {
+  return `deployment for ${account}`;
+}
+
+/** eve as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
 function fakeEve(
   options: {
     readonly reachable?: boolean;
@@ -402,8 +415,12 @@ function fakeEve(
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
+  /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
+  const cancelledAs: string[] = [];
   /** Every session eve was asked to retire, in order. */
   const reset: string[] = [];
+  /** Who asked each retire, in order, as `cancelledAs` writes it. */
+  const resetAs: string[] = [];
   let sessions = 0;
   let deliveries = 0;
   const eve = (authorization: string): EveSessions => ({
@@ -448,6 +465,7 @@ function fakeEve(
     cancel: (sessionId, eveTurnId) =>
       Effect.sync(() => {
         cancelled.push([sessionId, eveTurnId]);
+        cancelledAs.push(authorization);
         return options.cancels === false
           ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
           : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
@@ -455,11 +473,12 @@ function fakeEve(
     reset: (sessionId) =>
       Effect.sync(() => {
         reset.push(sessionId);
+        resetAs.push(authorization);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
     stream: () => Stream.empty,
   });
-  return { eve, opened, sent, cancelled, reset };
+  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
@@ -511,15 +530,27 @@ const standing = (
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       ANALYTICS.layer,
     );
+    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
+    const sessions = new Map(
+      [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
+    );
     const seams = {
+      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
       resolveUserId: (incoming: Request) =>
-        Effect.succeed(
-          Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+        requestUserId(
+          incoming,
+          (input) => {
+            const sub = bearers.get(input.headers.get("authorization") ?? "");
+            return Effect.succeed(sub === undefined ? undefined : { sub });
+          },
+          (input) =>
+            Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
-      // The deployment acting for an agent's starter, which the fake writes down as the starter's bearer.
-      eveAs: (starter: string) => eve.eve(`Bearer ${starter}`),
+      // The deployment acting for an account, an agent's starter for a chat notice or the account a
+      // cookie named, which the fake writes down apart from any bearer.
+      eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
     };
@@ -537,12 +568,12 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose(), chat.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group, and the chat's on the chat's. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, and the chat's on the chat's. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const { pathname } = new URL(request.url);
         if (pathname === CHAT) return chat.handler(request);
-        return pathname === TASK || pathname === TASKS
+        return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
           ? tasks.handler(request)
           : agents.handler(request);
       });
@@ -572,6 +603,8 @@ function request(
     picture?: string;
     src?: string;
     number?: string;
+    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
+    cookie?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -583,9 +616,12 @@ function request(
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
   if (init.number !== undefined) url.searchParams.set("number", init.number);
+  const headers = new Headers();
+  if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+  if (init.cookie !== undefined) headers.set("cookie", init.cookie);
   return new Request(url, {
     method: init.method ?? "GET",
-    headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+    headers,
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
 }
@@ -817,6 +853,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(eve.resetAs, [`Bearer ${other}`], "a bearer's delete retires over it");
       }),
   );
 
@@ -1016,6 +1053,64 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[`Bearer ${owner}`, prompt]],
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie an agent's Start and a task's start naming an agent open the session as the deployment acting for the cookie's account, which no other account's cookie reaches",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, eve, ask } = yield* openTask();
+        const cookie = sessionCookieOf(owner);
+        const prompt = "Expire invitations after a week.";
+
+        const started = yield* ask(
+          request(TASK_AGENTS, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie,
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+        const withTask = yield* ask(
+          request(TASKS, undefined, {
+            method: "POST",
+            cookie,
+            body: {
+              workspaceId: task.workspaceId,
+              repository: RELAY_FULL_NAME,
+              agent: { idempotencyKey: randomUUID(), prompt },
+            },
+          }),
+        );
+        const stranger = yield* ask(
+          request(TASK_AGENTS, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie: sessionCookieOf(other),
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+
+        assert.equal(
+          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.planId,
+          task.id,
+        );
+        assert.equal(
+          readAnswer(taskStartAnswerSchema, HOSTED_HTTP_STATUS.CREATED, withTask).agentRefusal,
+          undefined,
+        );
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          eve.opened.map((opened) => [opened.authorization, opened.message.message]),
+          [
+            [deploymentFor(owner), SNAPSHOT],
+            [deploymentFor(owner), prompt],
+          ],
         );
       }),
   );
@@ -3359,6 +3454,208 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
 
+  /** Where an agent's Stop lands. */
+  const AGENT_STOP = "/api/agents/stop";
+
+  /** Luke's turn under way on the task's own conversation, its session recorded, as a typed ask leaves one: the session it runs in. */
+  const lukeRunning = (owner: string, taskId: string) =>
+    Effect.gen(function* () {
+      const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
+      const target = { userId: owner, conversationId };
+      const sessionId = `wrun_${randomUUID()}`;
+      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const turnId = randomUUID();
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        conversationId: sessionKey(conversationId),
+        turnId,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      return sessionId;
+    });
+
+  it.effect(
+    "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, sessionId } = yield* startedAgent(eve, { running: false });
+        const message = (text: string) => ({ text, clientKey: randomUUID() });
+
+        const overCookie = yield* ask(
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: agent.id,
+            cookie: sessionCookieOf(owner),
+            body: message("Use the new table."),
+          }),
+        );
+        const overBearer = yield* ask(messageAs(owner, agent.id, message("And drop the old one.")));
+
+        assert.equal(
+          overCookie.status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          JSON.stringify(overCookie.body),
+        );
+        assert.equal(
+          overBearer.status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          JSON.stringify(overBearer.body),
+        );
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.message]),
+          [
+            [deploymentFor(owner), sessionId, "Use the new table."],
+            [`Bearer ${owner}`, sessionId, "And drop the old one."],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        const archived = yield* startedAgent(fakeEve(), { running: true });
+        const withTask = yield* startedAgent(fakeEve(), { running: true });
+
+        const stop = yield* stopped.ask(
+          request(AGENT_STOP, undefined, {
+            method: "POST",
+            id: stopped.agent.id,
+            cookie: sessionCookieOf(stopped.owner),
+          }),
+        );
+        const archive = yield* archived.ask(
+          request(AGENT, undefined, {
+            method: "PATCH",
+            id: archived.agent.id,
+            cookie: sessionCookieOf(archived.owner),
+            body: { archived: true },
+          }),
+        );
+        const taskArchive = yield* withTask.ask(
+          request(TASK, undefined, {
+            method: "PATCH",
+            id: withTask.task.id,
+            cookie: sessionCookieOf(withTask.owner),
+            body: { archived: true },
+          }),
+        );
+
+        assert.deepEqual(
+          [stop.status, archive.status, taskArchive.status],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        for (const { eve, owner, sessionId } of [stopped, archived, withTask]) {
+          assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+          assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+        }
+        assert.notEqual(
+          Option.getOrThrow(yield* readCodingAgent(archived.owner, archived.agent.id)).archivedAt,
+          null,
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie a task's delete stops its agent and retires its own session and the agent's as the deployment acting for the cookie's account, before the task goes",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+        const taskSession = yield* lukeRunning(owner, task.id);
+
+        const deleted = yield* ask(
+          request(TASK, undefined, {
+            method: "DELETE",
+            id: task.id,
+            cookie: sessionCookieOf(owner),
+          }),
+        );
+
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+        assert.deepEqual(eve.reset.toSorted(), [taskSession, sessionId].toSorted());
+        assert.deepEqual(eve.resetAs, [deploymentFor(owner), deploymentFor(owner)]);
+        assert.ok(Option.isNone(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie Luke's Stop on the task cancels his turn under way as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask } = yield* openTask({ eve });
+        const taskSession = yield* lukeRunning(owner, task.id);
+
+        const stopped = yield* ask(
+          request(TASK_STOP, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie: sessionCookieOf(owner),
+          }),
+        );
+
+        assert.deepEqual(stopped, { status: HOSTED_HTTP_STATUS.OK, body: {} });
+        assert.deepEqual(eve.cancelled, [[taskSession, "turn_0"]]);
+        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+      }),
+  );
+
+  it.effect(
+    "another account's session cookie reaches none of an agent's or its task's controls, which answer as nothing there and ask eve nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        yield* lukeRunning(owner, task.id);
+        const cookie = sessionCookieOf(other);
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        for (const asked of [
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: agent.id,
+            cookie,
+            body: { text: "Push to main.", clientKey: randomUUID() },
+          }),
+          request(AGENT_STOP, undefined, { method: "POST", id: agent.id, cookie }),
+          request(AGENT, undefined, {
+            method: "PATCH",
+            id: agent.id,
+            cookie,
+            body: { archived: true },
+          }),
+          request(TASK, undefined, {
+            method: "PATCH",
+            id: task.id,
+            cookie,
+            body: { archived: true },
+          }),
+          request(TASK, undefined, { method: "DELETE", id: task.id, cookie }),
+          request(TASK_STOP, undefined, { method: "POST", id: task.id, cookie }),
+        ]) {
+          const { pathname } = new URL(asked.url);
+          assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
+        }
+        assert.deepEqual(
+          [eve.sent, eve.cancelled, eve.reset],
+          [[], [], []],
+          "the owner's Start is all eve heard",
+        );
+        assert.ok(Option.isSome(yield* readTask(owner, task.id)));
+      }),
+  );
+
   it.effect(
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
@@ -4548,6 +4845,50 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     title: "What should the invitation email say?",
     response: { type: INBOX_RESPONSE.TEXT },
   } as const;
+
+  it.effect(
+    "over a browser's session cookie an answer to an item and a message on its thread reach its agent as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, ask, post, sessionId } = yield* openInbox(eve);
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const cookie = sessionCookieOf(owner);
+
+        const answered = yield* ask(
+          request(INBOX_ITEM, undefined, {
+            method: "POST",
+            id: posted.success.id,
+            cookie,
+            body: {
+              revision: posted.success.revision,
+              clientKey: randomUUID(),
+              reply: INBOX_REPLY.ANSWERED,
+              note: "Keep it short.",
+            },
+          }),
+        );
+        const messaged = yield* ask(
+          request(INBOX_MESSAGES, undefined, {
+            method: "POST",
+            id: posted.success.id,
+            cookie,
+            body: { text: "Say when it expires, too.", clientKey: randomUUID() },
+          }),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
+        assert.equal(messaged.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(messaged.body));
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [
+            [deploymentFor(owner), sessionId],
+            [deploymentFor(owner), sessionId],
+          ],
+        );
+      }),
+  );
 
   it.effect(
     "the account's inbox answers every open item across its plans with the agent that posted it, and leaves out settled items, an archived plan's, and another account's",
@@ -8010,7 +8351,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         });
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
-          [[`Bearer ${chat.owner}`, chat.sessionId]],
+          [[deploymentFor(chat.owner), chat.sessionId]],
         );
         const page = yield* listMessagesPast(
           chat.target.userId,
@@ -8060,7 +8401,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.deepEqual(fromTeammate.receipt.told, ["agent-1"]);
         assert.deepEqual(
           eve.sent.map((each) => each.authorization),
-          [`Bearer ${chat.owner}`, `Bearer ${chat.owner}`],
+          [deploymentFor(chat.owner), deploymentFor(chat.owner)],
         );
         // A plain post in a channel tells nobody.
         const plain = yield* chat.wrote({ text: "Morning, all.", clientKey: randomUUID() });

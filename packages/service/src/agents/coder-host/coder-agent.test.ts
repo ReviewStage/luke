@@ -167,6 +167,37 @@ test("the deployment's cancel of a turn, which a continue started through start_
   assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
 });
 
+test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the developer's own principal, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
+  const door = doorOf(coderChannel());
+  const control = (sessionId: string, route: string, method = "POST") =>
+    new Request(`https://luke.test/eve/v1/session/${sessionId}/${route}`, {
+      method,
+      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+    });
+
+  const { admitted } = await door(control(OWN_SESSION, "reset"));
+  assert.ok(admitted);
+  assert.deepEqual(
+    [admitted.authenticator, admitted.principalType, admitted.principalId],
+    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
+  );
+  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
+    refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
+  });
+  for (const [route, method] of [
+    ["reset", "GET"],
+    ["compact", "POST"],
+    ["clear", "POST"],
+  ] as const) {
+    assert.deepEqual(
+      await door(control(OWN_SESSION, route, method)),
+      { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
+      `${method} ${route}`,
+    );
+  }
+});
+
 test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of none", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;

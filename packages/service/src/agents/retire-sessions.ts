@@ -21,9 +21,11 @@ import {
  * still stands, because eve's door admits no one to the session of a
  * cleared conversation; so a task's delete retires its sessions before it
  * clears them, and an account's deletion before the account goes. Each is
- * asked as the developer, over the bearer the request carried, which both
- * deletes refuse to go on without (`http/http-effect.ts`'s
- * `hostedBearerOnly`): a browser's session cookie carries none eve takes.
+ * asked as the delete's own caller (`coder-host/stop.ts`'s `eveFor`): over
+ * the bearer the request carried, or, for a browser's session cookie, as the
+ * deployment acting for the account the cookie named, which eve's door
+ * admits for a retire on a session that account reaches
+ * (`brain-host/auth.ts`).
  *
  * A retire is a courtesy the delete does not wait on: an eve that cannot be
  * reached or does not confirm is logged by its outcome and status, and the
@@ -38,7 +40,7 @@ const RETIRE_SESSIONS = {
   TIMEOUT: Duration.seconds(35),
 } as const;
 
-/** How a caller reaches eve under one mount: the developer's own client, or the refusal that there is none. */
+/** How a caller reaches eve under one mount: the delete's own caller's client, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
 ) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;

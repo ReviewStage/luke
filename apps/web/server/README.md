@@ -618,16 +618,21 @@ bearer wherever `Authorization` is present, refused when it does not verify
 rather than read past to the cookie, and the browser's session cookie only
 where no `Authorization` is carried. `/api/mac-commands` takes the bearer
 alone (`resolveHostedBearerUserId`), because its held read claims commands
-for the one Mac that asks. A task's delete and the account's take the bearer
-alone too, asked in the endpoint itself (`hostedBearerOnly`) rather than by
-the route file's resolver, because every function holding a group answers
-every path the group declares, the one a client names in the dispatcher's
-`route-path` query among them: each ends the eve sessions of what it deletes
-over that bearer. The rest of what reaches eve over the caller's bearer (an
-agent's Start, message, and Stop) is refused at eve for a cookie. The eve
-services under `/eve/v1/*` and
+for the one Mac that asks. Everything else takes either, the work that
+reaches eve included: a request that carries a bearer reaches eve over it,
+and one that carries only the cookie reaches eve as the deployment acting
+for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
+`eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
+automation run, and a task's delete and the account's, which retire the eve
+sessions of what they delete, all work in a browser. Note that a route
+file's choice of resolver is not a boundary, because every function holding
+a group answers every path the group declares, the one a client names in the
+dispatcher's `route-path` query among them; whom eve is reached as is chosen
+per request in the endpoint instead, so where a request lands changes
+nothing about it. The eve services under `/eve/v1/*` and
 `/eve/coder/v1/*` share the origin but never pass through this adaptor; they
-resolve the bearer alone (`hostedUserId`) and take no cookie. Every route
+resolve the bearer alone (`hostedUserId`), or the deployment's own secret
+naming an account, and take no cookie. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
