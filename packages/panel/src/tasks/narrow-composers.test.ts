@@ -15,6 +15,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
+import { NewTaskDialog } from "./new-task-dialog.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
@@ -147,6 +148,43 @@ test("on a desktop, the agent's field grows to its eight lines whatever the wind
   const cap = getComputedStyle(field).maxHeight;
   assert.doesNotMatch(cap, /stage-height|field-cap/u, "the window's height bounds nothing");
   assert.equal(custom(field, "--agent-composer-field-cap"), undefined);
+});
+
+/** New task's dialog open, as a press of New task opens it, portalled over the window outside any shell; answers its field. */
+async function openNewTask(): Promise<Element> {
+  const control = tasksControl();
+  await draw(
+    createElement(NewTaskDialog, {
+      newTask: {
+        ...control.newTask,
+        open: true,
+        workspaceId: "workspace-acme",
+        repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+      },
+    }),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  return (
+    document.querySelector(".luke-dialog .agent-composer-input") ??
+    assert.fail("the dialog's field stands")
+  );
+}
+
+test("on a phone with the keyboard up, New task's dialog, drawn outside the shell, caps its field at the same share of what is seen", async () => {
+  document.documentElement.setAttribute("data-luke-profile", "web");
+  layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM, composer: PHONE.CARD }, { touch: true });
+  stageAt(PHONE.STAGE_WITH_KEYBOARD);
+  const field = await openNewTask();
+  assert.equal(pixels(field, getComputedStyle(field).maxHeight), PHONE.STAGE_WITH_KEYBOARD * 0.3);
+});
+
+test("on a desktop, New task's dialog lets its field grow to its eight lines whatever the window's height", async () => {
+  layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM, composer: DESKTOP.CARD });
+  stageAt(DESKTOP.STAGE);
+  const field = await openNewTask();
+  assert.doesNotMatch(getComputedStyle(field).maxHeight, /stage-height|field-cap/u);
 });
 
 /** A thread opened over a plan's column, as the plan lays it, in the room given. */

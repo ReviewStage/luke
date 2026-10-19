@@ -7280,6 +7280,25 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-left: auto;
 }
 
+/* The dialog portals out of the shell, so its narrow room is the dimmed
+   window's own (`luke-dialog-room`, `@luke/ui`'s dialog.css): on a phone,
+   its field stops growing at the same share of what is seen as a box's in
+   the shell does, so Start stays in the card above the keyboard. */
+@container luke-dialog-room (max-width: 639px) {
+  .new-task .agent-composer-field {
+    --agent-composer-field-lines: calc(
+      8 *
+      var(--luke-type-body-leading) +
+      var(--agent-composer-field-block)
+    );
+    --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
+  }
+
+  .new-task .new-task-composer .agent-composer-input {
+    max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
+  }
+}
+
 /* A card too narrow for its placeholder on one line, as on a phone, wraps
    it, since its field stands five lines tall; the agent's one-line box cuts
    its own short instead, which would otherwise run over its foot. */
