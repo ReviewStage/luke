@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
@@ -22,7 +30,10 @@ import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./o
  * Luke kept under its application data is left there and said; two opens of
  * the shared clone at once each bring in their own branch; one waits on a
  * clone another holds while it lives, and takes the lock over once it is
- * gone; and no two
+ * gone; an open tidies the worktrees, this Luke's and an earlier one's,
+ * whose branch is gone from GitHub, unless one is in use, was opened in the
+ * last day, or holds the developer's own, and an earlier Luke's clone once
+ * it holds none; and no two
  * branches share a worktree or reach outside its repository's folder.
  */
 
@@ -597,6 +608,110 @@ test(
     assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
     assert.match(printed, /No run command is set/u);
     assert.equal(code, 0);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "an open tidies the worktrees whose branch is gone from GitHub, unless in use, opened in the last day, or holding the developer's own",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const root = path.join(state, ".luke");
+    const trash = path.join(root, "trash");
+    const branches = ["luke/merged", "luke/changed", "luke/recent", "luke/running", "luke/open"];
+    for (const branch of branches) git(origin, ["branch", branch]);
+    const open = (branch: string) =>
+      run(
+        scratch,
+        shell,
+        openOnMacScript({
+          repository: "acme/app",
+          clone: cloneFolder(root, "acme/app"),
+          worktree: worktreeFolder(root, "acme/app", branch),
+          branch,
+          remotes: { https: origin, ssh: origin },
+          trash,
+        }),
+      );
+    for (const branch of branches) open(branch);
+    const folder = (branch: string) => worktreeFolder(root, "acme/app", branch);
+    const gitDir = (branch: string) => git(folder(branch), ["rev-parse", "--absolute-git-dir"]);
+    const daysAgo = (branch: string) => {
+      const then = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      utimesSync(path.join(gitDir(branch), "luke-opened-at"), then, then);
+    };
+    for (const branch of ["luke/merged", "luke/changed", "luke/running", "luke/open"])
+      daysAgo(branch);
+    writeFileSync(path.join(folder("luke/changed"), "README.md"), "mine\n");
+    const holder = spawn("sleep", ["60"]);
+    t.onTestFinished(() => void holder.kill());
+    writeFileSync(path.join(gitDir("luke/running"), "luke-running"), String(holder.pid));
+    for (const branch of ["luke/merged", "luke/changed", "luke/recent", "luke/running"])
+      git(origin, ["branch", "-D", branch]);
+
+    const printed = open("luke/fix-relay");
+
+    assert.match(printed, /Removed the worktree of luke\/merged/u);
+    assert.equal(existsSync(folder("luke/merged")), false);
+    assert.doesNotMatch(
+      git(cloneFolder(root, "acme/app"), ["worktree", "list"]),
+      /luke\+2Fmerged/u,
+    );
+    for (const kept of ["luke/changed", "luke/recent", "luke/running", "luke/open"])
+      assert.equal(existsSync(path.join(folder(kept), ".git")), true, kept);
+    assert.deepEqual(existsSync(trash) ? readdirSync(trash) : [], []);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "an open tidies an earlier Luke's worktree whose branch is gone, and its clone once it holds none",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    git(origin, ["branch", "luke/merged"]);
+    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierClone = cloneFolder(earlierRoot, "acme/app");
+    const earlierWorktree = worktreeFolder(earlierRoot, "acme/app", "luke/merged");
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: earlierClone,
+        worktree: earlierWorktree,
+        branch: "luke/merged",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+    const opened = path.join(
+      git(earlierWorktree, ["rev-parse", "--absolute-git-dir"]),
+      "luke-opened-at",
+    );
+    const then = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    utimesSync(opened, then, then);
+    git(origin, ["branch", "-D", "luke/merged"]);
+    const root = path.join(state, ".luke");
+
+    const printed = run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(root, "acme/app"),
+        worktree: worktreeFolder(root, "acme/app", "luke/fix-relay"),
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+        earlier: { worktrees: path.dirname(earlierWorktree), clone: earlierClone },
+        trash: path.join(root, "trash"),
+      }),
+    );
+
+    assert.match(printed, /Removed the worktree of luke\/merged/u);
+    assert.match(printed, /Removed the clone an earlier Luke kept/u);
+    assert.equal(existsSync(earlierWorktree), false);
+    assert.equal(existsSync(earlierClone), false);
   },
   GIT_DEADLINE,
 );

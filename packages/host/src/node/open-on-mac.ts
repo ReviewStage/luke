@@ -80,6 +80,51 @@ export function worktreeFolder(stateRoot: string, repository: string, branch: st
   );
 }
 
+/**
+ * The tidy each open runs beside its run: it finishes deleting what an
+ * earlier tidy moved aside, then moves aside every other worktree of the
+ * repository, this Luke's and an earlier one's, whose branch GitHub no
+ * longer has, which no run is using, which was not opened in the last day,
+ * and which holds no change and no commit of the developer's, and an earlier
+ * Luke's clone left with no worktree and no commit of the developer's. A
+ * worktree is moved aside whole and its record pruned before it is deleted,
+ * so one stopped half-way is never left half a worktree. GitHub unread, it
+ * tidies nothing.
+ */
+const SWEEP = [
+  "sweep() {",
+  '  [ -n "$trash" ] || return 0',
+  '  rm -rf "$trash"/* 2>/dev/null',
+  '  live="$(git -C "$clone" ls-remote --heads origin)" || return 0',
+  '  for each in "$(dirname "$worktree")"/* ${earlier_worktrees:+"$earlier_worktrees"/*}; do',
+  '    [ -e "$each/.git" ] && [ "$each" != "$worktree" ] || continue',
+  '    name="$(basename "$each")"',
+  '    name="${name//+2F//}"',
+  '    name="${name//%2F//}"',
+  `    printf "%s\\n" "$live" | awk -v want="refs/heads/$name" '$2 == want { found = 1 } END { exit !found }' && continue`,
+  '    gitdir="$(git -C "$each" rev-parse --absolute-git-dir 2>/dev/null)" || continue',
+  '    holder="$(cat "$gitdir/luke-running" 2>/dev/null)"',
+  '    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then continue; fi',
+  '    [ -z "$(find "$gitdir/luke-opened-at" -mtime -1 2>/dev/null)" ] || continue',
+  '    changes="$(git -C "$each" status --porcelain 2>/dev/null)" || continue',
+  '    [ -z "$changes" ] || continue',
+  '    mine="$(git -C "$each" rev-list --max-count=1 HEAD --not --remotes --glob=refs/luke/* 2>/dev/null)" || continue',
+  '    [ -z "$mine" ] || continue',
+  '    common="$(git -C "$each" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || continue',
+  '    mkdir -p "$trash" && mv "$each" "$trash/$(date +%s)-$$-$(basename "$each")" || continue',
+  '    git --git-dir="$common" worktree prune',
+  '    echo "▸ Removed the worktree of $name, whose branch is gone from GitHub"',
+  "  done",
+  '  if [ -n "$earlier_clone" ] && [ -e "$earlier_clone/.git" ] &&',
+  '    [ "$(git -C "$earlier_clone" worktree list --porcelain | grep -c "^worktree ")" = 1 ] &&',
+  '    [ -z "$(git -C "$earlier_clone" rev-list --max-count=1 --branches --not --remotes --glob=refs/luke/*)" ]; then',
+  '    mkdir -p "$trash" && mv "$earlier_clone" "$trash/$(date +%s)-$$-clone" &&',
+  '      echo "▸ Removed the clone an earlier Luke kept at $earlier_clone"',
+  "  fi",
+  '  rm -rf "$trash"/* 2>/dev/null',
+  "}",
+];
+
 /** The script, its values quoted, that brings the branch into a worktree of Luke's clone and runs the command there, where there is one; it ends with the command. */
 export function openOnMacScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
@@ -92,7 +137,17 @@ export function openOnMacScript(input: {
   /** The repository's run command on this Mac, run in the worktree; none where it has none, which the script says. */
   readonly command?: string | null | undefined;
   /** The folder an earlier Luke kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
-  readonly earlier?: { readonly worktrees: string } | undefined;
+  readonly earlier?:
+    | { readonly worktrees: string; readonly clone?: string | undefined }
+    | undefined;
+  /**
+   * Where worktrees past their use are moved to be deleted, under the shared
+   * root; none where the script tidies nothing. Each open tidies the
+   * repository's other worktrees there: one whose branch is gone from
+   * GitHub, that no run is using, not opened in the last day, and holding
+   * nothing of the developer's, and an earlier Luke's clone left with none.
+   */
+  readonly trash?: string | undefined;
   /** Where the script writes its terminal's device, which Luke resizes it through; none where nothing resizes it. */
   readonly ttyFile?: string | undefined;
   /** The terminal's size in cells as the tab first draws it. */
@@ -120,6 +175,8 @@ export function openOnMacScript(input: {
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
     `earlier_worktrees=${shellQuoted(input.earlier?.worktrees ?? "")}`,
+    `earlier_clone=${shellQuoted(input.earlier?.clone ?? "")}`,
+    `trash=${shellQuoted(input.trash ?? "")}`,
     `earlier_names=${shellQuoted(`${path.basename(input.worktree)} ${encodeURIComponent(input.branch)}`)}`,
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
@@ -221,6 +278,8 @@ export function openOnMacScript(input: {
     '  git config "branch.$branch.remote" origin || return 1',
     '  git config "branch.$branch.merge" "refs/heads/$branch" || return 1',
     '  git update-ref refs/worktree/luke-opened "$head" || return 1',
+    // Note that when the worktree was last opened is kept beside Git's own record of it, which a tidy reads.
+    '  touch "$(git rev-parse --absolute-git-dir)/luke-opened-at"',
     "}",
     // Note that a failed step is said, and the run ends there, never running the command on a stale or missing checkout.
     "if ! ( opened ); then",
@@ -228,6 +287,11 @@ export function openOnMacScript(input: {
     "  exit 1",
     "fi",
     'cd "$worktree" || exit 1',
+    ...SWEEP,
+    // Note that the tidy runs beside the run, so a slow network or a large delete never holds the run up.
+    "( sweep ) &",
+    // Note that the run's id is kept beside Git's record of the worktree, so a tidy from any Luke leaves a worktree in use alone; the command takes the script's place, keeping its id.
+    'echo "$$" > "$(git rev-parse --absolute-git-dir)/luke-running"',
     'echo "▸ $branch in $(pwd)"',
     ...(input.command == null
       ? [
