@@ -8,7 +8,7 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
  * Luke opens a terminal of this Mac in a tab of its own, whose shell brings
  * the branch into a worktree of Luke's own clone of the repository and opens
  * a shell there, after the repository's run command where this Mac has one
- * for it, kept in its settings file and never sent anywhere. What the terminal prints and what is typed into it travel
+ * for it, kept in its settings file and never sent anywhere. What the run prints, and the terminal's size, travel
  * on a port between main and that one tab, and nowhere else.
  */
 
@@ -53,6 +53,8 @@ export const macTerminalOpenParamsSchema = EffectSchema.Struct({
       EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum: 2_147_483_647 })),
     ),
   ),
+  /** Whether this is a Run press, which starts a run anew where the last has ended; a tab drawn again over an ended run only shows it. */
+  again: EffectSchema.optional(EffectSchema.Boolean),
   cols: terminalSize(1_000),
   rows: terminalSize(1_000),
 });
@@ -72,8 +74,6 @@ export const MAC_TERMINAL_PORT_MESSAGE = {
   OUTPUT: "output",
   /** main → renderer: the shell ended, with its status. */
   EXIT: "exit",
-  /** renderer → main: what was typed. */
-  INPUT: "input",
   /** renderer → main: the terminal's size in cells. */
   RESIZE: "resize",
 } as const;
@@ -91,14 +91,9 @@ export const macTerminalPortOutboundSchema = EffectSchema.Union([
 
 export type MacTerminalPortOutbound = typeof macTerminalPortOutboundSchema.Type;
 
-export const macTerminalPortInboundSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.INPUT),
-    data: EffectSchema.String.check(EffectSchema.isMaxLength(65_536)),
-  }),
-  EffectSchema.Struct({
-    type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.RESIZE),
-    cols: terminalSize(1_000),
-    rows: terminalSize(1_000),
-  }),
-]);
+/** renderer → main: the terminal's size; a run takes nothing typed. */
+export const macTerminalPortInboundSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.RESIZE),
+  cols: terminalSize(1_000),
+  rows: terminalSize(1_000),
+});

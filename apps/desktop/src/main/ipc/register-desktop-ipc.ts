@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -130,6 +131,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),
+      openInTerminal: (folder) =>
+        execFile("/usr/bin/open", ["-a", "Terminal", folder], () => undefined),
+      exists: (folder) => fs.existsSync(folder),
       stateRoot: config.stateRoot,
       ports: {
         open: (sender, ticket) => {
@@ -205,9 +209,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         colourCode: highlightSnippet,
       },
       codingAgents: { host: operator.host, notices },
-      integrations: { host: operator.host },
-      automations: { host: operator.host },
-      factory: { host: operator.host },
     },
     platformRows,
   );
@@ -259,6 +260,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
       {
         accountAsks: { host: operator.host },
         agents: { host: operator.host, notices },
+        automations: { host: operator.host },
+        factory: { host: operator.host },
+        integrations: { host: operator.host },
         issues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },

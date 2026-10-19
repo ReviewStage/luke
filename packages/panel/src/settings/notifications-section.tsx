@@ -1,23 +1,43 @@
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
 import { BUTTON_VARIANT, Button, ExternalIcon, SettingsRow, SettingsSection } from "@luke/ui";
-import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/voice/settings-controls";
+import {
+  NOTIFICATIONS_GRANTOR,
+  NOTIFICATIONS_STATUS,
+  type NotificationsControl,
+} from "@luke/voice/settings-controls";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/** What the test row says of when Luke notifies at all. */
-const NOTIFICATIONS_WHEN_NOTE = "Luke notifies only when its window is in the background.";
-
-/** What the section says of macOS's grant, by whether this is the packaged app. */
-const NOTIFICATIONS_LINE = {
+/**
+ * What the section says of when Luke notifies at all and of the grant: of
+ * macOS's, by whether this is the packaged app, or of the browser's
+ * permission for the site.
+ */
+const NOTIFICATIONS_WORDS = {
   packaged: {
+    when: "Luke notifies only when its window is in the background.",
     on: "macOS showed Luke's last notification, so notifications are on.",
     off: "macOS has notifications off for Luke.",
   },
   development: {
+    when: "Luke notifies only when its window is in the background.",
     on: "macOS showed the last notification from Electron, which is how the dev build appears to macOS.",
     off: "macOS has notifications off for Electron, which is how the dev build appears to macOS.",
   },
+  browser: {
+    when: "Luke notifies only while its tab is hidden.",
+    on: "Your browser lets Luke show notifications.",
+    off: "Your browser blocks Luke's notifications. Allow them in this site's settings, beside its address.",
+  },
 } as const;
+
+/** The words for the grant this panel stands under. */
+function notificationsWords(
+  control: NotificationsControl,
+): (typeof NOTIFICATIONS_WORDS)[keyof typeof NOTIFICATIONS_WORDS] {
+  if (control.grantor === NOTIFICATIONS_GRANTOR.BROWSER) return NOTIFICATIONS_WORDS.browser;
+  return control.packaged ? NOTIFICATIONS_WORDS.packaged : NOTIFICATIONS_WORDS.development;
+}
 
 /**
  * Whether Luke posts a notification as a coding agent ends behind his
@@ -29,7 +49,9 @@ const NOTIFICATIONS_LINE = {
  * standing now, because a change in System Settings posts nothing Electron
  * hears, and the test is how the developer asks again. A development
  * build runs inside Electron's own app, so macOS lists it as Electron, and
- * the line names it so.
+ * the line names it so. In a browser the grant is the site's permission,
+ * which the page cannot open, so the refusal says where it is changed and
+ * offers no button.
  *
  * The group is `@luke/ui`'s `SettingsSection` and each line its
  * `SettingsRow`, the test and System Settings presses the outline `Button`.
@@ -43,7 +65,8 @@ export function NotificationsSection({
   writes: SettingsWrites;
   control: NotificationsControl;
 }): React.JSX.Element {
-  const line = control.packaged ? NOTIFICATIONS_LINE.packaged : NOTIFICATIONS_LINE.development;
+  const words = notificationsWords(control);
+  const opensSettings = control.grantor === NOTIFICATIONS_GRANTOR.MACOS;
   return (
     <SettingsSection>
       <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.NOTIFICATIONS} view={view} writes={writes} />
@@ -51,10 +74,10 @@ export function NotificationsSection({
         label="Test notification"
         description={
           <>
-            {NOTIFICATIONS_WHEN_NOTE}
+            {words.when}
             {control.status === NOTIFICATIONS_STATUS.ON ? (
               <span className="settings-state settings-state-line" data-state="connected">
-                {line.on}
+                {words.on}
               </span>
             ) : null}
           </>
@@ -73,19 +96,21 @@ export function NotificationsSection({
           label={null}
           description={
             <span className="settings-state" data-state="attention">
-              {line.off}
+              {words.off}
             </span>
           }
         >
-          {() => (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<ExternalIcon />}
-              onClick={control.onOpenSettings}
-            >
-              Open System Settings
-            </Button>
-          )}
+          {opensSettings
+            ? () => (
+                <Button
+                  variant={BUTTON_VARIANT.OUTLINE}
+                  icon={<ExternalIcon />}
+                  onClick={control.onOpenSettings}
+                >
+                  Open System Settings
+                </Button>
+              )
+            : undefined}
         </SettingsRow>
       ) : null}
     </SettingsSection>

@@ -167,9 +167,9 @@ import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq } from "drizzle-orm";
-import type { Context } from "effect";
 import {
   Clock,
+  type Context,
   DateTime,
   Deferred,
   Duration,
@@ -208,11 +208,12 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
-import { tasksApp } from "../tasks/tasks-app.js";
+import { tasksProcedures } from "../tasks/tasks-procedures.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -242,12 +243,14 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { chatAttachmentApp } from "./chat-attachment-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
   CHAT_TOOL_REFUSAL,
   type ChatAgent,
   chatDigest,
+  editAsAgent,
   postAsAgent,
   readAsAgent,
   resolveAsAgent,
@@ -293,14 +296,18 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** One task, served by the tasks group, whose delete stops the task's agents through the same Stop. */
-const TASK = "/api/plans/plan";
-/** The account's tasks, served by the tasks group, each naming its agents in brief. */
+/** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 const TASKS = "/api/plans";
-/** Luke's Stop on a task, served by the tasks group, which reaches the brain's eve as the request's caller. */
-const TASK_STOP = "/api/plans/stop";
+/** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
+const TASK = (taskId: string) => `${TASKS}/${taskId}`;
+/** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
+const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
+/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+const TASK_PATH =
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
+const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -562,19 +569,22 @@ const standing = (
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const tasks = HttpRouter.toWebHandler(
-      tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    // SAFETY: the messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
-    const messages = hostedFetch({ messages: messagesProcedures(seams) });
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
+    const routed = hostedFetch({
+      messages: messagesProcedures(seams),
+      plans: tasksProcedures(seams),
+    });
+    const chatPictures = HttpRouter.toWebHandler(
+      chatAttachmentApp(seams).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, the transcript and the chat on the hosted oRPC router at their public paths, as their rewrites carry them. */
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
+    );
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const url = new URL(request.url);
@@ -582,11 +592,12 @@ const standing = (
         const id = url.searchParams.get("id");
         if (pathname === AGENT_MESSAGES && id !== null) {
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
-          return messages(new Request(url, request), webServices);
+          return routed(new Request(url, request), webServices);
         }
-        if (pathname === CHAT) return messages(request, webServices);
-        return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
-          ? tasks.handler(request)
+        if (pathname === CHAT) return routed(request, webServices);
+        if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
+        return pathname === TASKS || TASK_PATH.test(pathname)
+          ? routed(request, webServices)
           : agents.handler(request);
       });
     const ask = (request: Request) =>
@@ -863,7 +874,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         yield* joinWorkspace(task.workspaceId, other);
 
-        const deleted = yield* ask(request(TASK, other, { method: "DELETE", id: task.id }));
+        const deleted = yield* ask(request(TASK(task.id), other, { method: "DELETE" }));
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -1191,7 +1202,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             }),
           ),
         );
-        const opened = yield* ask(request(TASK, owner, { id: started.plan.id }));
+        const opened = yield* ask(request(TASK(started.plan.id), owner));
 
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
@@ -3555,9 +3566,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const taskArchive = yield* withTask.ask(
-          request(TASK, undefined, {
+          request(TASK(withTask.task.id), undefined, {
             method: "PATCH",
-            id: withTask.task.id,
             cookie: sessionCookieOf(withTask.owner),
             body: { archived: true },
           }),
@@ -3587,9 +3597,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const deleted = yield* ask(
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "DELETE",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3612,9 +3621,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const stopped = yield* ask(
-          request(TASK_STOP, undefined, {
+          request(TASK_STOP(task.id), undefined, {
             method: "POST",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3654,10 +3662,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const lukeStop = yield* stopped.ask(
-          request(TASK_STOP, undefined, { method: "POST", id: stopped.task.id, cookie: teammate }),
+          request(TASK_STOP(stopped.task.id), undefined, { method: "POST", cookie: teammate }),
         );
         const deleted = yield* stopped.ask(
-          request(TASK, undefined, { method: "DELETE", id: stopped.task.id, cookie: teammate }),
+          request(TASK(stopped.task.id), undefined, { method: "DELETE", cookie: teammate }),
         );
 
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
@@ -3710,14 +3718,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "PATCH",
-            id: task.id,
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, { method: "DELETE", id: task.id, cookie }),
-          request(TASK_STOP, undefined, { method: "POST", id: task.id, cookie }),
+          request(TASK(task.id), undefined, { method: "DELETE", cookie }),
+          request(TASK_STOP(task.id), undefined, { method: "POST", cookie }),
         ]) {
           const { pathname } = new URL(asked.url);
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
@@ -3764,7 +3771,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         const marked = (archived: boolean) =>
           Effect.map(
-            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            ask(request(TASK(task.id), other, { method: "PATCH", body: { archived } })),
             (answered) => answered.status,
           );
         const archiveNow = () =>
@@ -3799,9 +3806,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* sent("Rename the subject line too.");
 
         assert.deepEqual(
-          yield* ask(
-            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
-          ),
+          yield* ask(request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
@@ -5708,6 +5713,43 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
     });
 
   it.effect(
+    "a post whose pictures cannot be kept is not posted at all, so no reader ever sees an image block without its bytes, and nobody is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const attachmentId = randomUUID();
+        // One byte past a chat picture's bound, which the store's own check refuses as it writes the picture.
+        const bytes = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
+        bytes.set(PNG);
+        const refused = yield* Effect.flip(
+          postChat(
+            chat.telling,
+            {
+              authorMemberId: chat.person.id,
+              to: { channelId: chat.channel.id },
+              blocks: [
+                { type: CHAT_BLOCK.MARKDOWN, text: "@agent-1 the new email." },
+                { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+              ],
+              mentions: ["agent-1"],
+              clientKey: randomUUID(),
+            },
+            [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes }],
+          ).pipe(Effect.provide(chat.github.layer)),
+        );
+        assert.deepEqual(refused, HOSTED_REFUSAL.UNAVAILABLE);
+        const kept = Option.getOrThrow(
+          yield* history(chat.owner, chat.workspace, chat.person.id, {
+            channelId: chat.channel.id,
+          }),
+        );
+        assert.deepEqual(kept, [], "the message went with its pictures");
+        assert.equal(eve.sent.length, 0);
+      }),
+  );
+
+  it.effect(
     "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
     () =>
       Effect.gen(function* () {
@@ -6284,6 +6326,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         readAsAgent(agent, unparsedWire(value));
       const resolve = (agent: ChatAgent, value: WireBoundaryInput) =>
         resolveAsAgent(agent, unparsedWire(value));
+      const editChannel = (agent: ChatAgent, value: WireBoundaryInput) =>
+        editAsAgent(agent, unparsedWire(value));
       // Note that the handles are read back rather than assumed, because two agents started at one instant mint in either order.
       const handleOf = (agent: ChatAgent) =>
         Effect.map(read(agent, { channel: "#teammate-invitations" }), (answer) => {
@@ -6297,7 +6341,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           memberNamed(opened.owner, opened.task.workspaceId, handle.slice(1)),
           Option.getOrThrow,
         );
-      return { ...opened, first, second, handles, post, read, resolve, memberOf };
+      return { ...opened, first, second, handles, post, read, resolve, editChannel, memberOf };
     });
 
   it.effect(
@@ -6447,6 +6491,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const topic = yield* chat.post(chat.first, {
           text: "Release notes go here.",
           to: "#releases",
+          purpose: "What ships, and when",
         });
         assert.ok("in" in topic);
         assert.equal(topic.in, "#releases");
@@ -6465,6 +6510,75 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           ["#releases", CHANNEL_KIND.TOPIC],
           ["#teammate-invitations", CHANNEL_KIND.TASK],
         ]);
+        // The topic says what it is for, as its opener wrote it, to every agent that reads.
+        assert.equal(
+          read.channels.find((channel) => channel.name === "#releases")?.purpose,
+          "What ships, and when",
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent renames a topic, clears its purpose, and archives it with edit_channel; a channel no topic, or a name another holds, is refused by why",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        yield* chat.post(chat.first, { text: "Notes.", to: "#releases", purpose: "What ships" });
+        yield* chat.post(chat.first, { text: "Hi.", to: "#design" });
+        const renamed = yield* chat.editChannel(chat.second, {
+          channel: "#releases",
+          name: "release-train",
+          purpose: null,
+        });
+        assert.deepEqual(renamed, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          channel: { name: "#release-train", archived: false },
+        });
+        const archived = yield* chat.editChannel(chat.second, {
+          channel: "#release-train",
+          archived: true,
+        });
+        assert.ok("channel" in archived);
+        assert.equal(archived.channel.archived, true);
+        // The archived topic is still listed, marked, so any agent can bring it back by name.
+        const read = yield* chat.read(chat.first);
+        assert.ok("channels" in read);
+        assert.deepEqual(read.channels.at(-1), {
+          name: "#release-train",
+          kind: CHANNEL_KIND.TOPIC,
+          unread: 0,
+          archived: true,
+        });
+        const back = yield* chat.editChannel(chat.first, {
+          channel: "#release-train",
+          archived: false,
+        });
+        assert.ok("channel" in back);
+        assert.equal(back.channel.archived, false);
+        // A rename sent again after its answer was lost finds it done.
+        const rename = { channel: "#design", name: "ux" };
+        assert.ok("channel" in (yield* chat.editChannel(chat.second, rename)));
+        assert.deepEqual(yield* chat.editChannel(chat.second, rename), {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          channel: { name: "#ux", archived: false },
+        });
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#general", purpose: "Everyone" }),
+          refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#ux", name: "general" }),
+          refused(CHAT_TOOL_REFUSAL.EDIT_NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "#nowhere", archived: true }),
+          refused(CHAT_TOOL_REFUSAL.NO_TOPIC),
+        );
+        assert.deepEqual(
+          yield* chat.editChannel(chat.second, { channel: "ux", archived: true }),
+          refused(CHAT_TOOL_REFUSAL.UNREADABLE_EDIT),
+        );
       }),
   );
 
@@ -8515,6 +8629,41 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
   );
 
   it.effect(
+    "a person opens a topic channel with a purpose, renames it, and archives it from the window; a name another channel holds is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const opened = yield* chat.wrote({
+          open: { name: "release-train", purpose: "Friday's cut" },
+        });
+        assert.ok("channel" in opened);
+        assert.deepEqual(
+          [opened.channel.name, opened.channel.kind, opened.channel.purpose],
+          ["release-train", CHANNEL_KIND.TOPIC, "Friday's cut"],
+        );
+        const read = yield* chat.read;
+        assert.equal(
+          read.channels.find((channel) => channel.id === opened.channel.id)?.purpose,
+          "Friday's cut",
+        );
+        const edited = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, name: "release", purpose: null },
+        });
+        assert.ok("channel" in edited);
+        assert.deepEqual([edited.channel.name, edited.channel.purpose], ["release", undefined]);
+        const archived = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, archived: true },
+        });
+        assert.ok("channel" in archived);
+        assert.equal(archived.channel.archived, true);
+        assert.deepEqual(
+          yield* chat.write({ open: { name: "general" } }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
     "a person's post that names an agent by its mention link tells the agent, which reads the link as the agent's own @handle",
     () =>
       Effect.gen(function* () {
@@ -8723,6 +8872,103 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const self = (yield* chat.read).self;
         assert.equal(own.posted.authorId, self);
         assert.notEqual(own.posted.authorId, chat.agent.id);
+      }),
+  );
+
+  it.effect(
+    "a person's post keeps its pictures, named by image blocks after its words and served back as their bytes to a person in the workspace alone, the same pictures again under its key; a file whose bytes are no such picture is refused and posts nothing",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const png = { name: "invite-email.png", mediaType: CHAT_IMAGE_TYPE.PNG };
+        const send = {
+          text: "The new invite email.",
+          attachments: [{ ...png, data: Buffer.from(PNG).toString("base64") }],
+          clientKey: randomUUID(),
+        };
+
+        const sent = yield* chat.wrote(send);
+        assert.ok("posted" in sent);
+        const [words, picture] = sent.posted.blocks;
+        assert.deepEqual(words, { type: CHAT_BLOCK.MARKDOWN, text: "The new invite email." });
+        assert.ok(picture?.type === CHAT_BLOCK.IMAGE && "attachmentId" in picture);
+        assert.equal(picture.alt, "invite-email.png");
+        const at = (bearer: string | undefined, attachmentId = picture.attachmentId) => {
+          const url = new URL(CHAT_ATTACHMENT, ORIGIN);
+          url.searchParams.set("workspaceId", chat.workspace);
+          url.searchParams.set("messageId", sent.posted.id);
+          url.searchParams.set("attachmentId", attachmentId);
+          return new Request(url, {
+            headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+          });
+        };
+
+        const served = yield* chat.fetch(at(chat.owner));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), CHAT_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
+
+        const again = yield* chat.wrote(send);
+        assert.ok("posted" in again);
+        assert.deepEqual(
+          [again.posted.id, again.posted.blocks],
+          [sent.posted.id, sent.posted.blocks],
+        );
+        // A picture at its bound fits a write, its body stating its length, which holds many times a post's words.
+        const large = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES);
+        large.set(PNG);
+        const body = JSON.stringify({
+          attachments: [{ ...png, data: Buffer.from(large).toString("base64") }],
+          clientKey: randomUUID(),
+        });
+        const url = new URL(CHAT, ORIGIN);
+        url.searchParams.set("workspaceId", chat.workspace);
+        const big = readAnswer(
+          chatWriteAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chat.ask(
+            new Request(url, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${chat.owner}`,
+                "content-type": "application/json",
+                "content-length": String(Buffer.byteLength(body)),
+              },
+              body,
+            }),
+          ),
+        );
+        assert.ok("posted" in big);
+        assert.deepEqual(
+          big.posted.blocks.map((block) => block.type),
+          [CHAT_BLOCK.IMAGE],
+          "a post of a picture alone carries no words",
+        );
+
+        // Someone in another workspace reads nothing of this one's, even with Chat on.
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        yield* chooseChat(chat.other, true);
+        assert.deepEqual(yield* chat.ask(at(chat.other)), notFound);
+        assert.deepEqual(yield* chat.ask(at(chat.owner, randomUUID())), notFound);
+        assert.deepEqual(
+          yield* chat.ask(at(undefined)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        // A teammate in the workspace reads it as the poster does.
+        yield* joinWorkspace(chat.workspace, chat.other);
+        assert.equal((yield* chat.fetch(at(chat.other))).status, HOSTED_HTTP_STATUS.OK);
+
+        const before = (yield* chat.read).messages.length;
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        for (const data of [Buffer.from("%PDF-1.7").toString("base64"), "!!"]) {
+          assert.deepEqual(
+            yield* chat.write({ attachments: [{ ...png, data }], clientKey: randomUUID() }),
+            invalid,
+            data,
+          );
+        }
+        assert.equal((yield* chat.read).messages.length, before);
       }),
   );
 });

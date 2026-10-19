@@ -7,7 +7,9 @@
  * procedure only through a row marked oRPC, whose rewrite carries the whole
  * public path; `/api/models` answers its refusals through the committed
  * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
- * holds the signed-in read, which needs a catalog and a database).
+ * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
+ * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
+ * reads and writes).
  */
 
 import assert from "node:assert/strict";
@@ -186,4 +188,77 @@ test("an integration's parameterized path reaches its procedure through the comm
   );
   assert.equal(fetched.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
   assert.equal(await fetched.text(), '{"error":"method-not-allowed"}');
+});
+
+test("a plan's routes refuse through the committed table, the dispatcher and the deployed route as their old group did, an unsigned caller before its body is read", async () => {
+  const plan = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const routes = new Map([
+    ["plans/plan", orpcRoute],
+    ["plans/board", orpcRoute],
+  ]);
+  const bytes = async (response: Response) => ({
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    cacheControl: response.headers.get("cache-control"),
+    text: await response.text(),
+  });
+  const unsigned = {
+    status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+    contentType: "application/json",
+    cacheControl: null,
+    text: '{"error":"invalid-token"}',
+  };
+
+  assert.deepEqual(
+    await bytes(await dispatched(new Request(`${ORIGIN}/api/plans/${plan}/board`), routes)),
+    unsigned,
+  );
+  assert.deepEqual(
+    await bytes(
+      await dispatched(
+        new Request(`${ORIGIN}/api/plans/${plan}`, {
+          method: HTTP_METHOD.PATCH,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ unknown: true }),
+        }),
+        routes,
+      ),
+    ),
+    unsigned,
+  );
+  assert.deepEqual(
+    await bytes(
+      await dispatched(
+        new Request(`${ORIGIN}/api/plans/${plan}/board`, {
+          method: HTTP_METHOD.POST,
+          headers: { authorization: "Bearer t" },
+        }),
+        routes,
+      ),
+    ),
+    {
+      status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      contentType: "application/json",
+      cacheControl: null,
+      text: '{"error":"method-not-allowed"}',
+    },
+  );
+});
+
+test("the GitHub routes refuse through the committed table, the dispatcher and the deployed route as their old groups did", async () => {
+  const routes = new Map([
+    ["github/repositories/tree", orpcRoute],
+    ["github/connect", orpcRoute],
+  ]);
+  const unsigned = await dispatched(
+    new Request(`${ORIGIN}/api/github/repositories/tree?workspaceId=a&workspaceId=b`),
+    routes,
+  );
+  assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(unsigned.headers.get("cache-control"), null);
+  assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+
+  const read = await dispatched(new Request(`${ORIGIN}/api/github/connect`), routes);
+  assert.equal(read.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
+  assert.equal(await read.text(), '{"error":"method-not-allowed"}');
 });

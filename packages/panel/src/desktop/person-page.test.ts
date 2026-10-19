@@ -222,18 +222,9 @@ beforeEach(() => {
         request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
         request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
       if (inbox && inboxHeld) return new Promise(() => undefined);
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST && automationsHeld) {
-        return new Promise(() => undefined);
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
         const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST && !automationsRefused) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: AUTOMATIONS },
-        });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
         const value: CodingAgentInboxAnswerView = {
@@ -246,6 +237,11 @@ beforeEach(() => {
     },
   });
   fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => {
+      if (automationsHeld) return new Promise(() => undefined);
+      if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
+      return Promise.resolve({ automations: AUTOMATIONS });
+    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
       if (membersHeld) {
         return new Promise((resolve) => {

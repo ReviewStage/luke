@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
-import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BRIEF, type CodingAgentBrief } from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -232,7 +232,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent handed its task's plan is offered edit_plan, show_page, and the comment tools, one handed a prompt on a task all but edit_plan, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -240,15 +240,29 @@ test("an agent handed its task's plan is offered edit_plan, show_page, and the c
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  assert.deepEqual(
-    offered({ taskId: "plan-1", prompt: null }),
-    [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort(),
-  );
-  assert.deepEqual(
-    offered({ taskId: "plan-1", prompt: "Fix the flaky test." }),
-    [CODER_TOOL.SHOW_PAGE, ...comments].sort(),
-  );
-  assert.deepEqual(offered({ taskId: null, prompt: "Sweep the flaky tests." }), []);
+  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort();
+  const handedItsTask = { taskId: "plan-1", prompt: null };
+  const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
+  const automation = { taskId: null, prompt: "Sweep the flaky tests." };
+  assert.deepEqual(offered(handedItsTask), all);
+  assert.deepEqual(offered(handedPrompt), all);
+  assert.deepEqual(offered(automation), []);
+});
+
+test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
+  const UPDATING = "## Updating the plan";
+  const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    return [
+      words.includes(UPDATING),
+      words.includes(CODER_TOOL.EDIT_PLAN),
+      words.includes(READ_FIRST),
+    ];
+  };
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {

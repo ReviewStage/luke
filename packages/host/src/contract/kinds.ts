@@ -41,6 +41,18 @@ export const ACCOUNT_ASK_ACT_KIND = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
 } as const;
 
+/** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
+export const AUTOMATION_ACT_KIND = {
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
+  /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+} as const;
+
 /**
  * A task's coding agents, the core of what the Tasks tab asks of them: the
  * models, the default, the lists, an agent started, read, messaged, changed,
@@ -93,6 +105,28 @@ export const AVATAR_ACT_KIND = {
   VOICE_SET_VIDEO: "voice.setVideo",
 } as const;
 
+/** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
+export const FACTORY_ACT_KIND = {
+  FACTORY_WORLD: "factory.world",
+} as const;
+
+/**
+ * Settings' integration rows: where every one of the account's integrations
+ * stands, a browser sign-in to one begun and opened by the host, and one
+ * connection ended. The window hears whether the browser was sent, never the
+ * address it was sent to.
+ */
+export const INTEGRATION_ACT_KIND = {
+  INTEGRATIONS_STATUS: "integrations.status",
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_CANCEL: "integrations.cancel",
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
+  /** One account at a provider named as the developer calls it. */
+  INTEGRATIONS_RENAME: "integrations.rename",
+} as const;
+
 /** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
 export const ISSUE_ACT_KIND = {
   ISSUES_LIST: "issues.list",
@@ -102,17 +136,19 @@ export const ISSUE_ACT_KIND = {
 } as const;
 
 /**
- * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
- * each repository's run command read and set; and a terminal of this Mac
- * opened on the agent's branch for the asking panel, and closed with its
- * tab. What the terminal prints and what is typed travel on the port an open
- * posts to that panel, never on an act.
+ * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
+ * each repository's run command read and set; a run of the agent's branch
+ * started for the asking panel, stopped with Stop, and closed with its tab;
+ * and its worktree opened in the Mac's own Terminal. What the run prints
+ * travels on the port an open posts to that panel, never on an act.
  */
 export const MAC_TERMINAL_ACT_KIND = {
   MAC_REPOSITORIES: "macRepositories.read",
   MAC_REPOSITORY_SET: "macRepositories.set",
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
+  MAC_TERMINAL_STOP: "macTerminal.stop",
+  MAC_TERMINAL_REVEAL: "macTerminal.reveal",
 } as const;
 
 /**
@@ -197,7 +233,10 @@ export const WORKSPACE_ACT_KIND = {
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ASK_ACT_KIND,
   ...AGENT_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
   ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,

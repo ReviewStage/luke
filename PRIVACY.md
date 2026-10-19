@@ -308,7 +308,11 @@ someone else posted, and the last direct message or mention of you that you
 have not read, each named only by who posted it, its plan, and its place,
 never its words. While Luke's window is behind, a Mac notification says no
 more than that, such as "@agent-2 messaged you" under the plan's name,
-unless you turn notifications off in Settings › Coding agents.
+unless you turn notifications off in Settings › Coding agents. Luke in a
+browser tells you of the same things, in the same words, through the
+browser's own notifications, only while its tab is hidden and only once you
+allowed them from Settings › Notifications; the browser shows and keeps them
+as it does any site's, and nothing more leaves for it.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
@@ -611,7 +615,14 @@ word for why, and whether its pull request is open, merged, or closed; which
 providers you saved a key for or connected, and whether each key or
 connection works; your coding-agent model and effort, and the experiments
 you turned on; and when a call of yours dropped or an automation of yours
-failed to start, with the fixed word for why.
+failed to start, with the fixed word for why. For the most active accounts it
+also shows how many coding agents you started and pull requests of theirs
+merged, on how many days you created a task, wrote a plan revision, started
+an agent, or held a call, and when you last signed in. Counted across all
+accounts, never named to one, it shows how many plan revisions, inbox
+answers, and automation runs there were, and how many accounts posted in a
+workspace's chat, have GitHub connected on a workspace, have an integration
+connected, or opened or merged a pull request.
 Across every account, the same page counts how many of Luke's turns, coding
 agents' runs, calls, and automation runs ended and how many failed, were
 dropped, or were skipped, each by the fixed word the service records for why.

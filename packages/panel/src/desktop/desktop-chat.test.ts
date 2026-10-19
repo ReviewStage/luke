@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
+import {
+  ASK_STATUS,
+  CHANNEL_KIND,
+  CHAT_ASK,
+  CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
+} from "@luke/features/chat-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
+import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -18,6 +26,7 @@ import {
   fixtureChat,
   type Staged,
   stagedAnswer,
+  stagedChannel,
   stagedPost,
 } from "../tasks/chat-fixture.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -62,10 +71,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
+/** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them, its pictures read as the test answers them. */
 function mount(
   change: (chat: FixtureChat) => FixtureChat | undefined = (chat) => chat,
   workspace: Workspace | undefined = undefined,
+  readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer> = () =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -98,6 +109,8 @@ function mount(
           onList: () => undefined,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
+          onChannel: (change) => stage((held) => stagedChannel(held, change)),
+          readPicture,
         },
       }),
     });
@@ -113,7 +126,7 @@ function mount(
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll("h2, button")].map((node) => {
+  return [...nav.querySelectorAll("h2, li button")].map((node) => {
     if (node.matches("h2")) return `# ${node.textContent}`;
     const count = /(\d+) unread$/u.exec(node.textContent ?? "")?.[1];
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
@@ -153,9 +166,10 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "▸ For you (4)",
     "# Channels",
     "general",
+    "members-schema",
+    "# Tasks",
     "billing-export",
     "teammate-invitations (4)",
-    "members-schema",
     "# Direct messages",
     "agent-2 (1)",
     "luke",
@@ -644,5 +658,274 @@ test("in a listed workspace, an agent chosen from the @ list is written as its c
   assert.ok(
     last?.querySelector(".chat-words [data-mention-ref]"),
     "the sent message draws it as its chip",
+  );
+});
+
+/** Types into a field the way a person's typing leaves it. */
+function fill(field: HTMLInputElement | HTMLTextAreaElement, words: string): void {
+  const prototype =
+    field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The card a question stands in, whichever role it asks with. */
+function openDialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+}
+
+/** The button in the open dialog whose words are `label`. */
+function dialogButton(label: string): HTMLButtonElement {
+  const button = [...(openDialog()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(button, `no ${label} in the dialog`);
+  return button;
+}
+
+test("New channel opens a topic under the name typed, written as a channel's, with its purpose under its name; its menu archives it out of the rail", async () => {
+  const page = mount();
+  const create = page.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
+  assert.ok(create, "the rail offers a new channel");
+  act(() => create.click());
+  const [name, purpose] = [...(openDialog()?.querySelectorAll<HTMLInputElement>("input") ?? [])];
+  assert.ok(name && purpose);
+  fill(name, "general");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.match(openDialog()?.textContent ?? "", /#general is already a channel\./u);
+  fill(name, "Release Train");
+  fill(purpose, "What ships Friday");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.equal(openDialog(), null);
+  act(() => railRow(page, "release-train").click());
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# release-train");
+  assert.match(page.querySelector(".chat-head")?.textContent ?? "", /What ships Friday/u);
+
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  assert.ok(actions, "a topic's head offers its actions");
+  act(() => actions.click());
+  const archive = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Archive channel",
+  );
+  act(() => archive?.click());
+  act(() => dialogButton("Archive channel").click());
+  await settle();
+  // The topic archived while it is read keeps its row in sight, under the folded archive, still the one shown.
+  const archivedRows = () =>
+    [...page.querySelectorAll(".chat-rail section")]
+      .filter((group) => group.textContent?.startsWith("Archived"))
+      .flatMap((group) => [...group.querySelectorAll("li button")].map(railName));
+  assert.deepEqual(archivedRows(), ["release-train"]);
+  assert.ok(rail(page).includes("▸ release-train"));
+  act(() => railRow(page, "general").click());
+  assert.deepEqual(archivedRows(), [], "the fold holds it once another place is shown");
+
+  // Archived channels fold apart, and a topic among them is brought back from its own menu.
+  const archived = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find((each) =>
+    each.textContent?.startsWith("Archived"),
+  );
+  assert.ok(archived, "the archive stands folded in the rail");
+  act(() => archived.click());
+  act(() => railRow(page, "release-train").click());
+  const back = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  act(() => back?.click());
+  const bring = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Bring back channel",
+  );
+  act(() => bring?.click());
+  act(() => dialogButton("Bring back").click());
+  await settle();
+  assert.ok(
+    rail(page).includes("▸ release-train"),
+    "the topic stands among the channels again, shown",
+  );
+  assert.equal(
+    [...page.querySelectorAll(".chat-rail button")].some((each) =>
+      each.textContent?.startsWith("Archived"),
+    ),
+    false,
+    "nothing is left archived",
+  );
+});
+
+test("a fixture chat opens no topic past the bound, and an archive frees a place for one", () => {
+  const staged = fixtureChat({ fixtureMode: true }, AT);
+  assert.ok(staged);
+  let held: FixtureChat = staged;
+  const open = (name: string) => {
+    const landed = stagedChannel(held, { open: { name } });
+    if ("chat" in landed) held = landed.chat;
+    return landed;
+  };
+  const topics = () =>
+    held.answer.channels.filter(
+      (channel) => channel.kind === CHANNEL_KIND.TOPIC && !channel.archived,
+    );
+  while (topics().length < CHAT_BOUNDS.MAX_TOPIC_CHANNELS) open(`topic-${topics().length}`);
+  assert.ok("refused" in open("one-too-many"));
+  const [first] = topics();
+  assert.ok(first);
+  const archived = stagedChannel(held, { edit: { channelId: first.id, archived: true } });
+  assert.ok("chat" in archived);
+  held = archived.chat;
+  assert.ok("chat" in open("one-more"));
+});
+
+/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+/** The rows the open list offers, each its name and what it says beside it. */
+function offered(page: HTMLElement): (string | null)[] {
+  return [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+}
+
+test("words after an @ that read as a date offer it first, said as its chip says it with the date in full beside it, and the date sent is drawn as its chip", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "out @oct 20 to 24");
+    const listed = offered(page);
+    pressInComposer(box, "Enter");
+    const chips = [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent);
+    typeInComposer(box, "for the offsite");
+    pressInComposer(box, "Enter");
+    await settle();
+
+    assert.deepEqual(listed, ["Tomorrow → SaturdayOct 20, 2026 → Oct 24, 2026"]);
+    assert.deepEqual(chips, ["Tomorrow → Saturday"]);
+    const last = [...page.querySelectorAll(".chat-message")].at(-1);
+    const sent = last?.querySelector<HTMLElement>(".chat-words [data-mention-ref]");
+    assert.equal(sent?.dataset.kind, "date");
+    assert.equal(sent?.textContent, "Tomorrow → Saturday");
+    assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /for the offsite/u);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ word that reads as a date lists it before the members it matches, and words after a handle that name no date open no list", () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "@tomorrow");
+    const dated = offered(page);
+    pressInComposer(box, "Escape");
+    typeInComposer(box, " and @agent-1 please look");
+
+    assert.deepEqual(dated, ["TomorrowOct 20, 2026"]);
+    assert.equal(page.querySelector('[role="listbox"]'), null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("where the editor's bundle could not be loaded, a date one word names after an @ still offers it, and its pick is written and sent as its link", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, field, sent } = await plainChat();
+    writeInto(field, "ship it @tomorrow");
+    const listed = [...container.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+    pressInField(field, { key: "Enter" });
+    pressInField(field, { key: "Enter" });
+    await settle();
+
+    assert.deepEqual(listed, ["TomorrowOct 20, 2026"]);
+    assert.deepEqual(sent, ["ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/** A PNG's signature, which is all of a picture the test hands in, and the same bytes in base64 as its read answers them. */
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_BASE64 = "iVBORw0KGgo=";
+
+/** Hands `files` to a box: picked in its hidden picker, or dropped on its card. */
+async function handFiles(box: HTMLElement, files: readonly File[], how: "pick" | "drop") {
+  if (how === "pick") {
+    const picker =
+      box.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
+    Object.defineProperty(picker, "files", { configurable: true, value: files });
+    act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
+  } else {
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files } });
+    act(() => box.dispatchEvent(drop));
+  }
+  // Note that a file is read off the disk before it lands in the box.
+  for (let round = 0; round < 4; round += 1) await settle();
+}
+
+/** The names of the files a box holds, as its chips say them. */
+function chipNames(box: HTMLElement): (string | null)[] {
+  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+    chip.getAttribute("title"),
+  );
+}
+
+test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them under words or alone, each drawn in the channel and opened larger on a press", async () => {
+  const asked: string[] = [];
+  const page = mount(
+    (chat) => chat,
+    undefined,
+    (messageId) => {
+      asked.push(messageId);
+      return Promise.resolve({ contentType: CHAT_IMAGE_TYPE.PNG, base64: PNG_BASE64 });
+    },
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  assert.ok(box.querySelector('button[aria-label="Attach images"]'), "the box offers its +");
+
+  const shot = new File([PNG_BYTES], "invite-email.png", { type: CHAT_IMAGE_TYPE.PNG });
+  const rows = new File(["email,role"], "rows.csv", { type: "text/csv" });
+  await handFiles(box, [shot, rows], "pick");
+  assert.deepEqual(chipNames(box), ["invite-email.png"]);
+  assert.equal(
+    box.querySelector('[role="alert"]')?.textContent,
+    "rows.csv can't be attached. Attach images.",
+  );
+  typeInComposer(box, "the new invite email");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.equal(boxWords(box), "");
+  assert.deepEqual(chipNames(box), [], "the box lets go of the pictures it sent");
+  const under = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.equal(under?.querySelector(".chat-words")?.textContent?.trim(), "the new invite email");
+  const drawn = under?.querySelector<HTMLImageElement>(".picture-block img");
+  assert.equal(drawn?.getAttribute("src"), `data:${CHAT_IMAGE_TYPE.PNG};base64,${PNG_BASE64}`);
+  assert.equal(drawn?.getAttribute("alt"), "invite-email.png");
+
+  await handFiles(
+    box,
+    [new File([PNG_BYTES], "second.png", { type: CHAT_IMAGE_TYPE.PNG })],
+    "drop",
+  );
+  assert.deepEqual(chipNames(box), ["second.png"]);
+  pressInComposer(box, "Enter");
+  await settle();
+  const alone = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.notEqual(alone, under, "pictures alone are a post of their own");
+  assert.equal(alone?.querySelector(".chat-words"), null, "a post of pictures alone has no words");
+  assert.equal(alone?.querySelector(".picture-block img")?.getAttribute("alt"), "second.png");
+  assert.equal(new Set(asked).size, 2, "each picture is read under its own message");
+
+  act(() => alone?.querySelector<HTMLButtonElement>("button.picture-frame")?.click());
+  assert.ok(
+    document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
+    "a press opens the picture over the window",
   );
 });

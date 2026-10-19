@@ -1,7 +1,12 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  type CodingAgentAttachment,
+  codingAgentMessageRequestSchema,
+} from "./coding-agent-wire.js";
+import {
   fieldValueWords,
   INBOX_BOUNDS,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -185,6 +190,10 @@ export const CHAT_BOUNDS = {
   MAX_POSTS_PER_TURN: 20,
   /** The most characters a handle may spell. */
   MAX_HANDLE_CHARS: 40,
+  /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
+  MAX_PURPOSE_CHARS: 250,
+  /** The most pictures one post from the window may carry: a message's blocks, its words' one left out. */
+  MAX_POST_PICTURES: INBOX_BOUNDS.MAX_BLOCKS - 1,
 } as const;
 
 /**
@@ -198,6 +207,8 @@ export const CHAT_TOOL = {
   READ: "read_chat",
   /** Takes an ask of the poster's back, with why. */
   RESOLVE: "resolve_ask",
+  /** Renames a topic channel, says or clears what it is for, or archives it or brings it back. */
+  EDIT_CHANNEL: "edit_channel",
 } as const;
 
 /**
@@ -303,6 +314,11 @@ const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
+/** What a topic channel says it is for: one line of words, with no line break in it. */
+const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
+  EffectSchema.isPattern(/^[^\r\n]*$/u),
+);
+
 /** A member's handle, without its `@`. */
 export const chatHandleSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
@@ -384,6 +400,8 @@ function askKeyed(post: { readonly key?: string; readonly ask?: unknown }): bool
  */
 export const postChatAskInputSchema = EffectSchema.Struct({
   ...postFields,
+  /** What a topic channel `to` opens is for; nothing where the post opens none. */
+  purpose: EffectSchema.optionalKey(chatPurposeSchema),
   key: EffectSchema.optionalKey(inboxKeySchema),
   ask: EffectSchema.optionalKey(chatAskSchema),
   blocks: EffectSchema.optionalKey(inboxPostBlocksSchema),
@@ -405,6 +423,18 @@ export const readChatInputSchema = EffectSchema.Struct({
 export const resolveAskInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
+});
+
+/** What an edit of a topic channel's tool part carries: the topic by `#name`, and what changes of it, each left out standing. */
+export const editChannelInputSchema = EffectSchema.Struct({
+  channel: EffectSchema.String.check(
+    EffectSchema.isPattern(
+      new RegExp(`^#[a-z0-9][a-z0-9._-]{0,${CHAT_BOUNDS.MAX_KEY_CHARS - 1}}$`, "u"),
+    ),
+  ),
+  name: EffectSchema.optionalKey(chatChannelNameSchema),
+  purpose: EffectSchema.optionalKey(EffectSchema.NullOr(chatPurposeSchema)),
+  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /**
@@ -439,6 +469,8 @@ export const chatChannelSchema = EffectSchema.Struct({
     ),
   ),
   archived: EffectSchema.Boolean,
+  /** What a topic channel says it is for; absent where it says nothing. */
+  purpose: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /** @public */
@@ -491,6 +523,17 @@ export const CHAT_CURSOR_START = "0";
  * back or the start.
  */
 export const CHAT_QUERY = { WORKSPACE_ID: "workspaceId", AFTER: "after" } as const;
+
+/**
+ * What a window's read of one picture a message carries names in its
+ * query: the workspace, the message, and the attachment its image block
+ * names.
+ */
+export const CHAT_ATTACHMENT_QUERY = {
+  WORKSPACE_ID: CHAT_QUERY.WORKSPACE_ID,
+  MESSAGE_ID: "messageId",
+  ATTACHMENT_ID: "attachmentId",
+} as const;
 
 /** Where a reader of a workspace's chat stands, as the service last handed it back. */
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
@@ -563,9 +606,32 @@ export function replyRefusal(response: InboxReadResponse, reply: InboxReply): st
   return inboxReplyRefusal({ response }, reply);
 }
 
-/** Whether a window's post carries its words one way: as text, or as blocks, never both or neither. */
-function wordsOnce(post: { readonly text?: string; readonly blocks?: unknown }): boolean {
-  return (post.text === undefined) !== (post.blocks === undefined);
+/** What a window's post carries: its words as text or as blocks, and the pictures under them. */
+interface WindowPost {
+  readonly text?: string;
+  readonly blocks?: readonly unknown[];
+  readonly attachments?: readonly CodingAgentAttachment[];
+}
+
+/** Whether a window's post carries its words one way at most, as text or as blocks, and carries something: words, pictures, or both. */
+function wordsOnce(post: WindowPost): boolean {
+  if (post.text !== undefined && post.blocks !== undefined) return false;
+  return (
+    post.text !== undefined || post.blocks !== undefined || (post.attachments ?? []).length > 0
+  );
+}
+
+/** The image types a picture may be, which a post's files are held to. */
+const CHAT_IMAGE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/** Whether every file a post carries is a picture, and the message its words and pictures make holds no more blocks than any message. */
+function picturesFit(post: WindowPost): boolean {
+  const pictures = post.attachments ?? [];
+  const words = post.blocks?.length ?? (post.text === undefined ? 0 : 1);
+  return (
+    pictures.every((picture) => CHAT_IMAGE_TYPES.has(picture.mediaType)) &&
+    words + pictures.length <= CHAT_BOUNDS.MAX_BLOCKS
+  );
 }
 
 /** Whether a window's post names one place: a `to`, or the message it replies to, never both. */
@@ -575,11 +641,14 @@ function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): 
 
 /**
  * A person's post from the window: the words, as Markdown text or as word
- * blocks, a link or lines of code among them and never a picture, which a
- * window has no way to hand in yet; where it goes, a channel by `#name` or
- * a member's DM by `@handle`, `#general` where unsaid, or the message it
- * replies to by its place; and the window's own key for the post, which a
- * retry carries again. An `@handle` in the words tells that member.
+ * blocks, a link or lines of code among them; the pictures under them, in
+ * the coding agent's file shape, PNG, JPEG, or WebP alone, which the
+ * service keeps and the message names as image blocks after the words, a
+ * post of pictures alone carrying no words; where it goes, a channel by
+ * `#name` or a member's DM by `@handle`, `#general` where unsaid, or the
+ * message it replies to by its place; and the window's own key for the
+ * post, which a retry carries again. An `@handle` in the words tells that
+ * member.
  */
 export const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
@@ -589,10 +658,15 @@ export const chatPostRequestSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_BLOCKS),
     ),
   ),
+  attachments: codingAgentMessageRequestSchema.fields.attachments,
   to: EffectSchema.optionalKey(chatTargetSchema),
   replyTo: EffectSchema.optionalKey(countedNumber),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
-}).check(EffectSchema.makeFilter(wordsOnce), EffectSchema.makeFilter(placedOnce));
+}).check(
+  EffectSchema.makeFilter(wordsOnce),
+  EffectSchema.makeFilter(picturesFit),
+  EffectSchema.makeFilter(placedOnce),
+);
 
 /** @public */
 export type ChatPostRequest = typeof chatPostRequestSchema.Type;
@@ -621,9 +695,34 @@ export const chatReadToRequestSchema = EffectSchema.Struct({
   channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+/** A person's window opening a topic channel under a name of its own, with what it is for. */
+export const chatOpenRequestSchema = EffectSchema.Struct({
+  open: EffectSchema.Struct({
+    name: chatChannelNameSchema,
+    purpose: EffectSchema.optionalKey(chatPurposeSchema),
+  }),
+});
+
+/** @public */
+export type ChatOpenRequest = typeof chatOpenRequestSchema.Type;
+
+/** A person's window renaming a topic channel, saying or clearing its purpose, or archiving it or bringing it back; each left out stays. */
+export const chatEditRequestSchema = EffectSchema.Struct({
+  edit: EffectSchema.Struct({
+    channelId: wireUuidSchema,
+    name: EffectSchema.optionalKey(chatChannelNameSchema),
+    purpose: EffectSchema.optionalKey(EffectSchema.NullOr(chatPurposeSchema)),
+    archived: EffectSchema.optionalKey(EffectSchema.Boolean),
+  }),
+});
+
+/** @public */
+export type ChatEditRequest = typeof chatEditRequestSchema.Type;
+
 /**
  * What the window writes to a workspace's chat (POST): a post, an answer to
- * an ask, an ask of the person's own resolved, or how far they have read.
+ * an ask, an ask of the person's own resolved, how far they have read, or a
+ * topic channel opened or edited.
  * @public
  */
 export const chatWriteRequestSchema = EffectSchema.Union([
@@ -631,6 +730,8 @@ export const chatWriteRequestSchema = EffectSchema.Union([
   chatAnswerRequestSchema,
   chatResolveRequestSchema,
   chatReadToRequestSchema,
+  chatOpenRequestSchema,
+  chatEditRequestSchema,
 ]);
 
 /** @public */
@@ -649,8 +750,9 @@ export const chatReceiptSchema = EffectSchema.Struct({
  * the message and who it came to, a repeat under its key finishing a
  * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
  * taken, which it is not at a revision its poster has moved past or on an
- * ask no longer open; a resolve, the ask resolved; and a read, where the
- * person's cursor then stands everywhere, and each channel past it.
+ * ask no longer open; a resolve, the ask resolved; a read, where the
+ * person's cursor then stands everywhere, and each channel past it; and a
+ * channel opened or edited, the channel as it then stands.
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
@@ -660,6 +762,7 @@ export const chatWriteAnswerSchema = EffectSchema.Union([
     readSeq: countedNumber,
     reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
   }),
+  EffectSchema.Struct({ channel: chatChannelSchema }),
 ]);
 
 /** @public */

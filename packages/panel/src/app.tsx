@@ -25,10 +25,11 @@ import { forgetPictures } from "@luke/ui/picture-cache";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import type {
-  MicrophoneControl,
-  ShortcutControl,
-  UpdateControl,
+import {
+  type MicrophoneControl,
+  NOTIFICATIONS_GRANTOR,
+  type ShortcutControl,
+  type UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import {
@@ -795,6 +796,9 @@ export function App(): React.JSX.Element {
                                   microphone,
                                   notifications: {
                                     status: state.notifications.status,
+                                    grantor:
+                                      appPlatform().notificationsGrantor?.() ??
+                                      NOTIFICATIONS_GRANTOR.MACOS,
                                     packaged: state.run.packaged,
                                     onOpenSettings: () =>
                                       tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),

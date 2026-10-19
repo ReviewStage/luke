@@ -15,6 +15,7 @@ import {
   channelNamed,
   channelsOf,
   chatPast,
+  editTopicChannel,
   ensureGeneral,
   ensureMember,
   ensureTaskChannel,
@@ -44,6 +45,7 @@ import {
   type ChannelKind,
   chatAskSchema,
   chatPostBlocksSchema,
+  editChannelInputSchema,
   GENERAL_CHANNEL,
   MEMBER_KIND,
   type MemberKind,
@@ -122,6 +124,8 @@ export const CHAT_TOOLS = {
       `text is Markdown, at most ${CHAT_BOUNDS.MAX_TEXT_CHARS} characters. ` +
       "to is where it goes: #name for a channel, where a name no channel holds opens a topic channel under it, or @handle " +
       "for a direct message to one member; leave it out to post in your task's own channel, where its agents post by default. " +
+      `purpose says in one line, at most ${CHAT_BOUNDS.MAX_PURPOSE_CHARS} characters, what a topic channel your to opens is for; ` +
+      "it is shown under the channel's name and in every read, and is ignored where the channel already stands. " +
       "replyTo is a message's number to answer it in its thread, in that message's channel, with no to. " +
       "A direct message, an @handle in the words, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
@@ -151,7 +155,8 @@ export const CHAT_TOOLS = {
   READ: {
     name: CHAT_TOOL.READ,
     description:
-      "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each, " +
+      "Read your workspace's chat: who is in it, the channels you see with how many messages you have not read in each " +
+      "and what a topic channel says it is for, an archived topic last and marked, " +
       "then the messages. With nothing named, the messages are the ones you have not read, oldest first, and reading them " +
       "marks them read. channel (#name, or @handle for your direct messages with that member) reads its latest messages, " +
       "thread (a message's number) reads that message's whole thread, and before (a message's number) reads back from " +
@@ -166,6 +171,18 @@ export const CHAT_TOOLS = {
       "checked that the task is done. The call answers with your asks as they stand.",
     inputSchema: resolveAskInputSchema,
   },
+  EDIT_CHANNEL: {
+    name: CHAT_TOOL.EDIT_CHANNEL,
+    description:
+      "Rename a topic channel of your workspace's chat, say or clear what it is for, or archive it or bring it back. " +
+      "channel is the topic by #name. name is its new name, lowercase letters, digits, dots, dashes, and underscores. " +
+      `purpose is what it is for, in one line of at most ${CHAT_BOUNDS.MAX_PURPOSE_CHARS} characters, or null to clear it. ` +
+      "archived true archives it, so it takes no more posts and frees a place under the " +
+      `${CHAT_BOUNDS.MAX_TOPIC_CHANNELS} topics a workspace keeps open; false brings it back where there is room. ` +
+      "Only a topic is edited: never #general, a task's own channel, or a direct message. Leave out what stays. " +
+      "The call answers with the channel as it then stands.",
+    inputSchema: editChannelInputSchema,
+  },
 } as const;
 
 /** Why a call did nothing, in the words the model reads. */
@@ -177,6 +194,12 @@ export const CHAT_TOOL_REFUSAL = {
     "needs a key, a lowercase slug of letters, digits, dots, dashes, and underscores, and its response, one of choice, " +
     `approval, text, task, form, or none; a choice and a select field offer between two and ${CHAT_BOUNDS.MAX_OPTIONS} options.`,
   UNREADABLE_RESOLVE: "Not resolved: name the ask's key and why you resolve it.",
+  UNREADABLE_EDIT:
+    "Not edited: channel is the topic's #name; name is lowercase; purpose is one line, or null; archived is true or false.",
+  NO_TOPIC:
+    "Not edited: no topic channel stands under that name. read_chat lists the channels you see.",
+  EDIT_NAME_TAKEN: "Not edited: another channel holds that name. Pick another.",
+  EDIT_TOO_MANY_TOPICS: `Not edited: the workspace keeps ${CHAT_BOUNDS.MAX_TOPIC_CHANNELS} topic channels open already. Archive one first.`,
   UNREADABLE_READ:
     "Not read: channel is #name or @handle, lowercase, and thread and before are messages' numbers.",
   REPLY_AND_TO:
@@ -205,11 +228,14 @@ type MemberLine = {
   readonly left?: true;
 };
 
-/** A channel as a read lists it: how a post names it, its kind, and what the reader has not read in it. */
+/** A channel as a read lists it: how a post names it, its kind, what the reader has not read in it, and what a topic says it is for. */
 type ChannelLine = {
   readonly name: string;
   readonly kind: ChannelKind;
   readonly unread: number;
+  readonly purpose?: string;
+  /** An archived topic, which takes no post until edit_channel brings it back. */
+  readonly archived?: true;
 };
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
@@ -249,6 +275,14 @@ export type ChatToolResult =
       readonly asks: readonly AskLine[];
     }
   | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly asks: readonly AskLine[] }
+  | {
+      readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED;
+      readonly channel: {
+        readonly name: string;
+        readonly archived: boolean;
+        readonly purpose?: string;
+      };
+    }
   | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
 
 /** Who a call speaks as: a coding agent, or the plan's Luke. */
@@ -367,6 +401,18 @@ function unreadPostRefusal(input: UnparsedWireValue): string {
 }
 const readRead = readEither(readChatInputSchema, { excess: EXCESS_KEYS.DROP });
 const readResolve = readEither(resolveAskInputSchema, { excess: EXCESS_KEYS.DROP });
+const readEdit = readEither(editChannelInputSchema, { excess: EXCESS_KEYS.DROP });
+
+/** What the store's refusal of a topic's edit reads as to the model. */
+const EDIT_REFUSAL = {
+  [CHAT_REFUSAL.NOT_FOUND]: CHAT_TOOL_REFUSAL.NO_TOPIC,
+  [CHAT_REFUSAL.NAME_TAKEN]: CHAT_TOOL_REFUSAL.EDIT_NAME_TAKEN,
+  [CHAT_REFUSAL.TOO_MANY_TOPICS]: CHAT_TOOL_REFUSAL.EDIT_TOO_MANY_TOPICS,
+  [CHAT_REFUSAL.AUTHOR_LEFT]: CHAT_TOOL_REFUSAL.LEFT,
+  [CHAT_REFUSAL.CHANNEL_ARCHIVED]: CHAT_TOOL_REFUSAL.CHANNEL_ARCHIVED,
+  [CHAT_REFUSAL.KEY_TAKEN]: CHAT_TOOL_REFUSAL.UNAVAILABLE,
+  [CHAT_REFUSAL.ASK_ELSEWHERE]: CHAT_TOOL_REFUSAL.UNAVAILABLE,
+} as const satisfies Record<ChatRefusal, string>;
 
 export function chatRejected(reason: string): ChatToolResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
@@ -465,6 +511,7 @@ function channelForPost(
   agent: ChatReader,
   seat: ChatSeat,
   name: string,
+  purpose: string | undefined,
 ): ChatStoreEffect<Result.Result<ChatChannelRow, string>> {
   return Effect.gen(function* () {
     const { userId } = agent;
@@ -477,7 +524,13 @@ function channelForPost(
         ? Result.succeed(standing.value)
         : Result.fail(CHAT_TOOL_REFUSAL.CHANNEL_ARCHIVED);
     }
-    const opened = yield* openTopicChannel(userId, seat.organizationId, name, seat.self.id);
+    const opened = yield* openTopicChannel(
+      userId,
+      seat.organizationId,
+      name,
+      seat.self.id,
+      purpose ?? null,
+    );
     return Result.mapError(opened, (refusal) => TOPIC_REFUSAL[refusal]);
   });
 }
@@ -524,7 +577,7 @@ function placeOf(
   }
   const name = to.slice(1);
   const channel = to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)
-    ? channelForPost(agent, seat, name)
+    ? channelForPost(agent, seat, name, post.purpose)
     : dmWith(agent, seat, name);
   return Effect.map(channel, (found) =>
     Result.map(found, (row) => ({ to: { channelId: row.id }, named: { in: to } })),
@@ -718,6 +771,58 @@ export function resolveAsAgent(
   );
 }
 
+/**
+ * A topic channel edited as the agent: renamed, its purpose said or
+ * cleared, or archived or brought back, as a person may from the window
+ * (`editTopicChannel`). The topic is named as a post names it; a name no
+ * topic holds, #general's, a task's channel's, or a DM's, is refused.
+ * Answers the channel as it then stands.
+ */
+export function editAsAgent(
+  agent: ChatReader,
+  input: UnparsedWireValue,
+): Effect.Effect<ChatToolResult, never, DatabaseServices> {
+  const read = readEdit(input);
+  if (Result.isFailure(read))
+    return Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNREADABLE_EDIT));
+  const { channel: named, ...change } = read.success;
+  return Effect.gen(function* () {
+    const seat = yield* seatOf(agent);
+    if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
+    const { organizationId, self } = seat.value;
+    const standing = yield* channelNamed(agent.userId, organizationId, named.slice(1));
+    // Note that a rename sent again, its first answer lost, finds the old name gone and the new one standing, which it answers as done.
+    const channel =
+      Option.isNone(standing) && change.name !== undefined
+        ? Option.filter(
+            yield* channelNamed(agent.userId, organizationId, change.name),
+            (row) => row.kind === CHANNEL_KIND.TOPIC,
+          )
+        : standing;
+    if (Option.isNone(channel)) return chatRejected(CHAT_TOOL_REFUSAL.NO_TOPIC);
+    const edited = yield* editTopicChannel(
+      agent.userId,
+      organizationId,
+      self.id,
+      channel.value.id,
+      change,
+    );
+    if (Result.isFailure(edited)) return chatRejected(EDIT_REFUSAL[edited.failure]);
+    const { name, purpose, archivedAt } = edited.success;
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      channel: {
+        name: `${CHAT_TARGET_SIGIL.CHANNEL}${name ?? ""}`,
+        archived: archivedAt !== null,
+        ...(purpose === null ? undefined : { purpose }),
+      },
+    } satisfies ChatToolResult;
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+  );
+}
+
 /** How a post names each channel, by the channel's id. */
 function channelNames(
   channels: readonly ChatChannelRow[],
@@ -899,10 +1004,18 @@ export function readAsAgent(
           kind: row.kind,
           ...(row.leftAt === null ? undefined : { left: true as const }),
         })),
-        channels: listed(seen, seat.home, names).map((channel) => ({
+        // An archived topic is listed after the rest, marked, so its name stands to bring it back by.
+        channels: [
+          ...listed(seen, seat.home, names),
+          ...channels.filter(
+            (channel) => channel.kind === CHANNEL_KIND.TOPIC && channel.archivedAt !== null,
+          ),
+        ].map((channel) => ({
           name: names.get(channel.id) ?? "",
           kind: channel.kind,
           unread: unread.get(channel.id) ?? 0,
+          ...(channel.purpose === null ? undefined : { purpose: channel.purpose }),
+          ...(channel.archivedAt === null ? undefined : { archived: true as const }),
         })),
         messages: messages.map((message) =>
           lineOf(message, { names, members: byId, roots, handleOf: handlesIn(byId.values()) }),

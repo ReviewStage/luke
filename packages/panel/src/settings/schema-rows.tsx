@@ -15,6 +15,7 @@ import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
 import { ChangedMark } from "./marks.js";
 import { Picker } from "./picker-row.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
+import { SampledChoiceRow } from "./sampled-choice-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
@@ -77,7 +78,8 @@ function SchemaSwitchRow({
  * A choice's row: the shared row, and the shared pop-up for a short set read
  * whole. A set long enough to search drops the window's searchable menu
  * instead (`picker-row.tsx`), which the pop-up is not. A set whose values
- * have faces is a `PictureChoiceRow`, never this.
+ * have faces is a `PictureChoiceRow`, and a set whose values are heard a
+ * `SampledChoiceRow`, never this.
  */
 function SchemaChoiceRow({
   id,
@@ -231,6 +233,24 @@ export function SchemaSettingRows({
           changed={changed}
           value={control.value}
           options={pictured}
+          onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
+        />,
+      ];
+    }
+    // A set whose every value is heard, as the voices are, is chosen in a dialog that plays each as it is picked.
+    const sampled = control.options.flatMap(({ value, label, sample, group, tag }) =>
+      sample === undefined ? [] : [{ value, label, sample, group, tag }],
+    );
+    if (sampled.length > 0 && sampled.length === control.options.length) {
+      return [
+        <SampledChoiceRow
+          key={entry.id}
+          label={entry.label}
+          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
+          detail={entry.detail}
+          changed={changed}
+          value={control.value}
+          options={sampled}
           onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
         />,
       ];

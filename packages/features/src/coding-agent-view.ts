@@ -539,6 +539,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
+/** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
+export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+  attachmentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentChatAttachmentParams = typeof codingAgentChatAttachmentParamsSchema.Type;
+
 /**
  * The image, or the file an inbox answer carried, as the window hears it:
  * its bytes in base64 under the media type the service sniffed and kept, or

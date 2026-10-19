@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "messageId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attachmentId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "workspaceId",
+    "messageId",
+    "attachmentId"
+  ],
+  "additionalProperties": false
+}

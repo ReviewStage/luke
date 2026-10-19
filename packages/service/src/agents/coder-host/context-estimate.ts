@@ -207,6 +207,10 @@ const AUTHORED_TOOLS = {
     description: CHAT_TOOLS.RESOLVE.description,
     inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
   },
+  [CODER_TOOL.EDIT_CHANNEL]: {
+    description: CHAT_TOOLS.EDIT_CHANNEL.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.EDIT_CHANNEL.inputSchema),
+  },
   [CODER_TOOL.LIST_MODELS]: {
     description: LIST_MODELS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),

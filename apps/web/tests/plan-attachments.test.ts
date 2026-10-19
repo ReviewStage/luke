@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createTask } from "@luke/database/models/task-store";
+import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import { planAttachment } from "@luke/database/schemas/plan-attachment";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -192,7 +192,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
     Effect.gen(function* () {
       const { owner, planId: taskId } = yield* openSharedTask;
       const db = yield* Database;
-      yield* db.insert(planAttachment).values(
+      yield* db.insert(attachment).values(
         Array.from({ length: PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN }, () => ({
           taskId: taskId,
           userId: owner,

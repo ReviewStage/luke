@@ -113,6 +113,40 @@
               "minItems": 1,
               "maxItems": 8
             },
+            "attachments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "mediaType": {
+                    "type": "string",
+                    "enum": [
+                      "image/png",
+                      "image/jpeg",
+                      "image/webp",
+                      "application/pdf",
+                      "text/plain"
+                    ]
+                  },
+                  "data": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name",
+                  "mediaType",
+                  "data"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            },
             "to": {
               "type": "string",
               "maxLength": 81
@@ -275,6 +309,77 @@
           },
           "required": [
             "readTo"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "open": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "purpose": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 250
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "open"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edit": {
+              "type": "object",
+              "properties": {
+                "channelId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "purpose": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 250
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "archived": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "channelId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "edit"
           ],
           "additionalProperties": false
         }

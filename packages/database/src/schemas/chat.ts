@@ -154,6 +154,8 @@ export const chatChannel = pgTable(
     createdByMemberId: uuid("created_by_member_id").references((): AnyPgColumn => chatMember.id, {
       onDelete: "set null",
     }),
+    /** What a topic channel says it is for, under its name and to every agent that reads it; null where it says nothing. */
+    purpose: text("purpose"),
     createdAt: timestamptz("created_at").notNull(),
     /** When the channel was archived, which a plan's archive does to its channel; null while it stands. */
     archivedAt: timestamptz("archived_at"),

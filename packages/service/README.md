@@ -138,7 +138,8 @@ is who a coding agent's commits are by. A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
-`GET /api/github/repositories` (`src/github/github-repositories-app.ts`) is that
+`GET /api/github/repositories` (`src/github/github-procedures.ts`, on the
+hosted oRPC router) is that
 listing under the account bearer, answered as
 `packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
@@ -167,7 +168,7 @@ token minted for that one repository with `issues: read` alone; an
 installation that does not grant the App issues mints nothing and answers
 `{ issue: null }`, as an unreached repository, a pull request's number, a
 missing number, and a repository with its issues turned off do.
-`src/github/github-repositories-app.test.ts` holds the route and
+`src/github/github-repositories-procedures.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
 
@@ -1372,6 +1373,24 @@ belong in that loop. It lives in `account_preference.plan_template`
 (migration 0087), and a write sets that column alone: `updated_at` stays
 the preferences part's own, so a row a template opened answers no snapshot.
 `src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
+
+## The chapters group
+
+`src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
+(`@luke/features/pull-request-chapters`): `generateChapters(model, input)`
+groups, orders, and narrates the hunks in one structured call
+(`Output.object`, its JSON Schema emitted from the Effect Schema that decodes
+the answer), holds the answer to the diff, asks once more for any hunk it left
+out, and closes the story with "Other changes": the files a reader reads past,
+those with no hunk, and whatever is still outside. The model is a seam: the
+route hands in `chaptersModelOf(anthropicKey)`, one fixed fast Claude model on
+Luke's own key, never the account's meter, and a test hands in a scripted
+one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
+call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
+one of the store's `PULL_REQUEST_CHAPTERS_FAILURE` kinds, logged by its kind alone. The prompt,
+ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
+lays it out are `src/chapters/chapters-prompt.ts`.
+`src/chapters/chapters-generator.test.ts` answers it over a scripted model.
 
 ## The coding-agent routes
 

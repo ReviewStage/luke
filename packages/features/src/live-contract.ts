@@ -10,6 +10,7 @@ import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } fro
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
+import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
 import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
@@ -310,8 +311,24 @@ const liveInitialItemSchema = Schema.Union([
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
- * The desktop's opening frame: the offer, the voice, the seed, and the id of
- * the saved task the call is about. The service checks the task is the
+ * The developer's time zone as an opening frame names it, which the brain's
+ * turns on the call count days and spell times in. A zone this service does
+ * not know reads as none rather than refusing the call, since a client's
+ * zone list and the service's can differ, and a call without one reads UTC.
+ */
+const readTimeZone = readEither(timeZoneSchema);
+
+const callTimeZone = Schema.optionalKey(
+  declareReader<string | undefined>(
+    (value) => ({ ok: true, value: Result.getOrUndefined(readTimeZone(value)) }),
+    emitJsonSchema(timeZoneSchema),
+  ),
+);
+
+/**
+ * The desktop's opening frame: the offer, the voice, the seed, the id of
+ * the saved task the call is about, and the developer's time zone, which a
+ * desktop released before it sends none of. The service checks the task is the
  * account's, creates the session under the planning scene, lands its asks in
  * the task's conversation, and writes the binding on the session's row, so a
  * later `session.attach` is bound to the same task by that row and never by
@@ -324,6 +341,7 @@ export const sessionCreateFrameSchema = Schema.Struct({
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
   planId: wireUuidSchema,
+  timeZone: callTimeZone,
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
@@ -333,10 +351,11 @@ const SESSION_ID_CHARS = 256;
 
 const sessionId = text(SESSION_ID_CHARS);
 
-/** The desktop's opening frame on a connection to a session it already holds. */
+/** The desktop's opening frame on a connection to a session it already holds, with the developer's time zone as the create frame's. */
 export const sessionAttachFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
   sessionId,
+  timeZone: callTimeZone,
 });
 
 export type SessionAttachFrame = typeof sessionAttachFrameSchema.Type;

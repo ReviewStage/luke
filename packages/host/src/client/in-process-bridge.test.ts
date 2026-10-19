@@ -46,10 +46,7 @@ const UNREACHED = {
   settings: {},
   tasks: {},
   codingAgents: {},
-  integrations: {},
-  automations: {},
   issues: {},
-  factory: {},
 } as unknown as HostActDependencies<symbol>;
 
 /** The settings the fake host holds, and every reporter a write reached it under. */

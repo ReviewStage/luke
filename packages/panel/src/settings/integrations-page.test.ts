@@ -6,6 +6,7 @@ import type { IntegrationTool } from "@luke/features/integration-health";
 import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@luke/features/integration-sign-in";
 import {
   INTEGRATION_CALL_FAILURE,
+  type IntegrationStatusesView,
   type IntegrationToolsView,
 } from "@luke/features/integration-view";
 import {
@@ -20,6 +21,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { SettingsPage } from "@luke/ui";
@@ -34,7 +36,7 @@ import { runAppCommand } from "../app-commands.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
@@ -70,8 +72,12 @@ let refuseGitHubDisconnect = false;
 const standing = new Map<IntegrationProvider, IntegrationStatus>();
 /** What a provider's server answered when asked for its tools, over the tools it lists. */
 const toolReads = new Map<IntegrationProvider, IntegrationToolsView>();
-/** Every act the page sent, in order. */
-let sent: Act[] = [];
+/** One call the page made on the act port, by its kind, with what it carried. */
+type PortCall = {
+  [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
+}[PortActKind];
+/** Every act the page sent, in order, over `app:act` or the act port. */
+let sent: (Act | PortCall)[] = [];
 /** Every Settings link the page's presses followed. */
 let links: SettingsLink[] = [];
 /** How many times the account's GitHub connect was begun. */
@@ -144,13 +150,67 @@ beforeEach(() => {
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
-      const answer = answerOf(request);
-      if (!holdReads || request.kind !== ACT_KIND.INTEGRATIONS_STATUS) {
-        return Promise.resolve(answer);
-      }
-      const { promise, resolve } = Promise.withResolvers<ActOutcome>();
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+    },
+  });
+  // What the service answers an act the page sends on the act port.
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () => {
+      sent.push({ kind: ACT_KIND.INTEGRATIONS_STATUS, payload: undefined });
+      const answer: IntegrationStatusesView = refuseRead
+        ? { failure: INTEGRATION_CALL_FAILURE.UNANSWERED }
+        : {
+            integrations: serviceStatuses(),
+            ...(accounts.length > 0 ? { accounts } : undefined),
+            ...(addable.length > 0 ? { addable } : undefined),
+            ...(signInFailures.length > 0
+              ? { signInFailures: signInFailures.splice(0) }
+              : undefined),
+          };
+      if (!holdReads) return Promise.resolve(answer);
+      const { promise, resolve } = Promise.withResolvers<IntegrationStatusesView>();
       heldReads.push(() => resolve(answer));
       return promise;
+    },
+    [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
+      sent.push({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload });
+      if (payload.add === true) {
+        return Promise.resolve({ opened: true, connection: addedConnection });
+      }
+      touched.set(payload.provider, INTEGRATION_STATUS.PENDING);
+      return Promise.resolve({ opened: true });
+    },
+    // A Cancel ends a sign-in still pending; one that finished first stays connected.
+    [ACT_KIND.INTEGRATIONS_CANCEL]: (payload) => {
+      sent.push({ kind: ACT_KIND.INTEGRATIONS_CANCEL, payload });
+      const { provider } = payload;
+      const account = cancelled.get(payload.connection ?? provider);
+      if (account !== undefined) return Promise.resolve({ status: account });
+      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
+        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+      }
+      return Promise.resolve({ status: serviceStatuses()[provider] });
+    },
+    // A server whose tools the test holds none of is one the service never asked, as before tools were drawn.
+    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) => {
+      sent.push({ kind: ACT_KIND.INTEGRATIONS_TOOLS, payload });
+      const read = toolReads.get(payload.provider);
+      if (read !== undefined) return Promise.resolve(read);
+      const tools = listed.get(payload.provider);
+      return tools === undefined
+        ? Promise.reject(new Error("Not in this test."))
+        : Promise.resolve({ tools });
+    },
+    // A rename names the account anew, which the next read of the integrations says.
+    [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
+      sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
+      const { connection, label } = payload;
+      accounts = accounts.map((account) =>
+        account.connection === connection ? { ...account, label } : account,
+      );
+      const renamed =
+        accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
+      return Promise.resolve({ account: renamed });
     },
   });
 });
@@ -161,64 +221,6 @@ afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
-
-/** What the service answers an act the page sends, where the bridge answers it at all. */
-function answerOf(request: Act): ActOutcome {
-  const DONE = ACT_OUTCOME_STATUS.DONE;
-  switch (request.kind) {
-    case ACT_KIND.INTEGRATIONS_STATUS:
-      return refuseRead
-        ? { status: DONE, value: { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } }
-        : {
-            status: DONE,
-            value: {
-              integrations: serviceStatuses(),
-              ...(accounts.length > 0 ? { accounts } : undefined),
-              ...(addable.length > 0 ? { addable } : undefined),
-              ...(signInFailures.length > 0
-                ? { signInFailures: signInFailures.splice(0) }
-                : undefined),
-            },
-          };
-    case ACT_KIND.INTEGRATIONS_CONNECT:
-      if (request.payload.add === true) {
-        return { status: DONE, value: { opened: true, connection: addedConnection } };
-      }
-      touched.set(request.payload.provider, INTEGRATION_STATUS.PENDING);
-      return { status: DONE, value: { opened: true } };
-    // A Cancel ends a sign-in still pending; one that finished first stays connected.
-    case ACT_KIND.INTEGRATIONS_CANCEL: {
-      const provider = request.payload.provider;
-      const account = cancelled.get(request.payload.connection ?? provider);
-      if (account !== undefined) return { status: DONE, value: { status: account } };
-      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
-        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
-      }
-      return { status: DONE, value: { status: serviceStatuses()[provider] } };
-    }
-    // A server whose tools the test holds none of is one the service never asked, as before tools were drawn.
-    case ACT_KIND.INTEGRATIONS_TOOLS: {
-      const read = toolReads.get(request.payload.provider);
-      if (read !== undefined) return { status: DONE, value: read };
-      const tools = listed.get(request.payload.provider);
-      return tools === undefined
-        ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
-        : { status: DONE, value: { tools } };
-    }
-    // A rename names the account anew, which the next read of the integrations says.
-    case ACT_KIND.INTEGRATIONS_RENAME: {
-      const { connection, label } = request.payload;
-      accounts = accounts.map((account) =>
-        account.connection === connection ? { ...account, label } : account,
-      );
-      const renamed =
-        accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
-      return { status: DONE, value: { account: renamed } };
-    }
-    default:
-      return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
-  }
-}
 
 /** Lets every answer the bridge gave, and the redraws they cause, land. */
 async function settle(): Promise<void> {

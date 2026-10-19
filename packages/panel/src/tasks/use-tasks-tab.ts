@@ -43,10 +43,12 @@ import { callCard } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
+  type ChatChannelChange,
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
 } from "@luke/ui/chat-model";
+import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
   isBrowserTab,
@@ -424,6 +426,10 @@ interface ChatViewControl {
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Reads one picture a message carries, by the message and the attachment its block names; a fixture run's are not there to read. */
+  readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
 /** The fixture's staging, as a fixture run imports it. */
@@ -1377,6 +1383,7 @@ export function useTasksTab(input: {
         : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
+    readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });
   const liveRun = fixture === undefined;
   const shownChat: FixtureChat | undefined = liveRun
@@ -3206,6 +3213,11 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onAnswer(answer)
           : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
+      onChannel: (change) =>
+        liveRun
+          ? liveChat.onChannel(change)
+          : stage((held, staging) => staging.stagedChannel(held, change)),
+      readPicture: liveChat.readPicture,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {

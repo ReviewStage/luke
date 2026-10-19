@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
   CHAT_NOTICE_LEAD,
   CHAT_REPLY,
   chatChannelNameSchema,
@@ -178,6 +179,31 @@ test("a window's write is a post with its words one way and one place, an answer
   }
 });
 
+test("a window's post may carry pictures under its words or alone, PNG, JPEG, or WebP, as many as a message's blocks hold beside its words, and refuses any other file, a picture past that, and a post of nothing", () => {
+  const key = "send-1";
+  const picture = (name: string, mediaType: string) => ({ name, mediaType, data: "iVBORw0KGgo=" });
+  const png = picture("invite.png", CHAT_IMAGE_TYPE.PNG);
+  const room = CHAT_BOUNDS.MAX_POST_PICTURES;
+  for (const write of [
+    { text: "The new email.", attachments: [png], clientKey: key },
+    { attachments: [png, picture("b.jpg", CHAT_IMAGE_TYPE.JPEG)], to: "#general", clientKey: key },
+    { attachments: [picture("c.webp", CHAT_IMAGE_TYPE.WEBP)], replyTo: 41, clientKey: key },
+    { text: "Full.", attachments: Array.from({ length: room }, () => png), clientKey: key },
+    { attachments: Array.from({ length: room + 1 }, () => png), clientKey: key },
+  ]) {
+    assert.equal(takes(chatWriteRequestSchema, write), true, JSON.stringify(write).slice(0, 80));
+  }
+  for (const write of [
+    { attachments: [], clientKey: key },
+    { attachments: [picture("spec.pdf", "application/pdf")], clientKey: key },
+    { text: "Notes.", attachments: [picture("notes.txt", "text/plain")], clientKey: key },
+    { text: "Over.", attachments: Array.from({ length: room + 1 }, () => png), clientKey: key },
+    { attachments: [png], clientKey: key, readTo: 4 },
+  ]) {
+    assert.equal(takes(chatWriteRequestSchema, write), false, JSON.stringify(write).slice(0, 80));
+  }
+});
+
 test("a notice's words as a person reads them keep the message alone, without the head the card says or the closing lines telling the agent how to answer, keep a message that itself opens as a closing does, and leave any other text as it is", () => {
   const notice = (words: string, asks?: string) =>
     [
@@ -199,4 +225,28 @@ test("a notice's words as a person reads them keep the message alone, without th
     "Check this.\n\nIt asks you nothing, really.",
   );
   assert.equal(chatNoticeWords("Reply with care."), "Reply with care.");
+});
+
+test("a topic's purpose is one line within its bound, as an open, an edit, and an agent's post write it, and an edit may clear it", () => {
+  const id = "00000000-0000-4000-8000-0000000000c1";
+  assert.equal(
+    takes(chatWriteRequestSchema, { open: { name: "release", purpose: "Friday" } }),
+    true,
+  );
+  assert.equal(
+    takes(chatWriteRequestSchema, { open: { name: "release", purpose: "Friday\nMonday" } }),
+    false,
+  );
+  assert.equal(
+    takes(chatWriteRequestSchema, {
+      open: { name: "release", purpose: "x".repeat(CHAT_BOUNDS.MAX_PURPOSE_CHARS + 1) },
+    }),
+    false,
+  );
+  assert.equal(takes(chatWriteRequestSchema, { edit: { channelId: id, purpose: null } }), true);
+  assert.equal(takes(chatWriteRequestSchema, { edit: { channelId: id, purpose: "a\rb" } }), false);
+  assert.equal(
+    takes(postChatAskInputSchema, { text: "Hi.", to: "#release", purpose: "Two\nlines" }),
+    false,
+  );
 });

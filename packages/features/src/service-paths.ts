@@ -1,5 +1,3 @@
-import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
-
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
@@ -237,6 +235,12 @@ export const HOSTED_SERVICE_PATH = {
    * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
    */
   WORKSPACES_CHAT: "/api/workspaces/chat",
+  /**
+   * One picture a chat message carries, served as its bytes to a person in
+   * the workspace (GET), the workspace, the message, and the attachment
+   * named in `chat-wire.ts`'s `CHAT_ATTACHMENT_QUERY`.
+   */
+  WORKSPACES_CHAT_ATTACHMENT: "/api/workspaces/chat/attachment",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
@@ -300,38 +304,6 @@ export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** One task's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
-export function taskBoardPath(taskId: string): string {
-  return `${taskPath(taskId)}/board`;
-}
-
-/** The developer's edit of one task's document (POST). */
-/** Stops the turn Luke is running on one task (POST). */
-export function taskStopPath(taskId: string): string {
-  return `${taskPath(taskId)}/stop`;
-}
-
-export function planEditPath(taskId: string): string {
-  return `${taskPath(taskId)}/edit`;
-}
-
-/** What was said on one task's calls (GET). */
-export function taskTranscriptPath(taskId: string): string {
-  return `${taskPath(taskId)}/transcript`;
-}
-
-/**
- * One task's work (GET): a page of the brain turns of its calls, the
- * newest of all or, with `before`, the newest queued before that turn, and
- * on the newest page every code Luke showed on it.
- */
-export function taskWorkPath(taskId: string, before?: string): string {
-  const path = `${taskPath(taskId)}/work`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before });
-  return `${path}?${query}`;
-}
-
 /** Every code Luke showed on one task, oldest first (GET). */
 export function taskCodePath(taskId: string): string {
   return `${taskPath(taskId)}/code`;
@@ -379,62 +351,6 @@ export function taskSkillsPath(taskId: string): string {
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
-}
-
-/** The query naming a repository place, which every read of one repository by its workspace opens with. */
-function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
-  return new URLSearchParams({
-    [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: place.workspaceId,
-    [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: place.repository,
-  });
-}
-
-/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `taskTreePath`'s folder is. */
-export function repositoryTreePath(
-  place: RepositoryPlace,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const query = repositoryPlaceQuery(place);
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?${query}`;
-}
-
-/** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
-export function repositorySkillsPath(place: RepositoryPlace): string {
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
-}
-
-/** One pull request of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryPullRequestPath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
-}
-
-/** One issue of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryIssuePath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
-}
-
-/** One task's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
-export function planRevisionsPath(taskId: string, before?: number): string {
-  const path = `${taskPath(taskId)}/revisions`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before: String(before) });
-  return `${path}?${query}`;
-}
-
-/** One revision of one plan: its content beside the content before it (GET). */
-export function planRevisionPath(taskId: string, seq: number): string {
-  return `${planRevisionsPath(taskId)}/${seq}`;
-}
-
-/** One revision of one plan put back as its content (POST). */
-export function taskRestorePath(taskId: string, seq: number): string {
-  return `${planRevisionPath(taskId, seq)}/restore`;
 }
 
 /** One plan's pictures: one kept on the plan (POST). */

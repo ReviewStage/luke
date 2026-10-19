@@ -291,30 +291,13 @@ beforeEach(() => {
           value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
         });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-        catalogReads += 1;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-        const value = defaultRefused
-          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-          : { choice: DEFAULT_CHOICE };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        agentsAsked.push(request.payload);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { agents: [CI_DIGEST] },
-        });
-      }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
-        if (runsHeld) return new Promise<never>(() => undefined);
+        if (runsHeld) return new Promise(() => undefined);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
         runsAsked.push(request.payload.automationId);
-        if (runHeld) return new Promise<never>(() => undefined);
+        if (runHeld) return new Promise(() => undefined);
         if (runRefusal !== undefined) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
@@ -346,6 +329,23 @@ beforeEach(() => {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+        catalogReads += 1;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+        const value = defaultRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : { choice: DEFAULT_CHOICE };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        agentsAsked.push(request.payload);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { agents: [CI_DIGEST] },
+        });
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },

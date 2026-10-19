@@ -6,7 +6,12 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { AGENT_ACT_KIND } from "@luke/host/contract";
+import {
+  AGENT_ACT_KIND,
+  AUTOMATION_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
+} from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -14,7 +19,7 @@ import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -40,11 +45,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
-/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
-const isAgentRead = (kind: string): boolean =>
-  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
-  kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
-
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
@@ -68,6 +68,7 @@ const SETTINGS: SettingsPanelProps = {
   },
   notifications: {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
+    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
     onTest: ignore,
@@ -789,6 +790,14 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
 /** Every act the window sent over the bridge, by kind, in order. */
 let sentActs: string[] = [];
 
+/** The port kinds this window's fake refuses rather than answers with nothing. */
+const REFUSED_ON_PORT: readonly string[] = Object.values({
+  ...AGENT_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
+}).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
+
 /**
  * The bridge as the window meets it, every act written down, with Factory
  * on, and Settings' chunk already loaded, as it is
@@ -808,7 +817,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
 }

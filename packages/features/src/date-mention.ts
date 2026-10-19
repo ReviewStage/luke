@@ -1,4 +1,6 @@
-import { DateTime, Option } from "effect";
+import { SCHEMA_REFUSAL } from "@luke/wire";
+import { wireRefusal } from "@luke/wire/effect";
+import { DateTime, Option, Schema } from "effect";
 
 /**
  * date-mention.ts -- a date a mention names: a day, a time on one, or a range of either, read from the words typed after an `@`, and said as its written label, its chip's words, and its card's.
@@ -42,6 +44,9 @@ const TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})([+-])(\d{2}):(\d{
 
 /** The widest offset a zone is ever set at, in hours. */
 const MAX_OFFSET_HOURS = 14;
+
+/** The most characters of a time zone's name a client may send; the longest IANA name is 32. */
+const MAX_ZONE_CHARS = 64;
 
 /** The named days, each with how far from today it stands and how much of it must be typed to be read. */
 const NAMED_DAYS = [
@@ -580,3 +585,17 @@ export function dateDistance(span: DateSpan, now: number, zone: string): string 
 export function readerZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
+
+/**
+ * A time zone as a client names it, its reader's `readerZone()`: a name
+ * `DateTime.zoneMakeNamed` accepts, such as `America/Los_Angeles`, and
+ * nothing else, so the service counts days and spells times only in a zone
+ * that stands.
+ */
+export const timeZoneSchema = Schema.String.check(
+  Schema.isMaxLength(MAX_ZONE_CHARS),
+  Schema.makeFilter(
+    (zone) => Option.isSome(DateTime.zoneMakeNamed(zone)),
+    wireRefusal(SCHEMA_REFUSAL.MALFORMED),
+  ),
+);

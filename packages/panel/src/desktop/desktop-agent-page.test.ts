@@ -186,6 +186,12 @@ beforeEach(() => {
   gitHub = new Map();
   fakeActs({
     act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { automations: [SWEEP] },
+        });
+      }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve(
           members === undefined
@@ -234,12 +240,6 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: [SWEEP] },
-        });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);

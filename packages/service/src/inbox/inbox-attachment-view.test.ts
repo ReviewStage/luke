@@ -202,6 +202,9 @@ it.layer(getTestDB())("inbox_attachment as a view over attachment", (it) => {
         yield* sql.unsafe(`DROP TABLE "inbox_attachment_moved"`);
         yield* sql.unsafe(OLD_TABLE);
         yield* db.insert(inboxAttachment).values([rows.image, rows.answer, rows.message]);
+        // Note that the later migrations' views read columns this one added, so they go first; no test here reads them.
+        yield* sql.unsafe(`DROP VIEW IF EXISTS "plan_attachment"`);
+        yield* sql.unsafe(`DROP VIEW IF EXISTS "conversation_attachment"`);
         yield* sql.unsafe(`ALTER TABLE "attachment" DROP CONSTRAINT "attachment_inbox_kind"`);
         yield* sql.unsafe(
           `ALTER TABLE "attachment" DROP CONSTRAINT "attachment_one_owner", ADD CONSTRAINT "attachment_one_owner" CHECK (num_nonnulls("chat_message_id") = 1)`,

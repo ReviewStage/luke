@@ -1350,6 +1350,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  tools/voice-samples: {}
+
 packages:
 
   7zip-bin@5.2.0:

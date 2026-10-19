@@ -4865,6 +4865,20 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-top: var(--luke-section-gap);
 }
 
+/* Within Tasks, each group of the reader's own (Pinned, a section, the
+   rest) stands under a quieter name of its own, a step apart. */
+.chat-rail-tasks + .chat-rail-tasks {
+  margin-top: var(--luke-space-8);
+}
+
+.chat-rail-subheading {
+  margin: 0 0 var(--luke-space-2);
+  padding: 0 var(--row-inset);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
 /* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
 .desktop-task-chat {
@@ -4914,6 +4928,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .chat-head {
   padding-left: var(--column-inset);
+}
+
+/* A topic's menu stands at the head's end, past its name and purpose. */
+.chat-head-actions {
+  flex: none;
+  margin-inline-start: auto;
 }
 
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
@@ -5043,6 +5063,27 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .chat-composer-note {
   margin: var(--luke-space-6) 0 0;
+}
+
+/* The pictures a post will carry, as chips over the box's words at the
+   agent composer's inset (`.agent-composer .attached-files`); and files
+   dragged over the box brighten the card's edge, as the agent box's do. */
+.chat-composer .attached-files {
+  padding: var(--luke-space-12) var(--luke-space-12) 0;
+}
+
+.chat-composer[data-dropping] form {
+  border-color: var(--luke-color-border-selected);
+}
+
+/* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
+   picture block, kept to a chat's height so the stream reads on past it. */
+.chat-picture > .picture-block {
+  margin: var(--luke-space-6) 0;
+}
+
+.chat-picture .picture-image {
+  max-height: 320px;
 }
 
 /* The list an `@` or `#` opens stands over the card at its left. */

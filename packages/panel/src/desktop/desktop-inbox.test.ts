@@ -280,6 +280,9 @@ beforeEach(() => {
   members = [];
   fakeActs({
     act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+      }
       if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
       }
@@ -334,9 +337,6 @@ beforeEach(() => {
           status: ACT_OUTCOME_STATUS.DONE,
           value: { pages: taskPages.get(request.payload.taskId) ?? [] },
         });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;

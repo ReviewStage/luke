@@ -2,7 +2,17 @@
 <html lang="en" data-luke-profile="web" data-luke-theme="light" data-luke-density="compact">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover draws the page under a phone's notch and home
+         indicator, which the stage keeps off through the safe-area insets
+         (packages/panel/src/styles/desktop.css). interactive-widget has
+         Android shrink the layout viewport for the keyboard, as iOS's
+         visual viewport already does; the stage, measured by the visual
+         viewport (use-visual-viewport.ts), reads a keyboard inset of zero
+         then, so the two never count the keyboard twice. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="robots" content="noindex" />
     <!-- The light ground, as the landing page names it, so mobile browser chrome blends into it. -->
     <meta name="theme-color" content="#fbfbfa" />
@@ -55,6 +65,16 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Installable: added to a phone's Home Screen, the app opens at /app
+         full screen, and on iOS 16.4 and later only such a web app may show
+         notifications. The status bar stays default (dark text on a light
+         bar), because a translucent one would draw white text over the
+         light ground. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Luke" />
   </head>
   <body>
     <div id="root"></div>

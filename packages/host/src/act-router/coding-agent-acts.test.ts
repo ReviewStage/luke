@@ -176,6 +176,11 @@ function fixture() {
           asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
           return { readSeq: 4 };
         }),
+      codingAgentChatAttachment: ({ workspaceId, messageId, attachmentId }) =>
+        Effect.sync(() => {
+          asked.push(`chat-attachment:${workspaceId}:${messageId}:${attachmentId}`);
+          return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -370,6 +375,31 @@ it.effect(
         `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
         `chat-post:${WORKSPACE_ID}:${JSON.stringify(write.payload.write)}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a panel's read of a chat message's picture reaches the host with the workspace, the message, and the attachment, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const read = {
+        kind: ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT,
+        payload: { workspaceId: WORKSPACE_ID, messageId: "message-1", attachmentId: "picture-1" },
+      } as const;
+
+      const refused = yield* router.performAct(read, VOICE);
+      const picture = yield* router.performAct(read, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT].refusal,
+      });
+      assert.deepEqual(picture, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
+      assert.deepEqual(asked, [`chat-attachment:${WORKSPACE_ID}:message-1:picture-1`]);
     }),
 );
 
