@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, test } from "vitest";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { MarkdownField } from "./markdown-field.js";
 
@@ -15,8 +16,6 @@ import { MarkdownField } from "./markdown-field.js";
  */
 
 const roots: Root[] = [];
-
-beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -79,19 +78,25 @@ test("Write is the tab shown at first, its panel the words with the formatting p
   assert.notEqual(bold(field), null);
 });
 
-test("Preview shows how the words read in the panel it names, without the formatting presses, and Write brings the words back", async () => {
-  const field = mount("Looks **good**");
+it.effect(
+  "Preview shows how the words read in the panel it names, without the formatting presses, and Write brings the words back",
+  () =>
+    Effect.gen(function* () {
+      // Note that the panel lands the Markdown parser as it first paints, so the preview is drawn as the panel draws it.
+      yield* markdownHtmlParserLanded;
+      const field = mount("Looks **good**");
 
-  await act(async () => tab(field, "Preview").click());
+      yield* Effect.promise(() => act(async () => tab(field, "Preview").click()));
 
-  assert.equal(tab(field, "Preview").getAttribute("aria-selected"), "true");
-  const preview = panelOf(field, "Preview");
-  assert.equal(preview.querySelector("textarea"), null);
-  assert.equal(preview.textContent, "Looks good", "the words read as Markdown, not as written");
-  assert.equal(bold(field), null, "the formatting presses stand only while writing");
+      assert.equal(tab(field, "Preview").getAttribute("aria-selected"), "true");
+      const preview = panelOf(field, "Preview");
+      assert.equal(preview.querySelector("textarea"), null);
+      assert.equal(preview.textContent, "Looks good", "the words read as Markdown, not as written");
+      assert.equal(bold(field), null, "the formatting presses stand only while writing");
 
-  act(() => tab(field, "Write").click());
+      act(() => tab(field, "Write").click());
 
-  assert.equal(panelOf(field, "Write").querySelector("textarea")?.value, "Looks **good**");
-  assert.notEqual(bold(field), null);
-});
+      assert.equal(panelOf(field, "Write").querySelector("textarea")?.value, "Looks **good**");
+      assert.notEqual(bold(field), null);
+    }),
+);
