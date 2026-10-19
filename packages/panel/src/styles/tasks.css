@@ -2422,9 +2422,28 @@
 
 /* The title edited in place (`pull-request-writes.tsx`): its pencil stands
    faint after the number until the title is hovered or the pencil focused,
-   and the field takes the title's own type and room. */
+   the two wrapping as one. The pencil takes no room on the line, so it
+   never wraps onto a line of its own: it overhangs the title's end into its
+   inset and the header's own (`--column-inset`), the title keeping just
+   enough of an inset that the two hold it. The field takes the title's own
+   type and room. */
+.pull-request-title.pull-request-title-editable {
+  padding-inline-end: max(
+    var(--row-inset),
+    calc(var(--luke-space-2) + var(--luke-space-24) - var(--column-inset))
+  );
+}
+
+.pull-request-title-end {
+  white-space: nowrap;
+}
+
 .pull-request-title-edit {
-  margin-inline-start: var(--luke-space-2);
+  display: inline-block;
+  position: relative;
+  width: 0;
+  overflow: visible;
+  inset-inline-start: var(--luke-space-2);
   vertical-align: middle;
   opacity: 0;
 }

@@ -392,17 +392,21 @@ export function PullRequestTitle({
   }
   return (
     <h2 className="pull-request-title pull-request-title-editable">
-      {title} <span className="pull-request-number">{number}</span>
-      <span className="pull-request-title-edit">
-        <Tooltip label={TITLE_WORDS.EDIT}>
-          <IconButton
-            icon={<PencilIcon aria-hidden="true" />}
-            label={TITLE_WORDS.EDIT}
-            size={BUTTON_SIZE.COMPACT}
-            disabled={busy}
-            onClick={() => setEditing(true)}
-          />
-        </Tooltip>
+      {title}{" "}
+      {/* Note that the number and the pencil wrap as one, because a pencil wrapped alone would spend a line of its own. */}
+      <span className="pull-request-title-end">
+        <span className="pull-request-number">{number}</span>
+        <span className="pull-request-title-edit">
+          <Tooltip label={TITLE_WORDS.EDIT}>
+            <IconButton
+              icon={<PencilIcon aria-hidden="true" />}
+              label={TITLE_WORDS.EDIT}
+              size={BUTTON_SIZE.COMPACT}
+              disabled={busy}
+              onClick={() => setEditing(true)}
+            />
+          </Tooltip>
+        </span>
       </span>
     </h2>
   );
