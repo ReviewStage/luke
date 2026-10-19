@@ -1505,6 +1505,15 @@
   flex-direction: column;
 }
 
+/* The sheet of Files changed's keys (files-changed-keys.tsx): its groups
+   stacked as the Keyboard shortcuts page stacks them, in the part of the
+   card that scrolls where the window is short. */
+.files-changed-keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-settings-section-gap);
+}
+
 /* Files changed's list of diffs (diff-list.tsx): every file under a header
    of its own, which Pierre keeps at the top while the file's lines scroll
    under it, so it is drawn opaque, on the code's ground, at the height the

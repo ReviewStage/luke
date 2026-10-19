@@ -24,7 +24,12 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  APP_COMMAND,
+  FILES_CHANGED_KEYS,
+  FILES_CHANGED_SHORTCUTS,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -239,6 +244,8 @@ interface DrawOptions {
   readonly beside?: ReactElement;
   readonly repository?: string;
   readonly control?: typeof control;
+  /** Whether the view is the Pull request tab's chosen one; it is unless told. */
+  readonly shown?: boolean;
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
@@ -247,7 +254,7 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   const tab = createElement(AgentChangesTab, {
     agentId: AGENT.id,
     control: options.control ?? control,
-    shown: true,
+    shown: options.shown ?? true,
     repository: options.repository ?? "acme/relay",
     tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
@@ -617,6 +624,99 @@ test("a key typed into the tree's search is the field's", async () => {
 
   assert.equal(press(field, { key: "j" }), false);
   assert.deepEqual(revealed, []);
+});
+
+/** A press of a chord as the keyboard sends it: the key's character and place, Shift where the chord holds it. */
+function chordPress(chord: ShortcutChord): KeyboardEventInit {
+  return { key: chord.key.key, code: chord.key.code, shiftKey: chord.shift === true };
+}
+
+/** `?` as a US keyboard sends it: ⇧ on the slash key. */
+const QUESTION_MARK: KeyboardEventInit = { key: "?", code: "Slash", shiftKey: true };
+
+/** The sheet of the view's keys, where it stands. */
+function keysSheet(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+}
+
+test("every key of Files changed's table answers inside the view", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  await drawTab();
+
+  const unanswered = FILES_CHANGED_KEYS.filter((key) => {
+    // Each key is pressed with a file stood on, which Escape needs.
+    press(listBox(), { key: "j" });
+    return !press(listBox(), chordPress(FILES_CHANGED_SHORTCUTS[key].chord));
+  });
+  assert.deepEqual(unanswered, []);
+});
+
+test("? inside the view opens a sheet of its keys by group, which Escape or ? again puts away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+
+  assert.ok(press(listBox(), QUESTION_MARK), "? is the view's");
+  const sheet = keysSheet() ?? assert.fail("the sheet opens");
+  assert.equal(
+    document.getElementById(sheet.getAttribute("aria-labelledby") ?? "")?.textContent,
+    "Keyboard shortcuts",
+  );
+  const groups = [...sheet.querySelectorAll("section[aria-labelledby]")].map((section) => [
+    document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent,
+    [...section.querySelectorAll(".luke-settings-row")].map((row) => [
+      row.querySelector(".luke-settings-row-label")?.textContent,
+      row.querySelector("kbd")?.textContent,
+    ]),
+  ]);
+  assert.deepEqual(groups, [
+    ["General", [["Show keyboard shortcuts", "⇧/"]]],
+    [
+      "Navigation",
+      [
+        ["Next file", "J"],
+        ["Previous file", "K"],
+        ["Collapse or expand file", ";"],
+        ["Collapse or expand all files", "⇧;"],
+        ["Clear file focus", "Esc"],
+      ],
+    ],
+    ["Review", [["Toggle viewed and go to next file", "V"]]],
+  ]);
+
+  press(sheet, { key: "Escape" });
+  assert.equal(keysSheet(), null, "Escape puts the sheet away");
+  press(listBox(), QUESTION_MARK);
+  press(keysSheet() ?? assert.fail("the sheet opens again"), QUESTION_MARK);
+  assert.equal(keysSheet(), null, "? again puts it away");
+});
+
+test("the sheet goes with the view when another of the Pull request tab's views is chosen, and stays away on coming back", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+  press(listBox(), QUESTION_MARK);
+  assert.ok(keysSheet(), "the sheet opens");
+
+  await redraw({ shown: false });
+  assert.equal(keysSheet(), null, "hidden with the view");
+  await redraw({ shown: true });
+  assert.equal(keysSheet(), null, "not opened again by coming back");
+});
+
+test("? outside Files changed, or typed into its tree's search, opens no sheet", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab({
+    treeOpen: true,
+    beside: createElement(InboxBeside, { onNext: () => undefined }),
+  });
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+
+  assert.equal(press(document.body, QUESTION_MARK), false, "outside the view ? is nobody's");
+  assert.equal(press(field, QUESTION_MARK), false, "in the search ? is typed");
+  assert.equal(keysSheet(), null);
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
