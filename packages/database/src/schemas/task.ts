@@ -1,7 +1,13 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
+import {
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskPriority,
+  type TaskStatus,
+} from "@luke/features/task-wire";
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { issue } from "./issue.js";
@@ -37,6 +43,17 @@ export const task = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /**
+     * The task's number in its workspace, counted from one in the order its
+     * tasks were made and never reused (`task_number_counter`), which its key (`ACME-42`,
+     * `@luke/features/workspace-key`) is drawn from. A task moved to another
+     * workspace takes the next number there.
+     */
+    number: integer("number").notNull(),
+    /** Where the task stands (`TASK_STATUS`); apart from whether it is archived. */
+    status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
+    /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
+    priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
@@ -96,8 +113,24 @@ export const task = pgTable(
     // An issue's tasks, and the issue's deletion letting each of them go. Note that it is not
     // named `task_issue`, because an index shares its name's namespace with the table of links.
     index("task_workspace_issue").on(table.issueId),
+    // The key names one task of its workspace, and a new task takes the next number.
+    uniqueIndex("task_organization_number").on(table.organizationId, table.number),
   ],
 );
+
+/**
+ * The last number each workspace handed a task, so a task's number is
+ * never handed out again, whether the task that took it was deleted or moved
+ * to another workspace: a new task, or one moved in, takes one past it
+ * (`task-store.ts`). A workspace has no row until its first task, and the
+ * row goes with the workspace.
+ */
+export const taskNumberCounter = pgTable("task_number_counter", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  lastNumber: integer("last_number").notNull(),
+});
 
 /**
  * A task's whiteboard: the Excalidraw scene the Tasks tab shows, with the

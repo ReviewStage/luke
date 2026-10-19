@@ -229,15 +229,20 @@ const insertWorkspace = (
     return id;
   });
 
+/** The numbers the tasks below take, each its own whatever its workspace. */
+let taskNumbers = 0;
+
 /** A task in the workspace, its name and plan words no admin read may carry; answers its id. */
 const insertTask = (organizationId: string, userId: string, createdAt: Date) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
+    taskNumbers += 1;
     yield* db.insert(task).values({
       id,
       organizationId,
       userId,
+      number: taskNumbers,
       name: "Secret launch plan",
       document: "Confidential plan text.",
       createdAt,

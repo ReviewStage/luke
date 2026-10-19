@@ -5,7 +5,15 @@ import { githubRepositoryFullNameSchema } from "@luke/features/github-repositori
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { PLAN_ACTOR, TASK_BOUNDS } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_BOUNDS,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type Task,
+  taskPrioritySchema,
+  taskStatusSchema,
+} from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -30,9 +38,11 @@ import {
   cutOnLine,
   orStoreRefusal,
   reachedRepository,
+  TASK_PRIORITY_WORDS,
+  taskStandingOf,
   workedRepository,
 } from "./coding-agent-tools.js";
-import { workspaceStepOf, writtenMention } from "./written-mentions.js";
+import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 
 /**
  * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
@@ -81,7 +91,8 @@ export const READ_TASK_TOOL = {
   name: AGENT_TOOL.READ_TASK,
   description:
     "Read one task of your workspace by its id, a teammate's or an archived one included: its " +
-    "name, repository, who started it, whether it is archived and whether it is the task you " +
+    "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
+    "priority), repository, who started it, whether it is archived and whether it is the task you " +
     "work on, its mention, the brief the developer started it with (null for none), the issues " +
     "it links, Linear's or GitHub's, oldest first, with which keyword its pull requests write " +
     "of each, and the workspace issue it was started from (null for none), with what each " +
@@ -115,12 +126,13 @@ export function runReadTask(
         return agentToolRejected(READ_TASK_REFUSAL.NO_TASK);
       }
       const { task, text, saved, brief, issueLinks, issue } = stored.value;
-      const step = yield* workspaceStepOf(userId, workspace.value);
+      const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
           id: task.id,
+          ...taskStandingOf(task, name),
           name: task.name,
           repository: task.repository ?? null,
           startedBy: task.createdBy?.name ?? null,
@@ -157,8 +169,10 @@ export const CREATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not made: give a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a repository as ` +
     `owner/name, null for none, or none for the one you work in, a brief of at most ` +
-    `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, and a plan of at most ` +
-    `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none.`,
+    `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a plan of at most ` +
+    `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
+    `(${Object.values(TASK_STATUS).join(", ")}) or none, and a priority ` +
+    `(${Object.values(TASK_PRIORITY).join(", ")}) or none.`,
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -188,6 +202,13 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "it. Left out, it starts empty.",
     ),
   ),
+  status: Schema.optionalKey(
+    describeWire(
+      taskStatusSchema,
+      "Where the task stands: backlog for work filed for later; todo where left out.",
+    ),
+  ),
+  priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
 });
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
@@ -200,7 +221,8 @@ export const CREATE_TASK_TOOL = {
     "and a plan to start from where given, and no agent on it. Make one for a separate piece " +
     "of work that should stand as a task of its own, where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
-    "Answers `accepted` with the task's id, name, repository, and mention, or `rejected` and why.",
+    "Give it a status and a priority where the developer said them. Answers `accepted` with the " +
+    "task's id, key, name, status, priority, repository, and mention, or `rejected` and why.",
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 
@@ -231,7 +253,7 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan } = asked.success;
+  const { name, brief, plan, status, priority } = asked.success;
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -240,25 +262,24 @@ export function runCreateTask(
       }
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
-      const step = yield* workspaceStepOf(userId, workspace.value);
-      const answer = (task: {
-        readonly id: string;
-        readonly name: string;
-        readonly repository: string | null;
-      }) => ({
+      const naming = yield* workspaceNamingOf(userId, workspace.value);
+      const answer = (task: Task) => ({
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
           id: task.id,
+          ...taskStandingOf(task, naming.name),
           name: task.name,
-          repository: task.repository,
-          mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+          repository: task.repository ?? null,
+          mention: writtenMention(
+            { kind: MENTION_KIND.TASK, taskId: task.id },
+            task.name,
+            naming.step,
+          ),
         },
       });
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
-      if (Option.isSome(before)) {
-        return answer({ ...before.value.task, repository: before.value.task.repository ?? null });
-      }
+      if (Option.isSome(before)) return answer(before.value.task);
       const named =
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
@@ -277,6 +298,8 @@ export function runCreateTask(
               repository: reached.success,
               text,
               ...(brief === undefined ? undefined : { brief }),
+              ...(status === undefined ? undefined : { status }),
+              ...(priority === undefined ? undefined : { priority }),
             });
             if (Option.isSome(once) && text !== "") {
               yield* recordRevision({
@@ -297,13 +320,13 @@ export function runCreateTask(
         // A run of the same call made it meanwhile, which this one answers.
         const raced = yield* readTask(userId, id);
         if (Option.isNone(raced)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE);
-        return answer({ ...raced.value.task, repository: raced.value.task.repository ?? null });
+        return answer(raced.value.task);
       }
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.AGENT,
         has_issue: false,
       });
-      return answer({ id: made.value.id, name: made.value.name, repository: reached.success });
+      return answer(made.value);
     }),
   );
 }

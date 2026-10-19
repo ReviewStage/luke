@@ -359,6 +359,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     repositoryMenu: undefined,
     onChangeRepository: ignore,
     onSetRepository: () => Promise.resolve(undefined),
+    onSetTaskStanding: () => Promise.resolve(true),
     onOpenOnGitHub: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,

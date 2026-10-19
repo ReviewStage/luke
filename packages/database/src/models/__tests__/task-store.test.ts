@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
-import type { TaskSummary } from "@luke/features/task-wire";
-import { eq } from "drizzle-orm";
+import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
+import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
@@ -19,6 +19,7 @@ import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import { createIssue } from "../issue-store.js";
 import {
+  beginTaskWork,
   createTask,
   createTaskOnce,
   deleteTask,
@@ -26,6 +27,7 @@ import {
   nameUntitledTask,
   readTask,
   readTaskWorkspace,
+  TaskArchived,
   updateTask,
 } from "../task-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
@@ -580,5 +582,169 @@ it.layer(getTestDB())("a plan's archive and its live calls", (it) => {
 
         assert.deepEqual(yield* sweptOf([held, late]), [held, late]);
       }),
+  );
+});
+
+/** The task's number, status, and priority as the account opens it, failing the test where it reaches none. */
+const standingOf = (userId: string, taskId: string) =>
+  Effect.map(readTask(userId, taskId), (read) => {
+    const { number, status, priority } = Option.getOrElse(read, () =>
+      assert.fail("the task is not read"),
+    ).task;
+    return { number, status, priority };
+  });
+
+it.layer(getTestDB())("a task's number", (it) => {
+  it.effect("counts a workspace's tasks from one, apart from every other workspace's", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const acme = yield* openWorkspace(dean);
+      const initech = yield* openWorkspace(dean);
+
+      const first = yield* createTask(dean, { organizationId: acme });
+      const second = yield* createTask(dean, { organizationId: acme });
+      const elsewhere = yield* createTask(dean, { organizationId: initech });
+      const third = yield* createTaskOnce(dean, {
+        organizationId: acme,
+        id: randomUUID(),
+        text: "",
+      });
+
+      assert.deepEqual(
+        [first.number, second.number, Option.getOrUndefined(third)?.number],
+        [1, 2, 3],
+      );
+      assert.equal(elsewhere.number, 1);
+      assert.equal((yield* listedTask(dean, second.id)).number, 2);
+    }),
+  );
+
+  it.effect("never hands out again the number of a task deleted or moved away", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const acme = yield* openWorkspace(dean);
+      const initech = yield* openWorkspace(dean);
+      yield* createTask(dean, { organizationId: initech });
+      yield* createTask(dean, { organizationId: acme });
+      const deleted = yield* createTask(dean, { organizationId: acme });
+      const moving = yield* createTask(dean, { organizationId: acme });
+
+      yield* deleteTask(dean, deleted.id);
+      const moved = yield* updateTask(dean, moving.id, { organizationId: initech });
+      const next = yield* createTask(dean, { organizationId: acme });
+
+      assert.equal(Option.getOrUndefined(moved)?.number, 2);
+      assert.equal(next.number, 4);
+    }),
+  );
+
+  it.effect(
+    "is taken from the same count by an insert that names none, as the build before numbering inserts",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const acme = yield* openWorkspace(dean);
+        yield* createTask(dean, { organizationId: acme });
+        const id = randomUUID();
+
+        yield* Database.use((db) =>
+          db.execute(
+            sql`insert into task (id, user_id, organization_id, name, document) values (${id}, ${dean}, ${acme}, 'Older build', '')`,
+          ),
+        );
+        const after = yield* createTask(dean, { organizationId: acme });
+
+        assert.deepEqual(yield* standingOf(dean, id), {
+          number: 2,
+          status: TASK_STATUS.TODO,
+          priority: TASK_PRIORITY.NONE,
+        });
+        assert.equal(after.number, 3);
+      }),
+  );
+});
+
+it.layer(getTestDB())("a task's status and priority", (it) => {
+  it.effect("start to do and unweighed, or as the start names them", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+
+      const plain = yield* createTask(dean, { organizationId });
+      const filed = yield* createTask(dean, {
+        organizationId,
+        status: TASK_STATUS.BACKLOG,
+        priority: TASK_PRIORITY.HIGH,
+      });
+
+      assert.deepEqual([plain.status, plain.priority], [TASK_STATUS.TODO, TASK_PRIORITY.NONE]);
+      assert.deepEqual([filed.status, filed.priority], [TASK_STATUS.BACKLOG, TASK_PRIORITY.HIGH]);
+    }),
+  );
+
+  it.effect("change for every member, refused while archived, and not at all for an outsider", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      const outsider = yield* openAccount;
+
+      const changed = yield* updateTask(charles, taskId, {
+        status: TASK_STATUS.DONE,
+        priority: TASK_PRIORITY.URGENT,
+      });
+      assert.deepEqual(
+        [Option.getOrUndefined(changed)?.status, Option.getOrUndefined(changed)?.priority],
+        [TASK_STATUS.DONE, TASK_PRIORITY.URGENT],
+      );
+      assert.equal(
+        Option.isNone(yield* updateTask(outsider, taskId, { status: TASK_STATUS.CANCELED })),
+        true,
+      );
+
+      yield* updateTask(dean, taskId, { archived: true });
+      const refused = yield* Effect.result(
+        updateTask(dean, taskId, { priority: TASK_PRIORITY.LOW }),
+      );
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskArchived);
+      assert.deepEqual(yield* standingOf(dean, taskId), {
+        number: 1,
+        status: TASK_STATUS.DONE,
+        priority: TASK_PRIORITY.URGENT,
+      });
+    }),
+  );
+});
+
+it.layer(getTestDB())("a task's work beginning", (it) => {
+  it.effect("moves a task in the backlog or to do into progress, once", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const filed = yield* createTask(dean, { organizationId, status: TASK_STATUS.BACKLOG });
+      const todo = yield* createTask(dean, { organizationId });
+
+      assert.equal(yield* beginTaskWork(dean, filed.id), true);
+      assert.equal(yield* beginTaskWork(dean, todo.id), true);
+      assert.equal(yield* beginTaskWork(dean, todo.id), false);
+      assert.equal((yield* standingOf(dean, filed.id)).status, TASK_STATUS.IN_PROGRESS);
+      assert.equal((yield* standingOf(dean, todo.id)).status, TASK_STATUS.IN_PROGRESS);
+    }),
+  );
+
+  it.effect("never moves a settled task back, nor one of a workspace the account is not in", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const done = yield* createTask(dean, { organizationId, status: TASK_STATUS.DONE });
+      const canceled = yield* createTask(dean, { organizationId, status: TASK_STATUS.CANCELED });
+      const todo = yield* createTask(dean, { organizationId });
+
+      assert.equal(yield* beginTaskWork(dean, done.id), false);
+      assert.equal(yield* beginTaskWork(dean, canceled.id), false);
+      assert.equal(yield* beginTaskWork(outsider, todo.id), false);
+      assert.equal((yield* standingOf(dean, done.id)).status, TASK_STATUS.DONE);
+      assert.equal((yield* standingOf(dean, canceled.id)).status, TASK_STATUS.CANCELED);
+      assert.equal((yield* standingOf(dean, todo.id)).status, TASK_STATUS.TODO);
+    }),
   );
 });

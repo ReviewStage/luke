@@ -42,6 +42,7 @@ import {
   type TasksRevisionsParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
+  type TasksSetStandingParams,
   type TasksSkillsAnswer,
   type TasksSkillsParams,
   type TasksStartAnswer,
@@ -77,6 +78,7 @@ export interface TasksActsDependencies {
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
     tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
+    tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
     tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
     tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
     tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
@@ -130,6 +132,7 @@ export type TasksActKind =
   | typeof ACT_KIND.TASKS_ARCHIVE
   | typeof ACT_KIND.TASKS_REPOSITORIES
   | typeof ACT_KIND.TASKS_SET_REPOSITORY
+  | typeof ACT_KIND.TASKS_SET_STANDING
   | typeof ACT_KIND.TASKS_MOVE
   | typeof ACT_KIND.TASKS_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
@@ -270,6 +273,10 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     [ACT_KIND.TASKS_REPOSITORIES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_REPOSITORIES, sender);
       return host.tasksRepositories(params);
+    },
+    [ACT_KIND.TASKS_SET_STANDING]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_SET_STANDING, sender);
+      return host.tasksSetStanding(params);
     },
     [ACT_KIND.TASKS_SET_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_SET_REPOSITORY, sender);

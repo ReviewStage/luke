@@ -30,6 +30,26 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "backlog",
+        "todo",
+        "in-progress",
+        "done",
+        "canceled"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "none",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     }
   },
   "required": [],

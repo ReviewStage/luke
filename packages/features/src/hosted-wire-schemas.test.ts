@@ -404,6 +404,9 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof taskSectionWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
+    taskStatusSchema: taskWire.taskStatusSchema,
+    taskPrioritySchema: taskWire.taskPrioritySchema,
+    taskNumberSchema: taskWire.taskNumberSchema,
     agentEditLineSchema: taskWire.agentEditLineSchema,
     planAssumptionSchema: taskWire.planAssumptionSchema,
     planDocumentSchema: taskWire.planDocumentSchema,

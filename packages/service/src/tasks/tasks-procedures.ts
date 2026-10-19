@@ -423,6 +423,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(issueId === undefined ? undefined : { issueId }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
+          ...(input.status === undefined ? undefined : { status: input.status }),
+          ...(input.priority === undefined ? undefined : { priority: input.priority }),
         }),
       );
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
@@ -506,6 +508,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
           ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
           ...("archived" in changes ? { archived: changes.archived } : undefined),
+          ...(changes.status === undefined ? undefined : { status: changes.status }),
+          ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
         archiving ? standsStopped : undefined,

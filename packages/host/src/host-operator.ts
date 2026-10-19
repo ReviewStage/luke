@@ -198,6 +198,7 @@ import {
   type TasksRevisionsParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
+  type TasksSetStandingParams,
   type TasksSkillsAnswer,
   type TasksSkillsParams,
   type TasksStartAnswer,
@@ -406,6 +407,7 @@ export interface HostOperator {
   tasksDelete(taskId: string): Effect.Effect<boolean>;
   /** One task renamed; answers whether the service renamed it. */
   tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
+  tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
   /** One task pinned or unpinned; answers whether the service changed it. */
   tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
@@ -1075,6 +1077,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_RENAME, { taskId: params.taskId, name: params.name }),
         (answer) => record(answer)?.renamed === true,
+      ),
+    tasksSetStanding: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_SET_STANDING, { ...params }),
+        (answer) => record(answer)?.changed === true,
       ),
     tasksPin: (params) =>
       Effect.map(

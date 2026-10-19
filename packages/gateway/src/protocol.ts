@@ -36,6 +36,8 @@ export const GATEWAY_METHOD = {
   TASKS_REPOSITORIES: "tasks.repositories",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
+  /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_STANDING: "tasks.setStanding",
   /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_MOVE: "tasks.move",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
