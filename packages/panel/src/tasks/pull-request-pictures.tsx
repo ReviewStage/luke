@@ -31,7 +31,8 @@ import { useOpenLink } from "./use-open-link.js";
  * drawn as a plan's picture is (`../picture-block.tsx`), its press
  * (Enlarge) opening the window's file viewer (`attachment-viewer.tsx`)
  * over the description or comment it stands in, walking that entry's
- * pictures, with Open on GitHub beside the viewer's own Download. GitHub
+ * pictures, with Open on GitHub, to the address GitHub linked it to, beside the
+ * viewer's own Download. GitHub
  * wraps every picture in a link to itself, which `@luke/ui/github-html`
  * lets go of, so the press is the picture's own. A picture inside a link
  * the words keep, a bot's badge to its page, stands inline as GitHub drew
@@ -47,9 +48,10 @@ const PICTURE_WORDS = {
   UNNAMED: "Picture",
 } as const;
 
-/** A picture an entry's words name: its address, and its words. */
+/** A picture an entry's words name: its address, the address GitHub linked it to where it did, and its words. */
 interface EntryPicture {
   readonly src: string;
+  readonly original: string;
   readonly alt: string;
 }
 
@@ -75,11 +77,28 @@ export function useGitHubImageRead(): (
 }
 
 /**
+ * The link a picture stands alone in, as GitHub wraps every picture it
+ * renders: the one `@luke/ui/github-html` lets go of where it leads to the
+ * picture or to GitHub's own image addresses. None where the picture
+ * stands in no link, or shares its link with anything else.
+ */
+function soleLinkOf(image: Element): Element | undefined {
+  const link = image.parentElement;
+  if (link?.tagName !== "A") return undefined;
+  const held = [...link.childNodes].filter(
+    (child) => child.nodeType !== Node.TEXT_NODE || (child.textContent ?? "").trim() !== "",
+  );
+  return held.length === 1 && held[0] === image ? link : undefined;
+}
+
+/**
  * The pictures GitHub's rendering names that the tab reads and draws with
- * a press of their own, in the order they stand, each once: a picture
- * inside a link the words keep is the link's. Note that the rendering is
- * parsed into an inert document, which loads none of its pictures and runs
- * none of its scripts.
+ * a press of their own, in the order they stand, each once, beside the
+ * address GitHub linked each to, which Open on GitHub opens: a lasting
+ * upload's page where the picture is drawn from a signed address that
+ * expires. A picture inside a link the words keep is the link's. Note that
+ * the rendering is parsed into an inert document, which loads none of its
+ * pictures and runs none of its scripts.
  */
 function picturesOf(html: string): readonly EntryPicture[] {
   const document = new DOMParser().parseFromString(html, "text/html");
@@ -87,10 +106,11 @@ function picturesOf(html: string): readonly EntryPicture[] {
   return [...document.images].flatMap((image) => {
     const src = image.getAttribute("src") ?? "";
     const link = image.closest("a");
-    if (link !== null && !linksToPicture(link.getAttribute("href") ?? "", src)) return [];
+    const href = soleLinkOf(image)?.getAttribute("href") ?? "";
+    if (link !== null && !linksToPicture(href, src)) return [];
     if (seen.has(src) || githubImageOf(src) === undefined) return [];
     seen.add(src);
-    return [{ src, alt: image.getAttribute("alt") ?? "" }];
+    return [{ src, original: link === null ? src : href, alt: image.getAttribute("alt") ?? "" }];
   });
 }
 
@@ -110,12 +130,13 @@ function mediaTypeOf(url: string): string {
 function heldFiles(
   agentId: string,
   pictures: readonly EntryPicture[],
-): readonly { readonly src: string; readonly file: FileChip }[] {
-  return pictures.flatMap(({ src, alt }) => {
+): readonly { readonly src: string; readonly original: string; readonly file: FileChip }[] {
+  return pictures.flatMap(({ src, original, alt }) => {
     const state = pictureNow(agentId, src);
     if (state.kind !== PICTURE_STATE.READY) return [];
     const mediaType = mediaTypeOf(state.url);
-    return [{ src, file: { name: viewerName(alt, mediaType), mediaType, url: state.url } }];
+    const file = { name: viewerName(alt, mediaType), mediaType, url: state.url };
+    return [{ src, original, file }];
   });
 }
 
@@ -142,7 +163,7 @@ function EntryViewer({
     onPress: (file) => {
       // Note that the file is matched as the viewer was handed it, because two pictures may hold the same bytes.
       const shown = files.find((each) => each.file === file);
-      if (shown !== undefined) openLink(shown.src);
+      if (shown !== undefined) openLink(shown.original);
     },
   };
   return at < 0 ? null : (

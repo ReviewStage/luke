@@ -690,12 +690,11 @@ it.effect(
     }),
 );
 
-test("a picture GitHub linked to itself opens over the window rather than in the browser: Enlarge walks that entry's pictures from the one pressed, from what was read already, and Open on GitHub opens the one shown; a badge keeps its link", async () => {
+test("a picture GitHub linked to itself opens over the window rather than in the browser: Enlarge walks that entry's pictures from the one pressed, drawn from what was read, and Open on GitHub opens the one shown; a badge keeps its link", async () => {
   const tab = await draw(controlAnswering());
   await settle();
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
-  const read = [...images];
   assert.equal(
     description.querySelector('img[alt="before and after"]')?.closest("a"),
     null,
@@ -731,7 +730,46 @@ test("a picture GitHub linked to itself opens over the window rather than in the
   act(() => onGitHub.click());
   await settle();
   assert.deepEqual(opened, [SCREENSHOT]);
-  assert.deepEqual(images, read, "nothing is read again");
+});
+
+test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to, which lasts, rather than the address it is drawn from; a picture that shares its link with words keeps the link and stays out of the walk", async () => {
+  const drawnFrom = "https://user-images.githubusercontent.com/1/signed-preview.png";
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            html: [
+              `<p dir="auto"><a target="_blank" href="${UPLOAD}"><img src="${drawnFrom}" alt="upload"></a></p>`,
+              `<p dir="auto"><a href="${SCREENSHOT}"><img src="${SCREENSHOT}" alt="Overview"> the original</a></p>`,
+            ].join(""),
+          },
+        }),
+    }),
+  );
+  await settle();
+  const description =
+    tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  assert.equal(description.querySelector('[aria-label="Enlarge Overview"]'), null);
+  act(() =>
+    (
+      description.querySelector<HTMLButtonElement>('[aria-label="Enlarge upload"]') ??
+      assert.fail("the upload has Enlarge")
+    ).click(),
+  );
+  const viewer =
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
+  assert.equal(viewer.querySelector(".attachment-viewer-place"), null, "it walks the upload alone");
+  act(() =>
+    (
+      [...viewer.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Open on GitHub",
+      ) ?? assert.fail("the viewer offers Open on GitHub")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(opened, [UPLOAD]);
 });
 
 test("the Checks tab lists the head's deployments over its checks: each environment, where it stands, and a press opening the address it serves; a head with none lists no deployments", async () => {
