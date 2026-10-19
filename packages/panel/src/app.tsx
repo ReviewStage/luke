@@ -67,6 +67,7 @@ import { OpenPersonProvider } from "./person-door.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link.js";
+import { useStageWidth } from "./stage-width.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
@@ -501,8 +502,10 @@ export function App(): React.JSX.Element {
     tasks,
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
-  // and the sign-in gate draws no sidebar at all.
-  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
+  // and the sign-in gate draws no sidebar at all. It folds by the room the
+  // stage has, which on the desktop is the window's.
+  const stage = useStageWidth();
+  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.width);
 
   const caption = useCaptionPresentation({
     lukeCaptions,
@@ -699,6 +702,7 @@ export function App(): React.JSX.Element {
                   >
                     <ListedAutomations tasks={tasks} on={automationsOn}>
                       <div
+                        ref={stage.ref}
                         className="app-stage"
                         data-capture={String(state.run.captureMode)}
                         // The panel is drawn as an ordinary app window's content; desktop.css
