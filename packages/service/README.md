@@ -2563,7 +2563,10 @@ the account, is refused it. The table admits a typed message too, which a
 hosted route a browser reached on its session cookie alone carries for a
 comment's ask of Luke (`src/tasks/comment-ask.ts`): it is minted as the
 account's own principal instead, the deployment named only as its carrier,
-so it never joins the call's spoken turn, nor a spoken ask its turn. Which account a request acts
+so it never joins the call's spoken turn, nor a spoken ask its turn. The
+voice function's eve client is typed to send a spoken ask and nothing else
+(`src/voice/deployment-exchange.ts`), so the secret opens a typed turn of
+Luke's only where such a comment hands one over. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
 a turn only on a conversation the named account reaches, and cancel one or

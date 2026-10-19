@@ -2,6 +2,7 @@ import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
+import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
 import {
   type ExchangeAttachment,
@@ -30,8 +31,8 @@ import { upstreamSideband } from "./live-sideband.js";
 
 interface ExchangeAttachmentDeps {
   readonly writer: StoreWriter;
-  /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
-  readonly eve: (accountId: string) => EveSessions;
+  /** eve as the deployment reaches it for one account, for a spoken ask alone, composed by the caller so no secret enters here. */
+  readonly eve: (accountId: string) => EveSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
   readonly report: (message: string) => void;
