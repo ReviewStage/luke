@@ -89,6 +89,7 @@ import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import {
   Clock,
+  DateTime,
   Duration,
   Effect,
   Layer,
@@ -331,7 +332,11 @@ const sessionOn = (owner: string, taskId: string) =>
     const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
     const sessionId = `wrun_${randomUUID()}`;
     assert.equal(
-      yield* claimRuntimeSession({ userId: owner, conversationId }, sessionId, new Date()),
+      yield* claimRuntimeSession(
+        { userId: owner, conversationId },
+        sessionId,
+        yield* DateTime.nowAsDate,
+      ),
       true,
     );
     return sessionId;

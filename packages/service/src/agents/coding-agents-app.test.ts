@@ -3463,7 +3463,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
       const target = { userId: owner, conversationId };
       const sessionId = `wrun_${randomUUID()}`;
-      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const turnId = randomUUID();
       yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
