@@ -14,6 +14,7 @@ import {
   commentLinesLabel,
   filterFiles,
   startsCollapsed,
+  suggestedLines,
   textsOf,
   threadPreview,
   threadsOn,
@@ -437,4 +438,28 @@ test("a file whose lines end in a carriage return is turned back with its line e
 
 test("a file's contents are named as git names a blob, which GitHub names a changed file's contents by", async () => {
   assert.equal(await blobShaOf("hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a");
+});
+
+test("a suggestion starts from the head's own words of the lines a comment is on, and none is offered where either end counts on the old side", () => {
+  assert.equal(
+    suggestedLines(FILE_A, {
+      line: 5,
+      side: DIFF_SIDE.RIGHT,
+      startLine: 3,
+      startSide: DIFF_SIDE.RIGHT,
+    }),
+    "const c = 3;\nconst d = 5;\nconst e = 6;",
+  );
+  assert.equal(suggestedLines(FILE_A, { line: 6, side: DIFF_SIDE.RIGHT }), "const f = 7;");
+  assert.equal(suggestedLines(FILE_A, { line: 4, side: DIFF_SIDE.LEFT }), undefined);
+  assert.equal(
+    suggestedLines(FILE_A, {
+      line: 5,
+      side: DIFF_SIDE.RIGHT,
+      startLine: 4,
+      startSide: DIFF_SIDE.LEFT,
+    }),
+    undefined,
+  );
+  assert.equal(suggestedLines(FILE_A, { line: 9, side: DIFF_SIDE.RIGHT }), undefined);
 });

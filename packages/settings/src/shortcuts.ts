@@ -150,7 +150,10 @@ export type KeyedCommand = Exclude<AppCommand, MenuCommand | PaletteCommand>;
  * with Command held, which the keymap leaves to the field. `unshifted` is the
  * character the same key types without Shift where `key` needs it on a US
  * keyboard, and `aria` the key's name where `aria-keyshortcuts` cannot spell
- * it as its character.
+ * it as its character. `placed` marks a punctuation key a plain chord reads
+ * by its place, because Shift, which a plain chord may hold, turns it into
+ * another character (`;` into `:`, `/` into `?`); a Command chord still reads
+ * its character, as the menu bar does.
  */
 interface ShortcutKey {
   accelerator: string;
@@ -160,6 +163,7 @@ interface ShortcutKey {
   editsText?: true;
   unshifted?: string;
   aria?: string;
+  placed?: true;
 }
 
 export const SHORTCUT_KEY = {
@@ -179,7 +183,7 @@ export const SHORTCUT_KEY = {
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
-  // A bare V is Files changed's own, marking the file stood on viewed, as GitHub's does.
+  // A bare V is Files changed's own, marking the file stood on viewed; no app command holds it.
   V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
   // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
@@ -201,9 +205,10 @@ export const SHORTCUT_KEY = {
     editsText: true,
   },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
-  SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash" },
+  // ⇧/, the key `?` is typed on, is Files changed's own sheet of its keys, read by its place.
+  SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash", placed: true },
   // A bare ; and ⇧; are Files changed's own fold keys, stage-cli's, read by their place.
-  SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon" },
+  SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon", placed: true },
   // Note that Return is ⏎ rather than ↩, because the system face draws ⏎ as
   // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
   // a ↩ is borrowed from another face and sits off the line beside it.
@@ -570,6 +575,109 @@ export const APP_SHORTCUT_GROUPS = [
   },
 ] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];
 
+/**
+ * What a key does in Files changed, the Pull request tab's view of its files.
+ * Its keys are stage-cli's own, a letter alone each or ⇧ with one, and answer
+ * only where the press lands inside the view and is not typing
+ * (`changes-list.tsx` in `@luke/panel`), so none is an app command: the
+ * window's keymap never sees them, no menu item carries them, and J and K
+ * keep the Inbox's meaning everywhere else.
+ */
+export const FILES_CHANGED_KEY = {
+  NEXT_FILE: "files-changed-next-file",
+  PREVIOUS_FILE: "files-changed-previous-file",
+  TOGGLE_FILE: "files-changed-toggle-file",
+  TOGGLE_ALL_FILES: "files-changed-toggle-all-files",
+  LET_GO: "files-changed-let-go",
+  MARK_VIEWED: "files-changed-mark-viewed",
+  MINIMIZE_COMMENTS: "files-changed-minimize-comments",
+  SHOW_SHORTCUTS: "files-changed-show-shortcuts",
+} as const;
+
+export type FilesChangedKey = (typeof FILES_CHANGED_KEY)[keyof typeof FILES_CHANGED_KEY];
+
+/** One of Files changed's keys as its sheet and the Keyboard shortcuts page name it, and the chord that runs it. */
+interface FilesChangedShortcut {
+  label: string;
+  chord: ShortcutChord;
+}
+
+/**
+ * Files changed's keys: the one table the view's handler matches a press
+ * against, and its `?` sheet and the Keyboard shortcuts page list, so what
+ * is listed is what answers. Escape lets go of the file stood on only while
+ * one is, since otherwise it is the window's layered Escape, V answers
+ * only once the member's viewed marks are read, and I only where Minimize
+ * inline comments can be turned.
+ */
+export const FILES_CHANGED_SHORTCUTS = {
+  [FILES_CHANGED_KEY.NEXT_FILE]: {
+    label: "Next file",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+  },
+  [FILES_CHANGED_KEY.PREVIOUS_FILE]: {
+    label: "Previous file",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+  },
+  [FILES_CHANGED_KEY.TOGGLE_FILE]: {
+    label: "Collapse or expand file",
+    chord: { key: SHORTCUT_KEY.SEMICOLON, plain: true },
+  },
+  [FILES_CHANGED_KEY.TOGGLE_ALL_FILES]: {
+    label: "Collapse or expand all files",
+    chord: { key: SHORTCUT_KEY.SEMICOLON, plain: true, shift: true },
+  },
+  [FILES_CHANGED_KEY.LET_GO]: {
+    label: "Clear file focus",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [FILES_CHANGED_KEY.MARK_VIEWED]: {
+    label: "Toggle viewed and go to next file",
+    chord: { key: SHORTCUT_KEY.V, plain: true },
+  },
+  [FILES_CHANGED_KEY.MINIMIZE_COMMENTS]: {
+    label: "Minimize or show inline comments",
+    chord: { key: SHORTCUT_KEY.I, plain: true },
+  },
+  [FILES_CHANGED_KEY.SHOW_SHORTCUTS]: {
+    label: "Show keyboard shortcuts",
+    chord: { key: SHORTCUT_KEY.SLASH, plain: true, shift: true },
+  },
+} as const satisfies Record<FilesChangedKey, FilesChangedShortcut>;
+
+/**
+ * Files changed's keys as its `?` sheet lists them, in stage-cli's groups,
+ * every key in exactly one; the Keyboard shortcuts page lists them in this
+ * order under one Files changed group.
+ */
+export const FILES_CHANGED_SHORTCUT_GROUPS = [
+  { title: "General", keys: [FILES_CHANGED_KEY.SHOW_SHORTCUTS] },
+  {
+    title: "Navigation",
+    keys: [
+      FILES_CHANGED_KEY.NEXT_FILE,
+      FILES_CHANGED_KEY.PREVIOUS_FILE,
+      FILES_CHANGED_KEY.TOGGLE_FILE,
+      FILES_CHANGED_KEY.TOGGLE_ALL_FILES,
+      FILES_CHANGED_KEY.LET_GO,
+    ],
+  },
+  {
+    title: "Review",
+    keys: [FILES_CHANGED_KEY.MARK_VIEWED, FILES_CHANGED_KEY.MINIMIZE_COMMENTS],
+  },
+] as const satisfies readonly { title: string; keys: readonly FilesChangedKey[] }[];
+
+/** The Keyboard shortcuts page's group of Files changed's keys, and its settings search's words for them. */
+export const FILES_CHANGED_GROUP_TITLE = "Files changed";
+
+/** Files changed's keys in the order its sheet lists them, as the Keyboard shortcuts page lists them under one group. */
+export const FILES_CHANGED_KEYS_LISTED: readonly FilesChangedKey[] =
+  FILES_CHANGED_SHORTCUT_GROUPS.flatMap((group) => group.keys);
+
+/** Every one of Files changed's keys, in the order the table declares them. */
+export const FILES_CHANGED_KEYS: readonly FilesChangedKey[] = Object.values(FILES_CHANGED_KEY);
+
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
 
@@ -695,7 +803,8 @@ interface ShortcutKeyPress {
  * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
- * has changed the character. A key with an unshifted character answers
+ * has changed the character, or where a plain chord's key is read by its
+ * place because Shift changes its character. A key with an unshifted character answers
  * either character, Shift held or not, because which of the two needs Shift
  * is the keyboard layout's to say.
  */
@@ -705,7 +814,9 @@ export function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): 
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
   if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;
-  if (event.altKey) return event.code === chord.key.code;
+  if (event.altKey || (chord.plain === true && chord.key.placed === true)) {
+    return event.code === chord.key.code;
+  }
   const pressed = event.key.toLowerCase();
   return pressed === chord.key.key.toLowerCase() || pressed === chord.key.unshifted;
 }
@@ -716,6 +827,13 @@ export function commandForKey(
   event: ShortcutKeyPress,
 ): KeyedCommand | undefined {
   return commands.find((command) => shortcutMatches(APP_SHORTCUTS[command].chord, event));
+}
+
+/** The Files changed key whose chord a key press is, or nothing. */
+export function filesChangedKeyFor(event: ShortcutKeyPress): FilesChangedKey | undefined {
+  return FILES_CHANGED_KEYS.find((key) =>
+    shortcutMatches(FILES_CHANGED_SHORTCUTS[key].chord, event),
+  );
 }
 
 /** Whether the keymap leaves the chord to the window's own Escape, which steps back a layer at a time. */

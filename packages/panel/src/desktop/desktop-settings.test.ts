@@ -422,6 +422,35 @@ test("Keyboard shortcuts lists Show terminal and the Call group's chords only on
   assert.deepEqual(listed(without), { terminal: false, call: false, found: [] });
 });
 
+test("Keyboard shortcuts lists Files changed's own keys under a group of their own, which its search finds", () => {
+  const page = mount(createElement(SettingsHarness));
+  const drawn = openPage(page, "Keyboard shortcuts");
+  const group =
+    [...drawn.querySelectorAll("section[aria-labelledby]")].find(
+      (each) =>
+        document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
+        "Files changed",
+    ) ?? assert.fail("a Files changed group stands");
+
+  assert.deepEqual(
+    [...group.querySelectorAll(".luke-settings-row")].map((row) => [
+      row.querySelector(".luke-settings-row-label")?.textContent,
+      row.querySelector("kbd")?.textContent,
+    ]),
+    [
+      ["Show keyboard shortcuts", "⇧/"],
+      ["Next file", "J"],
+      ["Previous file", "K"],
+      ["Collapse or expand file", ";"],
+      ["Collapse or expand all files", "⇧;"],
+      ["Clear file focus", "Esc"],
+      ["Toggle viewed and go to next file", "V"],
+      ["Minimize or show inline comments", "I"],
+    ],
+  );
+  assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
+});
+
 test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
   const group =

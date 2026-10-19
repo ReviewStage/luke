@@ -1,5 +1,12 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import {
+  FILES_CHANGED_KEY,
+  FILES_CHANGED_SHORTCUTS,
+  type FilesChangedKey,
+  filesChangedKeyFor,
+  type ShortcutChord,
+  shortcutAria,
+} from "@luke/settings/shortcuts";
 import { BUTTON_SIZE, IconButton, TextButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
@@ -33,7 +40,11 @@ import type { DiffListDoor } from "./diff-list.js";
  * ⇧; collapses every file the filter keeps, or expands them all once all
  * are collapsed, V marks the file stood on viewed on GitHub, or unmarks it,
  * and steps on to the next, I turns Minimize inline comments on or off, as
- * stage-cli's does, and Escape lets go of the file stood on. They answer only
+ * stage-cli's does, Escape lets go of the file stood on, and `?`
+ * opens the sheet that lists them all (`files-changed-keys.tsx`). Each is a
+ * row of `@luke/settings/shortcuts`'s Files changed table, which the press is
+ * matched against and the sheet and the Keyboard shortcuts page list, so a
+ * key listed is a key that answers. They answer only
  * where the press lands inside Files changed and is not typing, and go no
  * further once answered, so J and K keep their meaning everywhere else in
  * the window (the Inbox's next and previous item, `@luke/settings/shortcuts`), an
@@ -52,27 +63,14 @@ import type { DiffListDoor } from "./diff-list.js";
  * and is scrolled to once the list holds it.
  */
 
-/** What a key does in the list. */
-const FILE_KEY = {
-  NEXT: "next",
-  PREVIOUS: "previous",
-  TOGGLE: "toggle",
-  TOGGLE_ALL: "toggle-all",
-  LET_GO: "let-go",
-  VIEWED: "viewed",
-  COMMENTS: "comments",
-} as const;
-
-type FileKey = (typeof FILE_KEY)[keyof typeof FILE_KEY];
-
 /** The fold keys' chords, for the hints of the controls that do the same. */
 export const FOLD_CHORD = {
-  ONE: { key: SHORTCUT_KEY.SEMICOLON, plain: true },
-  ALL: { key: SHORTCUT_KEY.SEMICOLON, plain: true, shift: true },
-} as const satisfies Record<string, ShortcutChord>;
+  ONE: FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.TOGGLE_FILE].chord,
+  ALL: FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.TOGGLE_ALL_FILES].chord,
+} as const;
 
 /** The key that marks the file stood on viewed, or unmarks it, as GitHub's own V does. */
-export const VIEWED_CHORD = { key: SHORTCUT_KEY.V, plain: true } as const satisfies ShortcutChord;
+export const VIEWED_CHORD = FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.MARK_VIEWED].chord;
 
 /** What the list says where a filter keeps no file. */
 export const LIST_WORDS = {
@@ -97,22 +95,16 @@ function typingInto(target: EventTarget | null): boolean {
 }
 
 /**
- * What a press does in the list, or nothing: a letter alone, or ⇧ with `;`,
- * read by its key for J and K and by its place for `;`, which ⇧ turns into
- * `:` on most keyboards. Note that Escape is the list's only while a file is
+ * Which of the view's keys a press is, or none: a letter read by its
+ * character, `;` and `/` by their place, since ⇧ turns them into `:` and `?`
+ * (`shortcutMatches`). Note that Escape is the list's only while a file is
  * stood on, because otherwise it is the window's.
  */
-function fileKeyOf(event: React.KeyboardEvent, standing: boolean): FileKey | undefined {
+function fileKeyOf(event: React.KeyboardEvent, standing: boolean): FilesChangedKey | undefined {
   if (event.defaultPrevented || event.nativeEvent.isComposing) return undefined;
-  if (event.metaKey || event.ctrlKey || event.altKey || typingInto(event.target)) return undefined;
-  if (event.key === "Escape") return standing ? FILE_KEY.LET_GO : undefined;
-  if (event.code === "Semicolon") return event.shiftKey ? FILE_KEY.TOGGLE_ALL : FILE_KEY.TOGGLE;
-  if (event.shiftKey) return undefined;
-  const key = event.key.toLowerCase();
-  if (key === "j") return FILE_KEY.NEXT;
-  if (key === "v") return FILE_KEY.VIEWED;
-  if (key === "i") return FILE_KEY.COMMENTS;
-  return key === "k" ? FILE_KEY.PREVIOUS : undefined;
+  if (typingInto(event.target)) return undefined;
+  const key = filesChangedKeyFor(event);
+  return key === FILES_CHANGED_KEY.LET_GO && !standing ? undefined : key;
 }
 
 /** The path `step` files on from `from` among `paths`, held at either end; the first for a file not among them. */
@@ -178,6 +170,9 @@ export interface ChangesList {
   /** Whether a file is marked viewed, and the door that marks or unmarks it, which folds or opens it; none while the marks are not read. */
   readonly viewed: ((path: string) => boolean) | undefined;
   readonly markViewed: ((path: string) => void) | undefined;
+  /** Whether the sheet of the view's keys, which `?` opens, stands, and the door that puts it away. */
+  readonly keysShown: boolean;
+  readonly hideKeys: () => void;
 }
 
 /** Files changed's list over `files`, every fold at its default and no file stood on until the developer acts. */
@@ -206,6 +201,8 @@ export function useChangesList(
     setStanding(undefined);
   }, []);
   const [sources, setSources] = useState<ReadonlySet<string>>(new Set());
+  const [keysShown, setKeysShown] = useState(false);
+  const hideKeys = useCallback(() => setKeysShown(false), []);
   const door = useRef<DiffListDoor | null>(null);
   const ordered = useMemo(() => treeOrder(files), [files]);
   const kept = useMemo(() => filterFiles(ordered, query), [ordered, query]);
@@ -296,32 +293,47 @@ export function useChangesList(
     door.current?.reveal(revealing);
   }, [revealing, paths]);
 
+  // A first press stands on the file at the top rather than stepping past it.
+  const stepFrom = (path: string, step: number) => {
+    const next = keptStanding === undefined ? path : stepped(paths, path, step);
+    go(next ?? path);
+  };
+  const onFile = (run: (path: string) => void) =>
+    current === undefined ? undefined : () => run(current);
+  // What each of the view's keys does as the list stands, none where it has
+  // nothing to act on: every key but `?` needs a file to stand on, V the
+  // marks read, and I a Minimize inline comments to turn. Note that the record is total over the table, so a key
+  // added to the table does not build until it is handled here.
+  const keyRuns = () =>
+    ({
+      [FILES_CHANGED_KEY.NEXT_FILE]: onFile((path) => stepFrom(path, 1)),
+      [FILES_CHANGED_KEY.PREVIOUS_FILE]: onFile((path) => stepFrom(path, -1)),
+      [FILES_CHANGED_KEY.TOGGLE_FILE]: onFile((path) => {
+        toggle(path);
+        go(path);
+      }),
+      [FILES_CHANGED_KEY.TOGGLE_ALL_FILES]: onFile(toggleAll),
+      [FILES_CHANGED_KEY.LET_GO]: onFile(letGo),
+      // The file marked folds, and the keys step on to the next, so pressing V again marks it.
+      [FILES_CHANGED_KEY.MARK_VIEWED]:
+        marks === undefined
+          ? undefined
+          : onFile((path) => {
+              markViewed(path);
+              stepFrom(path, 1);
+            }),
+      [FILES_CHANGED_KEY.MINIMIZE_COMMENTS]:
+        onMinimize === undefined ? undefined : onFile(() => onMinimize()),
+      [FILES_CHANGED_KEY.SHOW_SHORTCUTS]: () => setKeysShown(true),
+    }) satisfies Record<FilesChangedKey, (() => void) | undefined>;
   const onKeyDown = (event: React.KeyboardEvent) => {
     const key = fileKeyOf(event, keptStanding !== undefined);
-    if (key === undefined || current === undefined) return;
-    // V is the list's only while the marks are read, so there is something to mark.
-    if (key === FILE_KEY.VIEWED && marks === undefined) return;
-    if (key === FILE_KEY.COMMENTS && onMinimize === undefined) return;
+    const run = key === undefined ? undefined : keyRuns()[key];
+    if (run === undefined) return;
     // Note that an answered press goes no further, because the window's keymap would run the Inbox's J and K too.
     event.preventDefault();
     event.stopPropagation();
-    if (key === FILE_KEY.LET_GO) return letGo();
-    if (key === FILE_KEY.COMMENTS) return onMinimize?.();
-    if (key === FILE_KEY.TOGGLE_ALL) return toggleAll();
-    if (key === FILE_KEY.VIEWED) {
-      // The file marked folds, and the keys step on to the next, so pressing V again marks it.
-      markViewed(current);
-      const next = keptStanding === undefined ? current : stepped(paths, current, 1);
-      return go(next ?? current);
-    }
-    if (key === FILE_KEY.TOGGLE) {
-      toggle(current);
-      return go(current);
-    }
-    // A first press stands on the file at the top rather than stepping past it.
-    const step = key === FILE_KEY.NEXT ? 1 : -1;
-    const next = keptStanding === undefined ? current : stepped(paths, current, step);
-    if (next !== undefined) go(next);
+    run();
   };
 
   return {
@@ -343,6 +355,8 @@ export function useChangesList(
     toggleSource,
     viewed: marks?.viewed,
     markViewed: marks === undefined ? undefined : markViewed,
+    keysShown,
+    hideKeys,
   };
 }
 

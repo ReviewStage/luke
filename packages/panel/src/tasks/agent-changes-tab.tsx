@@ -80,6 +80,7 @@ import {
   listPatch,
   STATUS_LETTER,
   STATUS_WORDS,
+  suggestedLines,
   textsOf,
   threadsOn,
 } from "./changes-model.js";
@@ -91,6 +92,7 @@ import { LinesMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { FileViewBar, usePaneRoom } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
+import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
@@ -138,7 +140,8 @@ import { useViewedFiles } from "./viewed-files.js";
  * narrows the rows, said over the list while the tree is hidden, with the
  * pull request's count under it, or under the list while the tree is
  * hidden; choosing a file there or in a crumb's tree scrolls the list to
- * it. stage-cli's keys walk the list (`changes-list.tsx`). The diffs are
+ * it. stage-cli's keys walk the list (`changes-list.tsx`), and `?` opens a
+ * sheet listing them (`files-changed-keys.tsx`). The diffs are
  * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
  * File tab's ground, in its type and colours, unified or split, numbered
  * and wrapped as the File tabs' settings say, their numbers left out of the
@@ -696,7 +699,9 @@ function useListCommenting(
   const file = picked === undefined ? undefined : files.find((each) => each.path === picked.path);
   const lines =
     file === undefined || picked === undefined ? undefined : commentLines(file, picked.selection);
-  if (picked === undefined || lines === undefined) return { open, note: undefined };
+  if (file === undefined || picked === undefined || lines === undefined) {
+    return { open, note: undefined };
+  }
   const { path } = picked;
   const content: DiffNote = {
     key: COMMENT_KEY,
@@ -711,6 +716,7 @@ function useListCommenting(
         pending={comments.pending}
         body={words.get(path) ?? ""}
         onBody={(body) => setWords((was) => new Map(was).set(path, body))}
+        suggestion={suggestedLines(file, lines)}
         onClose={() => setPicked(undefined)}
         onWritten={comments.onWritten}
         onRefresh={onRefresh}
@@ -1111,6 +1117,13 @@ export function AgentChangesTab({
     [agentId, pullRequest, answered],
   );
   const { closeOver } = room;
+  const { hideKeys } = list;
+  // The sheet of the view's keys goes with the view: a Dialog stands over the
+  // whole window from document.body, so it would outlast the view's panel
+  // being hidden for another of the Pull request tab's views.
+  useEffect(() => {
+    if (!shown) hideKeys();
+  }, [shown, hideKeys]);
   const { go } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
@@ -1233,6 +1246,7 @@ export function AgentChangesTab({
       {/* The count stands under the tree, and under the list while the tree
           stands nowhere beside it, which the stylesheet says (tasks.css). */}
       <p className="file-tree-foot">{counted}</p>
+      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
     </div>
   );
 }

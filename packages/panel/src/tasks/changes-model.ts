@@ -61,6 +61,9 @@ import {
  * dashes is still one removed line; the rows kept are written again as a
  * patch of their own, its header counting them, with the thread's own lines
  * selected.
+ *
+ * A comment on lines of the head alone may suggest a change to them, which
+ * starts from those lines as the file's patch holds them (`suggestedLines`).
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
@@ -788,4 +791,28 @@ export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTe
   const text = before.join("\n");
   const beforeEndsInNewline = beforeUnended ? false : afterOnlyUnended ? true : endsInNewline;
   return { before: beforeEndsInNewline && before.length > 0 ? `${text}\n` : text, after };
+}
+
+/**
+ * The lines a comment is on as they read at the head, for a suggestion to
+ * start from: the new side's words of each line from its first to its
+ * last, as the file's patch holds them. None where either end counts on
+ * the old side, whose lines a suggestion cannot change, or where the patch
+ * holds no row for one of the lines.
+ */
+export function suggestedLines(
+  file: CodingAgentChangedFile,
+  lines: CommentLines,
+): string | undefined {
+  const first = lines.startLine ?? lines.line;
+  const sides = [lines.side, lines.startSide ?? lines.side];
+  if (file.patch === null || sides.some((side) => side !== DIFF_SIDE.RIGHT)) return undefined;
+  const hunk = (patchHunks(file.patch) ?? []).find(({ rows }) =>
+    rows.some((row) => row.newLine === lines.line),
+  );
+  const rows = (hunk?.rows ?? []).filter(
+    (row) => row.newLine !== undefined && row.newLine >= first && row.newLine <= lines.line,
+  );
+  if (rows.length !== lines.line - first + 1) return undefined;
+  return rows.map((row) => row.text).join("\n");
 }

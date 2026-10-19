@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { encodeMention, type MentionPlace } from "@luke/features/mention-link";
 import {
   ComboboxList,
   comboboxOptionId,
@@ -36,6 +37,8 @@ import { Tooltip } from "../tooltip.js";
 import { useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { MentionNodeChip } from "./mention-chip.js";
+import { useMentionDoors } from "./task-mentions.js";
 import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 
 /**
@@ -48,9 +51,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
  * starts a new line, and the box is empty again once the post is taken; a
  * post refused keeps its words and says why under the box. An `@` or a `#`
  * at the start of a word opens the chat's own list over the box
- * (`chat-mention-picker.tsx`), and the one chosen is written as its word
- * (`@agent-2`, `#general`), which is how the service reads who a message
- * names. The microphone records a dictation and lays its words in at the
+ * (`chat-mention-picker.tsx`). A person or an agent chosen is written as
+ * their chip, the same mention link the agent box, the Inbox, and a plan
+ * comment write (`[@ada](…/person/<id>)`), which the service reads to tell
+ * them; Luke and a channel are written as their word (`@luke`, `#general`),
+ * Luke because every task's answers to `@luke` by the channel it is said in.
+ * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's handles and channel
  * names (`chatKeywords`). Where the editor's bundle could not be loaded, a
  * plain textarea stands in with the same list, so a message can always be
@@ -118,6 +124,8 @@ interface ChatComposerProps {
   readonly targets: readonly ChatTarget[];
   /** The words a dictation here is likely to say (`chatKeywords`). */
   readonly keywords: readonly string[];
+  /** The workspace a chip's link is written in; where none is known yet, a member is written as their `@handle`. */
+  readonly place?: MentionPlace | undefined;
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
   /** Sends the words; answers why they were refused, or nothing once they are taken. */
@@ -217,6 +225,7 @@ function EditorChatComposer({
   keywords,
   compact,
   onSend,
+  place,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
@@ -224,9 +233,20 @@ function EditorChatComposer({
   const { draft, setDraft, sending, note, setNote, send } = useChatSend(onSend);
   const dictation = useDictation({ editor, keywords, onNote: setNote });
   const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
+  const doors = useMentionDoors();
   const picker = useChatMentionPicker({
     targets,
-    onChoose: (words) => editor.current?.chooseWords(words),
+    onChoose: (target) => {
+      // A person or an agent is written as their chip, the link every box of the app writes; Luke and a channel as their word.
+      if (target.mention !== undefined && place !== undefined) {
+        editor.current?.chooseMention({
+          name: target.name,
+          target: encodeMention(target.mention, place),
+        });
+        return;
+      }
+      editor.current?.chooseWords(`${target.sigil}${target.name}`);
+    },
   });
   return (
     <div className="chat-composer" data-compact={String(compact === true)}>
@@ -258,7 +278,7 @@ function EditorChatComposer({
           mentions={{
             onTrigger: picker.onMemberTrigger,
             onChannelTrigger: picker.onChannelTrigger,
-            chip: (mention) => `@${mention.name}`,
+            chip: (mention) => <MentionNodeChip mention={mention} doors={doors} />,
             pasted: () => undefined,
           }}
           // Note that a thread's box is opened by a press, so it takes the caret; a place's foot leaves it where it is.
