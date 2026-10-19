@@ -27,31 +27,27 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { runAppCommand } from "@luke/panel/app-commands";
-import { AutomationsPage } from "@luke/panel/desktop/automations-page";
-import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  useLeaveGuard,
-} from "@luke/panel/tasks/use-tasks-tab";
-import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "@luke/panel/testing/app-platform";
-import { handState } from "@luke/panel/testing/app-state";
-import { onRegistry } from "@luke/panel/testing/copy-feedback";
-import { playMotions } from "@luke/panel/testing/pane-motion";
-import { relayout } from "@luke/panel/testing/resize-observer";
-import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
-import { tasksControl } from "@luke/panel/testing/tasks-control";
-import { ToastHost } from "@luke/panel/toast";
-import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { layContainersAt } from "#testing/container-width";
+import { runAppCommand } from "../app-commands.js";
+import { OpenFeedbackProvider } from "../open-feedback.js";
+import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
+import { fakeAppBridge } from "../testing/app-bridge.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { playMotions } from "../testing/pane-motion.js";
+import { relayout } from "../testing/resize-observer.js";
+import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { tasksControl } from "../testing/tasks-control.js";
+import { ToastHost } from "../toast.js";
+import { appStateNow } from "../use-app-state.js";
+import { AutomationsPage } from "./automations-page.js";
 
 /**
  * automations-page.test.ts -- the Automations page as the window draws it: the listed workspace's automations, the workspace's before the personal ones, each naming its owner, an automation turned off saying so, a failed run marked, a switch's write taken in place, and a read that did not land said with a retry.
