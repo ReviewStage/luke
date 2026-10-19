@@ -7019,10 +7019,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* The words field stands at least five lines tall, so a task's prompt has
-   room before it is written; it still grows to the agent box's eight. In a
-   window too short for that, as a small one zoomed in, the minimum yields to
-   a quarter of the window, so the card's foot and its Start stay in view. */
+   room before it is written; it still grows to the agent box's eight. */
 .new-task-composer .agent-composer-input {
+  min-height: calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+}
+
+/* In the dialog, which does not scroll, a window too short for five lines,
+   as a small one zoomed in, has the minimum yield to a quarter of the
+   window, so the card's foot and its Start stay in view. Home scrolls, so
+   its composer keeps the five lines. */
+.new-task .new-task-composer .agent-composer-input {
   min-height: min(
     calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
     25vh
