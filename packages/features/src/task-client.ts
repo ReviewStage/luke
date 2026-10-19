@@ -16,14 +16,11 @@ import {
 import type { Board, BoardElement } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import {
-  GITHUB_REPOSITORIES_QUERY,
-  type GitHubRepositoriesAnswer,
-  type GitHubRepositoryIssueAnswer,
-  type GitHubRepositoryPullRequestAnswer,
-  githubRepositoriesAnswerSchema,
-  githubRepositoryIssueAnswerSchema,
-  githubRepositoryPullRequestAnswerSchema,
+import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
+import type {
+  GitHubRepositoriesAnswer,
+  GitHubRepositoryIssueAnswer,
+  GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
 import {
   askHosted,
@@ -58,10 +55,6 @@ import {
   planCommentThreadPath,
   planPageVersionPath,
   type RepositoryPlace,
-  repositoryIssuePath,
-  repositoryPullRequestPath,
-  repositorySkillsPath,
-  repositoryTreePath,
   taskCodePath,
   taskFilePath,
   taskPagesPath,
@@ -388,24 +381,10 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const query =
-        workspaceId === undefined
-          ? ""
-          : `?${new URLSearchParams({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceId })}`;
-      const answer = yield* call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}${query}`,
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) return UNANSWERED;
-      const listed = Result.getOrUndefined(
-        readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
-      );
-      return listed === undefined ? UNANSWERED : succeeded(listed);
-    });
+    return Effect.match(
+      askHosted(this.#hosted.github.repositories, workspaceId === undefined ? {} : { workspaceId }),
+      { onSuccess: succeeded, onFailure: () => UNANSWERED },
+    );
   }
 
   /**
@@ -536,9 +515,14 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryTreePath(place, admitted) },
-      taskTreeAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryTree, {
+        ...place,
+        ...(admitted.path === "" ? undefined : { path: admitted.path }),
+        ...(admitted.recursive === true
+          ? { recursive: GITHUB_REPOSITORY_TREE_RECURSIVE }
+          : undefined),
+      }),
     );
   }
 
@@ -546,10 +530,7 @@ export class HostedTaskClient {
   readRepositorySkills(
     place: RepositoryPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
-      taskSkillsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
   }
 
   /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
@@ -557,9 +538,8 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
-      githubRepositoryPullRequestAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryPullRequest, { ...place, number: String(number) }),
     );
   }
 
@@ -568,9 +548,8 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryIssuePath(place, number) },
-      githubRepositoryIssueAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
     );
   }
 

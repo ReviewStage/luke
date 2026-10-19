@@ -537,6 +537,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           CHAT_TOOL.POST,
           CHAT_TOOL.READ,
           CHAT_TOOL.RESOLVE,
+          CHAT_TOOL.EDIT_CHANNEL,
         ]);
         const on = (yield* host.standingContext(standing)).text;
         assert.ok(on.includes("[chat since the last call]"), on);

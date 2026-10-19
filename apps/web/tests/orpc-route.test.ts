@@ -244,3 +244,21 @@ test("a plan's routes refuse through the committed table, the dispatcher and the
     },
   );
 });
+
+test("the GitHub routes refuse through the committed table, the dispatcher and the deployed route as their old groups did", async () => {
+  const routes = new Map([
+    ["github/repositories/tree", orpcRoute],
+    ["github/connect", orpcRoute],
+  ]);
+  const unsigned = await dispatched(
+    new Request(`${ORIGIN}/api/github/repositories/tree?workspaceId=a&workspaceId=b`),
+    routes,
+  );
+  assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(unsigned.headers.get("cache-control"), null);
+  assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+
+  const read = await dispatched(new Request(`${ORIGIN}/api/github/connect`), routes);
+  assert.equal(read.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
+  assert.equal(await read.text(), '{"error":"method-not-allowed"}');
+});

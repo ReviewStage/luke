@@ -135,9 +135,45 @@ export interface ChatRailRow {
 export interface ChatRail {
   /** How many messages wait on the reader in For you. */
   readonly forYou: number;
+  /** #general, then the topics standing. */
   readonly channels: readonly ChatRailRow[];
+  /** The tasks' own channels, grouped as the reader's sidebar groups the tasks. */
+  readonly tasks: readonly ChatRailGroup[];
+  /** The channels archived: a task's that was archived with it, and a topic archived. */
+  readonly archived: readonly ChatRailRow[];
   readonly direct: readonly ChatRailRow[];
 }
+
+/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
+interface ChatRailGroup {
+  /** The group's own key, which a list draws it under. */
+  readonly key: string;
+  /** What heads it; none for the tasks no pin or section holds where nothing else is grouped. */
+  readonly title: string | undefined;
+  readonly rows: readonly ChatRailRow[];
+}
+
+/** How the reader's sidebar groups tasks: the tasks pinned, in their order, and the sections they keep, each with its tasks in order. */
+export interface ChatTaskGrouping {
+  readonly pinned: readonly string[];
+  readonly sections: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly taskIds: readonly string[];
+  }[];
+}
+
+/** What a group of task channels is headed by, where the rail draws it. */
+const TASK_GROUP = {
+  PINNED: "Pinned",
+  OTHER: "Other tasks",
+} as const;
+
+/** The keys of the groups no section names. */
+const TASK_GROUP_KEY = {
+  PINNED: "pinned",
+  OTHER: "other",
+} as const;
 
 /** A root message and the replies of its thread, each in the order posted. */
 export interface ChatThread {
@@ -224,7 +260,57 @@ function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[]
 }
 
 /** The rail: For you's count, the channels in their order, and the direct messages, the latest spoken in first. */
-export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
+/**
+ * The task channels grouped as the sidebar groups their tasks: the pinned
+ * first, in the pins' order, then each section in its order, then the rest
+ * by name, under Other tasks where any group stands above them and headed
+ * by nothing where none does. A task stands in its first group only. Note
+ * that the order within a group is the sidebar's own, so a task is found
+ * where the reader keeps it.
+ */
+function taskGroups(
+  rows: readonly ChatRailRow[],
+  grouping: ChatTaskGrouping | undefined,
+): readonly ChatRailGroup[] {
+  const byTask = new Map(
+    rows.flatMap((row) =>
+      row.channel.planId === undefined ? [] : [[row.channel.planId, row] as const],
+    ),
+  );
+  const placed = new Set<string>();
+  const take = (taskIds: readonly string[]) =>
+    taskIds.flatMap((taskId) => {
+      const row = byTask.get(taskId);
+      if (row === undefined || placed.has(taskId)) return [];
+      placed.add(taskId);
+      return [row];
+    });
+  const groups: ChatRailGroup[] = [];
+  const pinned = take(grouping?.pinned ?? []);
+  if (pinned.length > 0)
+    groups.push({ key: TASK_GROUP_KEY.PINNED, title: TASK_GROUP.PINNED, rows: pinned });
+  for (const section of grouping?.sections ?? []) {
+    const held = take(section.taskIds);
+    if (held.length > 0) groups.push({ key: section.id, title: section.title, rows: held });
+  }
+  const rest = rows.filter(
+    (row) => row.channel.planId === undefined || !placed.has(row.channel.planId),
+  );
+  if (rest.length > 0) {
+    groups.push({
+      key: TASK_GROUP_KEY.OTHER,
+      title: groups.length === 0 ? undefined : TASK_GROUP.OTHER,
+      rows: rest,
+    });
+  }
+  return groups;
+}
+
+export function chatRail(
+  chat: ChatAnswer,
+  names: ChatNames,
+  grouping?: ChatTaskGrouping | undefined,
+): ChatRail {
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
@@ -238,17 +324,29 @@ export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
   const latest = (channel: ChatChannel) => messagesIn(chat, channel.id).at(-1)?.seq ?? 0;
+  const byName = (one: ChatChannel, other: ChatChannel) =>
+    CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
+    channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other));
   const channels = shown
-    .filter((channel) => channel.kind !== CHANNEL_KIND.DM)
-    .toSorted(
-      (one, other) =>
-        CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
-        channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other)),
-    );
+    .filter(
+      (channel) => channel.kind === CHANNEL_KIND.GENERAL || channel.kind === CHANNEL_KIND.TOPIC,
+    )
+    .toSorted(byName);
+  const tasks = shown.filter((channel) => channel.kind === CHANNEL_KIND.TASK).toSorted(byName);
+  // Note that an archived DM has no place to come back from, so the archive holds channels alone.
+  const archived = chat.channels
+    .filter((channel) => channel.archived && channel.kind !== CHANNEL_KIND.DM)
+    .toSorted(byName);
   const direct = shown
     .filter((channel) => channel.kind === CHANNEL_KIND.DM)
     .toSorted((one, other) => latest(other) - latest(one));
-  return { forYou: forYou(chat).length, channels: channels.map(row), direct: direct.map(row) };
+  return {
+    forYou: forYou(chat).length,
+    channels: channels.map(row),
+    tasks: taskGroups(tasks.map(row), grouping),
+    archived: archived.map(row),
+    direct: direct.map(row),
+  };
 }
 
 /**

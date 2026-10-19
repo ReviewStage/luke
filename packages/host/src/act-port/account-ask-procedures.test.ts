@@ -16,6 +16,7 @@ import {
 } from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
+  type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
   type PlatformActProcedures,
@@ -131,7 +132,16 @@ function windowPort(
   const workspaces = { host: {} } as WorkspaceProceduresDependencies;
   // SAFETY: no platform act is called here, so no platform procedure is reached.
   const platform = {} as PlatformActProcedures<unknown>;
-  const handler = createActPortHandler({ accountAsks: { host }, issues, workspaces }, platform);
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
+  const handler = createActPortHandler(
+    { ...elsewhere, accountAsks: { host }, issues, workspaces },
+    platform,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

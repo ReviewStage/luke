@@ -200,6 +200,8 @@ export const CHAT_TOOL = {
   READ: "read_chat",
   /** Takes an ask of the poster's back, with why. */
   RESOLVE: "resolve_ask",
+  /** Renames a topic channel, says or clears what it is for, or archives it or brings it back. */
+  EDIT_CHANNEL: "edit_channel",
 } as const;
 
 /**
@@ -414,6 +416,18 @@ export const readChatInputSchema = EffectSchema.Struct({
 export const resolveAskInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
+});
+
+/** What an edit of a topic channel's tool part carries: the topic by `#name`, and what changes of it, each left out standing. */
+export const editChannelInputSchema = EffectSchema.Struct({
+  channel: EffectSchema.String.check(
+    EffectSchema.isPattern(
+      new RegExp(`^#[a-z0-9][a-z0-9._-]{0,${CHAT_BOUNDS.MAX_KEY_CHARS - 1}}$`, "u"),
+    ),
+  ),
+  name: EffectSchema.optionalKey(chatChannelNameSchema),
+  purpose: EffectSchema.optionalKey(EffectSchema.NullOr(chatPurposeSchema)),
+  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /**

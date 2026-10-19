@@ -38,6 +38,7 @@ type ChannelAsk =
 export interface ChannelDialogs {
   readonly askNew: () => void;
   readonly askEdit: (channel: ChatChannel) => void;
+  /** Asks to archive a standing topic, or to bring back an archived one. */
   readonly askArchive: (channel: ChatChannel) => void;
   readonly dialog: React.ReactNode;
 }
@@ -110,7 +111,7 @@ export function useChannelDialogs(
     () =>
       doomed === undefined
         ? Promise.resolve(answered(undefined))
-        : onChannel({ edit: { channelId: doomed.id, archived: true } }).then(answered),
+        : onChannel({ edit: { channelId: doomed.id, archived: !doomed.archived } }).then(answered),
   );
   // Note that a refused answer stands in the card until what was asked changes, which asks again.
   const typed = (set: (words: string) => void) => (words: string) => {
@@ -166,10 +167,20 @@ export function useChannelDialogs(
       <ConfirmDialog
         confirm={archive}
         question={{
-          title: "Archive channel?",
-          body: `#${doomed?.name ?? ""} leaves the rail and takes no more posts. Nothing in it is deleted.`,
-          verb: "Archive channel",
-          running: "Archiving",
+          ...(doomed?.archived === true
+            ? {
+                title: "Bring back channel?",
+                body: `#${doomed.name ?? ""} returns to the rail and takes posts again.`,
+                verb: "Bring back",
+                running: "Bringing back",
+                tone: DIALOG_TONE.PRIMARY,
+              }
+            : {
+                title: "Archive channel?",
+                body: `#${doomed?.name ?? ""} leaves the rail and takes no more posts. Nothing in it is deleted.`,
+                verb: "Archive channel",
+                running: "Archiving",
+              }),
         }}
       />
     </>

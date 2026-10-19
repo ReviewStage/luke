@@ -6,6 +6,7 @@
  */
 
 import { automationsContract } from "./automations.js";
+import { githubContract } from "./github.js";
 import { integrationsContract } from "./integrations.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
@@ -18,6 +19,7 @@ export { TASK_START_STATUS } from "./tasks.js";
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   automations: automationsContract,
+  github: githubContract,
   integrations: integrationsContract,
   messages: messagesContract,
   models: modelsContract,

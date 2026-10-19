@@ -106,6 +106,7 @@ import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "..
 import {
   type BrainChatCall,
   type ChatSince,
+  runBrainEditChannel,
   runBrainPost,
   runBrainRead,
   runBrainResolve,
@@ -332,6 +333,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
+- edit_channel renames a topic channel, says or clears what it is for, or archives it or brings it back.
 - list_models lists the models a coding agent may be started on, each with its id, the name to say it by, and the efforts it lists, and the developer's default, so start_agent names a model and effort it takes.
 - end_call ends the voice call once the developer asks you to end it or has clearly said they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"), even right after another request such as starting a coding agent. Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
@@ -782,6 +784,11 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...CHAT_TOOLS.RESOLVE,
     run: (call, input) => (call.chat === undefined ? chatOff : runBrainResolve(call.chat, input)),
+  },
+  {
+    ...CHAT_TOOLS.EDIT_CHANNEL,
+    run: (call, input) =>
+      call.chat === undefined ? chatOff : runBrainEditChannel(call.chat, input),
   },
   {
     ...END_CALL_TOOL,

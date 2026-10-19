@@ -149,7 +149,7 @@ export function askAct<Kind extends AnyActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): Promise<AnyActResult<Kind>> {
-  return performAct(send, kind, payload);
+  return performAct<Kind>(send, kind, payload);
 }
 
 /**
@@ -163,36 +163,28 @@ interface SettingWriteActs {
   ): Promise<SettingsUpdateResult>;
 }
 
-/** What a component or hook reaches the act channel through, in one bundle. */
+/**
+ * What a component or hook reaches the act channel through, in one bundle.
+ * Note that `act` and `tell` are typed as `askAct` and `tellAct` themselves,
+ * rather than restated as generic methods: with every kind the act port
+ * answers beside the ones `app:act` carries, comparing two such generic
+ * signatures is a union TypeScript can no longer represent.
+ */
 export interface ActHandle extends SettingWriteActs {
-  act<Kind extends AnyActKind>(
-    kind: Kind,
-    ...args: ActArguments<Kind>
-  ): Promise<AnyActResult<Kind>>;
-  tell<Kind extends AnyActKind>(kind: Kind, ...args: ActArguments<Kind>): void;
+  act: typeof askAct;
+  tell: typeof tellAct;
 }
 
 /** What a component or hook reaches the act channel through, in one bundle. */
 export function useAct(): ActHandle {
-  return useMemo<ActHandle>(() => {
-    function boundAct<Kind extends AnyActKind>(
-      kind: Kind,
-      ...[payload]: ActArguments<Kind>
-    ): Promise<AnyActResult<Kind>> {
-      return performAct(send, kind, payload);
-    }
-    function boundTell<Kind extends AnyActKind>(
-      kind: Kind,
-      ...[payload]: ActArguments<Kind>
-    ): void {
-      performTell(send, kind, payload);
-    }
-    return {
-      act: boundAct,
-      tell: boundTell,
+  return useMemo<ActHandle>(
+    () => ({
+      act: askAct,
+      tell: tellAct,
       // SAFETY: as updateSetting's own cast above, for this render tree's channel.
       updateSetting: (field, value) =>
-        boundAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
-    };
-  }, []);
+        askAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
+    }),
+    [],
+  );
 }
