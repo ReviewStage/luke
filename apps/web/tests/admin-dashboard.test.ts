@@ -185,6 +185,134 @@ function cardOf(page: HTMLElement, label: string): string {
   return name?.parentElement?.parentElement?.textContent ?? "";
 }
 
+test("a loaded dashboard states its sections under their headings, in order", () => {
+  const page = render(ready(metrics()));
+
+  expect(sectionHeadings(page)).toEqual(SECTIONS);
+});
+
+test("the loading dashboard stands its sections under the same headings, saying it is loading", () => {
+  const page = render({ status: "loading" });
+
+  expect(sectionHeadings(page)).toEqual(SECTIONS);
+  expect(page.querySelector('[role="status"]')?.textContent).toContain("Loading…");
+});
+
+test("each headline tile reads its week's figure under its name, with its move and its detail", () => {
+  const page = render(ready(metrics()));
+
+  expect(cardOf(page, "Weekly active developers")).toBe(
+    "Weekly active developers12+20% vs the 7 days before",
+  );
+  expect(cardOf(page, "Tasks created · 7 days")).toBe(
+    "Tasks created · 7 days30+50% vs the 7 days before · 2.5 per active developer",
+  );
+  expect(cardOf(page, "Agents started · 7 days")).toBe(
+    "Agents started · 7 days40flat vs the 7 days before · 25% from automations",
+  );
+  expect(cardOf(page, "PRs merged · 7 days")).toBe(
+    "PRs merged · 7 days9−25% vs the 7 days before · 75% of this week's agents' 20 PRs merged",
+  );
+});
+
+test("a quiet week's tiles state their figures without a share of nothing", () => {
+  const quiet = overview().headline;
+  const page = render(
+    ready(
+      metrics({
+        overview: overview({
+          headline: {
+            ...quiet,
+            activeDevelopers: { days: 7, recent: 0, prior: 0 },
+            agentsStarted: { days: 7, recent: 0, prior: 0 },
+            prsOpened: { opened: 0, merged: 0 },
+          },
+        }),
+      }),
+    ),
+  );
+
+  expect(cardOf(page, "Tasks created · 7 days")).toBe(
+    "Tasks created · 7 days30+50% vs the 7 days before",
+  );
+  expect(cardOf(page, "Agents started · 7 days")).toBe(
+    "Agents started · 7 days0flat vs the 7 days before",
+  );
+  expect(cardOf(page, "PRs merged · 7 days")).toBe("PRs merged · 7 days9−25% vs the 7 days before");
+});
+
+/** Each row of the list named `label`, its words joined by a bar. */
+function listRows(page: HTMLElement, label: string): string[] {
+  const list = page.querySelector(`ul[aria-label="${label}"]`);
+  return Array.from(list?.querySelectorAll("li") ?? [], (row) =>
+    Array.from(row.children, (cell) => cell.textContent)
+      .filter((words) => words !== "")
+      .join(" | "),
+  );
+}
+
+test("the funnel and reach read each row's count and its share of the base", () => {
+  const page = render(ready(metrics()));
+
+  expect(listRows(page, "Activation funnel")).toEqual([
+    "Signed up | 50 | 100%",
+    "GitHub connected | 30 | 60%",
+    "Created a task | 25 | 50%",
+    "Held a call | 10 | 20%",
+    "Started an agent | 20 | 40%",
+    "Opened a PR | 12 | 24%",
+    "Merged a PR | 8 | 16%",
+  ]);
+  expect(listRows(page, "Feature reach")).toEqual([
+    "Tasks & plans | 12 | 100%",
+    "Coding agents | 9 | 75%",
+    "Inbox | 6 | 50%",
+    "Voice calls | 3 | 25%",
+    "Integration connected | 4 | 33%",
+    "Automations | 1 | 8%",
+    "Chat | 0 | 0%",
+  ]);
+  expect(page.textContent).toContain("of 12 active developers");
+});
+
+test("retention counts meaningful actions until the hosted basis is chosen", () => {
+  const page = render(ready(metrics()));
+  const bases = page.querySelector('[role="radiogroup"][aria-label="Retained by"]');
+  const chosen = () =>
+    Array.from(bases?.querySelectorAll('[role="radio"]') ?? [])
+      .filter((radio) => radio.getAttribute("aria-checked") === "true")
+      .map((radio) => radio.textContent);
+
+  expect(chosen()).toEqual(["Meaningful action"]);
+  expect(page.textContent).toContain("70%");
+  expect(page.textContent).toContain("created a task, wrote a plan revision");
+
+  act(() => button(page, "Any hosted call").click());
+
+  expect(chosen()).toEqual(["Any hosted call"]);
+  expect(page.textContent).toContain("20%");
+  expect(page.textContent).not.toContain("70%");
+  expect(page.textContent).toContain("spent hosted voice or attention");
+});
+
+test("the most active accounts read each one's days and per-feature counts", () => {
+  const page = render(ready(metrics()));
+  const table = page.querySelector('table[aria-label="Accounts"]');
+  const headers = Array.from(table?.querySelectorAll("th") ?? [], (cell) => cell.textContent);
+  const cells = Array.from(table?.querySelectorAll("tbody td") ?? [], (cell) => cell.textContent);
+
+  expect(headers).toEqual([
+    "Account",
+    "Active days",
+    "Tasks",
+    "Agents",
+    "PRs merged",
+    "Call min",
+    "Last seen",
+  ]);
+  expect(cells.slice(1)).toEqual(["6 of 7", "4", "1,234", "3", "42", "—"]);
+});
+
 /** The button whose words are `words`. */
 function button(page: HTMLElement, words: string): HTMLButtonElement {
   const found = Array.from(page.querySelectorAll("button")).find(

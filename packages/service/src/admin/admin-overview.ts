@@ -102,9 +102,11 @@ export interface AdminOverview {
     agentsFromAutomations: number;
     prsMerged: AdminTrend;
     /**
-     * The pull requests opened by agents started in the recent run, and how
-     * many of them are merged. An agent's run is bounded to a day, so the
-     * agents started in a run are the pull requests opened in it.
+     * The pull requests of the agents started in the recent run, and how many
+     * of them are merged: a conversion of that week's agents, not of the
+     * merges `prsMerged` dates. A pull request records no instant it was
+     * opened, so the week's openings cannot be counted on their own, and one
+     * an older agent opened this week is in neither figure.
      */
     prsOpened: { opened: number; merged: number };
   };

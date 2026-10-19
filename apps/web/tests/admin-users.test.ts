@@ -248,3 +248,11 @@ test("under the roster, the sign-in methods count every account, whatever the se
   expect(page.textContent).toContain("GitHubGoogle");
   expect(page.textContent).not.toContain("Other");
 });
+
+test("a search that finds nobody still shows how every kept account signs in", async () => {
+  const page = await openUsers(roster({ search: "nobody", total: 0, rows: [] }));
+
+  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("Linked sign-in methods");
+  expect(page.textContent).toContain("GitHubGoogle");
+});

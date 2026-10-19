@@ -167,7 +167,7 @@ function HeadlineTiles({ headline }: { headline: AdminOverview["headline"] }): R
         detail={
           prsOpened.opened === 0
             ? undefined
-            : `${percentOf(prsOpened.merged, prsOpened.opened)} of ${formatNumber(prsOpened.opened)} opened`
+            : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatNumber(prsOpened.opened)} PRs merged`
         }
       />
     </StatGroup>

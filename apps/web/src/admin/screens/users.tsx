@@ -174,8 +174,9 @@ export function UsersScreen({
   );
 
   switch (state.status) {
-    case "loading":
+    case "loading": {
       return page({ filters: search, state: COLLECTION_STATE.LOADING });
+    }
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -206,6 +207,15 @@ export function UsersScreen({
         </Refreshing>
       );
 
+      // Note that the methods describe every account the scope keeps, so a
+      // search that narrows the rows, or finds none, leaves the chart standing.
+      const signInMethods = (
+        <>
+          <SectionHeading>Sign-in methods</SectionHeading>
+          <SignInMethodsChart methods={list.signIn.methods} totalAccounts={list.signIn.accounts} />
+        </>
+      );
+
       return page({
         // Note that the count stands beside the field rather than in it, so a
         // narrow page wraps it under the field instead of crowding the query.
@@ -225,6 +235,7 @@ export function UsersScreen({
             {truncatedTo === undefined ? null : (
               <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
             )}
+            {signInMethods}
           </>,
         ),
         children: refreshed(
@@ -240,13 +251,7 @@ export function UsersScreen({
               favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
             />
             <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
-            {/* Note that the methods describe every account the scope keeps, so
-            a search that narrows the rows leaves the chart as it stands. */}
-            <SectionHeading>Sign-in methods</SectionHeading>
-            <SignInMethodsChart
-              methods={list.signIn.methods}
-              totalAccounts={list.signIn.accounts}
-            />
+            {signInMethods}
           </>,
         ),
       });
