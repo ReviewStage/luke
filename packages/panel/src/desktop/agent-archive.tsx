@@ -139,7 +139,7 @@ function ArchivedAgentRow({
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
   return (
-    <li ref={item} className="task-summary-archived-agent" onContextMenu={menu.contextMenu()}>
+    <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
       <Tooltip
         label={subject.name}
         card={<AgentCard subject={subject} models={agents.models} />}

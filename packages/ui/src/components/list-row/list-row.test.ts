@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, cloneElement, createElement, useState } from "react";
+import { act, cloneElement, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
+import { Menu, useMenu } from "../menu/menu.js";
 import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -47,6 +48,9 @@ const MEMBERS = [
   { id: "ada", name: "Ada Lovelace", role: "Owner" },
   { id: "grace", name: "Grace Hopper", role: "Admin" },
 ] as const;
+
+/** A handler that hears nothing a test asks about. */
+const ignore = () => undefined;
 
 const roots: Root[] = [];
 
@@ -286,7 +290,15 @@ test("a key pressed on a row reaches its handler, and a right-click anywhere on 
         title: "Ada Lovelace",
         onPress: () => undefined,
         onKeyDown: (event) => heard.push(`key ${event.key}`),
-        onContextMenu: () => heard.push("menu"),
+        contextMenu: {
+          onContextMenu: () => heard.push("menu"),
+          onPointerDown: ignore,
+          onPointerMove: ignore,
+          onPointerUp: ignore,
+          onPointerCancel: ignore,
+          onTouchEnd: ignore,
+          "data-long-press": "",
+        },
         actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
       }),
     }),
@@ -1099,4 +1111,64 @@ test("a scroll that follows a quick trackpad swipe ends its flick, so the row on
   frameAt(1_000);
   frameAt(1_200);
   expect([acted, standing(item)]).toEqual([[], ["open", "72px", false]]);
+});
+
+/** A row offering a swipe and a menu a right-click or a long press opens, its press counted in `opened`. */
+function SwipedMenuRow({ opened }: { opened: string[] }): React.JSX.Element {
+  const menu = useMenu(true);
+  return createElement(
+    Fragment,
+    null,
+    createElement(List, {
+      label: "Inbox",
+      children: createElement(ListRow, {
+        title: "Alert at 80%?",
+        onPress: () => opened.push("open"),
+        swipe: { label: "Read", icon: glyph(), onAct: () => opened.push("Read") },
+        contextMenu: menu.contextMenu(),
+      }),
+    }),
+    menu.drawn === undefined
+      ? null
+      : createElement(Menu, {
+          label: "Item actions",
+          menu: menu.drawn,
+          groups: [[{ label: "Archive", onSelect: ignore }]],
+          onClose: menu.close,
+        }),
+  );
+}
+
+test("a row that swipes still opens its menu on a touch held still, and the touch's end makes no click", () => {
+  vi.useFakeTimers();
+  try {
+    const opened: string[] = [];
+    draw(createElement(SwipedMenuRow, { opened }));
+    const press = button(document.body, "Alert at 80%?");
+    const touch = (type: string) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+        clientX: 10,
+        clientY: 10,
+      });
+    act(() => {
+      press.dispatchEvent(touch("pointerdown"));
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(document.querySelector('[role="menu"][aria-label="Item actions"]')).not.toBeNull();
+    const touchEnd = new TouchEvent("touchend", { bubbles: true, cancelable: true });
+    act(() => {
+      press.dispatchEvent(touch("pointerup"));
+      press.dispatchEvent(touchEnd);
+    });
+    expect(touchEnd.defaultPrevented).toBe(true);
+    expect(opened).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -12,6 +12,7 @@ import {
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
+import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
 /**
@@ -36,9 +37,9 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * one focused) reaches a row's press through `ref` and hears the keys
  * pressed on it through `onKeyDown`; a row that opens nothing takes no
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
- * no keys, which would only be its acts'. `onContextMenu` hears a
- * right-click anywhere on the row, its acts included, so the app can open
- * its own menu there.
+ * no keys, which would only be its acts'. `contextMenu` (`useMenu`'s)
+ * hears a right-click or a touch's long press anywhere on the row, its acts
+ * included, so the app can open its own menu there.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -264,7 +265,7 @@ export function ListRow({
   id,
   ref,
   onKeyDown,
-  onContextMenu,
+  contextMenu,
   swipe,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
@@ -314,8 +315,8 @@ export function ListRow({
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
-  /** A right-click, or the menu key, anywhere on the row. */
-  onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
+  /** The menu a right-click, the menu key, or a long press opens anywhere on the row (`useMenu`'s `contextMenu`). */
+  contextMenu?: ContextMenuProps | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
@@ -428,14 +429,20 @@ export function ListRow({
       data-menu-open={menuOpen ? "true" : undefined}
       data-swipe={swipe === undefined ? undefined : view.state}
       data-armed={view.armed ? "true" : undefined}
-      onContextMenu={onContextMenu}
+      {...withContextMenu(
+        contextMenu,
+        swipe === undefined
+          ? {}
+          : {
+              onPointerDown: item.onPointerDown,
+              onPointerMove: item.onPointerMove,
+              onPointerUp: item.onPointerUp,
+              onPointerCancel: item.onPointerCancel,
+            },
+      )}
       {...(swipe === undefined
         ? undefined
         : {
-            onPointerDown: item.onPointerDown,
-            onPointerMove: item.onPointerMove,
-            onPointerUp: item.onPointerUp,
-            onPointerCancel: item.onPointerCancel,
             onClickCapture: item.onClickCapture,
             style: cssCustomProperties({
               "--luke-list-row-swipe": `${view.offset}px`,

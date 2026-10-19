@@ -332,7 +332,7 @@ export function SidebarPinnedTab({
             menu.close(false);
             if (!gone) onOpen();
           }}
-          onContextMenu={showMenu}
+          contextMenu={showMenu}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             <Tooltip label="Unpin">

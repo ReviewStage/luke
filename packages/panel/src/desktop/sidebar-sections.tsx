@@ -322,7 +322,7 @@ function SidebarSection({
         folded={folded}
         count={drawn.tasks.length}
         menuOpen={menu.open !== undefined}
-        onContextMenu={menu.contextMenu(ellipsis)}
+        contextMenu={menu.contextMenu(ellipsis)}
         onToggle={() => context.onToggle(section.id)}
         actions={
           <Tooltip label="Section actions">

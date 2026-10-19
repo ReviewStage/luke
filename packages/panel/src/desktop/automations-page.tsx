@@ -240,7 +240,7 @@ function AutomationRow({
           />
         }
         onPress={onOpen}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+        contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
       />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
