@@ -1579,6 +1579,7 @@ function TabContent({
   }
   switch (tab) {
     case SIDE_PANEL_TAB.PLAN:
+      // The plan is drawn by the panel itself, mounted across tab switches (`SidePanel`).
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
       return <>{inbox}</>;
@@ -2066,7 +2067,22 @@ export function SidePanel({
       {/* A panel with nothing to offer but kinds it has never closed stands
             empty, the "+" above offering any; otherwise every tab closed, it
             offers in place all that the "+" offers. */}
-      {tab === undefined ? (
+      {/* The plan stays mounted while another tab is shown, hidden, so an
+          edit not yet saved is neither sent on a tab switch nor lost with it,
+          as it stayed in the column before it stood here. */}
+      {plan === undefined ? null : (
+        <FindScope
+          className="side-panel-content"
+          role="tabpanel"
+          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN }).label}
+          hidden={tab !== SIDE_PANEL_TAB.PLAN}
+          active={keys && focused && tab === SIDE_PANEL_TAB.PLAN}
+          subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
+        >
+          {plan}
+        </FindScope>
+      )}
+      {tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
         <div className="side-panel-content">
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
         </div>

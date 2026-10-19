@@ -707,6 +707,19 @@ function PlanDocument({
   };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
+  // A summary row that opens a tab of the side panel hands the panel the
+  // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
+  const summaryTasks: TasksControl = {
+    ...tasks,
+    sidePanel: {
+      ...sidePanel,
+      onChoose: openPanelTab,
+      onOpenFile: (ref, commit) => {
+        sidePanel.onOpenFile(ref, commit);
+        showSide();
+      },
+    },
+  };
   const documentBody = (
     <section className="desktop-document" aria-label={task.name}>
       {/* Keyed by the archive, so an editor still open when the plan is
@@ -935,7 +948,7 @@ function PlanDocument({
                           )}
                         </FindScope>
                         <TaskSummary
-                          tasks={tasks}
+                          tasks={summaryTasks}
                           layout={summaryLayout}
                           cardId={summaryCard}
                           inbox={inbox.board}

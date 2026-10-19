@@ -36,7 +36,7 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
@@ -188,7 +188,7 @@ function codeTab(shownCode: readonly never[] | undefined, workFailed = false): H
 
 test("the Code tab waits while the task's code is unread, and says there is none only once it is read as none", () => {
   const tab = (page: HTMLElement) => {
-    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
     assert.ok(panel, "the panel shows its tab");
     return panel;
   };
@@ -225,7 +225,7 @@ test("the Code tab whose work read did not land says so with Retry while it hold
       }),
     ),
   );
-  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
   assert.match(tab?.textContent ?? "", /The code could not be read\./u);
   assert.equal(tab?.querySelector("[role=status]"), null, "the tab no longer waits");
   const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
@@ -237,7 +237,9 @@ test("the Code tab whose work read did not land says so with Retry while it hold
   container.remove();
 
   // Code already held stays drawn through a read that did not land.
-  const held = codeTab([], true).querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+  const held = codeTab([], true).querySelector(
+    "aside[aria-label='Panel'] [role=tabpanel]:not([hidden])",
+  );
   assert.match(held?.textContent ?? "", /No code yet\./u);
   assert.doesNotMatch(held?.textContent ?? "", /could not be read/u);
 });
@@ -989,4 +991,81 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
   assert.equal(dot("Roll back?"), false);
   inbox.unmount();
+});
+
+/** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
+function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const draw = (shown: SidePanelTab) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            captions: undefined,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              ...overrides,
+              sidePanel: { ...DOCUMENT_PANEL, ...overrides.sidePanel, tab: shown },
+            }),
+          }),
+        ),
+      ),
+    );
+  draw(tab);
+  return {
+    container,
+    draw,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+test("the plan stays drawn, hidden, while another tab of the side panel is shown, so an edit not yet saved outlives the switch", () => {
+  const page = panelPage(SIDE_PANEL_TAB.PLAN);
+  const document = page.container.querySelector(".desktop-document");
+  assert.ok(document, "the plan is drawn on its tab");
+
+  page.draw(SIDE_PANEL_TAB.CODE);
+  assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
+  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), true);
+
+  page.draw(SIDE_PANEL_TAB.PLAN);
+  assert.equal(page.container.querySelector(".desktop-document"), document);
+  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), false);
+  page.unmount();
+});
+
+test("a summary row that opens a tab of the side panel hands the panel the keys, so ⌘W closes the panel's tab rather than the column's", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 1200, height: 800 }),
+  );
+  const closed: string[] = [];
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const page = panelPage(SIDE_PANEL_TAB.PLAN, {
+    mainTabs: {
+      ...tasksControl().mainTabs,
+      tabs: [MAIN_TAB.CALL, { agent: agentId }],
+      tab: MAIN_TAB.CALL,
+      onClose: () => closed.push("column"),
+    },
+    sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
+  });
+  act(() => relayout());
+  const row = [
+    ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
+  ].find((each) => each.getAttribute("aria-label") === "Code");
+  assert.ok(row, "the summary offers the Code tab");
+  act(() => row.click());
+  act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
+
+  assert.deepEqual(closed, ["panel"]);
+  page.unmount();
 });
