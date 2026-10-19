@@ -1,15 +1,3 @@
-import {
-  type ButtonHTMLAttributes,
-  type HTMLAttributes,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-} from "react";
-import { CHOICE_ROLE, type ChoiceRole } from "./choice-keys.js";
-import { type ChoiceKeys, useChoiceKeys } from "./use-choice-keys.js";
-
 /**
  * choice-row.tsx -- the row every bar of options where you choose one draws through: `ChoiceBar`, and the `Tabs` and `Segmented` it stands behind.
  *
@@ -29,6 +17,18 @@ import { type ChoiceKeys, useChoiceKeys } from "./use-choice-keys.js";
  * This module is the engine's, not the barrel's: a caller reaches it as
  * `ChoiceBar`.
  */
+
+import {
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import { CHOICE_ROLE, type ChoiceRole } from "./choice-keys.js";
+import { type ChoiceKeys, useChoiceKeys } from "./use-choice-keys.js";
 
 /** How the row draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
@@ -87,43 +87,89 @@ const THUMB = {
   SLIDING: "sliding",
 } as const;
 
+/** The row's thumb, of its own children. */
+const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
+
 /** The option a row's thumb stands under, of the row's own options. */
 const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
 
+/** A box in a row, in pixels from its padding edge. */
+interface ThumbBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Sets where the thumb stands, its box, and the scale it is drawn at from its corner. */
+function setThumb(bar: HTMLElement, box: ThumbBox, scaleX: number, scaleY: number): void {
+  const style = bar.style;
+  style.setProperty("--luke-choice-bar-thumb-x", `${box.x}px`);
+  style.setProperty("--luke-choice-bar-thumb-y", `${box.y}px`);
+  style.setProperty("--luke-choice-bar-thumb-width", `${box.width}px`);
+  style.setProperty("--luke-choice-bar-thumb-height", `${box.height}px`);
+  style.setProperty("--luke-choice-bar-thumb-scale-x", String(scaleX));
+  style.setProperty("--luke-choice-bar-thumb-scale-y", String(scaleY));
+}
+
+/** Whether the thumb already stands, unscaled, on `box`. */
+function thumbStands(bar: HTMLElement, box: ThumbBox): boolean {
+  const style = bar.style;
+  return (
+    style.getPropertyValue("--luke-choice-bar-thumb-x") === `${box.x}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-y") === `${box.y}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-width") === `${box.width}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-height") === `${box.height}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-scale-x") === "1" &&
+    style.getPropertyValue("--luke-choice-bar-thumb-scale-y") === "1"
+  );
+}
+
 /**
  * Stands `bar`'s thumb under its chosen option, sliding there where `slide`
- * asks and the thumb already shows, and at once otherwise. Note that the
- * thumb's place is set beside the attribute that turns its transition on or
- * off, because a transition starts from the style after a change, so a
- * thumb placed is never seen to travel and one sliding always is; and that
+ * asks and the thumb already shows, and at once otherwise.
+ *
+ * A slide is played FLIP-style, on `transform` alone, as the motion
+ * contract has it (`docs/DESIGN.md`): the thumb lands in its new box at
+ * once, drawn by a transform where it was drawn before, from wherever a
+ * slide still running had it; then, with its transition on, the transform
+ * is let go. Note that the attribute that turns the transition on or off is
+ * set beside each step, because a transition starts from the style after a
+ * change, so the step back is never seen and the let go always is; and that
  * a thumb already where it should be is left alone, so a resize the slide
- * itself set off does not cut the slide short.
+ * itself set off does not cut it short.
  */
 function placeThumb(bar: HTMLElement, slide: boolean): void {
   const chosen = bar.querySelector<HTMLElement>(CHOSEN);
-  if (chosen === null || chosen.offsetWidth === 0) {
+  const thumb = bar.querySelector<HTMLElement>(THUMB_ELEMENT);
+  if (chosen === null || thumb === null || chosen.offsetWidth === 0) {
     bar.removeAttribute("data-thumb");
     return;
   }
   const box = {
-    x: `${chosen.offsetLeft}px`,
-    y: `${chosen.offsetTop}px`,
-    width: `${chosen.offsetWidth}px`,
-    height: `${chosen.offsetHeight}px`,
+    x: chosen.offsetLeft,
+    y: chosen.offsetTop,
+    width: chosen.offsetWidth,
+    height: chosen.offsetHeight,
   };
   const shown = bar.hasAttribute("data-thumb");
-  const style = bar.style;
-  const stands =
-    style.getPropertyValue("--luke-choice-bar-thumb-x") === box.x &&
-    style.getPropertyValue("--luke-choice-bar-thumb-y") === box.y &&
-    style.getPropertyValue("--luke-choice-bar-thumb-width") === box.width &&
-    style.getPropertyValue("--luke-choice-bar-thumb-height") === box.height;
-  if (shown && stands) return;
-  style.setProperty("--luke-choice-bar-thumb-x", box.x);
-  style.setProperty("--luke-choice-bar-thumb-y", box.y);
-  style.setProperty("--luke-choice-bar-thumb-width", box.width);
-  style.setProperty("--luke-choice-bar-thumb-height", box.height);
+  if (shown && thumbStands(bar, box)) return;
+  if (slide && shown) {
+    const drawn = thumb.getBoundingClientRect();
+    const within = bar.getBoundingClientRect();
+    const from = {
+      x: drawn.left - within.left - bar.clientLeft + bar.scrollLeft,
+      y: drawn.top - within.top - bar.clientTop + bar.scrollTop,
+      width: box.width,
+      height: box.height,
+    };
+    bar.setAttribute("data-thumb", THUMB.PLACED);
+    setThumb(bar, from, drawn.width / box.width, drawn.height / box.height);
+    // Note that measuring the thumb settles its step back before the slide starts.
+    thumb.getBoundingClientRect();
+  }
   bar.setAttribute("data-thumb", slide && shown ? THUMB.SLIDING : THUMB.PLACED);
+  setThumb(bar, box, 1, 1);
 }
 
 /**

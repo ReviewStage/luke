@@ -1,3 +1,11 @@
+/**
+ * choice-bar.tsx -- the one bar of options where you choose one, in its
+ * fill and its segmented look at both sizes: tabs over panels with glyphs
+ * and toned counts, a diff's lines among them; a value set by a radio
+ * group; a clearable one with none chosen; an option and a whole bar that
+ * cannot be chosen; and a row too narrow for its options.
+ */
+
 import {
   AlertIcon,
   CHOICE_BAR_LOOK,
@@ -20,14 +28,6 @@ import {
 import { useId, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
-
-/**
- * choice-bar.tsx -- the one bar of options where you choose one, in its
- * fill and its segmented look at both sizes: tabs over panels with glyphs
- * and toned counts, a diff's lines among them; a value set by a radio
- * group; a clearable one with none chosen; an option and a whole bar that
- * cannot be chosen; and a row too narrow for its options.
- */
 
 const VIEW = {
   CONVERSATION: "conversation",

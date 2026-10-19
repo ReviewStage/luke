@@ -105,7 +105,8 @@
   }
 
   /* The thumb stands where the row last measured its chosen option, hidden
-     while none is chosen or drawn; it slides only once it has shown. */
+     while none is chosen or drawn; it slides only once it has shown, and on
+     its transform alone, its box landing at once (`choice-row.tsx`). */
   .luke-choice-bar-thumb {
     position: absolute;
     top: 0;
@@ -114,7 +115,9 @@
     width: var(--luke-choice-bar-thumb-width);
     height: var(--luke-choice-bar-thumb-height);
     border-radius: var(--luke-control-radius);
-    transform: translate(var(--luke-choice-bar-thumb-x), var(--luke-choice-bar-thumb-y));
+    transform: translate(var(--luke-choice-bar-thumb-x), var(--luke-choice-bar-thumb-y))
+      scale(var(--luke-choice-bar-thumb-scale-x), var(--luke-choice-bar-thumb-scale-y));
+    transform-origin: 0 0;
     pointer-events: none;
   }
 
@@ -123,10 +126,7 @@
   }
 
   .luke-choice-bar[data-thumb="sliding"] .luke-choice-bar-thumb {
-    transition:
-      transform var(--luke-duration-pane) var(--luke-motion-pane),
-      width var(--luke-duration-pane) var(--luke-motion-pane),
-      height var(--luke-duration-pane) var(--luke-motion-pane);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   @media (prefers-reduced-motion: reduce) {

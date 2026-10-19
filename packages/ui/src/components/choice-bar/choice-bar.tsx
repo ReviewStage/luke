@@ -1,19 +1,3 @@
-import type { ReactNode } from "react";
-import {
-  CHOICE_BAR_FOCUS,
-  CHOICE_BAR_INSET,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  type ChoiceAppAttributes,
-  type ChoiceBarFocus,
-  type ChoiceBarInset,
-  type ChoiceBarLook,
-  type ChoiceBarSize,
-  type ChoicePanelIds,
-  ChoiceRow,
-} from "../choice/choice-row.js";
-import { type CountPart, CountParts } from "../choice/count-part.js";
-
 /**
  * choice-bar.tsx -- the one bar of options where you choose one: tabs over a few views of one thing, or a pick-one that sets a value, in a fill or a segmented trough.
  *
@@ -50,6 +34,22 @@ import { type CountPart, CountParts } from "../choice/count-part.js";
  * desktop's settings search) is the app's: it hands the bar the `data-`
  * attributes its search lands on.
  */
+
+import type { ReactNode } from "react";
+import {
+  CHOICE_BAR_FOCUS,
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  type ChoiceAppAttributes,
+  type ChoiceBarFocus,
+  type ChoiceBarInset,
+  type ChoiceBarLook,
+  type ChoiceBarSize,
+  type ChoicePanelIds,
+  ChoiceRow,
+} from "../choice/choice-row.js";
+import { type CountPart, CountParts } from "../choice/count-part.js";
 
 export {
   CHOICE_BAR_FOCUS,
