@@ -5728,6 +5728,103 @@ ol.transcript-list {
   color: var(--luke-color-text-subtle);
 }
 
+/* A task's Linked issues box under its name (`task-issue-links.tsx`): a
+   hairline box whose head, on the well's ground, says what it holds and ends
+   in Link issue, over one row per issue: its mark, its key in the code face,
+   its title taking the room left, its state in words, its Closes / Part of
+   switch, and its ×. */
+.task-issue-links {
+  margin: var(--luke-space-8) 0 var(--luke-space-20);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+  overflow: hidden;
+}
+
+.task-issue-links-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-8) var(--luke-space-4) var(--luke-space-12);
+  background: var(--luke-color-well);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-medium);
+}
+
+.task-issue-links-none {
+  color: var(--luke-color-text-subtle);
+  font-weight: var(--luke-weight-regular);
+}
+
+.task-issue-links-head > .issue-picker-chip {
+  margin-left: auto;
+}
+
+.task-issue-links-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-issue-link {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.task-issue-link-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.task-issue-link-unread {
+  width: 13px;
+  height: 13px;
+  color: var(--luke-color-text-subtle);
+}
+
+.task-issue-link-key {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.task-issue-link-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.task-issue-link-state {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+.task-issue-link-relation,
+.task-issue-link-unlink {
+  display: flex;
+  flex: none;
+}
+
+.task-issue-links-note {
+  margin: 0;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
 /* The pull request's row pinned over the composer, a card of one row
    (`@luke/ui`'s List). The lines it adds and removes read in the success
    green and the danger red, in tabular numerals so a count does not shift as

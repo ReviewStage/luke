@@ -60,6 +60,14 @@ export const GATEWAY_METHOD = {
   TASKS_ISSUE: "tasks.issue",
   /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
   TASKS_GITHUB_ISSUES: "tasks.githubIssues",
+  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
+  TASKS_ISSUE_LINKS: "tasks.issueLinks",
+  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
+  TASKS_ISSUE_LINK: "tasks.issueLink",
+  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
+  TASKS_ISSUE_RELATE: "tasks.issueRelate",
+  /** One of a task's links let go on the service; answered to the caller. */
+  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */

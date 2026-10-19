@@ -36,6 +36,14 @@ import {
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import {
+  taskIssueChoiceSchema,
+  taskIssueLinkAnswerSchema,
+  taskIssueLinkChangedAnswerSchema,
+  taskIssueLinksAnswerSchema,
+  taskIssueRelationSchema,
+  taskIssueUnlinkAnswerSchema,
+} from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   codeRefSchema,
@@ -843,6 +851,84 @@ export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
+
+/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, the task archived, or Linear unread. */
+const TASK_ISSUE_CALL_FAILURES = [
+  TASK_CALL_FAILURE.UNANSWERED,
+  TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_CALL_FAILURE.TASK_ARCHIVED,
+  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
+] as const;
+
+export type TaskIssueCallFailure = (typeof TASK_ISSUE_CALL_FAILURES)[number];
+
+const taskIssueCallFailed = EffectSchema.Struct({
+  failure: EffectSchema.Literals(TASK_ISSUE_CALL_FAILURES),
+});
+
+/** A task's linked issues, as its page asks the host for them: the task. */
+export const tasksIssueLinksParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TasksIssueLinksParams = typeof tasksIssueLinksParamsSchema.Type;
+
+/** A task's linked issues as the window hears them, each with where it stands now, or why there are none. */
+export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
+  taskIssueLinksAnswerSchema,
+  taskIssueCallFailed,
+]);
+
+export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
+
+/** An issue to link to a task, as its page names it: by what its provider finds it by, with its relation. */
+export const tasksIssueLinkParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  issue: taskIssueChoiceSchema,
+});
+
+export type TasksIssueLinkParams = typeof tasksIssueLinkParamsSchema.Type;
+
+/** A link made, why the service made none, or why there is no answer. */
+export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
+  taskIssueLinkAnswerSchema,
+  taskIssueCallFailed,
+]);
+
+export type TasksIssueLinkAnswer = typeof tasksIssueLinkAnswerSchema.Type;
+
+/** A link's keyword to change: the task, the link, and the keyword. */
+export const tasksIssueRelateParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  linkId: EffectSchema.NonEmptyString,
+  relation: taskIssueRelationSchema,
+});
+
+export type TasksIssueRelateParams = typeof tasksIssueRelateParamsSchema.Type;
+
+/** A link as it stands once changed, or why there is no answer. */
+export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
+  taskIssueLinkChangedAnswerSchema,
+  taskIssueCallFailed,
+]);
+
+export type TasksIssueRelateAnswer = typeof tasksIssueRelateAnswerSchema.Type;
+
+/** A link to let go: the task and the link. */
+export const tasksIssueUnlinkParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  linkId: EffectSchema.NonEmptyString,
+});
+
+export type TasksIssueUnlinkParams = typeof tasksIssueUnlinkParamsSchema.Type;
+
+/** That the link was let go, or why there is no answer. */
+export const tasksIssueUnlinkAnswerSchema = EffectSchema.Union([
+  taskIssueUnlinkAnswerSchema,
+  taskIssueCallFailed,
+]);
+
+export type TasksIssueUnlinkAnswer = typeof tasksIssueUnlinkAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

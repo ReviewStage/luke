@@ -32,6 +32,11 @@ import {
 } from "../integrations/integration-connect.js";
 import type { IntegrationAccountKey } from "../integrations/integration-store.js";
 
+/** The workspace Linear connector of a suite that reads no workspace's Linear: every ask is a defect. */
+export const NO_WORKSPACE_LINEAR: Layer.Layer<WorkspaceLinearConnect> = Layer.suspend(() =>
+  Layer.succeed(WorkspaceLinearConnect, CONNECTOR_ASKED_NOTHING),
+);
+
 /** The first account a Luke account holds at a provider, as its first sign-in begins it: named after the provider, under the account's own user id. */
 export function firstIntegrationAccount(
   userId: string,

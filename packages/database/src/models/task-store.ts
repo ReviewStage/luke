@@ -963,8 +963,12 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
         );
         for (const link of started.issueLinks ?? []) {
           yield* linkTaskIssue(userId, row.id, link).pipe(
-            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
-            Effect.catchTags({ TaskIssuesFull: Effect.die, TaskIssueLinked: Effect.die }),
+            // A new task's links are its starter's few, each named once, on a task not yet archived, so a refusal is the caller breaking its contract.
+            Effect.catchTags({
+              TaskIssuesFull: Effect.die,
+              TaskIssueLinked: Effect.die,
+              TaskArchived: Effect.die,
+            }),
           );
         }
         return yield* taskOf(userId, row);

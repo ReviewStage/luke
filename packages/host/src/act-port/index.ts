@@ -23,6 +23,10 @@ import {
 } from "./integration-procedures.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
+import {
+  type TaskIssueProceduresDependencies,
+  taskIssueProcedures,
+} from "./task-issue-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
   type WorkspaceProceduresDependencies,
@@ -48,6 +52,7 @@ export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
+export type { TaskIssueProceduresDependencies } from "./task-issue-procedures.js";
 export type { TasksProceduresDependencies } from "./tasks-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
@@ -96,6 +101,7 @@ export interface ActPortDependencies {
   readonly issues: IssueProceduresDependencies;
   readonly settings: SettingsProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
+  readonly taskIssues: TaskIssueProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
 
@@ -125,6 +131,7 @@ export function createActPortHandler<Sender>(
     ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
+    ...taskIssueProcedures(dependencies.taskIssues),
     ...workspaceProcedures(dependencies.workspaces),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf(router);

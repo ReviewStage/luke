@@ -301,6 +301,7 @@ function portDependencies(
     factory: { host },
     integrations: { host },
     issues: { host },
+    taskIssues: { host },
     settings: {
       host,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),

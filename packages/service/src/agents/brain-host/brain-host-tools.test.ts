@@ -77,6 +77,7 @@ import {
   type InstallationFixture,
   NO_GITHUB,
 } from "../../testing/github-app-fake.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { CHAT_TOOL_REFUSAL } from "../coder-host/chat.js";
 import { ASK_REFUSAL } from "../coder-host/chat-ask.js";
 import { HELD_DOORS } from "../coder-host/chat-notify.js";
@@ -239,7 +240,9 @@ async function callerOn(
     database.run(
       host
         .runTool(name, binding, input, toolContext(id, auth, name, callId))
-        .pipe(Effect.provide(Layer.merge(services, modelCatalogOf(catalog)))),
+        .pipe(
+          Effect.provide(Layer.mergeAll(services, modelCatalogOf(catalog), NO_WORKSPACE_LINEAR)),
+        ),
     );
 }
 

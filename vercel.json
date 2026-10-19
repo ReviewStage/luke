@@ -102,6 +102,14 @@
           "dest": "/api/default.js?route=plans/agents&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/issues/([^/]+)",
+          "dest": "/api/default.js?route=plans/issue&route-path=plans/$1/issues/$2&id=$1&link=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/issues",
+          "dest": "/api/default.js?route=plans/issues&route-path=plans/$1/issues&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/inbox",
           "dest": "/api/default.js?route=plans/inbox&id=$1"
         },
