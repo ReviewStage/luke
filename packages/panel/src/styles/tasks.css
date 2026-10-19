@@ -2140,6 +2140,14 @@
   display: none;
 }
 
+/* The band the views' tabs stand in under the header, whose hairline is the
+   band's rather than the tabs'. */
+.pull-request-tabs {
+  flex: none;
+  padding-block: var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
 /* The fixed header under the bar: the title, the branches, who opened it
    and its reviewers, and whether it merges, standing put while the tab
    under it scrolls. */

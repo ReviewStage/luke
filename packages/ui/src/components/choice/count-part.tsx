@@ -37,9 +37,9 @@ export type CountPart = {
 /** One part, its glyph named for a reader who cannot see it. */
 function CountPartView({ part }: { part: CountPart }): React.JSX.Element {
   return (
-    <span className="luke-tab-count-part" data-tone={part.tone ?? COUNT_TONE.QUIET}>
+    <span className="luke-count-part" data-tone={part.tone ?? COUNT_TONE.QUIET}>
       {part.glyph === undefined ? null : (
-        <span className="luke-tab-count-glyph" role="img" aria-label={part.glyphLabel}>
+        <span className="luke-count-glyph" role="img" aria-label={part.glyphLabel}>
           {part.glyph}
         </span>
       )}

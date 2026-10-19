@@ -933,35 +933,37 @@ function ShowTabs({
   ids: ShowTabIds;
 }): React.JSX.Element {
   return (
-    <Tabs<InboxShow>
-      label={SHOW_TABS}
-      tabs={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
-        const count = counts[value];
-        if (count === undefined) return [];
-        return [
-          {
-            value,
-            label,
-            count: (
-              <TabCount
-                tone={
-                  value === INBOX_SHOW.NEEDS_YOU && count > 0
-                    ? TAB_COUNT_TONE.ATTENTION
-                    : TAB_COUNT_TONE.QUIET
-                }
-              >
-                {String(count)}
-              </TabCount>
-            ),
-          },
-        ];
-      })}
-      value={show.show}
-      onChange={show.onShow}
-      ids={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
-      inset={TABS_INSET.COLUMN}
-      density={TABS_DENSITY.COMPACT}
-    />
+    <div className="inbox-show-tabs">
+      <Tabs<InboxShow>
+        label={SHOW_TABS}
+        tabs={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
+          const count = counts[value];
+          if (count === undefined) return [];
+          return [
+            {
+              value,
+              label,
+              count: (
+                <TabCount
+                  tone={
+                    value === INBOX_SHOW.NEEDS_YOU && count > 0
+                      ? TAB_COUNT_TONE.ATTENTION
+                      : TAB_COUNT_TONE.QUIET
+                  }
+                >
+                  {String(count)}
+                </TabCount>
+              ),
+            },
+          ];
+        })}
+        value={show.show}
+        onChange={show.onShow}
+        ids={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
+        inset={TABS_INSET.COLUMN}
+        density={TABS_DENSITY.COMPACT}
+      />
+    </div>
   );
 }
 

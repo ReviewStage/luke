@@ -103,6 +103,9 @@
   --luke-color-switch-track: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.09));
   --luke-color-switch-on: #0071e3;
   --luke-color-switch-thumb: light-dark(#fff, rgba(255, 255, 255, 0.95));
+  /* A segmented control's chosen option, raised on its trough: white in the
+     light, a lighter step of the trough in the dark. */
+  --luke-color-thumb: light-dark(#fff, rgba(255, 255, 255, 0.13));
   /* A hint is a dark pill in either appearance, as the system's own are. */
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
@@ -199,6 +202,7 @@
   --luke-color-switch-track: rgba(0, 0, 0, 0.14);
   --luke-color-switch-on: #0d6e80;
   --luke-color-switch-thumb: #fff;
+  --luke-color-thumb: oklch(1 0 0);
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
@@ -281,6 +285,7 @@
   --luke-color-switch-track: rgba(255, 255, 255, 0.09);
   --luke-color-switch-on: #2f9bd8;
   --luke-color-switch-thumb: rgba(255, 255, 255, 0.95);
+  --luke-color-thumb: rgba(255, 255, 255, 0.13);
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);

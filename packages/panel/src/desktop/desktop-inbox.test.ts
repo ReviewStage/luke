@@ -546,7 +546,7 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
 /** The tab under the Inbox's title whose name starts with `name`. */
 function showTab(page: HTMLElement, name: string): HTMLButtonElement {
   const found = [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === name,
+    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
   );
   assert.ok(found, `the list offers the ${name} tab`);
   return found;
@@ -555,7 +555,7 @@ function showTab(page: HTMLElement, name: string): HTMLButtonElement {
 /** The tabs under the Inbox's title as a reader sees them: each name and count, the one shown in brackets. */
 function showTabs(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].map((each) => {
-    const words = `${each.querySelector(".luke-tab-label")?.textContent} ${each.querySelector(".luke-tab-count")?.textContent}`;
+    const words = `${each.querySelector(".luke-choice-bar-label")?.textContent} ${each.querySelector(".luke-choice-bar-count")?.textContent}`;
     return each.getAttribute("aria-selected") === "true" ? `[${words}]` : words;
   });
 }
