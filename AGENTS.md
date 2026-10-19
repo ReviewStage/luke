@@ -190,11 +190,14 @@ reads it, the moment the root first reaches it, so the edge is here rather than
 at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
+module-scope memoized runtime `apps/web/server/runtime.ts` and the five doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
 function module under `apps/web/server/routes/**` exports its `HttpRouter`
 through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/voice/function.ts`
+builds do its own running), `apps/web/server/orpc-route.ts` (the route every
+path moved onto the hosted oRPC router answers through, which reads that
+runtime once per instance and hands its services to each request as oRPC's
+`effect/context`), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
 request, so there is no request fiber to compose it into),
 `apps/web/server/terminal/function.ts` (the terminal relay, stood for a
