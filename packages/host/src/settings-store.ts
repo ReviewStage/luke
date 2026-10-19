@@ -476,8 +476,7 @@ function settledPersistedSettings(persisted: PersistedSettings): PersistedSettin
   };
 }
 
-/** The signed-in account's experiments as last cached, or none. */
-/** The experiments kept for the signed-in account, and none for anyone else or for no one. */
+/** The signed-in account's experiments as last cached, and none for anyone else or for no one. */
 function experimentsOf(
   persisted: PersistedSettings,
   accountEmail: string | undefined,
