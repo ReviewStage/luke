@@ -141,7 +141,7 @@ function mount(
   } = {},
   registry?: AtomRegistry,
 ) {
-  const told: ActKind[] = [];
+  const told: (ActKind | PortActKind)[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
@@ -153,9 +153,9 @@ function mount(
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
-  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
-  const record = (kind: ActKind) => {
+  const record = (kind: ActKind | PortActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
   let control: TasksControl | undefined;
@@ -179,11 +179,13 @@ function mount(
   const portAnswers: {
     [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
   } = answers;
-  /** An act-port kind's answer as the test gives it, or a rejection where it gives none. */
+  /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
     ...args: unknown[]
   ): Promise<PortActResult<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
     const answer = portAnswers[kind];
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
@@ -204,8 +206,8 @@ function mount(
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // An `app:act` kind the test does not answer is recorded and refused;
-        // an act-port kind is answered as the port would, and recorded nowhere.
+        // A kind the test does not answer is recorded and refused, whichever
+        // side carries it, so a test reads what was asked the same way for both.
         // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
           isPortActKind(kind)
@@ -403,7 +405,7 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
-  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
   kind: ActKind,
 ): (string | undefined)[] {
   return payloads
@@ -1527,7 +1529,9 @@ test("a person's page opened in another workspace lists it without reopening its
 });
 
 /** The tasks each open the tab asked of main named, in order. */
-function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+function opensAsked(
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
+) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
     .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.taskId);

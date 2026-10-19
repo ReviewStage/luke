@@ -3,12 +3,14 @@
  */
 
 import type { AppBridge } from "@luke/host/bridge";
-import type {
-  ActPortClient,
-  PortActKind,
-  PortActPayload,
-  PortActResult,
+import {
+  ACT_ERROR,
+  type ActPortClient,
+  type PortActKind,
+  type PortActPayload,
+  type PortActResult,
 } from "@luke/host/contract";
+import { ORPCError } from "@orpc/client";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
 
 let answering: Partial<AppBridge> = {};
@@ -32,6 +34,11 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
   installActPortClient(procedures as ActPortClient);
+}
+
+/** A procedure's refusal as the act port answers it: the declared error, carrying `sentence`. */
+export function refusedOnPort(sentence: string): ORPCError<string, unknown> {
+  return new ORPCError(ACT_ERROR.REFUSED, { message: sentence });
 }
 
 /** Each port kind's procedure as a test answers it: its payload in, its answer or a rejection out. */

@@ -248,7 +248,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     router,
     run,
-    actPort: createActPortHandler({ issues: { host: operator.host } }),
+    actPort: createActPortHandler({
+      issues: { host: operator.host },
+      workspaces: { host: operator.host, openExternal: config.openExternal },
+    }),
     services: effectServices,
     reports,
     /**

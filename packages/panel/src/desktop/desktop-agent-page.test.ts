@@ -40,7 +40,12 @@ import { runAppCommand } from "../app-commands.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -209,9 +214,6 @@ beforeEach(() => {
           : { agent: back };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
         // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
         const value = transcript;
@@ -256,6 +258,10 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      members === undefined ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(members),
   });
   handCapabilities(DESKTOP_CAPABILITIES);
 });

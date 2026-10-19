@@ -1,5 +1,6 @@
 import "@orpc/experimental-effect/extensions/input-output";
 import { oc } from "@orpc/contract";
+import { Schema } from "effect";
 
 /**
  * base.ts -- the builder every act procedure's contract starts from, and the refusal each declares.
@@ -18,4 +19,14 @@ export const ACT_ERROR = { REFUSED: "REFUSED" } as const;
 /** An act whose refusal, unless its row words one of its own, reads `sentence`. */
 export function actProcedure(sentence: string) {
   return oc.errors({ [ACT_ERROR.REFUSED]: { message: sentence } });
+}
+
+/**
+ * An act's input, read exactly: a key its schema does not name is refused
+ * rather than dropped, as `app:act` refused it.
+ */
+export function exactInput<T, E>(schema: Schema.Codec<T, E>) {
+  return Schema.toStandardSchemaV1(schema.annotate({}), {
+    parseOptions: { onExcessProperty: "error" },
+  });
 }

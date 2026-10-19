@@ -13,7 +13,11 @@ import {
   type PortActPayload,
   type PortActResult,
 } from "../contract/index.js";
-import { createActPortHandler, type IssueProceduresDependencies } from "./index.js";
+import {
+  createActPortHandler,
+  type IssueProceduresDependencies,
+  type WorkspaceProceduresDependencies,
+} from "./index.js";
 
 /**
  * The Issues page's acts, through the act port as a window calls them: only
@@ -54,6 +58,13 @@ type HostAsk = IssueProceduresDependencies["host"];
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
+/** The workspace procedures' host, never asked here. */
+const NO_WORKSPACES: WorkspaceProceduresDependencies = {
+  // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
+  host: {} as WorkspaceProceduresDependencies["host"],
+  openExternal: () => Promise.resolve(),
+};
+
 const opened: MessagePort[] = [];
 
 afterEach(() => {
@@ -83,7 +94,7 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  const handler = createActPortHandler({ issues: { host } });
+  const handler = createActPortHandler({ issues: { host }, workspaces: NO_WORKSPACES });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

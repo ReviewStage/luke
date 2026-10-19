@@ -6,6 +6,7 @@ import type {
 } from "@orpc/contract";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
+import { workspaceActsContract } from "./workspaces.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -18,11 +19,12 @@ import type { PortActKind } from "./kinds.js";
  */
 
 export { ACT_ERROR } from "./base.js";
-export { ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
+export { ISSUE_ACT_KIND, type PortActKind, WORKSPACE_ACT_KIND } from "./kinds.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...issueActsContract,
+  ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
 /** The window's typed client of the act port. */
