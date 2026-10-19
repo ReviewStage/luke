@@ -1908,7 +1908,7 @@ ul.actor-stack {
 [data-luke-profile="desktop"] .toolbar-button,
 [data-luke-profile="desktop"] .luke-button,
 [data-luke-profile="desktop"] .luke-chip,
-[data-luke-profile="desktop"] .luke-segment,
+[data-luke-profile="desktop"] .luke-choice-bar-option,
 [data-luke-profile="desktop"] .luke-nav-item,
 [data-luke-profile="desktop"] .desktop-toolbar-actions,
 [data-luke-profile="desktop"] .desktop-toolbar .inbox-crumbs,
@@ -3140,6 +3140,14 @@ ul.actor-stack {
 
 .inbox-view > [hidden] {
   display: none;
+}
+
+/* The band the list's tabs stand in under its title, whose hairline is the
+   band's rather than the tabs'. */
+.inbox-show-tabs {
+  flex: none;
+  padding-block: var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 /* The chip saying whose items the list holds, under its tabs and over its

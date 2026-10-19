@@ -1,43 +1,34 @@
 import type { ReactNode } from "react";
-import { CHOICE_ROLE } from "../choice/choice-keys.js";
+import {
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  type ChoiceBarInset,
+  type ChoiceBarSize,
+  type ChoicePanelIds,
+  ChoiceRow,
+} from "../choice/choice-row.js";
 import { COUNT_TONE, type CountPart, CountParts, type CountTone } from "../choice/count-part.js";
-import { useChoiceKeys } from "../choice/use-choice-keys.js";
 
 /**
- * tabs.tsx -- the one row of tabs over a few views of one thing: each tab its glyph, its name, and a quiet count, the chosen one underlined on the row's hairline.
+ * tabs.tsx -- the row of tabs over a few views of one thing, which is `ChoiceBar` in its fill look with a panel for every tab, kept under this name while its callers move to `ChoiceBar`.
  *
- * It is a tablist, as a reader expects one: each tab is a tab selected
- * while its view is shown and controlling that view's panel, Tab lands on
- * the selected tab and leaves the row in one press, and the arrows (Home and
- * End to either end) move along it and show each view as they go, wrapping
- * at either end. The panels are the caller's: it gives each tab and panel
- * its id (`ids`), and draws each panel labelled by its tab. Narrower than
- * its tabs need, a tab other than the selected one keeps its glyph and its
- * count, its name left to a reader who cannot see it. A row whose tabs
- * line up with a reading measure's words (`inset`) stands them inside it,
- * its hairline still running to the container's edges, and one heading a
- * narrow column stands them in from its edges as far as the column's own
- * rows. A row in a narrow column that must name every tab (`density`)
- * draws them compact: the caption's type, a tab's room around its words
- * and between its name and its count taken in.
+ * Everything a reader meets is `ChoiceBar`'s (`choice-bar.tsx`): a
+ * tablist, each tab its glyph, its name, and a count, the chosen one on
+ * the fill. What is this module's own is its older vocabulary: `ids` for
+ * `panels`, `density` for `size`, and a count drawn by the caller
+ * (`TabCount`, or `CountParts`) rather than handed as parts.
  */
 
-/** Where the row stands its tabs: at its container's edges, or with the words of a page read at its measure, a column's inset at least. */
-export const TABS_INSET = {
-  NONE: "none",
-  READING: "reading",
-  COLUMN: "column",
-} as const;
+/** Where the row stands its tabs: `ChoiceBar`'s insets. */
+export const TABS_INSET = CHOICE_BAR_INSET;
 
-export type TabsInset = (typeof TABS_INSET)[keyof typeof TABS_INSET];
+export type TabsInset = ChoiceBarInset;
 
-/** How much room the row keeps around its tabs: a page's, or a narrow column's, which names them all in less. */
-export const TABS_DENSITY = {
-  REGULAR: "regular",
-  COMPACT: "compact",
-} as const;
+/** How much room the row keeps around its tabs: `ChoiceBar`'s sizes. */
+export const TABS_DENSITY = CHOICE_BAR_SIZE;
 
-export type TabsDensity = (typeof TABS_DENSITY)[keyof typeof TABS_DENSITY];
+export type TabsDensity = ChoiceBarSize;
 
 /** What a count says beside a tab's name, in the state palette or quiet: the count part's tones (`COUNT_TONE`). */
 export const TAB_COUNT_TONE = COUNT_TONE;
@@ -55,10 +46,7 @@ export interface TabItem<Value extends string> {
 }
 
 /** The ids a tab and the panel it controls carry. */
-export interface TabIds {
-  readonly tab: string;
-  readonly panel: string;
-}
+export type TabIds = ChoicePanelIds;
 
 /** A count's glyph and what it says, the words required beside one so it is never colour and shape alone. */
 type TabCountGlyph =
@@ -98,41 +86,16 @@ export function Tabs<Value extends string>({
   inset?: TabsInset | undefined;
   density?: TabsDensity | undefined;
 }): React.JSX.Element {
-  // An arrow shows the next view along and takes the keyboard to its tab; Home and End go to either end.
-  const keys = useChoiceKeys({ options: tabs, value, role: CHOICE_ROLE.TAB, onChoose: onChange });
   return (
-    <div
-      className="luke-tabs"
-      data-inset={inset}
-      data-density={density}
-      role="tablist"
-      aria-label={label}
-      onKeyDown={keys.onKeyDown}
-    >
-      {tabs.map((tab) => {
-        const selected = tab.value === value;
-        return (
-          <button
-            key={tab.value}
-            id={ids(tab.value).tab}
-            type="button"
-            role="tab"
-            className="luke-tab"
-            aria-selected={selected}
-            aria-controls={ids(tab.value).panel}
-            tabIndex={keys.tabIndexOf(tab.value)}
-            onClick={() => onChange(tab.value)}
-          >
-            {tab.icon === undefined ? null : (
-              <span className="luke-tab-icon" aria-hidden="true">
-                {tab.icon}
-              </span>
-            )}
-            <span className="luke-tab-label">{tab.label}</span>
-            {tab.count === undefined ? null : <span className="luke-tab-count">{tab.count}</span>}
-          </button>
-        );
-      })}
-    </div>
+    <ChoiceRow<Value>
+      label={label}
+      options={tabs}
+      value={value}
+      onChoose={onChange}
+      look={CHOICE_BAR_LOOK.FILL}
+      size={density}
+      panels={ids}
+      inset={inset}
+    />
   );
 }

@@ -1768,14 +1768,16 @@ function PullRequestTabBody({
                 editing={{ options, refreshing: pullRequestRead.out }}
               />
             </header>
-            <Tabs<PullRequestView>
-              label="Pull request"
-              tabs={tabsOf(parts, published, bar)}
-              value={view}
-              onChange={onView}
-              ids={ids}
-              inset={TABS_INSET.READING}
-            />
+            <div className="pull-request-tabs">
+              <Tabs<PullRequestView>
+                label="Pull request"
+                tabs={tabsOf(parts, published, bar)}
+                value={view}
+                onChange={onView}
+                ids={ids}
+                inset={TABS_INSET.READING}
+              />
+            </div>
             <div
               className="pull-request-view"
               role="tabpanel"

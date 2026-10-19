@@ -402,7 +402,7 @@ async function narrowTaskInbox(
     /** The list's head as a reader meets it: its name, and the tab it shows. */
     head: () => [
       tab.querySelector(".inbox-tasks header h1")?.textContent,
-      tab.querySelector('.inbox-tasks [role="tab"][aria-selected="true"] .luke-tab-label')
+      tab.querySelector('.inbox-tasks [role="tab"][aria-selected="true"] .luke-choice-bar-label')
         ?.textContent,
     ],
     pressTab: (name: string) => act(() => taskInboxTab(tab, name)?.click()),
@@ -450,7 +450,7 @@ async function narrowTaskInbox(
 /** The tab under a task's Inbox's title named `name`. */
 function taskInboxTab(tab: HTMLElement, name: string): HTMLButtonElement | undefined {
   return [...tab.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
-    (each) => each.querySelector(".luke-tab-label")?.textContent === name,
+    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
   );
 }
 
