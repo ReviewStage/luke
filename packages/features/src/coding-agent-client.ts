@@ -62,7 +62,6 @@ import {
 } from "./coding-agent-view.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_WORKSPACE_QUERY,
@@ -622,9 +621,8 @@ export class HostedCodingAgentClient {
   /**
    * One planning worker's transcript sealed for following over Neon
    * Realtime, as an agent's worker's is, answered at once: not found where
-   * the account reaches no such plan, unanswered where the deployment has
-   * no Realtime and for anything else, which the caller answers by holding
-   * its read open as before.
+   * the account reaches no such plan, unanswered for anything else, which
+   * the caller answers by sealing it again.
    */
   taskWorkerTranscriptLive(
     taskId: string,
@@ -641,32 +639,23 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * One task's conversation as an agent's transcript is read, or a
-   * brain worker's where the call that started it is named: past the
-   * cursor, held by the service while a turn or the worker runs; with no
+   * One task's conversation as an agent's transcript is read: past the
+   * cursor, held by the service while a turn or a worker runs; with no
    * cursor, its newest turns; with `before`, the turns before that one.
    */
   taskMessages(
     taskId: string,
     page: { after?: string; before?: string },
-    callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const asked =
-      callId === undefined
-        ? askHosted(
-            this.#hosted.messages.task,
-            {
-              id: taskId,
-              ...(page.after === undefined ? undefined : { after: page.after }),
-              ...(page.before === undefined ? undefined : { before: page.before }),
-            },
-            HOSTED_DEADLINE.HELD,
-          )
-        : askHosted(
-            this.#hosted.messages.taskWorker,
-            { id: taskId, call: callId, after: page.after ?? CODING_AGENT_CURSOR_START },
-            HOSTED_DEADLINE.HELD,
-          );
+    const asked = askHosted(
+      this.#hosted.messages.task,
+      {
+        id: taskId,
+        ...(page.after === undefined ? undefined : { after: page.after }),
+        ...(page.before === undefined ? undefined : { before: page.before }),
+      },
+      HOSTED_DEADLINE.HELD,
+    );
     return hostedAnswer(asked, ROW_REFUSALS);
   }
 

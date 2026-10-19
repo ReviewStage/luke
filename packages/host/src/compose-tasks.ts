@@ -1314,11 +1314,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           });
         }
         const { taskId, callId, ...page } = read.success;
-        const held = served(conversations.taskMessages(taskId, page, callId));
-        // A planning worker's transcript is held here on its live statements where the service seals them.
+        // A planning worker's transcript is held here on its live statements.
         const answer =
           callId === undefined
-            ? yield* held
+            ? yield* served(conversations.taskMessages(taskId, page))
             : yield* transcriptPast(workerTranscripts, new TaskWorkerKey({ taskId, callId }), {
                 now: served(
                   conversations.taskWorkerMessagesNow(
@@ -1327,7 +1326,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     page.after ?? CODING_AGENT_CURSOR_START,
                   ),
                 ),
-                held,
               });
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),

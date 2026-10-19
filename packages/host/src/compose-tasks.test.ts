@@ -826,7 +826,7 @@ interface FakeConversations extends TasksConversationClient {
   answer: (taskId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
-  /** What the service seals for following a planning worker's transcript; none answers unanswered, as a service without Realtime does. */
+  /** What the service seals for following a planning worker's transcript; none answers unanswered. */
   workerSealed: AgentTranscriptLiveAnswer | undefined;
   /** Every read of a worker's transcript at once, as `plan:call:cursor`, in order. */
   readonly workerReads: string[];
@@ -2987,7 +2987,7 @@ function workerPage(
 }
 
 it.effect(
-  "a planning worker's transcript is held here on its live statements where the service seals them: read at once, again only as they move, and answered once the service says its held read would not hold",
+  "a planning worker's transcript is held here on its live statements: read at once, again only as they move, and answered once the service says its held read would not hold",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -3026,7 +3026,7 @@ it.effect(
 );
 
 it.effect(
-  "a planning worker's transcript the service seals nothing for is read on its held read, as before",
+  "a planning worker's transcript the service seals nothing for is sealed again each second, then read live",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -3034,10 +3034,15 @@ it.effect(
       const read = yield* Effect.forkChild(
         call(GATEWAY_METHOD.TASKS_MESSAGES, { taskId: INVITES, callId: "call-0-0", after: "2:0" }),
       );
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "2:0"]);
-      const page = conversationPage([], "2:0", CODING_AGENT_STATUS.COMPLETED);
-      yield* conversations.answer(INVITES, page);
-      assert.deepEqual(yield* Fiber.join(read), page);
+      yield* TestClock.adjust(Duration.seconds(1));
       assert.deepEqual(conversations.workerReads, []);
+      conversations.workerSealed = SEALED_WORKER;
+      yield* TestClock.adjust(Duration.seconds(1));
+      const page = workerPage([], CODING_AGENT_STATUS.COMPLETED, false);
+      yield* conversations.answerWorker(page);
+      const { holds: _holds, ...answered } = page;
+      assert.deepEqual(yield* Fiber.join(read), answered);
+      assert.deepEqual(conversations.workerReads, [`${INVITES}:call-0-0:2:0`]);
+      assert.deepEqual(conversations.asks, []);
     }),
 );

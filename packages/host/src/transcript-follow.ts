@@ -101,9 +101,9 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
 }
 
 /** The transcript sealed, asked again every `RESEAL` until the service seals it; none where the account does not reach it. */
-function sealedOf(
-  dependencies: TranscriptFollowDependencies,
-  key: TranscriptKey,
+function sealedOf<Key>(
+  dependencies: TranscriptFollowDependencies<Key>,
+  key: Key,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>> {
   return Effect.gen(function* () {
     while (true) {
