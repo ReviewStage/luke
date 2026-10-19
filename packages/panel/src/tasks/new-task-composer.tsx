@@ -45,7 +45,12 @@ import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { SkillFiles } from "./skill-chip.js";
-import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
+import {
+  TaskMentions,
+  tasklessMentions,
+  useMentionAgentsReader,
+  useMentionIssuesReader,
+} from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
@@ -347,6 +352,7 @@ export function NewTaskComposer({
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
   const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
+  const readMentionIssues = useMentionIssuesReader(workspace);
   const slug = workspace?.slug;
   const { onShowMention } = newTask;
   const mentions = useMemo(
@@ -357,8 +363,9 @@ export function NewTaskComposer({
             { workspace: slug ?? workspaceId, workspaceId, repository },
             onShowMention,
             readMentionAgents,
+            readMentionIssues,
           ),
-    [workspaceId, slug, repository, onShowMention, readMentionAgents],
+    [workspaceId, slug, repository, onShowMention, readMentionAgents, readMentionIssues],
   );
   const skills = useMemo(
     () =>
