@@ -43,10 +43,10 @@ const RETIRE_SESSIONS = {
   TIMEOUT: Duration.seconds(35),
 } as const;
 
-/** How a caller reaches eve under one mount: the delete's own caller's client, or the refusal that there is none. */
+/** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
-) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<Pick<EveSessions, "reset">, HostedRefusal, HttpClient.HttpClient>;
 
 /**
  * How a delete's caller reaches eve to retire what it deletes, settled
@@ -67,7 +67,7 @@ export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   const composed = {
     [EVE_MOUNT.CODER]: yield* eveFor(reach, request, account, EVE_MOUNT.CODER),
     [EVE_MOUNT.TASKS]: yield* eveFor(reach, request, account, EVE_MOUNT.TASKS),
-  } satisfies Readonly<Record<EveMount, EveSessions>>;
+  } satisfies Readonly<Record<EveMount, Pick<EveSessions, "reset">>>;
   return (mount) => Effect.succeed(composed[mount]);
 });
 

@@ -89,7 +89,11 @@ export function brainHostChannelInput(
  * deployment's own, and a typed ask the member's, minted as their own
  * principal with the deployment as its carrier, so it waits behind a call's
  * spoken turn, and joins only the member's own typed turn, exactly as their
- * bearer's would. What else such a route asks of eve needs no row: a plan's
+ * bearer's would. A row admits anything that holds the secret, whatever role
+ * it acts in, so what keeps the deployment's typed asks to a comment's is the
+ * code: no code path but the comment hand-over sends one, and the voice
+ * function's client is typed to send none (`voice/deployment-exchange.ts`).
+ * What else such a route asks of eve needs no row: a plan's
  * Stop, which is a cancel, and a delete's retire, which is a reset. A
  * caller of another role adds its row here and nowhere else; the coder
  * channel keeps a table of its own (`coder-host/channel.ts`).

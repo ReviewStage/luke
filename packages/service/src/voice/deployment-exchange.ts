@@ -26,8 +26,10 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
  * fake eve behind the same door. Its eve sends a spoken ask and nothing else
- * by its type, so the deployment's secret opens a typed turn of Luke's only
- * where a comment a browser sent hands one over (`tasks/comment-ask.ts`).
+ * by its type. The brain's door admits a typed ask from anything that holds
+ * the deployment's secret, so what keeps the deployment's typed asks to a
+ * comment's is the code: no code path but the comment hand-over
+ * (`tasks/comment-ask.ts`) sends one.
  */
 
 /** The one kind of turn the voice function asks Luke for. */

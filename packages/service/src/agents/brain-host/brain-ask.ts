@@ -170,8 +170,9 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
  * What accepting an ask needs: the ask record built over the store's runner,
  * and eve as the caller reaches it, sending the kinds of turn `Turn` names.
  * The voice function's client, the deployment acting for the account, sends
- * a spoken ask alone, so a comment's (`tasks/comment-ask.ts`) is the one
- * typed ask the deployment carries to Luke.
+ * a spoken ask alone by its type. The brain's door admits a typed ask from
+ * anything that holds the deployment's secret, so no code path but the
+ * comment hand-over (`tasks/comment-ask.ts`) sends one.
  */
 export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;

@@ -337,6 +337,13 @@ test("at the door the deployment is admitted for the named account's own convers
   );
   assert.deepEqual(presented(cancelled), deploymentItself);
   assert.equal(actedForAccount(cancelled ?? null), "user-a");
+  // A typed turn's header on a cancel makes it no typed message: the Stop presents the deployment still.
+  assert.deepEqual(
+    presented(
+      await auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}/cancel`)),
+    ),
+    deploymentItself,
+  );
   assert.equal(
     await refusal(() =>
       auth(scheduled("user-b", undefined, `/eve/v1/session/${SESSION_A}/cancel`)),
