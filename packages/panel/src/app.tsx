@@ -494,6 +494,7 @@ export function App(): React.JSX.Element {
   // knows where it stands.
   const history = useWindowHistory({
     known: state !== undefined && !accountGated,
+    link: copyLink.standing,
     tab,
     onTabChange: changeTab,
     settingsView: shownView,

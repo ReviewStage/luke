@@ -26,6 +26,13 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * workspaces are read, as a task's own is; an agent's page under the
  * workspace the page read its agent into, which only the page knows, so the
  * page tells the window (`usePageWorkspace`).
+ *
+ * One of them names the step the window stands on, as its history counts
+ * steps (`navigation-history.ts`): the task, or its version while its
+ * version history stands, the Inbox, an agent's or a person's page, an
+ * automation or the list, Factory, an issue, or a page of Settings. The
+ * history writes that link as the step's address, so the address and Copy
+ * link never disagree. Chat, the Issues list, and the home page have none.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -52,11 +59,13 @@ const LINK_THING = {
 
 type LinkThing = (typeof LINK_THING)[keyof typeof LINK_THING];
 
-/** A link the window can copy: the place, under its workspace, what it is called, and its name where the window holds one. */
+/** A link the window can copy: the place, under its workspace, what it is called, its name where the window holds one, and whether it names the step the window stands on. */
 export interface LinkAtHand {
   readonly link: ReadLink;
   readonly thing: LinkThing;
   readonly name?: string | undefined;
+  /** Whether it names the step the window stands on, rather than something open within it or the task under it. */
+  readonly step?: boolean;
 }
 
 /** The workspace an agent's page read its agent into, by the agent's id. */
@@ -133,11 +142,12 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   if (tasks.history.open) {
     const revision = tasks.history.selected;
     return revision === undefined
-      ? [task]
+      ? [{ ...task, step: true }]
       : [
           {
             link: { workspace, place: { kind: LINK_PLACE.VERSION, planId: drawn.id, revision } },
             thing: LINK_THING.VERSION,
+            step: true,
           },
           task,
         ];
@@ -160,15 +170,22 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       : { link: { workspace, place: held }, thing };
   // A panel filling the window hides the work column, so its tab is at hand whatever holds the keyboard.
   const panelFirst = at.sidePanelFocused || tasks.sidePanel.fullScreen;
-  const order = panelFirst ? [panel, agent, task] : [agent, panel, task];
+  const standing: LinkAtHand = { ...task, step: true };
+  const order = panelFirst ? [panel, agent, standing] : [agent, panel, standing];
   return order.filter((each): each is LinkAtHand => each !== undefined);
 }
 
 /** Every link the window can copy now, the most specific first; none on the home page. */
 function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   const listed = slugOf(tasks.workspaces, tasks.workspace?.id);
+  // `at_` writes the link of the step the window stands on, `within` one of something open in it.
   const at_ = (place: LinkPlace, thing: LinkThing, workspace = listed): LinkAtHand => ({
     link: { workspace, place },
+    thing,
+    step: true,
+  });
+  const within = (place: LinkPlace, thing: LinkThing): LinkAtHand => ({
+    link: { workspace: listed, place },
     thing,
   });
   if (at.settings !== undefined) {
@@ -196,7 +213,7 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       "taskId" in chosen
         ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
         : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
-    return [at_(item, LINK_THING.INBOX_ITEM), inbox];
+    return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
   if (tasks.automationsView.open) {
     const list = at_({ kind: LINK_PLACE.AUTOMATIONS }, LINK_THING.AUTOMATIONS);
@@ -207,11 +224,13 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
             { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
             LINK_THING.AUTOMATION,
           ),
-          list,
+          within({ kind: LINK_PLACE.AUTOMATIONS }, LINK_THING.AUTOMATIONS),
         ]
       : [list];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
+  // Chat has no link of its own, and the task it stands over is not in sight, so it offers none.
+  if (tasks.chatView.open) return [];
   // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
   const issues = tasks.issuesView;
   if (issues.open) {
@@ -225,10 +244,12 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
 /**
  * The links at hand, the most specific first, as the keyboard stood in or
  * out of the side panel, and the copy of one, as the command palette offers
- * them; and the ear an agent's page tells its workspace to.
+ * them; the link of the step the window stands on, which its history writes
+ * as that step's address; and the ear an agent's page tells its workspace to.
  */
 export interface CopyLink {
   readonly linksAt: (sidePanelFocused: boolean) => readonly LinkAtHand[];
+  readonly standing: ReadLink | undefined;
   readonly copy: (held: LinkAtHand) => void;
   readonly onPageWorkspace: (held: PageWorkspace | undefined) => void;
 }
@@ -274,5 +295,6 @@ export function useCopyLink(
         }
       : undefined,
   );
-  return { linksAt, copy, onPageWorkspace };
+  const standing = linksAt(false).find((each) => each.step === true)?.link;
+  return { linksAt, standing, copy, onPageWorkspace };
 }
