@@ -242,6 +242,22 @@ body,
   transform: none;
 }
 
+/* A narrow room's sidebar is a drawer: the same float, standing on the
+   window's left edge over the work, never so wide that the work stops showing
+   past it, where a press puts it away (`shell-room.ts`). It stands out of the
+   shell's columns, so the work is the one column left. */
+.desktop-shell[data-room="narrow"][data-sidebar-collapsed] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktop-shell[data-room="narrow"][data-sidebar-collapsed] .desktop-sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
+}
+
 /* Where the pointer peeks the folded sidebar out: a strip at the window's
    left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {

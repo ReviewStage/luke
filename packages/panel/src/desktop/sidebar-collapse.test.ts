@@ -17,6 +17,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
+import { useShellRoom } from "../shell-room.js";
 import { useStageWidth } from "../stage-width.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
@@ -146,6 +147,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         onLeaveVersionHistory: ignore,
       },
       sidebar,
+      room: useShellRoom(stage.width),
       call: undefined,
       captions: {
         caption: { content: undefined, shown: false },

@@ -26,6 +26,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
@@ -387,7 +388,10 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * (task-summary.tsx), glides the work beside them (pane-motion.tsx). A
  * window too narrow to pin the sidebar folds it, and a folded sidebar floats
  * over the work rather than beside it (`sidebar-collapse.ts`), put away by a
- * press outside it and its toggle. Back and forward ride the left column's title-bar row,
+ * press outside it and its toggle. A stage as narrow as a phone's stands the
+ * window as one pane at a time (`shell-room.ts`): the sidebar is a drawer its
+ * toggle opens, with no edge to peek it out, and the side panel stands only
+ * full screen. Back and forward ride the left column's title-bar row,
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
@@ -403,6 +407,7 @@ export function DesktopShell({
   tasks,
   history,
   sidebar,
+  room,
   call,
   captions,
   settings,
@@ -413,6 +418,8 @@ export function DesktopShell({
   tasks: TasksControl;
   history: WindowHistory;
   sidebar: SidebarCollapse;
+  /** The room the panel's stage gives; narrow, the sidebar is a drawer and the side panel stands only full screen. */
+  room: ShellRoom;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
   call: CallCardInput | undefined;
   captions: CaptionStripProps;
@@ -516,7 +523,7 @@ export function DesktopShell({
   if (tab === PANEL_TAB.SETTINGS) {
     const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
     return (
-      <div className="desktop-shell">
+      <div className="desktop-shell" data-room={room}>
         <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
           <DesktopSettings
             sidebar={sidebar}
@@ -536,7 +543,7 @@ export function DesktopShell({
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
     return (
-      <div className="desktop-shell">
+      <div className="desktop-shell" data-room={room}>
         {/* A chip in a version's words hangs the cards the plan's own words do. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
@@ -590,6 +597,7 @@ export function DesktopShell({
     <div
       ref={shell}
       className="desktop-shell"
+      data-room={room}
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle)}
@@ -674,8 +682,11 @@ export function DesktopShell({
         call={sidebar.collapsed ? call : undefined}
         surface={CALL_CARD_SURFACE.FLOATING}
       />
-      {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does. */}
-      {sidebar.collapsed && sidebar.overlay === SIDEBAR_OVERLAY.CLOSED ? (
+      {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
+          a narrow room's drawer opens by its toggle alone, as a phone's does. */}
+      {sidebar.collapsed &&
+      sidebar.overlay === SIDEBAR_OVERLAY.CLOSED &&
+      room === SHELL_ROOM.WIDE ? (
         <div
           className="sidebar-peek-edge"
           data-sidebar-peek-edge=""

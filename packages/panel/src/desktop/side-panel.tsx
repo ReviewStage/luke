@@ -16,6 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  CloseIcon,
   CollapseIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -1631,7 +1632,9 @@ function TabContent({
  * neither top row it serves, the way the sidebar's toggle stands beside the
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
- * it however fast the presses come. It stands on every task's page, so it
+ * it however fast the presses come. Where the room holds the panel only full
+ * screen, a narrow one's, it reads Close while the panel is open, since the
+ * panel covers everything else. It stands on every task's page, so it
  * is also what offers the panel's shortcut. ⌘T is the task's page's, which hands it to the column
  * holding the window's focus (desktop-tasks.tsx). While the task is not
  * drawn there is no panel to show, so it is disabled and offers none.
@@ -1643,13 +1646,15 @@ export function SidePanelToggle({
   panel: SidePanelControl;
   disabled: boolean;
 }): React.JSX.Element {
-  const label = panel.open ? "Hide panel" : "Show panel";
+  // A panel standing only full screen covers the whole window, so its toggle is the way out of it.
+  const closes = panel.open && panel.fullScreenOnly;
+  const label = closes ? "Close" : panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
       <IconButton
-        icon={<SidePanelIcon />}
+        icon={closes ? <CloseIcon /> : <SidePanelIcon />}
         label={label}
         aria-expanded={panel.open}
         disabled={disabled}
@@ -2128,7 +2133,8 @@ export function SidePanel({
  * row and its resize edge at its left. Full screen, it covers what it stood
  * beside rather than taking its place, and an empty room holds the panel's
  * own width beside it, so what is beneath keeps its layout and is there to
- * be uncovered as the panel goes back. It plays its own exits (`playExit`);
+ * be uncovered as the panel goes back. Where the room holds it only full
+ * screen it has neither the button nor the edge, and keeps no room. It plays its own exits (`playExit`);
  * its arrival is played by the pane motion around it (`pane-motion.tsx`).
  */
 export function PanelFrame({
@@ -2142,7 +2148,7 @@ export function PanelFrame({
   banner,
   children,
 }: Omit<SidePanelDrawing, "panel"> & {
-  panel: Pick<SidePanelControl, "width" | "fullScreen" | "onToggleFullScreen">;
+  panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
   /** What the pane is called to a reader. */
   label: string;
   /** The row's tabs, which take what the row leaves beside the actions and the full-screen button. */
@@ -2161,8 +2167,9 @@ export function PanelFrame({
   }, [leaving, onLeft]);
   return (
     <>
-      {/* Shut, it gives the document its room back at once, to glide into. */}
-      {panel.fullScreen && leaving !== PANEL_LEAVING.CLOSE ? (
+      {/* Shut, it gives the document its room back at once, to glide into. A
+          panel only ever full screen is never uncovered beside it, so it keeps none. */}
+      {panel.fullScreen && !panel.fullScreenOnly && leaving !== PANEL_LEAVING.CLOSE ? (
         <div ref={room} className="side-panel-room" style={{ width: panel.width }} />
       ) : null}
       <aside
@@ -2180,11 +2187,13 @@ export function PanelFrame({
         <div className="side-panel-bar">
           {tabs}
           {actions}
-          <FullScreenToggle
-            fullScreen={panel.fullScreen}
-            leaving={leaving !== PANEL_LEAVING.NONE}
-            onToggle={panel.onToggleFullScreen}
-          />
+          {panel.fullScreenOnly ? null : (
+            <FullScreenToggle
+              fullScreen={panel.fullScreen}
+              leaving={leaving !== PANEL_LEAVING.NONE}
+              onToggle={panel.onToggleFullScreen}
+            />
+          )}
         </div>
         {panel.fullScreen ? banner : null}
         {children}

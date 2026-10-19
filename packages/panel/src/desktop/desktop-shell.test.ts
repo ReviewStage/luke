@@ -25,6 +25,7 @@ import { runAppCommand } from "../app-commands.js";
 import { callControls } from "../call/call-card.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
@@ -148,6 +149,7 @@ function shellProps(
       staged: false,
       ...sidebarPatch,
     },
+    room: SHELL_ROOM.WIDE,
     call: undefined,
     captions: {
       caption: { content: undefined, shown: false },
@@ -774,6 +776,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       onResize: ignore,
       staged: false,
     },
+    room: SHELL_ROOM.WIDE,
     call: {
       card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
       speakerMuted: false,

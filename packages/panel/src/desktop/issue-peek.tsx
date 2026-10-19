@@ -94,12 +94,12 @@ export function IssuePeek({
 }): React.JSX.Element | null {
   const drawing = useSidePanelDrawing(panel);
   const standing = drawing.panel !== undefined && issue !== undefined;
-  // Escape steps out of full screen first, then puts the peek away, before it leaves the Issues page.
+  // Escape steps out of full screen first, where the room allows the panel beside the page, then puts the peek away, before it leaves the Issues page.
   useAppCommand(
     APP_COMMAND.EXIT_ISSUES,
     !standing || drawing.leaving !== PANEL_LEAVING.NONE
       ? undefined
-      : panel.fullScreen
+      : panel.fullScreen && !panel.fullScreenOnly
         ? panel.onToggleFullScreen
         : onClose,
   );

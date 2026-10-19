@@ -67,6 +67,7 @@ import { OpenPersonProvider } from "./person-door.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link.js";
+import { useShellRoom } from "./shell-room.js";
 import { useStageWidth } from "./stage-width.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
@@ -281,6 +282,10 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // The stage's width, on the desktop the window's, which the sidebar folds
+  // by and which says whether the panel stands as one pane (`shell-room.ts`).
+  const stage = useStageWidth();
+  const room = useShellRoom(stage.width);
   // The Tasks tab, drawn from the same voice report the strip reads, so a
   // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
@@ -303,6 +308,7 @@ export function App(): React.JSX.Element {
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
     leaveGuard,
+    room,
   });
   // A Browser tab left open as its experiment goes off closes, its page with
   // it, on whatever plan and whatever the window shows, Settings included.
@@ -505,7 +511,6 @@ export function App(): React.JSX.Element {
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
-  const stage = useStageWidth();
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.width);
 
   const caption = useCaptionPresentation({
@@ -735,6 +740,7 @@ export function App(): React.JSX.Element {
                               tasks={tasks}
                               history={history}
                               sidebar={sidebar}
+                              room={room}
                               call={call}
                               captions={{
                                 caption,

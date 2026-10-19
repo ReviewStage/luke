@@ -31,6 +31,7 @@ import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type ByPullRequestTab,
   ofPullRequestTab,
@@ -517,8 +518,10 @@ const FIRST_LAUNCH: SidePanelState = {
 export interface SidePanelControl {
   /** Whether the panel is drawn: open, and its strip holding a tab or it asked for with none. */
   open: boolean;
-  /** Whether the open panel fills the work column in the document's place. */
+  /** Whether the open panel fills the work column in the document's place: asked for, or the only way a narrow room holds it. */
   fullScreen: boolean;
+  /** Whether the room holds the open panel only full screen, as a narrow one does: it has no edge to resize it and no full-screen button, and leaving full screen shuts it. */
+  fullScreenOnly: boolean;
   /** Whether ⌘T asked for the "+" menu and the "+" has not yet opened it. */
   newTabAsked: boolean;
   /** The open task's fixed tabs, in the strip's order. */
@@ -1507,7 +1510,10 @@ function firstHeld(was: TaskHolds, now: TaskHolds): readonly FixedSidePanelTab[]
  * each, none where the work has none or is unread, and `files` the files
  * Luke showed on it, by path, and `pages` the pages agents wrote for it, by
  * id; the tabs drawn and the tab shown are held to them, a delegated
- * worker's to the open agent tabs.
+ * worker's to the open agent tabs. In a narrow `room` the panel stands only
+ * full screen, so leaving full screen there shuts it, and a room widened
+ * again hands back the panel beside the document, or full screen where it
+ * was asked for.
  */
 export function useSidePanel(
   staged: SidePanelState | undefined,
@@ -1517,6 +1523,7 @@ export function useSidePanel(
   files: readonly string[] = [],
   pages: readonly string[] = NO_PAGES,
   taskAgents?: readonly string[] | undefined,
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -1669,7 +1676,12 @@ export function useSidePanel(
     },
     [update],
   );
-  const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
+  // Note that a narrow room holds the panel full screen alone, so leaving full screen there shuts it.
+  const narrow = room === SHELL_ROOM.NARROW;
+  const onToggleFullScreen = useCallback(() => {
+    if (narrow) onSetOpen(false);
+    else setFullScreen((was) => !was);
+  }, [narrow, onSetOpen]);
   const onNewTab = useCallback(() => {
     update((held) => (held.open ? held : { ...held, open: true }));
     setEmptyShownOn(taskId);
@@ -1879,7 +1891,8 @@ export function useSidePanel(
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,
-    fullScreen: shown && fullScreen,
+    fullScreen: shown && (fullScreen || narrow),
+    fullScreenOnly: shown && narrow,
     newTabAsked: shown && newTabAsked,
     onToggle,
     onSetOpen,
