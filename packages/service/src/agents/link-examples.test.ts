@@ -82,3 +82,16 @@ test("the inbox's post tool and the plan's edit tool show a file's link Luke dra
 test("the planner shows an issue's link for the plan and a file's link for code, each drawn as its chip", () => {
   assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.LINK, MENTION_KIND.FILE]);
 });
+
+/** Every date mention the words show, as the mention its target names. */
+function datesIn(words: string): (string | undefined)[] {
+  return [...words.matchAll(/\]\((luke:\/\/date\/[^)\s`]+)\)/gu)].map(
+    ([, target]) => decodeMention(target ?? "", REPOSITORY)?.kind,
+  );
+}
+
+test("a coding agent is shown a day, a time, and a range, and the planner a day, each a date Luke draws as its chip", () => {
+  const words = coderInstructions(REPOSITORY, CODING_AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
+  assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
+  assert.deepEqual(datesIn(BRAIN_INSTRUCTIONS), [MENTION_KIND.DATE]);
+});

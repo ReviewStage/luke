@@ -32,6 +32,7 @@
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./conversation-picture-wire": "./src/conversation-picture-wire.js",
+    "./date-mention": "./src/date-mention.js",
     "./desktop-session-wire": "./src/desktop-session-wire.js",
     "./dictation-wire": "./src/dictation-wire.js",
     "./github-connection-wire": "./src/github-connection-wire.js",

@@ -1,4 +1,5 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { dateChipText, dateDistance, dateWhole, readerZone } from "@luke/features/date-mention";
 import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
@@ -34,6 +35,7 @@ import { fileName } from "@luke/voice/code-pane-model";
 import {
   AppWindowIcon,
   BotIcon,
+  CalendarIcon,
   FactoryIcon,
   FileDiffIcon,
   FolderIcon,
@@ -69,6 +71,7 @@ import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { ServerCard } from "./server-card.js";
 import { AgentMark } from "./tab-look.js";
+import { useMinute } from "./task-time.js";
 import { useKnownNames } from "./use-known-names.js";
 import {
   type ChipWhere,
@@ -133,6 +136,12 @@ import { useOpenLink } from "./use-open-link.js";
  * place as any Luke link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
+ *
+ * A date is said from where the reader stands rather than by the words it
+ * was written with (`@luke/features/date-mention`): Today, Tomorrow,
+ * Friday 3:00 PM, in the reader's own zone, said again as the minute turns
+ * (`useMinute`), and its card says it in full and how far off it is. It
+ * opens nothing, since a day has no page.
  *
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
@@ -239,6 +248,7 @@ function pressOf(
     case MENTION_KIND.FOLDER:
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
+    case MENTION_KIND.DATE:
       return undefined;
     case MENTION_KIND.TASK:
       return () => doors.onOpenTask(mention);
@@ -367,6 +377,8 @@ function MentionGlyph({
       return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
     case MENTION_KIND.ISSUE:
       return <ListTodoIcon aria-hidden="true" />;
+    case MENTION_KIND.DATE:
+      return <CalendarIcon aria-hidden="true" />;
   }
 }
 
@@ -662,6 +674,37 @@ function MentionChip({
   );
 }
 
+/** A date mention. */
+type DateMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.DATE }>;
+
+/** A date's card: the date in full, in the reader's zone, and how far off it is now. */
+function DateCard({ date }: { date: DateMention }): React.JSX.Element {
+  const now = useMinute();
+  const zone = readerZone();
+  return (
+    <HoverCard data-mention-card="">
+      <HoverCardHead glyph={<CalendarIcon aria-hidden="true" />} name={dateWhole(date, zone)} />
+      <HoverCardNote>{dateDistance(date, now, zone)}</HoverCardNote>
+    </HoverCard>
+  );
+}
+
+/** A date in words: its chip, saying it from the reader's today and moving on as the minute turns, hanging its card. */
+function DateChip({ date }: { date: DateMention }): React.JSX.Element {
+  const now = useMinute();
+  return (
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={<CalendarIcon aria-hidden="true" />}
+      label={dateChipText(date, now, readerZone())}
+      card={<DateCard date={date} />}
+      data-mention-ref=""
+      data-kind={date.kind}
+      data-state={MENTION_STATE.FOUND}
+    />
+  );
+}
+
 /** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
 function PlaceGlyph({
   place,
@@ -857,6 +900,7 @@ export function linkChip(
 ): React.JSX.Element | undefined {
   const bare = isBareLink(label, href);
   const found = linkMention(label, href, doors.place.repository);
+  if (found?.mention.kind === MENTION_KIND.DATE) return <DateChip date={found.mention} />;
   if (found !== undefined) {
     return (
       <MentionChip
@@ -938,5 +982,6 @@ export function MentionNodeChip({
 }): React.JSX.Element {
   const named = decodeMention(mention.target, doors.place.repository);
   if (named === undefined) return <>{`@${mention.name}`}</>;
+  if (named.kind === MENTION_KIND.DATE) return <DateChip date={named} />;
   return <MentionChip mention={named} target={mention.target} name={mention.name} doors={doors} />;
 }

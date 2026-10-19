@@ -949,3 +949,51 @@ test("a comment's words ask Luke though twenty other mentions come before him", 
     { luke: true, agentIds: [] },
   );
 });
+
+test("a date is written in the app's own form, a day, a time with its offset, or a range, and read back as written", () => {
+  const dates: Mention[] = [
+    { kind: MENTION_KIND.DATE, start: "2026-10-20" },
+    { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00-07:00" },
+    { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00+05:30", end: "2026-10-20T17:00+05:30" },
+    { kind: MENTION_KIND.DATE, start: "2026-10-20", end: "2026-10-24" },
+  ];
+  assert.deepEqual(
+    dates.map((date) => encodeMention(date, PLACE)),
+    [
+      "luke://date/2026-10-20",
+      "luke://date/2026-10-20T15:00-07:00",
+      "luke://date/2026-10-20T15:00+05:30/2026-10-20T17:00+05:30",
+      "luke://date/2026-10-20/2026-10-24",
+    ],
+  );
+  for (const date of dates) {
+    assert.deepEqual(decodeMention(encodeMention(date, PLACE), REPOSITORY), date);
+  }
+  assert.equal(
+    mentionMarkdown(dates[0] as Mention, "Oct 20, 2026", PLACE),
+    "[@Oct 20, 2026](luke://date/2026-10-20)",
+  );
+});
+
+test("a date that is no day, a range out of order or of two kinds, or a step past its end names nothing", () => {
+  for (const target of [
+    "luke://date/",
+    "luke://date/2026-02-30",
+    "luke://date/2026-10-20T15:00",
+    "luke://date/2026-10-24/2026-10-20",
+    "luke://date/2026-10-20/2026-10-20T15:00-07:00",
+    "luke://date/2026-10-20/2026-10-24/2026-10-25",
+    "luke://date/2026-10-20#today",
+    "luke://date/2026-10-20?tz=UTC",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a date written bare is named by its date in full, and is no address a paste makes a chip of", () => {
+  assert.deepEqual(linkMention("luke://date/2026-10-20", "luke://date/2026-10-20", REPOSITORY), {
+    mention: { kind: MENTION_KIND.DATE, start: "2026-10-20" },
+    name: "Oct 20, 2026",
+  });
+  assert.equal(pastedLinkMention("luke://date/2026-10-20", REPOSITORY), undefined);
+});
