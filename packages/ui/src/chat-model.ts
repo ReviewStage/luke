@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
+import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -324,4 +325,35 @@ export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTa
     (target, at) =>
       offered.findIndex((each) => each.sigil === target.sigil && each.name === target.name) === at,
   );
+}
+
+/** What the wire refuses in a dictation's word: a line break, or an angle bracket. */
+const REFUSED_KEYWORD = /[<>\r\n]/u;
+
+/**
+ * The words a dictation in the chat is likely to say, which tell the
+ * transcription model how to spell them: every handle of a member still
+ * here, each agent's title, and every standing channel's name, each once
+ * and within the wire's bounds, as `dictation-keywords.ts` holds a task's.
+ */
+export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly string[] {
+  const here = chat.members.filter((member) => !member.left);
+  const named = [
+    ...here.map((member) => member.handle),
+    ...here.map((member) =>
+      member.agentId === undefined ? "" : (names.agents.get(member.agentId)?.title ?? ""),
+    ),
+    ...chat.channels
+      .filter((channel) => channel.kind !== CHANNEL_KIND.DM && !channel.archived)
+      .map((channel) => channelLabel(chat, names, channel)),
+  ];
+  const kept = new Set<string>();
+  for (const word of named) {
+    const trimmed = word.trim();
+    if (trimmed === "" || trimmed.length > DICTATION_BOUNDS.MAX_KEYWORD_CHARS) continue;
+    if (REFUSED_KEYWORD.test(trimmed)) continue;
+    kept.add(trimmed);
+    if (kept.size === DICTATION_BOUNDS.MAX_KEYWORDS) break;
+  }
+  return [...kept];
 }

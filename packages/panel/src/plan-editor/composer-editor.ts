@@ -373,6 +373,34 @@ function atWord(text: string, caret: number): TriggerWord | undefined {
 }
 
 /**
+ * The `#` word the caret ends: a channel's name as far as it is typed,
+ * through to the name's end; nothing inside a word (`a#b`), past the
+ * longest name, or in code, as chat reads a channel's name
+ * (`@luke/ui/chat-mention`). Note that the grammar is spelled here rather
+ * than imported, because that module reaches the chat's wire schemas,
+ * which this bundle must not carry.
+ */
+function hashWord(text: string, caret: number): TriggerWord | undefined {
+  let at = caret;
+  while (at > 0 && CHANNEL_CHARACTER.test(text[at - 1] ?? "")) at -= 1;
+  const start = at - 1;
+  if (text[start] !== CHANNEL_SIGIL) return undefined;
+  const query = text.slice(at, caret);
+  if (query.length > MAX_CHANNEL_CHARS) return undefined;
+  const before = text[start - 1];
+  if (before !== undefined && !/\s/u.test(before)) return undefined;
+  if (insideCode(text, start)) return undefined;
+  let end = caret;
+  while (end < text.length && CHANNEL_CHARACTER.test(text[end] ?? "")) end += 1;
+  return { start, query, end };
+}
+
+/** The sigil a channel is named by in a chat message, the characters of its name, and the most it spells (`CHAT_BOUNDS.MAX_KEY_CHARS`). */
+const CHANNEL_SIGIL = "#";
+const CHANNEL_CHARACTER = /[a-z0-9._-]/u;
+const MAX_CHANNEL_CHARS = 80;
+
+/**
  * The word a trigger character starts at the caret, where the character
  * stands in plain text: the report, and the range a pick replaces; nothing
  * while the box has no caret, or the caret ends no such word.
@@ -547,6 +575,8 @@ interface ComposerState {
   trigger: ReturnType<typeof triggerAt>;
   mentionReported: ComposerTrigger | undefined;
   mentionTrigger: ReturnType<typeof triggerAt>;
+  channelReported: ComposerTrigger | undefined;
+  channelTrigger: ReturnType<typeof triggerAt>;
   /** Whether the box takes mentions, as it was mounted. */
   readonly mentions: boolean;
   /** Each mark's place, carried through every change the document takes. */
@@ -565,9 +595,17 @@ function reported(view: EditorView, state: ComposerState, props: ComposerEditorP
   if (mentions === undefined) return;
   state.mentionTrigger = triggerAt(view, atWord);
   const mention = state.mentionTrigger?.trigger;
-  if (sameTrigger(mention, state.mentionReported)) return;
-  state.mentionReported = mention;
-  mentions.onTrigger(mention);
+  if (!sameTrigger(mention, state.mentionReported)) {
+    state.mentionReported = mention;
+    mentions.onTrigger(mention);
+  }
+  const { onChannelTrigger } = mentions;
+  if (onChannelTrigger === undefined) return;
+  state.channelTrigger = triggerAt(view, hashWord);
+  const channel = state.channelTrigger?.trigger;
+  if (sameTrigger(channel, state.channelReported)) return;
+  state.channelReported = channel;
+  onChannelTrigger(channel);
 }
 
 /**
@@ -742,6 +780,21 @@ function choseChip(editor: Editor, word: ReturnType<typeof triggerAt>, chip: PmN
   );
 }
 
+/** The word a trigger found written as the plain words given, a space after them unless one follows, the caret after the space. */
+function choseWords(editor: Editor, word: ReturnType<typeof triggerAt>, words: string): void {
+  if (word === undefined || words === "") return;
+  const { doc, schema } = editor.state;
+  const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
+  const tr = editor.state.tr.replaceWith(
+    word.from,
+    word.to,
+    schema.text(spaced ? words : `${words}${SPACE}`),
+  );
+  editor.view.dispatch(
+    tr.setSelection(TextSelection.create(tr.doc, word.from + words.length + 1)).scrollIntoView(),
+  );
+}
+
 /**
  * A mention made elsewhere laid in where the caret stands, over what is
  * selected, a space after it unless one follows, the caret after the
@@ -855,6 +908,8 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     trigger: undefined,
     mentionReported: undefined,
     mentionTrigger: undefined,
+    channelReported: undefined,
+    channelTrigger: undefined,
     mentions: props.mentions !== undefined,
     marks: new Map(),
   };
@@ -899,6 +954,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     insertQuote: (words) => laidInQuote(editor, state, props.maxLength, words),
     chooseSkillAtMention: (name) =>
       choseChip(editor, state.mentionTrigger, editor.schema.node(SKILL_NODE, { name })),
+    chooseWords: (words) => choseWords(editor, state.channelTrigger ?? state.mentionTrigger, words),
     setSkills: (skills) => {
       state.skills = skills;
       const tr = chipped(editor.state, skills, true);

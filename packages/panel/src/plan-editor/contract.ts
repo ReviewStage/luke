@@ -135,6 +135,8 @@ interface ComposerMentions {
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
   /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
+  /** The `#` word the caret ends, as it changes, where the box names channels (chat's); none where it names none. */
+  readonly onChannelTrigger?: ((trigger: ComposerTrigger | undefined) => void) | undefined;
 }
 
 /** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
@@ -291,6 +293,8 @@ export interface ComposerEditorHandle {
   readonly chooseMention: (mention: MentionNode) => void;
   /** The `@` word the caret ends written as the skill named, as a `/` word's pick writes it. */
   readonly chooseSkillAtMention: (name: string) => void;
+  /** The `#` word the caret ends, or else its `@` word, written as the plain words given (`#general`), a space after them. */
+  readonly chooseWords: (words: string) => void;
   /** A mention made elsewhere (a File tab's ⌥K) laid in where the caret stands, a space after it, the box focused; nothing where it has no room under the bound. */
   readonly insertMention: (mention: MentionNode) => void;
   /** The skills a `/name` names: each such word is drawn as a chip from now on. */
