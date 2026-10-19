@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -746,7 +747,7 @@ const NOTICE: CodingAgentMessage = {
 };
 
 /** The notice drawn in an agent's transcript, beside the fixture's chat or none, with Chat offered or not, every place it opens recorded. */
-function noticeDrawn(withChat: boolean, chatOn = true) {
+function noticeDrawn(withChat: boolean, chatOn = true, message: CodingAgentMessage = NOTICE) {
   const opened: ChatPlace[] = [];
   const read = fixtureChat({ fixtureMode: true }, 0);
   assert.ok(read);
@@ -766,7 +767,7 @@ function noticeDrawn(withChat: boolean, chatOn = true) {
       onRegistry(
         AtomRegistry.make(),
         createElement(AgentMessage, {
-          message: NOTICE,
+          message,
           plan: false,
           lead: AGENT_LEAD,
           moving: false,
@@ -822,6 +823,54 @@ test("where the window holds no chat, a notice's card says its sender and place 
     ),
     false,
   );
+});
+
+test("a notice another coding agent posted names it by its own chip in the handle's place, and where the window holds no chat its words are the message alone, without the lines telling the agent how to answer", () => {
+  const posted: CodingAgentMessage = {
+    ...NOTICE,
+    parts: [
+      {
+        type: "text",
+        text: [
+          "Chat · @agent-2 in #teammate-invitations (m 43):",
+          "Are you changing the memberships columns?",
+          chatNoticeReplyLine(43),
+        ].join("\n\n"),
+      },
+    ],
+    sentBy: {
+      name: "Invite expiry",
+      agent: true,
+      agentId: "agent-2",
+      model: "anthropic/claude-opus-5.5",
+    },
+  };
+  const { container } = noticeDrawn(false, true, posted);
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(card, "the notice draws as a card");
+  assert.equal(
+    card.querySelector(".chat-notice-from"),
+    null,
+    "no bare handle stands for the agent",
+  );
+  assert.match(card.querySelector(".chat-notice-head")?.textContent ?? "", /Invite expiry/u);
+  assert.equal(
+    card.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Are you changing the memberships columns?",
+  );
+});
+
+test("an inbox answer the developer sent reads back in their bubble without the item's key", () => {
+  const { container } = drawn({
+    id: "answer",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      { type: "text", text: 'Inbox answer on "Ship it?" (key ship-it): Approved.\n\nGo ahead.' },
+    ],
+  });
+  const said = container.textContent ?? "";
+  assert.match(said, /Inbox answer on "Ship it\?": Approved\./u);
+  assert.equal(said.includes("(key ship-it)"), false);
 });
 
 test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no card and nothing to open", () => {
