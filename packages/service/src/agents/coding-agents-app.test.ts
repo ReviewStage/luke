@@ -106,6 +106,8 @@ import {
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
+  chatNoticeAsksLine,
+  chatNoticeReplyLine,
   chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
@@ -5482,6 +5484,61 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         [false, true],
       );
     }),
+  );
+
+  it.effect(
+    "a post past a notice's bound is cut in its words alone, so the notice stays within a message's bound and ends on its closing lines whole, an ask's among them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three blocks a little short of their bound each run past what one notice may carry.
+        const block = (fill: string) => `@agent-2 ${fill.repeat(7_900)}`;
+        const blocks = ["a", "b", "c"].map((fill) => ({
+          type: CHAT_BLOCK.MARKDOWN,
+          text: block(fill),
+        }));
+        const told = (ask: boolean) =>
+          Effect.gen(function* () {
+            const post = {
+              authorMemberId: chat.first.member.id,
+              to: { channelId: chat.channel.id },
+              blocks,
+              mentions: ["agent-2"],
+              clientKey: randomUUID(),
+            };
+            const seq = ask
+              ? yield* Effect.gen(function* () {
+                  const posted = Result.getOrThrow(
+                    yield* postAsk(chat.owner, chat.workspace, {
+                      ...post,
+                      key: "long-ask",
+                      ask: { response: { type: CHAT_ASK.TEXT } },
+                    }),
+                  );
+                  yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+                    Effect.provide(chat.github.layer),
+                  );
+                  return posted.message.seq;
+                })
+              : (yield* postChat(chat.telling, post).pipe(Effect.provide(chat.github.layer)))
+                  .message.seq;
+            yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+            return { seq, text: String(eve.sent.at(-1)?.message.message) };
+          });
+        for (const ask of [false, true]) {
+          const { seq, text } = yield* told(ask);
+          assert.ok(text.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(text.length));
+          const closings = [
+            ...(ask ? [chatNoticeAsksLine(CHAT_ASK.TEXT)] : []),
+            chatNoticeReplyLine(seq),
+          ].join("\n\n");
+          assert.ok(text.endsWith(`\n\n${closings}`), text.slice(-200));
+          const words = chatNoticeWords(text);
+          assert.ok(words.startsWith(block("a")), "the words are cut from their end");
+          assert.equal(words.includes("Reply with"), false);
+        }
+      }),
   );
 
   it.effect(
