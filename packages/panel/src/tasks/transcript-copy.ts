@@ -1,4 +1,5 @@
 import type { Replay } from "@luke/features/agent-replay";
+import { chatNoticeWords } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
@@ -8,6 +9,7 @@ import {
   type CodingAgentBrief,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
+import { inboxLineWords } from "@luke/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -215,11 +217,20 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
   return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
 }
 
-/** One of the developer's messages as a copy reads it: their words. */
+/**
+ * One of the developer's messages as a copy reads it: their words, as the
+ * tab draws them, an inbox line without its item's key; and a chat notice,
+ * while the window offers Chat, as the message it tells of under who said
+ * it, without the lines that are the agent's alone.
+ */
 function developerTurn(message: CodingAgentMessage, chatOn: boolean): CopiedTurn {
-  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: messageWords(message) }] as const;
+  const words = messageWords(message);
   const notice = chatOn ? chatNoticeOf(message) : undefined;
-  if (notice !== undefined) return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
+  if (notice !== undefined) {
+    const blocks = [{ kind: COPIED_BLOCK.WORDS, text: chatNoticeWords(words) }] as const;
+    return { speaker: SPEAKER.CHAT, from: notice.from, blocks };
+  }
+  const blocks = [{ kind: COPIED_BLOCK.WORDS, text: inboxLineWords(words) }] as const;
   return { speaker: SPEAKER.DEVELOPER, blocks };
 }
 

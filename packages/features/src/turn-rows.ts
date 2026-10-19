@@ -68,6 +68,8 @@ export const CALL_KIND = {
   STOP_AGENT: "stop-agent",
   /** A coding agent renamed, moved to another model, pinned, or given other servers (`update_agent`), its row naming it by its chip. */
   UPDATE_AGENT: "update-agent",
+  /** One task of the workspace read with its plan (`read_task`), its row naming the task once answered. */
+  READ_TASK: "read-task",
   /** A section made in the member's sidebar (`create_section`), its row naming its title. */
   CREATE_SECTION: "create-section",
   /** A section of the member's sidebar deleted (`delete_section`), its row naming its title once answered. */
@@ -125,6 +127,7 @@ export const CALL_WORDS = {
   [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
   [CALL_KIND.STOP_AGENT]: { verb: "Stopped the coding agent", code: false },
   [CALL_KIND.UPDATE_AGENT]: { verb: "Changed the coding agent", code: false },
+  [CALL_KIND.READ_TASK]: { verb: "Read the task", code: false },
   [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
   [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
   [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },

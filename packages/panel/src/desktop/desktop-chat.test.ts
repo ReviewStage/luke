@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
+import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
@@ -9,6 +10,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { sideBundles } from "../bundle-loader.js";
 import { ChatComposer } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -17,8 +19,16 @@ import {
   stagedAnswer,
   stagedPost,
 } from "../tasks/chat-fixture.js";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopChat, TaskChatTab } from "./desktop-chat.js";
 
@@ -27,6 +37,9 @@ const AT = Date.parse("2026-10-14T10:00:00Z");
 
 // A message's words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+// The box is the agent box's editor, drawn at once where its bundle has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+beforeAll(installEditorLayout);
 
 let root: Root | undefined;
 
@@ -48,6 +61,7 @@ afterEach(() => {
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
 function mount(
   change: (chat: FixtureChat) => FixtureChat | undefined = (chat) => chat,
+  workspace: Workspace | undefined = undefined,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -63,6 +77,7 @@ function mount(
     return createElement(DesktopChat, {
       accountName: "Dean Stratakos",
       tasks: tasksControl({
+        workspace,
         chatView: {
           open: true,
           available: true,
@@ -202,19 +217,6 @@ test("an ask posted in a direct message is listed among For you's asks as a dire
   ]);
 });
 
-/** Types the words into a box, as a person typing them would leave it, the caret at their end. */
-function typeInto(field: HTMLTextAreaElement, text: string): void {
-  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function press(field: HTMLElement, key: string): void {
-  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
-}
-
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -222,10 +224,18 @@ async function settle(): Promise<void> {
   });
 }
 
-function boxNamed(page: HTMLElement, label: string): HTMLTextAreaElement {
-  const box = page.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`);
+/** The chat box whose editor is named `label`: what words are typed into and keys pressed in. */
+function boxNamed(page: HTMLElement, label: string): HTMLElement {
+  const box = [...page.querySelectorAll<HTMLElement>(".chat-composer")].find(
+    (each) => each.querySelector(`.composer-editor[aria-label="${label}"]`) !== null,
+  );
   assert.ok(box, `no box ${label}`);
   return box;
+}
+
+/** The words a box holds, as its editor shows them. */
+function boxWords(box: HTMLElement): string {
+  return (composerEditor(box).textContent ?? "").replaceAll("\u00a0", " ");
 }
 
 /** The text of every message's words in the pane, in order, a reply's indented. */
@@ -241,17 +251,17 @@ test("a channel's composer offers its members as an @ is typed, writes the one c
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
+  typeInComposer(box, "@age");
   const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
   assert.deepEqual(options, ["@agent-1Add teammate invitations", "@agent-2Invite emails"]);
-  press(box, "ArrowDown");
-  press(box, "Enter");
-  assert.equal(box.value, "@agent-2 ");
+  pressInComposer(box, "ArrowDown");
+  pressInComposer(box, "Enter");
+  assert.equal(boxWords(box), "@agent-2 ");
   assert.equal(page.querySelector('[role="listbox"]'), null);
-  typeInto(box, "@agent-2 hold the template until #214 lands");
-  press(box, "Enter");
+  typeInComposer(box, "hold the template until #214 lands");
+  pressInComposer(box, "Enter");
   await settle();
-  assert.equal(box.value, "");
+  assert.equal(boxWords(box), "");
   assert.equal(words(page).at(-1), "@agent-2 hold the template until #214 lands");
   assert.equal(stream(page).at(-1), "Dean Stratakos");
 });
@@ -304,8 +314,8 @@ test("an approval is answered by its press, and a reply typed under an opened th
   );
   act(() => toggle?.click());
   const reply = boxNamed(page, "Reply in thread");
-  typeInto(reply, "Thanks, both.");
-  press(reply, "Enter");
+  typeInComposer(reply, "Thanks, both.");
+  pressInComposer(reply, "Enter");
   await settle();
   assert.deepEqual(
     words(page).filter((line) => line.startsWith("  ↳ ")),
@@ -378,27 +388,21 @@ test("an Enter that confirms what an input method composed leaves the mention li
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
-  act(() =>
-    box.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
-    ),
-  );
-  assert.equal(box.value, "@age");
-  assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
+  typeInComposer(box, "@age");
+  pressInComposer(box, "Enter", { isComposing: true, keyCode: 229 });
+  // Note that the editor reads its selection back from jsdom's DOM on a composing key, which jsdom does not keep, so only the words are asserted.
+  assert.equal(boxWords(box), "@age");
 });
 
 test("the arrows and Escape an input method composes with move its candidates, never the mention list", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
   const box = boxNamed(page, "Message #teammate-invitations");
-  typeInto(box, "@age");
+  typeInComposer(box, "@age");
   const highlighted = () => page.querySelector('[role="option"][aria-selected="true"]')?.id;
   const before = highlighted();
   for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
-    act(() =>
-      box.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true })),
-    );
+    pressInComposer(box, key, { isComposing: true, keyCode: 229 });
   }
   assert.equal(highlighted(), before, "the highlight stays where it was");
   assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
@@ -439,21 +443,166 @@ test("a post still out names the composer's send Sending and busy, and the box e
   root = createRoot(container);
   act(() =>
     root?.render(
-      createElement(ChatComposer, {
-        label: "Message #general",
-        hints: [],
-        targets: [],
-        onSend: () => gate.promise,
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ChatComposer, {
+          label: "Message #general",
+          hints: [],
+          targets: [],
+          keywords: [],
+          onSend: () => gate.promise,
+        }),
+      ),
     ),
   );
   const box = boxNamed(container, "Message #general");
-  typeInto(box, "Shipping today.");
-  press(box, "Enter");
+  typeInComposer(box, "Shipping today.");
+  pressInComposer(box, "Enter");
   const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
   assert.equal(sending?.getAttribute("aria-busy"), "true");
   act(() => gate.resolve(undefined));
   await settle();
   assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
-  assert.equal(box.value, "");
+  assert.equal(boxWords(box), "");
+});
+
+test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
+  const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+  const page = mount((chat) => {
+    const handle = (name: string) => chat.answer.members.find((each) => each.handle === name)?.id;
+    const [one, two] = [handle("agent-1"), handle("agent-2")];
+    const first = chat.answer.messages[0];
+    if (one === undefined || two === undefined || first === undefined) return undefined;
+    const { parentId: _root, ask: _ask, ...sample } = first;
+    const top = Math.max(...chat.answer.messages.map((each) => each.seq)) + 1;
+    return {
+      ...chat,
+      answer: {
+        ...chat.answer,
+        channels: [
+          ...chat.answer.channels,
+          { id: BETWEEN, kind: CHANNEL_KIND.DM, members: [one, two], archived: false },
+        ],
+        messages: [
+          ...chat.answer.messages,
+          {
+            ...sample,
+            id: BETWEEN,
+            seq: top,
+            touchedSeq: top,
+            channelId: BETWEEN,
+            authorId: one,
+            mentions: [],
+          },
+          {
+            ...sample,
+            id: "6c7d8e9f-0a1b-4c2d-9e3f-4a5b6c7d8e9f",
+            seq: top + 1,
+            touchedSeq: top + 1,
+            channelId: BETWEEN,
+            authorId: two,
+            mentions: [],
+            ask: {
+              key: "between",
+              revision: 1,
+              status: ASK_STATUS.OPEN,
+              response: { type: CHAT_ASK.APPROVAL },
+              needsReply: true,
+            },
+          },
+        ],
+      },
+    };
+  });
+  // Nothing in it waits on the developer, so For you holds what it held.
+  assert.equal(rail(page)[0], "▸ For you (4)");
+  act(() => railRow(page, "agent-1 ↔ agent-2").click());
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "@agent-1 ↔ @agent-2");
+  assert.equal(page.querySelector(".chat-composer"), null);
+  assert.match(page.textContent ?? "", /Only @agent-1 and @agent-2 post in this conversation\./u);
+  assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
+  // Its open ask reads as waiting, with nothing to answer it by.
+  const ask = page.querySelector('.chat-ask[data-status="open"]');
+  assert.match(ask?.textContent ?? "", /Waiting on an answer/u);
+  assert.equal(ask?.querySelector("button"), null);
+});
+
+test("a # at the start of a word offers the channels, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "see #bill");
+  const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+  assert.deepEqual(options, ["#billing-export"]);
+  pressInComposer(box, "Enter");
+  assert.equal(boxWords(box), "see #billing-export ");
+  assert.ok(box.querySelector('button[aria-label="Dictate"]'), "the box takes a dictation");
+});
+
+test("where the editor's bundle could not be loaded, the box is a plain field that still names a member and posts", async () => {
+  const sent: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const bundles = sideBundles({
+    planEditor: () => Promise.reject(new Error("The chunk could not be loaded.")),
+  });
+  await act(async () =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          bundles,
+          createElement(ChatComposer, {
+            label: "Message #general",
+            hints: [],
+            targets: [{ sigil: "@", name: "agent-1", detail: undefined }],
+            keywords: [],
+            onSend: (text) => {
+              sent.push(text);
+              return Promise.resolve(undefined);
+            },
+          }),
+        ),
+      ),
+    ),
+  );
+  const field = container.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Message #general"]',
+  );
+  assert.ok(field, "the plain field stands in");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "@agent-1 ship it");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await settle();
+  assert.deepEqual(sent, ["@agent-1 ship it"]);
+  assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+});
+
+test("in a listed workspace, an agent chosen from the @ list is written as its chip, sent as its link, and the message names it", async () => {
+  const acme: Workspace = {
+    id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  const page = mount((chat) => chat, acme);
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "@agent-2");
+  pressInComposer(box, "Enter");
+  assert.ok(box.querySelector("[data-mention-ref]"), "the agent stands in the box as its chip");
+  typeInComposer(box, "take the template");
+  pressInComposer(box, "Enter");
+  await settle();
+  const last = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /take the template/u);
+  assert.ok(
+    last?.querySelector(".chat-words [data-mention-ref]"),
+    "the sent message draws it as its chip",
+  );
 });

@@ -724,6 +724,22 @@ export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text:
   return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
 }
 
+/** An answer's or a thread message's first line, as `inboxAnswerMessage` and `inboxThreadMessage` write it. */
+const INBOX_LINE_HEAD = new RegExp(
+  `^(${INBOX_ANSWER_LEAD}|${INBOX_MESSAGE_LEAD}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
+  "u",
+);
+
+/**
+ * An inbox answer or thread message as the developer reads it back in the
+ * agent's transcript: its first line without the item's key, which names the
+ * item to the agent and says nothing the title beside it does not to a
+ * person. Any other line is answered as it is.
+ */
+export function inboxLineWords(text: string): string {
+  return text.replace(INBOX_LINE_HEAD, "$1 on $2:");
+}
+
 /** Whether a response read off the wire is one this build knows, which its type decides. */
 export function knownResponse(response: InboxReadResponse): response is InboxResponse {
   return Object.values<string>(INBOX_RESPONSE).includes(response.type);

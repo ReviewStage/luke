@@ -22,7 +22,14 @@ import {
   SETTINGS_VIEW,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
+import {
+  APP_COMMAND,
+  APP_SHORTCUTS,
+  FILES_CHANGED_GROUP_TITLE,
+  FILES_CHANGED_KEYS_LISTED,
+  FILES_CHANGED_SHORTCUTS,
+  shownShortcutGroups,
+} from "@luke/settings/shortcuts";
 import { NAV_CURRENT, NavItem, SearchField } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
@@ -305,6 +312,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
       })),
     ),
+    // Files changed's own keys, listed under the window's.
+    ...FILES_CHANGED_KEYS_LISTED.map((key) => ({
+      id: key,
+      label: FILES_CHANGED_SHORTCUTS[key].label,
+      page: SETTINGS_VIEW.SHORTCUTS,
+      haystack: [
+        FILES_CHANGED_SHORTCUTS[key].label,
+        WINDOW_SHORTCUT_WORDS,
+        FILES_CHANGED_GROUP_TITLE,
+      ],
+    })),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }

@@ -9,6 +9,7 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import type { MentionPlace } from "@luke/features/mention-link";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -34,11 +35,13 @@ import {
   type ChatWho,
   channelLabel,
   channelThreads,
+  chatKeywords,
   chatTargets,
   chatWho,
   type ForYouEntry,
   forYou,
   placeChannel,
+  postsIn,
   postTarget,
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon } from "lucide-react";
@@ -83,6 +86,10 @@ const NOTHING_WAITS = "Nothing waits on you.";
 
 /** What a channel says before anything is posted in it. */
 const NOTHING_POSTED = "Nothing posted here yet.";
+
+/** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
+const ARCHIVED_CHANNEL = "This channel is archived, so nothing more is posted in it.";
+const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
 
 /** What a row says of a block this build does not know. */
 const NEWER_LUKE = "Open this in a newer Luke to see the rest.";
@@ -172,6 +179,10 @@ interface MessageContext {
   readonly names: ChatNames;
   readonly now: number;
   readonly targets: readonly ChatTarget[];
+  /** The words a dictation in the chat is likely to say. */
+  readonly keywords: readonly string[];
+  /** The workspace a chip's link is written in. */
+  readonly mentionPlace: MentionPlace | undefined;
   readonly openLink: (url: string) => void;
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
@@ -191,11 +202,13 @@ function Body({
   ));
   const { ask } = message;
   if (ask === undefined) return <>{blocks}</>;
+  const home = context.chat.channels.find((channel) => channel.id === message.channelId);
   return (
     <AskCard
       message={message}
       ask={ask}
       mine={message.authorId === context.chat.self}
+      answers={home === undefined || postsIn(context.chat, home)}
       blocks={blocks}
       nameOf={(memberId) => chatWho(context.chat, context.names, memberId).name}
       onAnswer={context.onAnswer}
@@ -271,6 +284,9 @@ function ThreadRow({
   const [open, setOpen] = useState(false);
   const { message, replies } = thread;
   const who = chatWho(context.chat, context.names, message.authorId);
+  const home = context.chat.channels.find((channel) => channel.id === message.channelId);
+  // A thread in a channel the reader cannot post in reads as it stands, with no box to reply in.
+  const canReply = home === undefined || postsIn(context.chat, home);
   const toggle = (
     <TextButton
       tone={TEXT_BUTTON_TONE.ACCENT}
@@ -282,6 +298,17 @@ function ThreadRow({
   );
   // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
+  if (quiet && !canReply) {
+    return (
+      <li className="chat-message" data-seq={message.seq}>
+        <MemberMark who={who} />
+        <div className="chat-message-body">
+          <Byline who={who} at={message.postedAt} where={where} now={context.now} />
+          <Body message={message} context={context} />
+        </div>
+      </li>
+    );
+  }
   return (
     <li className="chat-message" data-seq={message.seq}>
       <MemberMark who={who} />
@@ -304,11 +331,13 @@ function ThreadRow({
                 ))}
               </ul>
             ) : null}
-            {open ? (
+            {open && canReply ? (
               <ChatComposer
                 label="Reply in thread"
                 hints={[]}
                 targets={context.targets}
+                keywords={context.keywords}
+                place={context.mentionPlace}
                 compact
                 onSend={(text) => context.onPost({ text, replyTo: message.seq })}
               />
@@ -366,8 +395,16 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
   }
 }
 
-/** A channel's title as its head says it: `# name`, or a DM's `@handle`. */
+/** A direct message's two, each by their handle, as its title and its foot name them where the reader is neither. */
+function dmPair(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  return (channel.members ?? []).map((id) => `@${chatWho(chat, names, id).handle}`).join(" and ");
+}
+
+/** A channel's title as its head says it: `# name`, a DM's `@handle`, or a DM between two others' `@a ↔ @b`. */
 function channelTitle(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  if (channel.kind === CHANNEL_KIND.DM && !(channel.members ?? []).includes(chat.self)) {
+    return (channel.members ?? []).map((id) => `@${chatWho(chat, names, id).handle}`).join(" ↔ ");
+  }
   const label = channelLabel(chat, names, channel);
   return channel.kind === CHANNEL_KIND.DM ? `@${label}` : `# ${label}`;
 }
@@ -377,6 +414,7 @@ export function ChatPane({
   chat,
   names,
   place,
+  mentionPlace,
   now,
   openLink,
   onPost,
@@ -385,6 +423,8 @@ export function ChatPane({
   chat: ChatAnswer;
   names: ChatNames;
   place: ChatPlace;
+  /** The workspace a chip's link is written in; none where it is not known yet, when members are written as their handles. */
+  mentionPlace?: MentionPlace | undefined;
   now: number;
   openLink: (url: string) => void;
   /** Posts a message; answers why it was refused, or nothing once it is taken. */
@@ -393,7 +433,18 @@ export function ChatPane({
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
 }): React.JSX.Element {
   const targets = chatTargets(chat, names);
-  const context: MessageContext = { chat, names, now, targets, openLink, onPost, onAnswer };
+  const keywords = chatKeywords(chat, names);
+  const context: MessageContext = {
+    chat,
+    names,
+    now,
+    targets,
+    keywords,
+    mentionPlace,
+    openLink,
+    onPost,
+    onAnswer,
+  };
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
@@ -447,13 +498,23 @@ export function ChatPane({
         </ScrollArea>
       )}
       {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
-      <ChatComposer
-        key={channel.id}
-        label={`Message ${postTarget(chat, names, channel)}`}
-        hints={COMPOSER_HINTS}
-        targets={targets}
-        onSend={(text) => onPost({ text, to: postTarget(chat, names, channel) })}
-      />
+      {postsIn(chat, channel) ? (
+        <ChatComposer
+          key={channel.id}
+          label={`Message ${postTarget(chat, names, channel)}`}
+          hints={COMPOSER_HINTS}
+          targets={targets}
+          keywords={keywords}
+          place={mentionPlace}
+          onSend={(text) => onPost({ text, to: postTarget(chat, names, channel) })}
+        />
+      ) : (
+        <div className="chat-closed-foot">
+          <Text tone={TEXT_TONE.MUTED}>
+            {channel.archived ? ARCHIVED_CHANNEL : OTHERS_DM(dmPair(chat, names, channel))}
+          </Text>
+        </div>
+      )}
     </section>
   );
 }

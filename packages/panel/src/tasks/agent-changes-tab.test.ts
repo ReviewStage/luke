@@ -20,9 +20,16 @@ import {
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
 } from "@luke/features/pull-request-write-wire";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  APP_COMMAND,
+  FILES_CHANGED_KEYS,
+  FILES_CHANGED_SHORTCUTS,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
 import { DisclosureFind } from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -42,6 +49,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
+import { blobShaOf } from "./changes-model.js";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -238,21 +246,27 @@ function InboxBeside({ onNext }: { onNext: () => void }): null {
 /** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
 let registry = AtomRegistry.make();
 
+/** How a test draws the view: its threads, its tree, what stands beside it, the task's repository, and the agents as the panel holds them. */
+interface DrawOptions {
+  readonly threads?: ChangesThreads;
+  readonly treeOpen?: boolean;
+  readonly beside?: ReactElement;
+  readonly repository?: string;
+  readonly control?: typeof control;
+  /** Whether a find looks through the tab, which draws its folds' closed bodies hidden. */
+  readonly finding?: boolean;
+  /** Whether the view is the Pull request tab's chosen one; it is unless told. */
+  readonly shown?: boolean;
+}
+
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
-async function redraw(
-  options: {
-    threads?: ChangesThreads;
-    treeOpen?: boolean;
-    beside?: ReactElement;
-    finding?: boolean;
-  } = {},
-): Promise<DiffListProps> {
+async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab.js");
   const tab = createElement(AgentChangesTab, {
     agentId: AGENT.id,
-    control,
-    shown: true,
-    repository: "acme/relay",
+    control: options.control ?? control,
+    shown: options.shown ?? true,
+    repository: options.repository ?? "acme/relay",
     tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
   });
@@ -275,14 +289,7 @@ async function redraw(
 }
 
 /** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
-async function drawTab(
-  options: {
-    threads?: ChangesThreads;
-    treeOpen?: boolean;
-    beside?: ReactElement;
-    finding?: boolean;
-  } = {},
-): Promise<DiffListProps> {
+async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   act(() => root?.unmount());
   document.body.innerHTML = "";
   registry = AtomRegistry.make();
@@ -634,6 +641,105 @@ test("a key typed into the tree's search is the field's", async () => {
 
   assert.equal(press(field, { key: "j" }), false);
   assert.deepEqual(revealed, []);
+});
+
+/** A press of a chord as the keyboard sends it: the key's character and place, Shift where the chord holds it. */
+function chordPress(chord: ShortcutChord): KeyboardEventInit {
+  return { key: chord.key.key, code: chord.key.code, shiftKey: chord.shift === true };
+}
+
+/** `?` as a US keyboard sends it: ⇧ on the slash key. */
+const QUESTION_MARK: KeyboardEventInit = { key: "?", code: "Slash", shiftKey: true };
+
+/** The sheet of the view's keys, where it stands. */
+function keysSheet(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+}
+
+test("every key of Files changed's table answers inside the view", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  await drawTab();
+
+  const unanswered = FILES_CHANGED_KEYS.filter((key) => {
+    // Each key is pressed with a file stood on, which Escape needs.
+    press(listBox(), { key: "j" });
+    return !press(listBox(), chordPress(FILES_CHANGED_SHORTCUTS[key].chord));
+  });
+  assert.deepEqual(unanswered, []);
+});
+
+test("? inside the view opens a sheet of its keys by group, which Escape or ? again puts away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+
+  assert.ok(press(listBox(), QUESTION_MARK), "? is the view's");
+  const sheet = keysSheet() ?? assert.fail("the sheet opens");
+  assert.equal(
+    document.getElementById(sheet.getAttribute("aria-labelledby") ?? "")?.textContent,
+    "Keyboard shortcuts",
+  );
+  const groups = [...sheet.querySelectorAll("section[aria-labelledby]")].map((section) => [
+    document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent,
+    [...section.querySelectorAll(".luke-settings-row")].map((row) => [
+      row.querySelector(".luke-settings-row-label")?.textContent,
+      row.querySelector("kbd")?.textContent,
+    ]),
+  ]);
+  assert.deepEqual(groups, [
+    ["General", [["Show keyboard shortcuts", "⇧/"]]],
+    [
+      "Navigation",
+      [
+        ["Next file", "J"],
+        ["Previous file", "K"],
+        ["Collapse or expand file", ";"],
+        ["Collapse or expand all files", "⇧;"],
+        ["Clear file focus", "Esc"],
+      ],
+    ],
+    [
+      "Review",
+      [
+        ["Toggle viewed and go to next file", "V"],
+        ["Minimize or show inline comments", "I"],
+      ],
+    ],
+  ]);
+
+  press(sheet, { key: "Escape" });
+  assert.equal(keysSheet(), null, "Escape puts the sheet away");
+  press(listBox(), QUESTION_MARK);
+  press(keysSheet() ?? assert.fail("the sheet opens again"), QUESTION_MARK);
+  assert.equal(keysSheet(), null, "? again puts it away");
+});
+
+test("the sheet goes with the view when another of the Pull request tab's views is chosen, and stays away on coming back", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+  press(listBox(), QUESTION_MARK);
+  assert.ok(keysSheet(), "the sheet opens");
+
+  await redraw({ shown: false });
+  assert.equal(keysSheet(), null, "hidden with the view");
+  await redraw({ shown: true });
+  assert.equal(keysSheet(), null, "not opened again by coming back");
+});
+
+test("? outside Files changed, or typed into its tree's search, opens no sheet", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab({
+    treeOpen: true,
+    beside: createElement(InboxBeside, { onNext: () => undefined }),
+  });
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+
+  assert.equal(press(document.body, QUESTION_MARK), false, "outside the view ? is nobody's");
+  assert.equal(press(field, QUESTION_MARK), false, "in the search ? is typed");
+  assert.equal(keysSheet(), null);
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
@@ -1518,4 +1624,198 @@ test("minimized, the threads on no line take a row of their own for their chip, 
       .querySelector(".diff-thread-chip-row");
   assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
+});
+
+/** The seats file at the pull request's head, ten lines, its fifth changed, and its patch as GitHub sends it. */
+const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join("\n")}\n`;
+const BASE_TEXT = HEAD_TEXT.replace("five", "5");
+const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
+
+/** Answers each read of a file whole as given, keeping every read asked. */
+function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
+  const asked: Act[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      asked.push(request);
+      const outcome: ActOutcome = {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
+      };
+      return Promise.resolve(outcome);
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+test("a changed file is read whole at the pull request's head the first time its gaps are opened, once, its text before turned back from it", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  const asked = answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  const readTexts = props.readTexts ?? assert.fail("the list is handed a way to read files whole");
+  assert.equal(asked.length, 0, "nothing is read before a gap is opened");
+
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  await readTexts("src/seats.ts");
+  assert.equal(await readTexts("src/new.ts"), undefined, "an added file has no gaps to open");
+  assert.deepEqual(
+    asked.flatMap((request) => (request.kind === ACT_KIND.TASKS_FILE ? [request.payload] : [])),
+    [
+      {
+        taskId: AGENT.planId,
+        path: "src/seats.ts",
+        firstLine: 1,
+        lastLine: 1,
+        raw: true,
+        ref: "a".repeat(40),
+      },
+    ],
+  );
+});
+
+test("a file the service will not read whole, or whose text is not the one its patch was made against, opens no gap", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.MISSING }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.equal(await readTexts("src/seats.ts"), undefined);
+  assert.equal(await readTexts("src/moved.ts"), undefined);
+});
+
+test("no file is read whole for an agent on no task, a head not named, or a task whose repository is not the pull request's", async () => {
+  files = [changed("src/seats.ts", { patch: HEAD_PATCH })];
+  commits = { headSha: "a".repeat(40) };
+  assert.equal(
+    (await drawTab({ repository: "acme/other" })).readTexts,
+    undefined,
+    "another repository",
+  );
+  const taskless = codingAgentsControl({
+    agents: [{ ...AGENT, planId: null }],
+    agentIds: [AGENT.id],
+    models: [],
+    readChanges: control.readChanges,
+  });
+  assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
+  commits = {};
+  assert.equal((await drawTab()).readTexts, undefined, "no head");
+  commits = { headSha: "a".repeat(40) };
+  assert.notEqual(
+    (await drawTab({ repository: "ACME/Relay" })).readTexts,
+    undefined,
+    "the same repository, whatever its case",
+  );
+});
+
+test("a file whose gaps are never read whole offers none: a secret one, and one not changed in place", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("config/.env.local", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  assert.deepEqual(
+    props.files.map((file) => [file.path, file.expandable]),
+    [
+      ["config/.env.local", false],
+      ["src/new.ts", false],
+      ["src/seats.ts", true],
+    ],
+  );
+});
+
+test("a file whose read is refused closes its gaps and says why, once, above its first hunk", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.NOT_TEXT }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  await readTexts("src/seats.ts");
+  await readTexts("src/moved.ts");
+  await flush();
+  const drawn = lastDrawn();
+  assert.deepEqual(
+    drawn.files.map((file) => [file.path, file.expandable]),
+    [
+      ["src/moved.ts", false],
+      ["src/seats.ts", false],
+    ],
+  );
+  const why = (path: string) => {
+    const key = drawn.files.find((file) => file.path === path)?.annotations[0]?.key ?? "";
+    return drawn.renderAnnotation(path, key).textContent;
+  };
+  assert.equal(
+    why("src/seats.ts"),
+    "Can't load more of this file: it's too large or not plain text.",
+  );
+  assert.equal(
+    why("src/moved.ts"),
+    "Can't load more of this file: it changed since these changes were read.",
+  );
+});
+
+test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+  files = [changed("src/seats.ts")];
+  await drawTab();
+  const hintOver = (long: boolean) => {
+    const wrapper = listBox().appendChild(document.createElement("div"));
+    wrapper.setAttribute("data-separator-wrapper", "");
+    const arrow = wrapper.appendChild(document.createElement("div"));
+    arrow.setAttribute("data-expand-button", "");
+    if (long)
+      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
+    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    const words = document.querySelector('[role="tooltip"]')?.textContent;
+    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+    wrapper.remove();
+    return words;
+  };
+  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
+  assert.equal(hintOver(false), "Show these lines");
+});
+
+test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
+  commits = { headSha: "a".repeat(40) };
+  const listedAs = await blobShaOf(HEAD_TEXT);
+  // The same hunks, with a line far from them changed by a later push.
+  const pushed = HEAD_TEXT.replace("10", "ten");
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+    changed("src/moved.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/seats.ts" ? HEAD_TEXT : pushed,
+    },
+  }));
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  assert.equal(await readTexts("src/moved.ts"), undefined);
 });

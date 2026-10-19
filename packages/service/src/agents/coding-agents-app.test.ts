@@ -106,6 +106,9 @@ import {
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
+  chatNoticeAsksLine,
+  chatNoticeReplyLine,
+  chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
   mentionedHandles,
@@ -2606,6 +2609,53 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         );
 
         assert.equal(changes.pullRequest?.headSha, LINE_HEAD);
+      }),
+  );
+
+  it.effect(
+    "each changed file names the git object its contents after are, which a read of it whole is checked against; a removed file names none",
+    () =>
+      Effect.gen(function* () {
+        const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
+        const blob = "b".repeat(40);
+        const listed: RepositoryScript = (sent) =>
+          new URL(sent.url).pathname.endsWith(`/pulls/${PUBLISHED.number}/files`)
+            ? Response.json([
+                {
+                  filename: "src/seats.ts",
+                  status: "modified",
+                  additions: 1,
+                  deletions: 1,
+                  changes: 2,
+                  patch: "@@ -1 +1 @@\n-a\n+b",
+                  sha: blob,
+                },
+                {
+                  filename: "src/gone.ts",
+                  status: "removed",
+                  additions: 0,
+                  deletions: 1,
+                  changes: 1,
+                  patch: "@@ -1 +0,0 @@\n-a",
+                  sha: "0".repeat(40),
+                },
+              ])
+            : headed(sent);
+        const { owner, agent, ask } = yield* published({ repository: listed });
+
+        const changes = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        );
+
+        assert.deepEqual(
+          changes.pullRequest?.files.map((file) => [file.path, file.blobSha]),
+          [
+            ["src/seats.ts", blob],
+            ["src/gone.ts", undefined],
+          ],
+        );
       }),
   );
 
@@ -5172,6 +5222,11 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           chat_seq: sent.message.seq,
           from: "agent-1",
         });
+        // The window reads the notice back as the words posted alone, its head and closing lines its own.
+        const noticeLine = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
           // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
@@ -5476,6 +5531,61 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         [false, true],
       );
     }),
+  );
+
+  it.effect(
+    "a post past a notice's bound is cut in its words alone, so the notice stays within a message's bound and ends on its closing lines whole, an ask's among them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three blocks a little short of their bound each run past what one notice may carry.
+        const block = (fill: string) => `@agent-2 ${fill.repeat(7_900)}`;
+        const blocks = ["a", "b", "c"].map((fill) => ({
+          type: CHAT_BLOCK.MARKDOWN,
+          text: block(fill),
+        }));
+        const told = (ask: boolean) =>
+          Effect.gen(function* () {
+            const post = {
+              authorMemberId: chat.first.member.id,
+              to: { channelId: chat.channel.id },
+              blocks,
+              mentions: ["agent-2"],
+              clientKey: randomUUID(),
+            };
+            const seq = ask
+              ? yield* Effect.gen(function* () {
+                  const posted = Result.getOrThrow(
+                    yield* postAsk(chat.owner, chat.workspace, {
+                      ...post,
+                      key: "long-ask",
+                      ask: { response: { type: CHAT_ASK.TEXT } },
+                    }),
+                  );
+                  yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+                    Effect.provide(chat.github.layer),
+                  );
+                  return posted.message.seq;
+                })
+              : (yield* postChat(chat.telling, post).pipe(Effect.provide(chat.github.layer)))
+                  .message.seq;
+            yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+            return { seq, text: String(eve.sent.at(-1)?.message.message) };
+          });
+        for (const ask of [false, true]) {
+          const { seq, text } = yield* told(ask);
+          assert.ok(text.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(text.length));
+          const closings = [
+            ...(ask ? [chatNoticeAsksLine(CHAT_ASK.TEXT)] : []),
+            chatNoticeReplyLine(seq),
+          ].join("\n\n");
+          assert.ok(text.endsWith(`\n\n${closings}`), text.slice(-200));
+          const words = chatNoticeWords(text);
+          assert.ok(words.startsWith(block("a")), "the words are cut from their end");
+          assert.equal(words.includes("Reply with"), false);
+        }
+      }),
   );
 
   it.effect(
@@ -7853,6 +7963,39 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a person's post that names an agent by its mention link tells the agent, which reads the link as the agent's own @handle",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const named = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: chat.agent.agentId ?? "" },
+          "Fix the login",
+          { workspace: "acme", repository: null },
+        );
+        const sent = yield* chat.wrote({
+          text: `${named} take the table, please.`,
+          clientKey: randomUUID(),
+        });
+        assert.ok("posted" in sent);
+        assert.deepEqual(sent.receipt, { told: ["agent-1"], held: [], left: [], unresolved: [] });
+        assert.equal(eve.sent.length, 1);
+        const notice = JSON.stringify(eve.sent.map(({ message }) => message.message));
+        assert.match(notice, /@agent-1 take the table, please\./u);
+        assert.doesNotMatch(notice, /tryluke\.dev/u);
+        // A chip naming no member comes back unresolved under its label, as a handle does, without its `@`.
+        const ghost = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: randomUUID() },
+          "Ghost",
+          { workspace: "acme", repository: null },
+        );
+        const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
+        assert.ok("posted" in unknown);
+        assert.deepEqual(unknown.receipt.unresolved, ["Ghost"]);
       }),
   );
 

@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   test: {
     name: "desktop",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     setupFiles: ["../../packages/panel/src/testing/resize-observer.ts"],
     server: { deps: { inline: ["streamdown"] } },
   },

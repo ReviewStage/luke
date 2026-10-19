@@ -1,3 +1,4 @@
+import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -10,6 +11,8 @@ import {
   MEMBER_KIND,
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
+import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -179,8 +182,28 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
   return { member, name, handle, agent, taskName };
 }
 
-/** What a channel is called: a channel's own name, a direct message's other member's handle. */
+/** Whether the reader is one of a direct message's two; a channel holds no such pair. */
+function inDm(chat: ChatAnswer, channel: ChatChannel): boolean {
+  return channel.members?.includes(chat.self) ?? false;
+}
+
+/**
+ * Whether the reader may post in a channel: one standing, and a direct
+ * message only where they are one of its two, as the service holds them
+ * to. Note that a reader shown a direct message between two others has
+ * no box to write in it, since a post there would open their own with
+ * one of the two instead.
+ */
+export function postsIn(chat: ChatAnswer, channel: ChatChannel): boolean {
+  if (channel.archived) return false;
+  return channel.kind !== CHANNEL_KIND.DM || inDm(chat, channel);
+}
+
+/** What a channel is called: a channel's own name, a direct message's other member's handle, or both of its two's where the reader is neither. */
 export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  if (channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel)) {
+    return (channel.members ?? []).map((id) => chatWho(chat, names, id).handle).join(" ↔ ");
+  }
   const other = otherOf(chat, channel);
   if (other !== undefined) return chatWho(chat, names, other).handle;
   return (
@@ -253,7 +276,8 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
   const channels = new Map(chat.channels.map((channel) => [channel.id, channel]));
   const entries = chat.messages.toSorted(bySeq).flatMap((message): ForYouEntry[] => {
     const channel = channels.get(message.channelId);
-    if (channel === undefined || channel.archived) return [];
+    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
+    if (channel === undefined || !postsIn(chat, channel)) return [];
     const reason = waitingReason(chat, message, channel);
     if (reason === undefined) return [];
     const replies = chat.messages.filter((reply) => reply.parentId === message.id).toSorted(bySeq);
@@ -280,13 +304,37 @@ export function postTarget(chat: ChatAnswer, names: ChatNames, channel: ChatChan
 }
 
 /** What the composer offers to name: every member who has not left but the reader, and every channel standing that is not a DM. */
+/**
+ * The mention a chip writes a member as: a person by their account, an
+ * agent by its id. Note that Luke has none here: every task's Luke answers
+ * to `@luke`, which the service reads by the channel's task, so he is
+ * written as that word rather than as one task's link.
+ */
+function mentionOf(member: ChatMember): ChatMemberMention | undefined {
+  if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
+    return { kind: MENTION_KIND.PERSON, userId: member.userId };
+  }
+  if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
+    // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
+    return member.planId === undefined
+      ? { kind: MENTION_KIND.AGENT, agentId: member.agentId }
+      : { kind: MENTION_KIND.AGENT, taskId: member.planId, agentId: member.agentId };
+  }
+  return undefined;
+}
+
 export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTarget[] {
   const members = chat.members
     .filter((member) => !member.left && member.id !== chat.self)
     .map((member): ChatTarget => {
       const who = chatWho(chat, names, member.id);
       const detail = member.kind === MEMBER_KIND.HUMAN ? undefined : who.name;
-      return { sigil: CHAT_TARGET_SIGIL.MEMBER, name: member.handle, detail };
+      return {
+        sigil: CHAT_TARGET_SIGIL.MEMBER,
+        name: member.handle,
+        detail,
+        mention: mentionOf(member),
+      };
     });
   const channels = chat.channels
     .filter((channel) => !channel.archived && channel.kind !== CHANNEL_KIND.DM)
@@ -303,4 +351,35 @@ export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTa
     (target, at) =>
       offered.findIndex((each) => each.sigil === target.sigil && each.name === target.name) === at,
   );
+}
+
+/** What the wire refuses in a dictation's word: a line break, or an angle bracket. */
+const REFUSED_KEYWORD = /[<>\r\n]/u;
+
+/**
+ * The words a dictation in the chat is likely to say, which tell the
+ * transcription model how to spell them: every handle of a member still
+ * here, each agent's title, and every standing channel's name, each once
+ * and within the wire's bounds, as `dictation-keywords.ts` holds a task's.
+ */
+export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly string[] {
+  const here = chat.members.filter((member) => !member.left);
+  const named = [
+    ...here.map((member) => member.handle),
+    ...here.map((member) =>
+      member.agentId === undefined ? "" : (names.agents.get(member.agentId)?.title ?? ""),
+    ),
+    ...chat.channels
+      .filter((channel) => channel.kind !== CHANNEL_KIND.DM && !channel.archived)
+      .map((channel) => channelLabel(chat, names, channel)),
+  ];
+  const kept = new Set<string>();
+  for (const word of named) {
+    const trimmed = word.trim();
+    if (trimmed === "" || trimmed.length > DICTATION_BOUNDS.MAX_KEYWORD_CHARS) continue;
+    if (REFUSED_KEYWORD.test(trimmed)) continue;
+    kept.add(trimmed);
+    if (kept.size === DICTATION_BOUNDS.MAX_KEYWORDS) break;
+  }
+  return [...kept];
 }

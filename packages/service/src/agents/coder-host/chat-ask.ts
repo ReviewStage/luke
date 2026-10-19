@@ -1,5 +1,11 @@
-import type { ChatImageWrite, ChatMessageRow } from "@luke/database/models/chat-store";
+import type {
+  ChatImageWrite,
+  ChatMemberSubject,
+  ChatMessageRow,
+  ChatNamedSubject,
+} from "@luke/database/models/chat-store";
 import { chatAttachmentId } from "@luke/database/models/ids";
+import { type ChatMemberMention, chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   type AskStatus,
@@ -15,9 +21,10 @@ import {
   type ChatReply,
   type ChatResponse,
   codeLinesReadable,
-  mentionedHandles,
+  MEMBER_KIND,
   type postChatAskInputSchema,
 } from "@luke/features/chat-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Result } from "effect";
 import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
@@ -152,11 +159,42 @@ export function askPostRefusal(post: AskPost, repository: string | null): string
 }
 
 /** The handles a post mentions, in its words and in every Markdown block under them, each once. */
-export function postMentions(post: AskPost): readonly string[] {
+export function postMentions(post: AskPost): ChatNamed {
   const markdown = (post.blocks ?? []).flatMap((block) =>
     block.type === CHAT_BLOCK.MARKDOWN ? [block.text] : [],
   );
-  return mentionedHandles([post.text, ...markdown].join("\n\n"));
+  return namedIn([post.text, ...markdown].join("\n\n"));
+}
+
+/** Whom a post's words name, as the store resolves them: the handles typed as words, and the members written as mention links. */
+export interface ChatNamed {
+  readonly mentions: readonly string[];
+  readonly subjects: readonly ChatNamedSubject[];
+}
+
+/** The member a mention link names, as the store finds one: a person by their account, an agent by its id, a Luke by his task. */
+function subjectOf(mention: ChatMemberMention): ChatMemberSubject {
+  switch (mention.kind) {
+    case MENTION_KIND.PERSON:
+      return { kind: MEMBER_KIND.HUMAN, userId: mention.userId };
+    case MENTION_KIND.AGENT:
+      return { kind: MEMBER_KIND.AGENT, agentId: mention.agentId };
+    case MENTION_KIND.LUKE:
+      return { kind: MEMBER_KIND.LUKE, taskId: mention.taskId };
+  }
+}
+
+/** Whom words name: each `@handle` typed outside a link, and each person, agent, or Luke a mention link writes, with its label. */
+export function namedIn(words: string): ChatNamed {
+  const read = chatMentionsIn(words);
+  return {
+    mentions: read.handles,
+    // Note that a label is kept without its `@`, as a handle is, since whoever reads an unresolved one writes the `@` back.
+    subjects: read.members.map(({ mention, label }) => ({
+      subject: subjectOf(mention),
+      label: label.replace(/^@/u, ""),
+    })),
+  };
 }
 
 /**

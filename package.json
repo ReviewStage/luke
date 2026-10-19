@@ -12,7 +12,7 @@
     "check": "node scripts/check.mjs",
     "check:affected": "./scripts/check.sh --affected",
     "db:generate": "pnpm --filter @luke/database db:generate",
-    "discarded-effect": "node scripts/discarded-effect.mjs",
+    "discarded-effect": "node --max-old-space-size=4096 scripts/discarded-effect.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
     "lint": "biome check . && pnpm oxlint",
