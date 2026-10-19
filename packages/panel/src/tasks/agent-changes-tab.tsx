@@ -760,8 +760,8 @@ const COMMENT_SIDE = {
 /**
  * The lines review threads ending on one line of `file` are on now, as the
  * list lights them: the widest of their ranges, the one whose first line's
- * row the diff draws first, which holds every other; none for threads on no
- * line of the head.
+ * row the diff draws first, a first line out of the patch before any, which
+ * holds every other; none for threads on no line of the head.
  */
 function threadLines(
   threads: readonly ReviewThread[],
@@ -771,11 +771,15 @@ function threadLines(
     if (thread.line === null) return [];
     const side = COMMENT_SIDE[thread.startSide ?? thread.side];
     const start = thread.startLine ?? thread.line;
-    const place = rowPlace(file, side, start) ?? Number.POSITIVE_INFINITY;
+    // Note that a first line no row of the patch holds stands before every row
+    // drawn, since the threads all end on one drawn line.
+    const place = rowPlace(file, side, start) ?? Number.NEGATIVE_INFINITY;
     const selection = { start, side, end: thread.line, endSide: COMMENT_SIDE[thread.side] };
     return [{ place, lines: { path: thread.path, selection } }];
   });
-  return ranges.toSorted((a, b) => a.place - b.place)[0]?.lines;
+  return ranges.toSorted(
+    (a, b) => a.place - b.place || a.lines.selection.start - b.lines.selection.start,
+  )[0]?.lines;
 }
 
 /**

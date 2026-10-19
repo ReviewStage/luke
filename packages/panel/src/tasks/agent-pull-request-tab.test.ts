@@ -2953,8 +2953,9 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     threads: [
       thread(),
       thread({
-        startLine: 10,
-        originalStartLine: 10,
+        // A first line above the patch's hunk, which no drawn row holds.
+        startLine: 3,
+        originalStartLine: 3,
         comments: [
           { ...(thread().comments[0] ?? assert.fail("a comment")), url: `${PAGE}#discussion_r2` },
         ],
@@ -3017,7 +3018,11 @@ test("the pointer resting on a review thread in Files changed lights the lines i
   act(() => {
     chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   });
-  assert.equal(litFrom(), 10, "the chip lights the widest of its threads' lines, 10–13");
+  assert.equal(
+    litFrom(),
+    3,
+    "the chip lights the widest of its threads' lines, 3–13, though no drawn row holds line 3",
+  );
 
   act(() => chip.click());
   await settle();
@@ -3040,7 +3045,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
       }),
     );
   });
-  assert.equal(litFrom(), 10, "back on the chip, the chip's lines light again");
+  assert.equal(litFrom(), 3, "back on the chip, the chip's lines light again");
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
