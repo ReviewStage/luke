@@ -282,6 +282,26 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   ]);
 });
 
+test("the Comments tab's Resolved toggle starts the other list at its top", () => {
+  const { container } = drawn("tab");
+  const list = container.querySelector<HTMLElement>(".comments-list");
+  assert.ok(list);
+  let top = 240;
+  Object.defineProperty(list, "scrollTop", {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+
+  act(() =>
+    container.querySelector<HTMLButtonElement>(".comments-head button[aria-pressed]")?.click(),
+  );
+
+  assert.equal(top, 0);
+});
+
 test("the Comments tab lists each open thread whole, its reply field under its comments", () => {
   const { container } = drawn("tab");
 
@@ -469,7 +489,7 @@ test("the button beside a list comments on the bullet under the pointer, a paren
 
 test("a thread at rest opens from a press anywhere on its card", () => {
   const { container } = drawn("page");
-  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count button")?.click());
   const card = () =>
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.dataset.open, "false");
@@ -496,7 +516,7 @@ test("the pointer on a thread's words marks its card before a press", () => {
 test("a line's count stands every thread on the line under it, the first open", () => {
   const { container } = drawn("page");
 
-  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count button")?.click());
 
   const cards = [...container.querySelectorAll<HTMLElement>(".comment-float .comment-card")];
   assert.deepEqual(
@@ -637,6 +657,46 @@ test("a thread at rest draws its comment's mentions as their chips, as it does o
     "true",
     "a press on the chip opens the thread with it",
   );
+});
+
+test("a block a thread covers whole offers no button to start another, and one a thread covers in part keeps it", () => {
+  const onHeading = threadOn(ID.OPEN, "Approach", "Is this the right order?", {
+    scope: PLAN_COMMENT_SCOPE.BLOCK,
+    section: "Approach",
+  });
+  const onWord = threadOn(ID.RESOLVED, "withdraw", "Or revoke?", { section: "Approach" });
+  const blocks = (container: HTMLElement) => {
+    const button = (block: Element) => {
+      act(() => block.dispatchEvent(new Event("pointerover", { bubbles: true })));
+      return container.querySelector(".comment-block-button button");
+    };
+    const heading = (name: string) =>
+      [...container.querySelectorAll(".markdown-heading")].find((h) => h.textContent === name);
+    const paragraph = [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("Admins can withdraw"),
+    );
+    const approach = heading("Approach");
+    const goal = heading("Goal");
+    assert.ok(approach && goal && paragraph);
+    return { button, approach, goal, paragraph };
+  };
+
+  const { container } = wide(() => drawn("page", [onHeading, onWord]));
+  const { button, approach, goal, paragraph } = blocks(container);
+  assert.ok(button(approach) === null, "the heading a thread covers offers none");
+  assert.ok(button(goal), "a heading without one does");
+  assert.ok(button(paragraph), "a paragraph with a thread on one word does");
+  assert.ok(button(approach) === null, "and going back takes it away");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  container.remove();
+
+  // Note that folded, a line's count stands where its button would, though its thread covers a word alone; jsdom stands every line at one top.
+  const folded = blocks(drawn("page", [onWord]).container);
+  assert.ok(folded.button(folded.paragraph) === null, "the counted line offers none");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const bare = blocks(drawn("page", []).container);
+  assert.ok(bare.button(bare.paragraph), "a line with no count does");
 });
 
 test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
@@ -785,4 +845,68 @@ test("a thread being started keeps its card through a press away while its words
     "Ask Luke about retries",
     "and takes them back where the send fails",
   );
+});
+
+test("in the Comments tab a thread's quote stands under its first comment's writer, so its tools keep the card's top corner", () => {
+  const { container } = drawn("tab");
+  const card = container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`);
+  const entry = card?.querySelector(".comment-entry");
+
+  assert.ok(
+    entry?.querySelector(
+      ":scope > .comment-head + * .comment-quote, :scope > .comment-head + .comment-quote",
+    ),
+  );
+  assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
+});
+
+test("a thread's resolve reads as its writer's own line, drawn as a comment's head, and an empty tab says how a thread starts", () => {
+  const resolved = threadOn(ID.RESOLVED, "teammate", "A guest, too?", {
+    status: PLAN_COMMENT_STATUS.RESOLVED,
+    entries: [
+      ...threadOn(ID.RESOLVED, "teammate", "A guest, too?").entries,
+      {
+        id: `${ID.RESOLVED.slice(0, -4)}bbbb`,
+        kind: PLAN_COMMENT_ENTRY.RESOLVED,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-dean", name: "Dean Stratakos" },
+        },
+        at: 2,
+      },
+    ],
+  });
+  const { container } = drawn("tab", [resolved]);
+
+  assert.ok(container.querySelector(".luke-empty-state")?.textContent?.includes("No comments"));
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
+  const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
+  assert.ok(
+    event?.firstElementChild?.classList.contains("comment-head"),
+    "drawn as a comment's head",
+  );
+  assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
+});
+
+test("the line a thread's ask leaves is not drawn, since the mention in its words says who was asked", () => {
+  const asked = threadOn(ID.OPEN, "**single-use link** that expires", "Should this be a setting?", {
+    entries: [
+      ...threadOn(ID.OPEN, "**single-use link** that expires", "Should this be a setting?").entries,
+      {
+        id: `${ID.OPEN.slice(0, -4)}cccc`,
+        kind: PLAN_COMMENT_ENTRY.ASKED,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-dean", name: "Dean Stratakos" },
+        },
+        asked: { actor: PLAN_COMMENT_ACTOR.LUKE },
+        at: 2,
+      },
+    ],
+  });
+  const { container } = drawn("tab", [asked]);
+
+  const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  assert.equal(card.querySelectorAll(".comment-event").length, 0);
 });
