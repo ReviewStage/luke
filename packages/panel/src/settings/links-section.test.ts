@@ -9,7 +9,7 @@ import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -59,6 +59,7 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
     },
     notifications: {
       status: NOTIFICATIONS_STATUS.UNKNOWN,
+      grantor: NOTIFICATIONS_GRANTOR.MACOS,
       packaged: true,
       onOpenSettings: ignore,
       onTest: ignore,

@@ -165,7 +165,7 @@ export function relayChildEvent(
 
 /**
  * The plan's tools the session is offered for the turn it opens, for those
- * tools' own files (`planToolsOf`): none for a session the host does not
+ * tools' own files (`taskToolsOf`): none for a session the host does not
  * admit or whose conversation is no agent's.
  */
 export function offeredPlanTools(

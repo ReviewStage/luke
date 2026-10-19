@@ -25,7 +25,6 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
   FILES_CHANGED_KEYS,
@@ -44,7 +43,6 @@ import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
-import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
@@ -266,8 +264,6 @@ interface DrawOptions {
   readonly finding?: boolean;
   /** Whether the view is the Pull request tab's chosen one; it is unless told. */
   readonly shown?: boolean;
-  /** The window's way to open Settings at a place; nothing unless told. */
-  readonly openSettings?: (link: SettingsLink) => void;
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
@@ -287,12 +283,9 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
         registry,
         onSideBundles(
           bundles,
-          createElement(OpenSettingsProvider, {
-            value: options.openSettings ?? (() => undefined),
-            children: createElement(DisclosureFind, {
-              finding: options.finding ?? false,
-              children: createElement("div", null, tab, options.beside ?? null),
-            }),
+          createElement(DisclosureFind, {
+            finding: options.finding ?? false,
+            children: createElement("div", null, tab, options.beside ?? null),
           }),
         ),
       ),
@@ -836,9 +829,8 @@ test("? outside Files changed, or typed into its tree's search, opens no sheet",
   assert.equal(keysSheet(), null);
 });
 
-test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and opens Settings at its Diffs from its foot", async () => {
-  const opened: SettingsLink[] = [];
-  await drawTab({ openSettings: (link) => opened.push(link) });
+test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and holds no way out to Settings", async () => {
+  await drawTab();
   const popover = openSettings("dark");
 
   const groups = [...popover.querySelectorAll<HTMLElement>(".view-settings-group")].map((group) => [
@@ -862,14 +854,13 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
     "the other appearance's theme is a press away",
   );
 
-  const foot = [...popover.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "All diff and code settings\u2026",
+  assert.deepEqual(
+    [...popover.querySelectorAll<HTMLButtonElement>("button")].filter((button) =>
+      /settings/iu.test(button.textContent ?? ""),
+    ),
+    [],
+    "no button opens Settings",
   );
-  act(() => foot?.click());
-  assert.deepEqual(opened, [
-    { page: SETTINGS_VIEW.APPEARANCE, section: SETTINGS_SECTION.APPEARANCE_DIFFS },
-  ]);
-  assert.equal(document.querySelector('[role="dialog"]'), null, "and the popover closes");
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {

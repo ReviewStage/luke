@@ -11,11 +11,14 @@
  * client runs no voice yet.
  *
  * The panel's acts reach the host's own rows in this process; the few a
- * platform answers itself (a copy, a download, focus, the contact mail, and
- * feedback) are the tab's, and every other platform kind is refused in its
- * own words, so the table stays total. The composition is a `Layer`, built by
- * the tab's one runtime edge (`web-root.tsx`), whose close is the host's
- * drain; `run` is that runtime's, handed in so no act runs anywhere else.
+ * platform answers itself (a copy, a download, focus, the contact mail,
+ * feedback, and Settings' test notification) are the tab's, and every other
+ * platform kind is refused in its own words, so the table stays total. A
+ * notice is the panel's toast while the tab is shown and the browser's
+ * notification while it is hidden (`web-notices.ts`). The composition is a
+ * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
+ * is the host's drain; `run` is that runtime's, handed in so no act runs
+ * anywhere else.
  */
 
 import { feedbackDelivery } from "@luke/features/feedback";
@@ -32,7 +35,7 @@ import {
   refusedRows,
 } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
-import { AgentNoticeDoors, type AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
+import { AgentNoticeDoors } from "@luke/host/agent-notices";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { AppBridge } from "@luke/host/bridge";
 import {
@@ -67,12 +70,19 @@ import {
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
 import type { AppPlatform } from "@luke/panel/app-platform";
-import { SETTING_SIDE_EFFECT } from "@luke/settings";
+import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
 import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
+import {
+  notificationsOffered,
+  notificationsStatusNow,
+  onTabShownChanged,
+  type WebNoticeDoors,
+  webNoticeDoors,
+} from "./web-notices";
 import { downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
@@ -90,9 +100,10 @@ const FEEDBACK_PATH = "/api/feedback";
 
 /**
  * Every `app:act` kind a platform answers that a browser tab cannot carry
- * yet: the updater, Browser tabs, the microphone, and notifications. The
- * terminals and the Mac's own, the voice, the call window, and the avatar
- * ride the act port, where `refusedPlatformProcedures` refuses them.
+ * yet: the updater, Browser tabs, the microphone, and the system's
+ * notification settings, which a page cannot open. The terminals and the
+ * Mac's own, the voice, the call window, and the avatar ride the act port,
+ * where `refusedPlatformProcedures` refuses them.
  */
 const REFUSED_KINDS = [
   ACT_KIND.UPDATE_CHECK,
@@ -108,7 +119,6 @@ const REFUSED_KINDS = [
   ACT_KIND.MICROPHONE_REQUEST,
   ACT_KIND.MICROPHONE_ROUTE,
   ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS,
-  ACT_KIND.NOTIFICATIONS_TEST,
 ] as const;
 
 /** The page every act is from: a tab holds one panel and nothing else. */
@@ -168,18 +178,6 @@ function cookieDoor(): CookieSessionDoor {
   };
 }
 
-/** The tab coming forward or going behind, for as long as the listener stands. */
-function onTabFocusChanged(listener: (focused: boolean) => void): () => void {
-  const forward = () => listener(true);
-  const behind = () => listener(false);
-  window.addEventListener("focus", forward);
-  window.addEventListener("blur", behind);
-  return () => {
-    window.removeEventListener("focus", forward);
-    window.removeEventListener("blur", behind);
-  };
-}
-
 /**
  * Each write another tab of this origin made to the files this tab's host
  * keeps, which the browser says as a `storage` event in every tab but the
@@ -214,24 +212,40 @@ function seamLayers() {
 /**
  * Where an agent's end, an inbox item, a failed run, or a chat message is
  * said: the panel's own toast, through the bridge's events once the bridge
- * stands. The tab posts no notification and draws no badge yet.
+ * stands, or the browser's notification while the tab is hidden, and the
+ * badge. What the browser answers is written for Settings. The badge comes
+ * down with the host's scope.
  */
-function noticeDoors(
+const noticeDoors = (
+  state: AppStateStore,
   said: () => Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined,
-): AgentNoticeDoorsSurface {
-  return {
-    post: () => undefined,
-    toast: ({ place, words, detail, failed }) =>
-      said()?.onAgentEnded({ ...place, words, detail, failed }),
-    toastInbox: (item) => said()?.onInboxItemOpened(item),
-    toastFailedRun: ({ place, words, detail }) => said()?.onRunFailed({ ...place, words, detail }),
-    toastChat: (message) => said()?.onChatMessageWaiting(message),
-    badge: () => undefined,
-  };
-}
+) =>
+  Effect.acquireRelease(
+    Effect.sync(() =>
+      webNoticeDoors({
+        toasts: {
+          toast: ({ place, words, detail, failed }) =>
+            said()?.onAgentEnded({ ...place, words, detail, failed }),
+          toastInbox: (item) => said()?.onInboxItemOpened(item),
+          toastFailedRun: ({ place, words, detail }) =>
+            said()?.onRunFailed({ ...place, words, detail }),
+          toastChat: (message) => said()?.onChatMessageWaiting(message),
+        },
+        onAnswered: (status) => {
+          if (state.snapshot().notifications.status !== status) {
+            state.update({ notifications: { status } });
+          }
+        },
+      }),
+    ),
+    (doors) => Effect.sync(() => doors.close()),
+  );
 
 /** The rows the tab answers itself, and every other platform kind refused. */
-function platformRows(http: HttpClient.HttpClient): PlatformActRows<WebSender> {
+function platformRows(
+  http: HttpClient.HttpClient,
+  doors: WebNoticeDoors,
+): PlatformActRows<WebSender> {
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
   return {
     ...refusedRows(REFUSED_KINDS),
@@ -239,6 +253,9 @@ function platformRows(http: HttpClient.HttpClient): PlatformActRows<WebSender> {
     [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }) => downloadText({ name, text }),
     [ACT_KIND.WINDOW_FOCUS_PANEL]: () => window.focus(),
     [ACT_KIND.CONTACT_EMAIL]: () => location.assign(CONTACT_MAILTO),
+    // Note that this is the one place the tab asks for permission, because a
+    // browser lets a page ask only on a press.
+    [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
       Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
   };
@@ -356,11 +373,18 @@ const composedWeb = (run: WebHostOptions["run"]) =>
             platform: "web",
           },
           false,
-          // The tab offers nothing of its own beside the host's concerns yet: notifications come later.
-          hostCapabilities(assembly.concerns, []),
+          // The tab's own offer beside the host's concerns: notifications, where the browser posts them.
+          hostCapabilities(
+            assembly.concerns,
+            notificationsOffered() ? [HOST_CAPABILITY.NOTIFICATIONS] : [],
+          ),
         ),
         services,
       );
+      // What the site's permission already says, read without asking.
+      if (notificationsOffered()) {
+        state.update({ notifications: { status: notificationsStatusNow() } });
+      }
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
@@ -375,6 +399,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       // The notices' toasts reach the panel through the bridge, which is built
       // over the rows the notices are handed to, so they find it late.
       let events: Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined;
+      const doors = yield* noticeDoors(state, () => events);
       const notices = yield* linkClientNotices({
         state,
         host: operator.host,
@@ -385,14 +410,9 @@ const composedWeb = (run: WebHostOptions["run"]) =>
           openFailedRun: (place) => events?.onShowFailedRun(place),
           openChat: (workspaceId) => events?.onShowChat({ workspaceId }),
         },
-        onPanelFocusChanged: onTabFocusChanged,
+        onPanelFocusChanged: onTabShownChanged,
         report,
-      }).pipe(
-        Effect.provideService(
-          AgentNoticeDoors,
-          noticeDoors(() => events),
-        ),
-      );
+      }).pipe(Effect.provideService(AgentNoticeDoors, doors));
 
       const count: AppPlatform["recordSurfaceEvent"] = (name, properties) => {
         void run(operator.host.recordEvent(name, properties));
@@ -400,7 +420,10 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
         routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator, state, notices), platformRows(http)),
+          createHostActRouter(
+            hostRowDependencies(operator, state, notices),
+            platformRows(http, doors),
+          ),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),

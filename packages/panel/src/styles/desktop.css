@@ -4865,6 +4865,20 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-top: var(--luke-section-gap);
 }
 
+/* Within Tasks, each group of the reader's own (Pinned, a section, the
+   rest) stands under a quieter name of its own, a step apart. */
+.chat-rail-tasks + .chat-rail-tasks {
+  margin-top: var(--luke-space-8);
+}
+
+.chat-rail-subheading {
+  margin: 0 0 var(--luke-space-2);
+  padding: 0 var(--row-inset);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
 /* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
 .desktop-task-chat {

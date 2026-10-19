@@ -155,9 +155,10 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "▸ For you (4)",
     "# Channels",
     "general",
+    "members-schema",
+    "# Tasks",
     "billing-export",
     "teammate-invitations (4)",
-    "members-schema",
     "# Direct messages",
     "agent-2 (1)",
     "luke",
@@ -705,11 +706,43 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   act(() => archive?.click());
   act(() => dialogButton("Archive channel").click());
   await settle();
+  // The topic archived while it is read keeps its row in sight, under the folded archive, still the one shown.
+  const archivedRows = () =>
+    [...page.querySelectorAll(".chat-rail section")]
+      .filter((group) => group.textContent?.startsWith("Archived"))
+      .flatMap((group) => [...group.querySelectorAll("li button")].map(railName));
+  assert.deepEqual(archivedRows(), ["release-train"]);
+  assert.ok(rail(page).includes("▸ release-train"));
+  act(() => railRow(page, "general").click());
+  assert.deepEqual(archivedRows(), [], "the fold holds it once another place is shown");
+
+  // Archived channels fold apart, and a topic among them is brought back from its own menu.
+  const archived = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find((each) =>
+    each.textContent?.startsWith("Archived"),
+  );
+  assert.ok(archived, "the archive stands folded in the rail");
+  act(() => archived.click());
+  act(() => railRow(page, "release-train").click());
+  const back = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  act(() => back?.click());
+  const bring = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Bring back channel",
+  );
+  act(() => bring?.click());
+  act(() => dialogButton("Bring back").click());
+  await settle();
+  assert.ok(
+    rail(page).includes("▸ release-train"),
+    "the topic stands among the channels again, shown",
+  );
   assert.equal(
-    [...page.querySelectorAll(".chat-rail button")].some((row) =>
-      row.textContent?.includes("release-train"),
+    [...page.querySelectorAll(".chat-rail button")].some((each) =>
+      each.textContent?.startsWith("Archived"),
     ),
     false,
+    "nothing is left archived",
   );
 });
 
@@ -734,4 +767,73 @@ test("a fixture chat opens no topic past the bound, and an archive frees a place
   assert.ok("chat" in archived);
   held = archived.chat;
   assert.ok("chat" in open("one-more"));
+});
+
+/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+/** The rows the open list offers, each its name and what it says beside it. */
+function offered(page: HTMLElement): (string | null)[] {
+  return [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+}
+
+test("words after an @ that read as a date offer it first, said as its chip says it with the date in full beside it, and the date sent is drawn as its chip", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "out @oct 20 to 24");
+    const listed = offered(page);
+    pressInComposer(box, "Enter");
+    const chips = [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent);
+    typeInComposer(box, "for the offsite");
+    pressInComposer(box, "Enter");
+    await settle();
+
+    assert.deepEqual(listed, ["Tomorrow → SaturdayOct 20, 2026 → Oct 24, 2026"]);
+    assert.deepEqual(chips, ["Tomorrow → Saturday"]);
+    const last = [...page.querySelectorAll(".chat-message")].at(-1);
+    const sent = last?.querySelector<HTMLElement>(".chat-words [data-mention-ref]");
+    assert.equal(sent?.dataset.kind, "date");
+    assert.equal(sent?.textContent, "Tomorrow → Saturday");
+    assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /for the offsite/u);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ word that reads as a date lists it before the members it matches, and words after a handle that name no date open no list", () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "@tomorrow");
+    const dated = offered(page);
+    pressInComposer(box, "Escape");
+    typeInComposer(box, " and @agent-1 please look");
+
+    assert.deepEqual(dated, ["TomorrowOct 20, 2026"]);
+    assert.equal(page.querySelector('[role="listbox"]'), null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("where the editor's bundle could not be loaded, a date one word names after an @ still offers it, and its pick is written and sent as its link", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, field, sent } = await plainChat();
+    writeInto(field, "ship it @tomorrow");
+    const listed = [...container.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+    pressInField(field, { key: "Enter" });
+    pressInField(field, { key: "Enter" });
+    await settle();
+
+    assert.deepEqual(listed, ["TomorrowOct 20, 2026"]);
+    assert.deepEqual(sent, ["ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
