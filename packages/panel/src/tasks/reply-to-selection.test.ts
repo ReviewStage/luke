@@ -262,6 +262,24 @@ test("R replies to the words selected as Reply does, and does nothing while no R
   assert.equal(document.activeElement, composerEditor(tab.container), "the box takes the caret");
 });
 
+test("words selected in a pane then hidden, as the narrow Inbox hides its item behind the list, take Reply and R with them", async () => {
+  const tab = await mounted();
+  composerEditor(tab.container).blur();
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  assert.ok(tab.reply(), "Reply stands over the selection");
+
+  tab.container.hidden = true;
+  await settle();
+  assert.equal(tab.reply() === undefined, true, "Reply goes with the pane");
+  act(() => {
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "r", code: "KeyR", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+  assert.deepEqual(tab.blocks(), [""], "R lays nothing into the hidden box");
+});
+
 test("a selection outside the agent's words, in its thought or the developer's words, is offered no Reply", async () => {
   const tab = await mounted();
   tab.select(AGENT_THOUGHT, "Weighing", "calendar.");

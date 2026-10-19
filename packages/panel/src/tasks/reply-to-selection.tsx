@@ -100,6 +100,8 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
     SCOPE_SELECTOR,
   );
   if (words === null || words === undefined || !scope.contains(words)) return undefined;
+  // Note that words a hidden pane holds keep their selection, as the narrow Inbox's item does behind its list, but are no longer on screen to reply to.
+  if (words.closest("[hidden]") !== null) return undefined;
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
@@ -151,15 +153,19 @@ export function ReplyToSelection({
     };
   }, [scope, settle]);
 
-  // Once offered, the press follows the selection as the log scrolls and goes as it does.
+  // Once offered, the press follows the selection as the log scrolls and goes as it does, or as the pane holding it is hidden.
   useEffect(() => {
     const element = scope.current;
     if (!shown || element === null) return undefined;
     const follow = () => setPicked(pickedIn(element));
+    // Note that hiding a pane changes no selection, so its `hidden` attribute is watched for itself.
+    const hiding = new MutationObserver(follow);
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     document.addEventListener("selectionchange", follow);
     document.addEventListener("scroll", follow, true);
     window.addEventListener("resize", follow);
     return () => {
+      hiding.disconnect();
       document.removeEventListener("selectionchange", follow);
       document.removeEventListener("scroll", follow, true);
       window.removeEventListener("resize", follow);
