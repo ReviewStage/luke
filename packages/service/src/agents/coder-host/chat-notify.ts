@@ -20,6 +20,7 @@ import { chatNoticeKey } from "@luke/database/models/ids";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { type ChatMemberMention, chatWordsForAgents } from "@luke/features/chat-mentions";
 import {
   CHANNEL_KIND,
   CHAT_BLOCK,
@@ -31,6 +32,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "../../core.js";
@@ -232,10 +234,10 @@ const AUTHOR_OF_KIND = {
 } as const;
 
 /** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
-export function blockWords(block: ChatReadBlock): string {
+export function blockWords(block: ChatReadBlock, handleOf: HandleOf = NO_HANDLES): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
-      return "text" in block ? block.text : "";
+      return "text" in block ? chatWordsForAgents(block.text, handleOf) : "";
     case CHAT_BLOCK.LINK:
       return "url" in block ? `${block.label} (${block.url})` : "";
     case CHAT_BLOCK.CODE:
@@ -246,6 +248,30 @@ export function blockWords(block: ChatReadBlock): string {
       return "alt" in block ? `[image: ${block.alt}]` : "";
     default:
       return `[${block.type}]`;
+  }
+}
+
+/** The handle of the member a mention link names, where one is; how an agent reads a person's chip. */
+type HandleOf = (mention: ChatMemberMention) => string | undefined;
+
+/** No member known, so each member's link reads as its label. */
+const NO_HANDLES: HandleOf = () => undefined;
+
+/** The handles of the members given, by what each is: a person by their account, an agent by its id, a Luke by his task. */
+export function handlesIn(members: Iterable<ChatMemberRow>): HandleOf {
+  const rows = [...members];
+  return (mention) => rows.find((row) => namesMember(mention, row))?.handle;
+}
+
+/** Whether a mention link names the member: a person by their account, an agent by its id, a Luke by his task. */
+function namesMember(mention: ChatMemberMention, row: ChatMemberRow): boolean {
+  switch (mention.kind) {
+    case MENTION_KIND.PERSON:
+      return row.kind === MEMBER_KIND.HUMAN && row.userId === mention.userId;
+    case MENTION_KIND.AGENT:
+      return row.kind === MEMBER_KIND.AGENT && row.agentId === mention.agentId;
+    case MENTION_KIND.LUKE:
+      return row.kind === MEMBER_KIND.LUKE && row.taskId === mention.taskId;
   }
 }
 
@@ -266,7 +292,12 @@ const PARAGRAPH_BREAK = "\n\n";
  * notice back always finds its closing lines in their whole shape
  * (`chatNoticeWords`).
  */
-function noticeText(from: ChatMemberRow, channel: ChatChannelRow, message: ChatMessageRow): string {
+function noticeText(
+  from: ChatMemberRow,
+  channel: ChatChannelRow,
+  message: ChatMessageRow,
+  handleOf: HandleOf,
+): string {
   const header = `${CHAT_NOTICE_LEAD} · @${from.handle} ${whereSaid(channel, message)} (m ${message.seq}):`;
   const closings = [
     ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
@@ -275,7 +306,7 @@ function noticeText(from: ChatMemberRow, channel: ChatChannelRow, message: ChatM
   const kept = [header, ...closings].join(PARAGRAPH_BREAK);
   const room = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - kept.length - PARAGRAPH_BREAK.length;
   const words = message.blocks
-    .map(blockWords)
+    .map((block) => blockWords(block, handleOf))
     .filter((part) => part !== "")
     .join(PARAGRAPH_BREAK)
     .slice(0, Math.max(room, 0));
@@ -392,7 +423,11 @@ export function tellMessage(
     );
     const from = members.get(message.authorMemberId);
     if (from === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const notice = { message, text: noticeText(from, channel.value, message), from };
+    const notice = {
+      message,
+      text: noticeText(from, channel.value, message, handlesIn(members.values())),
+      from,
+    };
     const told = toldBy({
       authorMemberId: message.authorMemberId,
       mentions: message.mentions,

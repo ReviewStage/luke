@@ -9,6 +9,7 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import type { MentionPlace } from "@luke/features/mention-link";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -180,6 +181,8 @@ interface MessageContext {
   readonly targets: readonly ChatTarget[];
   /** The words a dictation in the chat is likely to say. */
   readonly keywords: readonly string[];
+  /** The workspace a chip's link is written in. */
+  readonly mentionPlace: MentionPlace | undefined;
   readonly openLink: (url: string) => void;
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
@@ -334,6 +337,7 @@ function ThreadRow({
                 hints={[]}
                 targets={context.targets}
                 keywords={context.keywords}
+                place={context.mentionPlace}
                 compact
                 onSend={(text) => context.onPost({ text, replyTo: message.seq })}
               />
@@ -410,6 +414,7 @@ export function ChatPane({
   chat,
   names,
   place,
+  mentionPlace,
   now,
   openLink,
   onPost,
@@ -418,6 +423,8 @@ export function ChatPane({
   chat: ChatAnswer;
   names: ChatNames;
   place: ChatPlace;
+  /** The workspace a chip's link is written in; none where it is not known yet, when members are written as their handles. */
+  mentionPlace?: MentionPlace | undefined;
   now: number;
   openLink: (url: string) => void;
   /** Posts a message; answers why it was refused, or nothing once it is taken. */
@@ -433,6 +440,7 @@ export function ChatPane({
     now,
     targets,
     keywords,
+    mentionPlace,
     openLink,
     onPost,
     onAnswer,
@@ -497,6 +505,7 @@ export function ChatPane({
           hints={COMPOSER_HINTS}
           targets={targets}
           keywords={keywords}
+          place={mentionPlace}
           onSend={(text) => onPost({ text, to: postTarget(chat, names, channel) })}
         />
       ) : (

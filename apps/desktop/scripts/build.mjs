@@ -7,6 +7,7 @@ import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
+import { bundleCeiling } from "./bundle-budget.mjs";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
@@ -587,15 +588,16 @@ if (uploadsSourceMaps) {
   for (const bundle of unrecorded) {
     console.error(`error: ${bundle} has no baseline in bundle-budget.json`);
   }
+  const withSentry = Boolean(process.env.SENTRY_AUTH_TOKEN);
   const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {
     if (!(bundle in budget.gzipBytes)) return [];
-    const ceiling = Math.floor(budget.gzipBytes[bundle] * (1 + budget.slack));
+    const ceiling = bundleCeiling(budget.gzipBytes[bundle], budget, withSentry);
     return bytes > ceiling ? [{ bundle, bytes, ceiling }] : [];
   });
   if (exceeded.length > 0 || unrecorded.length > 0) {
     for (const { bundle, bytes, ceiling } of exceeded) {
       console.error(
-        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%)`,
+        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%${withSentry ? `, or ${budget.sentrySlackBytes} bytes with Sentry` : ""})`,
       );
     }
     console.error(

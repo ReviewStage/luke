@@ -684,6 +684,41 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
+    "members named by what they are resolve as a post lands: a person and a task's Luke minted where they are not yet, an agent only where it is a member, and one naming no one answered by its label",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const unminted = yield* openAgent(room.owner, room.plan);
+        const sent = Result.getOrThrow(
+          yield* postMessage(room.owner, room.workspace, {
+            authorMemberId: room.ada.id,
+            to: { channelId: room.channel.id },
+            blocks: words("Over to you."),
+            mentions: [],
+            subjects: [
+              {
+                subject: { kind: MEMBER_KIND.HUMAN, userId: room.teammate },
+                label: "@Grace Hopper",
+              },
+              {
+                subject: { kind: MEMBER_KIND.AGENT, agentId: room.second.agentId ?? "" },
+                label: "@Two",
+              },
+              { subject: { kind: MEMBER_KIND.LUKE, taskId: room.plan }, label: "@Luke" },
+              { subject: { kind: MEMBER_KIND.AGENT, agentId: unminted }, label: "@Unminted" },
+            ],
+            clientKey: randomUUID(),
+          }),
+        );
+        const luke = Option.getOrThrow(
+          yield* memberNamed(room.owner, room.workspace, "luke", room.plan),
+        );
+        assert.deepEqual(sent.message.mentions, [room.grace.id, room.second.id, luke.id]);
+        assert.deepEqual(sent.unresolved, ["@Unminted"]);
+      }),
+  );
+
+  it.effect(
     "every person reads every DM, one with a person in it included, an agent reads only its own, and only a DM's pair posts in it",
     () =>
       Effect.gen(function* () {

@@ -1512,6 +1512,15 @@
   padding-inline: var(--luke-space-12);
 }
 
+/* The sheet of Files changed's keys (files-changed-keys.tsx): its groups
+   stacked as the Keyboard shortcuts page stacks them, in the part of the
+   card that scrolls where the window is short. */
+.files-changed-keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-settings-section-gap);
+}
+
 /* Files changed's list of diffs (diff-list.tsx): every file under a header
    of its own, which Pierre keeps at the top while the file's lines scroll
    under it, so it is drawn opaque, on the code's ground, at the height the
@@ -2029,6 +2038,32 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* Write and Preview at the start of the field's head, and the formatting
+   presses at its end while the words are written, as GitHub's own box
+   draws them; a narrow field wraps the presses under the choice. */
+.markdown-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: stretch;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+}
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* The hairline between groups of presses. */
+.markdown-toolbar-rule {
+  width: 1px;
+  height: var(--luke-control-icon);
+  margin: 0 var(--luke-space-4);
+  background: var(--luke-color-border);
 }
 
 /* The box is the preview's frame, its words scrolling inside it in
@@ -3436,6 +3471,13 @@ ol.transcript-list {
   white-space: nowrap;
 }
 
+/* A suggested change's header names it in words rather than as a language,
+   and its lines stand on the added lines' tint. */
+.transcript-code-suggestion {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+}
+
 .transcript-code-body {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
@@ -3452,6 +3494,10 @@ ol.transcript-list {
 
 .transcript-code-body > code {
   font: inherit;
+}
+
+.transcript-code[data-suggestion] .transcript-code-body {
+  background: var(--luke-color-complete-tint);
 }
 
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */

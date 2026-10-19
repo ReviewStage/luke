@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
 import {
   type ChatNames,
@@ -17,6 +18,7 @@ import {
   channelThreads,
   chatKeywords,
   chatRail,
+  chatTargets,
   chatWho,
   FOR_YOU_REASON,
   forYou,
@@ -320,4 +322,26 @@ test("a dictation in the chat listens for every handle still here, each agent's 
   assert.equal(words.includes("gone-person"), false, "a member who left is not listened for");
   assert.equal(words.includes("aardvark"), false, "an archived channel is not");
   assert.equal(new Set(words).size, words.length, "each word once");
+});
+
+test("a person and an agent are offered as the mentions their chips write, an agent on a task under its task, and Luke as his word", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: chatOf(0, []).members.map((member) =>
+      member.id === AGENT
+        ? { ...member, planId: TASK_ID }
+        : member.id === MARIA
+          ? { ...member, userId: "user-maria" }
+          : member,
+    ),
+  };
+  const offered = chatTargets(chat, NAMES).filter((target) => target.sigil === "@");
+  assert.deepEqual(
+    offered.map((target) => [target.name, target.mention]),
+    [
+      ["agent-2", { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: AGENT_ID }],
+      ["luke", undefined],
+      ["maria", { kind: MENTION_KIND.PERSON, userId: "user-maria" }],
+    ],
+  );
 });

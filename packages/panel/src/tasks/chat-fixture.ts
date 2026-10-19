@@ -1,3 +1,4 @@
+import { chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -11,10 +12,10 @@ import {
   GENERAL_CHANNEL,
   LUKE_HANDLE,
   MEMBER_KIND,
-  mentionedHandles,
   replyWords,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskAgentLine } from "@luke/features/task-wire";
 import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
@@ -416,9 +417,23 @@ function withMessage(
 ): ChatAnswer {
   const seq = Math.max(0, ...chat.messages.map((each) => each.touchedSeq)) + 1;
   const words = message.blocks.flatMap((block) => ("text" in block ? [block.text] : []));
-  const mentions = mentionedHandles(words.join("\n")).flatMap(
-    (handle) => chat.members.find((member) => member.handle === handle)?.id ?? [],
-  );
+  // Note that the fixture reads whom the words name as the service does: the handles typed, and the people and agents their chips write.
+  const named = chatMentionsIn(words.join("\n"));
+  const mentions = [
+    ...named.handles.flatMap(
+      (handle) => chat.members.find((member) => member.handle === handle)?.id ?? [],
+    ),
+    ...named.members.flatMap(
+      ({ mention }) =>
+        chat.members.find((member) =>
+          mention.kind === MENTION_KIND.PERSON
+            ? member.userId === mention.userId
+            : mention.kind === MENTION_KIND.AGENT
+              ? member.agentId === mention.agentId
+              : member.kind === MEMBER_KIND.LUKE && member.planId === mention.taskId,
+        )?.id ?? [],
+    ),
+  ];
   const posted: ChatMessage = {
     id: crypto.randomUUID(),
     seq,

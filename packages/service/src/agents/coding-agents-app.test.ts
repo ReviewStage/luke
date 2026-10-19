@@ -7967,6 +7967,39 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
   );
 
   it.effect(
+    "a person's post that names an agent by its mention link tells the agent, which reads the link as the agent's own @handle",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const named = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: chat.agent.agentId ?? "" },
+          "Fix the login",
+          { workspace: "acme", repository: null },
+        );
+        const sent = yield* chat.wrote({
+          text: `${named} take the table, please.`,
+          clientKey: randomUUID(),
+        });
+        assert.ok("posted" in sent);
+        assert.deepEqual(sent.receipt, { told: ["agent-1"], held: [], left: [], unresolved: [] });
+        assert.equal(eve.sent.length, 1);
+        const notice = JSON.stringify(eve.sent.map(({ message }) => message.message));
+        assert.match(notice, /@agent-1 take the table, please\./u);
+        assert.doesNotMatch(notice, /tryluke\.dev/u);
+        // A chip naming no member comes back unresolved under its label, as a handle does, without its `@`.
+        const ghost = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: randomUUID() },
+          "Ghost",
+          { workspace: "acme", repository: null },
+        );
+        const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
+        assert.ok("posted" in unknown);
+        assert.deepEqual(unknown.receipt.unresolved, ["Ghost"]);
+      }),
+  );
+
+  it.effect(
     "a member's answer to an ask is counted as their reply in the thread, once however often it is sent again under its key",
     () =>
       Effect.gen(function* () {
