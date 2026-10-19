@@ -14,7 +14,7 @@
  * earlier one.
  */
 
-import type { ChatShown } from "@luke/host/acts";
+import type { ChatShown } from "@luke/host/contract";
 import { useEffect, useRef } from "react";
 import { appBridge } from "../app-bridge.js";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast.js";

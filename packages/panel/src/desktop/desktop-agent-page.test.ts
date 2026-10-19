@@ -28,7 +28,7 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -40,7 +40,13 @@ import { runAppCommand } from "../app-commands.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -145,7 +151,7 @@ let members: readonly WorkspaceMember[] | undefined;
 /** What the next read of the agent's transcript answers; none refuses it. */
 let transcript: CodingAgentMessagesAnswerView | undefined;
 /** Every act the page told or asked, in order. */
-let told: Act[] = [];
+let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
 let published: CodingAgentPullRequestAnswer | undefined;
 /** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
@@ -178,8 +184,8 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   workspace = [];
   gitHub = new Map();
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       told.push(request);
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const value = {

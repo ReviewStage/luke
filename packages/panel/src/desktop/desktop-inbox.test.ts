@@ -41,7 +41,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DocumentIcon } from "@luke/ui";
@@ -57,7 +57,12 @@ import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeActsAnswer,
+} from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -273,8 +278,8 @@ beforeEach(() => {
   readMarks = [];
   readMarkRefused = false;
   members = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
         Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
@@ -2525,10 +2530,11 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 function heldAnswers(): CodingAgentInboxAnswerParams[] {
   const sent: CodingAgentInboxAnswerParams[] = [];
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -2720,10 +2726,11 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   inboxes = new Map([[BILLING.id, [answered]]]);
   let failing = true;
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return bridge.act(request);
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
         value: failing
@@ -2921,12 +2928,13 @@ test("what an item's box said of a dictation that failed stays with that item, a
     }),
   });
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) =>
+    act: (request: AnyAct): Promise<AnyActOutcome> =>
       request.kind === ACT_KIND.MICROPHONE_REQUEST
         ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
-        : bridge.act(request),
+        : previous(request),
   });
   const { page } = mount();
   await settle();
@@ -2952,9 +2960,10 @@ test("what an item's box said of a dictation that failed stays with that item, a
 function skillReads(): string[] {
   const opened: string[] = [];
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const release = {
           name: "release",
@@ -2970,7 +2979,7 @@ function skillReads(): string[] {
         opened.push(request.payload.url);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
       }
-      return bridge.act(request);
+      return previous(request);
     },
   });
   return opened;
@@ -3127,11 +3136,12 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   ]);
   const { page } = mount();
   await settle();
-  const listReads: Act[] = [];
+  const listReads: AnyAct[] = [];
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         const asked = request.payload.itemId === noted.id ? noted : bare;
@@ -3141,7 +3151,7 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
           value: { item: answered, taken: true },
         });
       }
-      return bridge.act(request);
+      return previous(request);
     },
   });
   const doneAndSend = async () => {
@@ -3855,10 +3865,11 @@ function heldMessages(
 ): CodingAgentInboxMessageParams[] {
   const sent: CodingAgentInboxMessageParams[] = [];
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return bridge.act(request);
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request.payload) });
     },
@@ -4644,10 +4655,11 @@ function gatedAnswers(): GatedAnswers {
   const sent: CodingAgentInboxAnswerParams[] = [];
   const waiting: ((view: CodingAgentInboxAnsweredView) => void)[] = [];
   const bridge = appBridge();
-  fakeAppBridge({
+  const previous = fakeActsAnswer();
+  fakeActs({
     ...bridge,
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise((resolve) =>
         waiting.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),

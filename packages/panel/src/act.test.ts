@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createActPortHandler } from "@luke/host/act-port";
+import { type AgentProceduresDependencies, createActPortHandler } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -44,6 +44,8 @@ function openActPort(actor: ActSender): void {
         dictationTranscribe: notTemplated,
       },
     },
+    // SAFETY: no agent act is called here, so the agents' host and notices are never reached.
+    agents: { host: {}, notices: {} } as AgentProceduresDependencies,
     issues: {
       host: {
         issueList: unanswered,

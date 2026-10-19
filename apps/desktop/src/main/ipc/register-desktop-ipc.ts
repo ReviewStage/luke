@@ -250,6 +250,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     run,
     actPort: createActPortHandler({
       accountAsks: { host: operator.host },
+      agents: { host: operator.host, notices },
       issues: { host: operator.host },
     }),
     services: effectServices,

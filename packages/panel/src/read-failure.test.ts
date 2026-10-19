@@ -61,8 +61,6 @@ function answer(request: Act): Promise<ActOutcome> {
   const done = (value: ActResultFor<ActKind>): Promise<ActOutcome> =>
     Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_LIST:
-      return done({ agents: [] });
     case ACT_KIND.CODING_AGENTS_INBOX:
       // A read past the cursor is held open while nothing changes, as the service holds it.
       if (request.payload.after !== INBOX_CURSOR_START) return new Promise(() => undefined);
@@ -83,6 +81,7 @@ beforeEach(() => {
   });
   fakeAppBridge({ act: answer });
   fakeActPort({
+    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });
 });

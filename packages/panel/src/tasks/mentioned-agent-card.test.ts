@@ -12,7 +12,7 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -20,7 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -115,7 +115,7 @@ const STATE: AppStateSnapshot = (() => {
 })();
 
 /** Every act the panel told the main process, in order. */
-const told: Act[] = [];
+const told: AnyAct[] = [];
 
 /** Whether the service answers reads of agents; refused otherwise. */
 let answering = true;
@@ -133,7 +133,7 @@ afterEach(() => {
 });
 
 /** What the main process answers: a task's agents, and the workspace's searched or newest. */
-function answer(request: Act): ActOutcome {
+function answer(request: AnyAct): AnyActOutcome {
   if (!answering) return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." };
   if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
     const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
@@ -217,10 +217,10 @@ async function drawnElement(
   element: ReactElement,
   state: AppStateSnapshot = STATE,
 ): Promise<HTMLElement> {
-  fakeAppBridge({
+  fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
-    act: (request: Act): Promise<ActOutcome> => {
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       told.push(request);
       return Promise.resolve(answer(request));
     },
@@ -264,7 +264,7 @@ function mentionOf(agent: CodingAgentSummary, name: string): string {
 }
 
 /** The acts that read agents, as told. */
-function agentReads(): readonly Act[] {
+function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
       request.kind === ACT_KIND.CODING_AGENTS_LIST ||

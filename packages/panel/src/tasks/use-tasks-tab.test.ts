@@ -98,6 +98,8 @@ const OPEN: TasksView = {
   document: { status: TASKS_READ.READY, task: TASK },
 };
 
+/** Any kind the tab asks: one `app:act` carries, or one the act port answers. */
+type AnyKind = ActKind | PortActKind;
 /** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -146,9 +148,9 @@ function mount(
   } = {},
   registry?: AtomRegistry,
 ) {
-  const told: ActKind[] = [];
+  const told: AnyKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
-  const agentActs: ActKind[] = [];
+  const agentActs: AnyKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
@@ -158,9 +160,9 @@ function mount(
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
-  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const payloads: { readonly kind: AnyKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
-  const record = (kind: ActKind) => {
+  const record = (kind: AnyKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
   let control: TasksControl | undefined;
@@ -184,11 +186,13 @@ function mount(
   const portAnswers: {
     [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
   } = answers;
-  /** An act-port kind's answer as the test gives it, or a rejection where it gives none. */
+  /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
     ...args: unknown[]
   ): Promise<PortActResult<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
     const answer = portAnswers[kind];
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
@@ -209,15 +213,14 @@ function mount(
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // An `app:act` kind the test does not answer is recorded and refused;
-        // an act-port kind is answered as the port would, and recorded nowhere.
+        // A kind the test does not answer, on either side, is recorded and refused.
         // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
           isPortActKind(kind)
             ? portAnswer(kind, ...args)
             : appAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
-        tell: ((kind: ActKind, ...args: unknown[]) => {
+        // SAFETY: a told kind's answer is read by no one, so either side's kind is recorded alike.
+        tell: ((kind: AnyKind, ...args: unknown[]) => {
           record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
@@ -408,8 +411,8 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
-  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
-  kind: ActKind,
+  payloads: readonly { readonly kind: AnyKind; readonly payload: unknown }[],
+  kind: AnyKind,
 ): (string | undefined)[] {
   return payloads
     .filter((asked) => asked.kind === kind)
@@ -1576,7 +1579,7 @@ test("a person's page opened in another workspace lists it without reopening its
 });
 
 /** The tasks each open the tab asked of main named, in order. */
-function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+function opensAsked(payloads: readonly { readonly kind: AnyKind; readonly payload: unknown }[]) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
     .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.taskId);
@@ -2416,7 +2419,7 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -2445,7 +2448,7 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
 });
 
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {

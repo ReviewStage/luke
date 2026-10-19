@@ -20,7 +20,7 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
-import { createActPortHandler } from "@luke/host/act-port";
+import { type AgentProceduresDependencies, createActPortHandler } from "@luke/host/act-port";
 import {
   createHostActRouter,
   type HostActDependencies,
@@ -301,12 +301,17 @@ function hostRowDependencies(
  * panel's and trusted; the procedures' effects run on the tab's runtime.
  * Both ends close with the host's scope.
  */
-const servedActPort = (operator: OperatorClient, services: Context.Context<never>) =>
+const servedActPort = (
+  operator: OperatorClient,
+  notices: AgentProceduresDependencies["notices"],
+  services: Context.Context<never>,
+) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
       createActPortHandler({
         accountAsks: { host: operator.host },
+        agents: { host: operator.host, notices },
         issues: { host: operator.host },
       }).upgrade(channel.port2, {
         context: () => ({
@@ -399,7 +404,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         report,
       });
       events = made.events;
-      const actPort = yield* servedActPort(operator, services);
+      const actPort = yield* servedActPort(operator, notices, services);
       return {
         bridge: made.bridge,
         actPort,

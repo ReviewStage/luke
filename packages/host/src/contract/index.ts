@@ -5,6 +5,7 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { accountAskActsContract } from "./account-asks.js";
+import { agentActsContract } from "./agents.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 
@@ -18,12 +19,14 @@ import type { PortActKind } from "./kinds.js";
  * with no procedure here cannot be called on the port at all.
  */
 
+export type { ChatShown } from "./agents.js";
 export { ACT_ERROR } from "./base.js";
-export { ACCOUNT_ASK_ACT_KIND, ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
+export { ACCOUNT_ASK_ACT_KIND, AGENT_ACT_KIND, ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...accountAskActsContract,
+  ...agentActsContract,
   ...issueActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 

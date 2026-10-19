@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_RESPONSE,
@@ -48,18 +41,6 @@ const CHAT = {
   cursor: "1",
 };
 
-const STARTED: CodingAgentAgentAnswer = {
-  agent: {
-    id: AGENT_ID,
-    planId: TASK_ID,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    title: null,
-    createdAt: 1_800_000_000_000,
-    status: CODING_AGENT_STATUS.STARTING,
-    turnId: null,
-  },
-};
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
   agentId: AGENT_ID,
@@ -75,124 +56,17 @@ const ITEM: InboxItem = {
   updatedAt: 1_800_000_060_000,
 };
 
-function fixture(answered: CodingAgentAgentAnswer = STARTED) {
+function fixture() {
   const asked: string[] = [];
   /** What the notices were told, in order. */
   const noted: string[] = [];
   const rows = codingAgentActRows({
     notices: {
-      observeAgents: (agents) => {
-        noted.push(`agents:${agents.map((agent) => `${agent.id}=${agent.status}`).join(",")}`);
-      },
-      observeStatus: (agentId, status) => {
-        noted.push(`status:${agentId}=${status}`);
-      },
-      observeTitle: (agentId, title) => {
-        noted.push(`title:${agentId}=${title}`);
-      },
-      observeMessaged: (agent) => {
-        noted.push(`messaged:${agent.id}=${agent.status}`);
-      },
-      observeModels: (models) => {
-        noted.push(`models:${models.length}`);
-      },
       observePublished: (agentId, pullRequest) => {
         noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
       },
-      observeTaskGone: (taskId) => {
-        noted.push(`gone:${taskId}`);
-      },
-      shown: (agentId) => {
-        noted.push(`shown:${agentId}`);
-      },
-      shownInbox: (taskId) => {
-        noted.push(`inbox:${taskId}`);
-      },
-      shownChat: (shown) => {
-        noted.push(`chat:${shown}`);
-      },
     },
     host: {
-      codingAgentWorkspaceList: (params) =>
-        Effect.sync(() => {
-          asked.push(`workspace agents ${params.workspaceId}`);
-          return { agents: [] };
-        }),
-      codingAgentModels: () =>
-        Effect.sync(() => {
-          asked.push("models");
-          return { models: [] };
-        }),
-      codingAgentDefaultRead: () =>
-        Effect.sync(() => {
-          asked.push("default");
-          return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
-        }),
-      codingAgentDefaultWrite: (choice) =>
-        Effect.sync(() => {
-          asked.push(`default:${choice.model}:${choice.effort}`);
-          return { choice };
-        }),
-      codingAgentList: ({ taskId, includeArchived }) =>
-        Effect.sync(() => {
-          asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);
-          return { agents: [] };
-        }),
-      codingAgentStart: (params) =>
-        Effect.sync(() => {
-          asked.push(`start:${params.taskId}:${params.idempotencyKey}`);
-          return STARTED;
-        }),
-      codingAgentMessages: ({ agentId, after, callId }) =>
-        Effect.sync(() => {
-          asked.push(
-            callId === undefined
-              ? `messages:${agentId}:${after}`
-              : `worker:${agentId}:${callId}:${after}`,
-          );
-          return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING, title: null };
-        }),
-      codingAgentMessage: ({ agentId, text, clientKey }) =>
-        Effect.sync(() => {
-          asked.push(`message:${agentId}:${clientKey}:${text}`);
-          return STARTED;
-        }),
-      codingAgentChoose: ({ agentId, model, effort }) =>
-        Effect.sync(() => {
-          asked.push(`choose:${agentId}:${model}:${effort}`);
-          return STARTED;
-        }),
-      codingAgentRename: ({ agentId, title }) =>
-        Effect.sync(() => {
-          asked.push(`rename:${agentId}:${title}`);
-          return answered;
-        }),
-      codingAgentServers: ({ agentId, disabledServers }) =>
-        Effect.sync(() => {
-          asked.push(`servers:${agentId}:${disabledServers.join(",")}`);
-          return STARTED;
-        }),
-      codingAgentStop: ({ agentId }) =>
-        Effect.sync(() => {
-          asked.push(`stop:${agentId}`);
-          return STARTED;
-        }),
-      codingAgentArchive: ({ agentId, archived }) =>
-        Effect.sync(() => {
-          asked.push(`archive:${agentId}:${String(archived)}`);
-          return answered;
-        }),
-      codingAgentPin: ({ agentId, pinned }) =>
-        Effect.sync(() => {
-          asked.push(`pin:${agentId}:${String(pinned)}`);
-          return answered;
-        }),
-      tasksRefresh: () =>
-        Effect.sync(() => {
-          asked.push("refresh");
-        }),
-      codingAgentPage: () =>
-        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentAgentInbox: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentPullRequest: ({ agentId }) =>
@@ -310,105 +184,31 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
 }
 
 it.effect(
-  "a panel's Start reaches the host with the plan and the press's own key, and hears the agent",
-  () =>
-    Effect.gen(function* () {
-      const { router, asked } = fixture();
-
-      const outcome = yield* router.performAct(
-        {
-          kind: ACT_KIND.CODING_AGENTS_START,
-          payload: { taskId: TASK_ID, idempotencyKey: "press-1" },
-        },
-        PANEL,
-      );
-
-      assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
-      assert.deepEqual(asked, [`start:${TASK_ID}:press-1`]);
-    }),
-);
-it.effect(
-  "a rename, an archive, or a pin answering an agent with no plan reads the plan list again, which lists it, and one on a plan does not",
-  () =>
-    Effect.gen(function* () {
-      assert.ok("agent" in STARTED);
-      const taskless = fixture({ agent: { ...STARTED.agent, planId: null } });
-      const onTask = fixture();
-      const rename = {
-        kind: ACT_KIND.CODING_AGENTS_RENAME,
-        payload: { agentId: AGENT_ID, title: "Triage" },
-      } as const;
-      const archive = {
-        kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
-        payload: { agentId: AGENT_ID, archived: true },
-      } as const;
-
-      const pin = {
-        kind: ACT_KIND.CODING_AGENTS_PIN,
-        payload: { agentId: AGENT_ID, pinned: true },
-      } as const;
-
-      yield* taskless.router.performAct(rename, PANEL);
-      yield* taskless.router.performAct(archive, PANEL);
-      yield* taskless.router.performAct(pin, PANEL);
-      yield* onTask.router.performAct(rename, PANEL);
-
-      assert.deepEqual(taskless.asked, [
-        `rename:${AGENT_ID}:Triage`,
-        "refresh",
-        `archive:${AGENT_ID}:true`,
-        "refresh",
-        `pin:${AGENT_ID}:true`,
-        "refresh",
-      ]);
-      assert.deepEqual(onTask.asked, [`rename:${AGENT_ID}:Triage`]);
-    }),
-);
-it.effect(
   "the voice window is refused every coding-agent act in the kind's own words, and the host is not asked",
   () =>
     Effect.gen(function* () {
       const { router, asked } = fixture();
 
       const refused = yield* router.performAct(
-        { kind: ACT_KIND.CODING_AGENTS_STOP, payload: { agentId: AGENT_ID } },
+        { kind: ACT_KIND.CODING_AGENTS_CHANGES, payload: { agentId: AGENT_ID } },
         VOICE,
       );
-      const models = yield* router.performAct({ kind: ACT_KIND.CODING_AGENTS_MODELS }, VOICE);
+      const inbox = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX, payload: { taskId: TASK_ID, after: "0" } },
+        VOICE,
+      );
 
       assert.deepEqual(refused, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_STOP].refusal,
+        reason: ACT[ACT_KIND.CODING_AGENTS_CHANGES].refusal,
       });
-      assert.deepEqual(models, {
+      assert.deepEqual(inbox, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_MODELS].refusal,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX].refusal,
       });
       assert.deepEqual(asked, []);
     }),
 );
-it.effect(
-  "a panel's ask for a workspace's agents reaches the host as asked, and the voice window's is refused before it",
-  () =>
-    Effect.gen(function* () {
-      const { router, asked } = fixture();
-      const act = {
-        kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
-        payload: { workspaceId: "workspace-1" },
-      } as const;
-
-      const refused = yield* router.performAct(act, VOICE);
-      const listed = yield* router.performAct(act, PANEL);
-
-      assert.deepEqual(refused, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CODING_AGENTS_WORKSPACE_LIST].refusal,
-      });
-      assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
-      assert.deepEqual(asked, ["workspace agents workspace-1"]);
-    }),
-);
-
 it.effect(
   "a panel's change to an agent's pull request reaches the host as asked and hears how GitHub took it, and the voice window's is refused before it",
   () =>

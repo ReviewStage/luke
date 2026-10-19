@@ -28,13 +28,14 @@ import {
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, type ChatShown } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";

@@ -27,7 +27,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -39,7 +39,13 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -214,8 +220,8 @@ beforeEach(() => {
   noRecent = false;
   integrationsHeld = false;
   integrationsRefusals = 0;
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         listed.push(request.payload.workspaceId);
         if (listHeld) return new Promise(() => undefined);
