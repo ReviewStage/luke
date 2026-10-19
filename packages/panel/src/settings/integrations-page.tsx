@@ -660,7 +660,13 @@ function IntegrationRow({
       {connected && tools.expanded && tools.shown.length > 0 ? (
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
-      {managing ? <GitHubDialog onClose={() => setManaging(false)} /> : null}
+      {managing ? (
+        <GitHubDialog
+          connected={connected}
+          onRefresh={statuses.read}
+          onClose={() => setManaging(false)}
+        />
+      ) : null}
       <ConfirmDialog
         confirm={disconnect}
         question={{

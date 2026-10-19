@@ -41,6 +41,8 @@ let stored: GitHubTokenSummary | null = null;
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Why the service keeps nothing of the next save, where it refuses one. */
 let refuseSave: GitHubTokenRejection | undefined;
+/** How many times the dialog asked the integrations to be read again. */
+let refreshes = 0;
 
 const roots: Root[] = [];
 
@@ -49,6 +51,7 @@ beforeEach(() => {
   stored = null;
   sent = [];
   refuseSave = undefined;
+  refreshes = 0;
   fakeActPort({
     [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
@@ -79,12 +82,23 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(): Promise<void> {
+async function mount(connected = true): Promise<void> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(GitHubDialog, { onClose: () => undefined })));
+  act(() =>
+    root.render(
+      createElement(GitHubDialog, {
+        connected,
+        onRefresh: () => {
+          refreshes += 1;
+          return Promise.resolve();
+        },
+        onClose: () => undefined,
+      }),
+    ),
+  );
   await settle();
 }
 
@@ -98,8 +112,8 @@ const checked = () => document.querySelector('[role="radio"][aria-checked="true"
 const tokenField = () =>
   document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
 
-const button = (words: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+const button = (words: string, within: ParentNode = document) =>
+  [...within.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === words,
   ) ?? assert.fail(`no ${words} button`);
 
@@ -137,12 +151,17 @@ test("the dialog opens on the App; a token pasted into the unrecorded field is s
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
 });
 
-test("the dialog opens on a saved token, and Remove takes it away", async () => {
+test("the dialog opens on a saved token, and Remove asks first, then takes it away", async () => {
   stored = KEPT;
   await mount();
   assert.match(checked() ?? "", /^Personal access token/u);
 
   act(() => button("Remove").click());
+  await settle();
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
+  const question =
+    document.querySelector('[role="alertdialog"]') ?? assert.fail("no confirm dialog");
+  act(() => button("Remove", question).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
   assert.ok(tokenField(), "the field stands again");
@@ -156,4 +175,12 @@ test("a refused save says why in a short label and keeps the field", async () =>
 
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
   assert.ok(tokenField(), "the field stands as pasted");
+});
+
+test("the App's panel says whether GitHub is connected, and Refresh reads it again", async () => {
+  await mount(false);
+  assert.match(document.body.textContent ?? "", /Not connected/u);
+  act(() => button("Refresh").click());
+  await settle();
+  assert.equal(refreshes, 1);
 });

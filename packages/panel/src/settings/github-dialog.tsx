@@ -16,6 +16,7 @@ import {
   Button,
   CHOICE_LOOK,
   ChoiceList,
+  ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
   ErrorState,
@@ -24,7 +25,9 @@ import {
   TEXT_LINK_LOOK,
   TextField,
   TextLink,
+  useConfirmDialog,
 } from "@luke/ui";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
@@ -36,10 +39,10 @@ import { useOpenLink } from "../tasks/use-open-link.js";
  * github-dialog.tsx -- Settings › Integrations › GitHub › Manage: how Luke reaches GitHub for the member, the Luke GitHub App or their own classic personal access token.
  *
  * Two options, one panel open at a time. The Luke GitHub App, recommended
- * and open by default, says which GitHub the account is connected to, and
- * Refresh reads that again. The personal access token opens a password
+ * and open by default, says whether the account's GitHub is connected, by
+ * the login where the connection names one, and Refresh reads that again. The personal access token opens a password
  * field with Save, and once a token is saved its hint, login, expiry, and
- * Remove. Which option is open is only which panel shows: the saved token
+ * Remove, which asks first in the confirm dialog. Which option is open is only which panel shows: the saved token
  * is what counts, so opening the App removes nothing, and the dialog opens
  * on the token where one is saved. Every line is a label or a fact.
  *
@@ -62,8 +65,9 @@ const NO_CAPTURE = "ph-no-capture";
 const LINE = {
   READ_FAILED: "Your GitHub token could not be read.",
   SAVE_FAILED: "Couldn't save the token",
-  REMOVE_FAILED: "Couldn't remove the token",
+  REMOVE_FAILED: "Couldn't remove the token.",
   NOT_CONNECTED: "Not connected",
+  CONNECTED: "Connected",
 } as const;
 
 /** Why a save kept nothing, as a short label. */
@@ -107,16 +111,32 @@ function Problem({ children }: { children: string }): React.JSX.Element {
   );
 }
 
-/** The App's panel: the GitHub the account is connected to, and Refresh. */
-function AppPanel(): React.JSX.Element {
-  const { tell } = useAct();
+/**
+ * The App's panel: whether the account's GitHub is connected, by the
+ * integrations' own read, and the login and avatar where the connection
+ * names one; Refresh reads where it stands again, at once.
+ */
+function AppPanel({
+  connected,
+  onRefresh,
+}: {
+  connected: boolean;
+  onRefresh: () => Promise<void>;
+}): React.JSX.Element {
   const { connection } = useGitHubConnection();
-  const login = connection?.connected === true ? connection.login : null;
+  const [refreshing, setRefreshing] = useState(false);
+  const login = connected ? (connection?.login ?? null) : null;
+  const refresh = () => {
+    setRefreshing(true);
+    void onRefresh().finally(() => setRefreshing(false));
+  };
   return (
     <div className="github-dialog-panel">
       <span className="github-dialog-facts">
-        {login === null ? (
+        {!connected ? (
           LINE.NOT_CONNECTED
+        ) : login === null ? (
+          LINE.CONNECTED
         ) : (
           <>
             Connected to
@@ -133,7 +153,9 @@ function AppPanel(): React.JSX.Element {
       <Button
         variant={BUTTON_VARIANT.OUTLINE}
         icon={<RefreshCwIcon />}
-        onClick={() => tell(ACT_KIND.TASKS_REFRESH)}
+        busy={refreshing}
+        busyLabel="Refreshing"
+        onClick={refresh}
       >
         Refresh
       </Button>
@@ -141,25 +163,16 @@ function AppPanel(): React.JSX.Element {
   );
 }
 
-/** A saved token: its hint, login, expiry, and status, with Remove. */
+/** A saved token: its hint, login, expiry, and status, with Remove, which asks first. */
 function SavedToken({
   token,
   onRemove,
 }: {
   token: GitHubTokenSummary;
-  onRemove: () => Promise<string | undefined>;
+  onRemove: () => Promise<ActionResult>;
 }): React.JSX.Element {
-  const [removing, setRemoving] = useState(false);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const removal = useConfirmDialog({ subject: true, surfaceOpen: true }, onRemove);
   const status = statusLabel(token.status);
-  const remove = () => {
-    setRemoving(true);
-    setProblem(undefined);
-    void onRemove().then((refused) => {
-      setRemoving(false);
-      setProblem(refused);
-    });
-  };
   return (
     <div className="github-dialog-panel">
       <span className="github-dialog-facts">
@@ -173,21 +186,14 @@ function SavedToken({
             <Problem>{status}</Problem>
           </>
         )}
-        {problem === undefined ? null : (
-          <>
-            {" · "}
-            <Problem>{problem}</Problem>
-          </>
-        )}
       </span>
-      <Button
-        variant={BUTTON_VARIANT.DANGER_OUTLINE}
-        busy={removing}
-        busyLabel="Removing the token"
-        onClick={remove}
-      >
+      <Button variant={BUTTON_VARIANT.DANGER_OUTLINE} disabled={removal.busy} onClick={removal.ask}>
         Remove
       </Button>
+      <ConfirmDialog
+        confirm={removal}
+        question={{ title: "Remove your GitHub token?", verb: "Remove", running: "Removing…" }}
+      />
     </div>
   );
 }
@@ -251,7 +257,17 @@ function TokenForm({
 }
 
 /** The dialog Manage opens on the GitHub row. */
-export function GitHubDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function GitHubDialog({
+  connected,
+  onRefresh,
+  onClose,
+}: {
+  /** Whether the account's GitHub is connected, as Settings › Integrations last read it. */
+  connected: boolean;
+  /** Reads where the account's integrations stand again, at once. */
+  onRefresh: () => Promise<void>;
+  onClose: () => void;
+}): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
   const [option, setOption] = useState<Option>(OPTION.APP);
@@ -291,13 +307,15 @@ export function GitHubDialog({ onClose }: { onClose: () => void }): React.JSX.El
         return answer.rejected === undefined ? undefined : rejectionLabel(answer.rejected);
       });
 
-  const remove = (): Promise<string | undefined> =>
+  const remove = (): Promise<ActionResult> =>
     act(ACT_KIND.GITHUB_TOKEN_REMOVE)
       .catch(() => undefined)
-      .then((answer) => {
-        if (answer === undefined || "failure" in answer) return LINE.REMOVE_FAILED;
+      .then((answer): ActionResult => {
+        if (answer === undefined || "failure" in answer) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: LINE.REMOVE_FAILED };
+        }
         setToken(answer.token);
-        return undefined;
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
 
   const tokenPanel = readFailed ? (
@@ -348,7 +366,11 @@ export function GitHubDialog({ onClose }: { onClose: () => void }): React.JSX.El
             if (next !== undefined) setOption(next);
           }}
         />
-        {option === OPTION.APP ? <AppPanel /> : <div className={NO_CAPTURE}>{tokenPanel}</div>}
+        {option === OPTION.APP ? (
+          <AppPanel connected={connected} onRefresh={onRefresh} />
+        ) : (
+          <div className={NO_CAPTURE}>{tokenPanel}</div>
+        )}
       </div>
     </Dialog>
   );
