@@ -37,6 +37,7 @@ export const AGENT_TOOL = {
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
   STOP_AGENT: "stop_agent",
+  UPDATE_AGENT: "update_agent",
   LIST_TASKS: "list_tasks",
   // The sections the member keeps tasks in in the workspace's sidebar, named for any agent offered `list_tasks`.
   CREATE_SECTION: "create_section",

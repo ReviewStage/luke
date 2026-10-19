@@ -84,6 +84,7 @@ import {
   READ_PAGE_REFUSAL,
   START_CODING_AGENT_REFUSAL,
   STOP_AGENT_REFUSAL,
+  UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
@@ -2495,4 +2496,91 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
   });
+});
+
+test("update_agent renames a teammate's agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on no task, refuses a pin on a task's agent and a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller, teammates, otherWorkspaces } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const offered: readonly OfferedModel[] = [
+    ...CATALOG,
+    { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
+  ];
+  const call = await peerCaller(hostOf(true), caller, eve.services, modelCatalogOf(offered));
+  const stored = async () =>
+    Option.getOrThrow(await database.run(readCodingAgent(teammates.userId, teammates.id)));
+
+  const changed = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: teammates.id,
+    title: " Billing export ",
+    model: SOL,
+    effort: "low",
+    contextWindow: "standard",
+    disabledServers: ["notion"],
+  });
+  assert.equal(changed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(changed));
+  assert.ok(isRecord(changed.agent));
+  assert.deepEqual(
+    [changed.agent.title, changed.agent.model, changed.agent.modelName, changed.agent.effort],
+    ["Billing export", SOL, "GPT-6.1 Sol", "low"],
+  );
+  // A model with one window keeps its whole one, as the catalog reads the choice.
+  const after = await stored();
+  assert.deepEqual(
+    [after.title, after.model, after.effort, after.contextWindow, after.disabledServers],
+    ["Billing export", SOL, "low", "long", ["notion"]],
+  );
+
+  // A pin stands only on an agent with no task; one asked of a task's agent writes nothing asked beside it.
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, title: "Pinned", pinned: true }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_AGENT_REFUSAL.PIN_ON_TASK },
+  );
+  assert.equal((await stored()).title, "Billing export");
+  const sweeper = await tasklessAgentOn(caller.userId, workspaceId);
+  const pinned = await call(CODER_TOOL.UPDATE_AGENT, { agentId: sweeper.id, pinned: true });
+  assert.equal(isRecord(pinned.agent) && pinned.agent.pinned, true, JSON.stringify(pinned));
+
+  // A refused model is said with the choices, and nothing else asked beside it is written.
+  const refused = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: teammates.id,
+    title: "Not this",
+    model: OPUS_FAST,
+    effort: "high",
+  });
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.ok(
+    String(refused.reason).startsWith("Not changed: no offered model is"),
+    String(refused.reason),
+  );
+  assert.ok(String(refused.reason).includes(`${SOL} (low, high)`), String(refused.reason));
+  assert.equal((await stored()).title, "Billing export");
+
+  // An empty title clears it, so the tab falls back to the model's name.
+  const cleared = await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, title: "" });
+  assert.equal(isRecord(cleared.agent) && cleared.agent.title, SOL);
+  assert.equal((await stored()).title, null);
+
+  for (const input of [
+    { agentId: teammates.id },
+    { agentId: teammates.id, model: SOL },
+    { agentId: teammates.id, contextWindow: "long" },
+    { agentId: "not-an-id", title: "x" },
+  ]) {
+    assert.deepEqual(await call(CODER_TOOL.UPDATE_AGENT, input), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: UPDATE_AGENT_REFUSAL.UNREADABLE,
+    });
+  }
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: otherWorkspaces.id, title: "x" }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
+    },
+  );
+  const theirs = Option.getOrThrow(
+    await database.run(readCodingAgent(otherWorkspaces.userId, otherWorkspaces.id)),
+  );
+  assert.equal(theirs.title, null);
 });
