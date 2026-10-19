@@ -1022,10 +1022,15 @@
 
 /* How a run of lines filling its place is drawn (code-lines.tsx), as
    the File tabs' settings say (file-view-settings.ts): lines unwrapped,
-   which scroll on both axes together, each stand as wide as their text or
-   the place, so the lit lines' ground runs under the whole of every one;
-   and the numbers' gutter may be gone. */
-.code-lines[data-wrap="false"] > .code-line {
+   which scroll on both axes together, stand as wide as the longest or the
+   place, so the lit lines' ground runs under the whole of every one; and
+   the numbers' gutter may be gone. The frame around them is as wide as
+   the place, which a note between them measures itself by. */
+.code-lines-frame {
+  container-type: inline-size;
+}
+
+.code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
 }
@@ -2684,9 +2689,13 @@
   line-height: var(--luke-type-body-leading);
 }
 
+/* Note that the note is stuck within the lines, which are as wide as the
+   longest, so it stays in view across the whole of them, and is as wide
+   as the place they scroll in, less its margins. */
 .code-lines[data-wrap="false"] > .file-note {
   position: sticky;
   left: var(--luke-space-12);
+  width: calc(100cqi - 2 * var(--luke-space-12));
 }
 
 /* The fold's line, its age and link beside it, then its words the card's

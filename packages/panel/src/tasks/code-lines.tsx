@@ -20,9 +20,13 @@ import { useFileViewSettings } from "./file-view-settings.js";
  * alone (`CodeLineRows`), and every other place draws them filling it and
  * scrolling in a `ScrollArea` of `@luke/ui` (`CodeLinesView`), never an
  * `overflow` of its own. Wrapped, they scroll up and down alone.
- * Unwrapped, they scroll on both axes together, each line as wide as itself
- * or the place, whichever is wider, so the lit lines' ground runs under the
- * whole of what is read; the gutter's numbers may be gone. Whether they wrap and number is the caller's: a File tab's and a
+ * Unwrapped, they scroll on both axes together, every line as wide as the
+ * longest or the place, whichever is wider, so the lit lines' ground runs
+ * under the whole of what is read, while a note between them keeps to the
+ * place's width in view; the gutter's numbers may be gone. Note that the
+ * lines stand in a frame as wide as the place, which a note measures itself
+ * by, because the lines themselves are as wide as the longest so a note can
+ * stay stuck in view across the whole of them. Whether they wrap and number is the caller's: a File tab's and a
  * page's source follow the File tabs' settings (`useLinesLook`), a text
  * file opened over the window always wraps and numbers. What stands above
  * and below the lines, a File tab's rows reading more of its file, stands
@@ -153,14 +157,16 @@ export function CodeLinesView({
       axis={look.wrap ? SCROLL_AXIS.VERTICAL : SCROLL_AXIS.BOTH}
       fade={fade}
     >
-      <div
-        className="code-lines"
-        data-line-numbers={String(look.lineNumbers)}
-        data-wrap={String(look.wrap)}
-      >
-        {above}
-        <CodeLineRows firstLine={firstLine} lines={lines} pointed={pointed} before={before} />
-        {below}
+      <div className="code-lines-frame">
+        <div
+          className="code-lines"
+          data-line-numbers={String(look.lineNumbers)}
+          data-wrap={String(look.wrap)}
+        >
+          {above}
+          <CodeLineRows firstLine={firstLine} lines={lines} pointed={pointed} before={before} />
+          {below}
+        </div>
       </div>
     </ScrollArea>
   );
