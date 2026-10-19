@@ -11,9 +11,11 @@ import { LINK_PLACE, readLink } from "./luke-link.js";
  * from its page or any page under it (`pullRequestAddressOf`); a page an
  * agent showed on a plan, by its Luke link (`luke-link.ts`); and lines of
  * a file pinned to a commit, `https://github.com/<owner>/<name>/blob/<commit>/<path>#L3-L5`,
- * drawn as the Code tab draws them. A file's link on a branch names no
- * lines that hold still, since a branch moves and its name may hold a
- * slash, so it is no card; nor is a link to anything else. Nothing here
+ * drawn as the Code tab draws them, its commit whole, since the lines are
+ * read at it and a read takes no abbreviation. A file's link on a branch
+ * names no lines that hold still, since a branch moves and its name may
+ * hold a slash, so it is no card; nor is a link to anything else, a
+ * commit abbreviated among them, which stays its chip. Nothing here
  * reads what a link names: the card does, through what the window
  * already reads.
  */
@@ -31,8 +33,11 @@ const GITHUB_ORIGIN = "https://github.com";
 /** The step before a file's commit in its GitHub page's path. */
 const FILE_STEP = "blob";
 
-/** A commit as a link pins one: seven to forty hexadecimal digits. */
-const COMMIT = /^[0-9a-f]{7,40}$/u;
+/**
+ * A commit as a code card reads its lines at: forty hexadecimal digits,
+ * since the File tab's read takes a whole commit and no abbreviation.
+ */
+const COMMIT = /^[0-9a-f]{40}$/u;
 
 /** A GitHub page's lines: `#L3`, or `#L3-L5`. */
 const LINES_FRAGMENT = /^#L(\d{1,9})(?:-L(\d{1,9}))?$/u;

@@ -47,19 +47,20 @@ test("lines of a file at a commit are the code card of those lines, one line or 
       endLine: 5,
     },
   );
-  assert.deepEqual(loneLinkOf(`https://github.com/acme/relay/blob/${COMMIT.slice(0, 7)}/a.ts#L9`), {
+  assert.deepEqual(loneLinkOf(`https://github.com/acme/relay/blob/${COMMIT}/a.ts#L9`), {
     kind: LONE_LINK.CODE,
     repo: "acme/relay",
     path: "a.ts",
-    sha: COMMIT.slice(0, 7),
+    sha: COMMIT,
     startLine: 9,
     endLine: 9,
   });
 });
 
-test("a file on a branch, a file with no lines, lines that run backwards, a path climbing out, an issue, a plan, or another page earns no card", () => {
+test("a file on a branch or at an abbreviated commit, a file with no lines, lines that run backwards, a path climbing out, an issue, a plan, or another page earns no card", () => {
   for (const address of [
     "https://github.com/acme/relay/blob/main/apps/web/rollout-store.ts#L3-L5",
+    `https://github.com/acme/relay/blob/${COMMIT.slice(0, 7)}/apps/web/rollout-store.ts#L3-L5`,
     `https://github.com/acme/relay/blob/${COMMIT}/apps/web/rollout-store.ts`,
     `https://github.com/acme/relay/blob/${COMMIT}/apps/web/rollout-store.ts#L5-L3`,
     `https://github.com/acme/relay/blob/${COMMIT}/../secrets.ts#L1`,
