@@ -19,6 +19,7 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
+import * as issueLive from "./issue-live.js";
 import * as issueView from "./issue-view.js";
 import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
@@ -69,6 +70,10 @@ const EFFECT_MODULE_SCHEMAS = {
     scopeInboxLiveAnswerSchema: liveWire.scopeInboxLiveAnswerSchema,
     scopeInboxLiveRowsSchema: liveWire.scopeInboxLiveRowsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
+  "issue-live": {
+    issuesLiveAnswerSchema: issueLive.issuesLiveAnswerSchema,
+    issuesLiveRowsSchema: issueLive.issuesLiveRowsSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof issueLive>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,

@@ -75,6 +75,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_INBOX: "/api/live/task-inbox",
   /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
+  /** A workspace's standing issues under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `issue-live.ts` declares the answer. */
+  LIVE_ISSUES: "/api/live/issues",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

@@ -1,14 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { issuesLiveRowsSchema, issuesOfLiveRows } from "@luke/features/issue-live";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
-import { beginIssueWork, changeIssue, createIssue, listIssues, readIssue } from "../issue-store.js";
+import {
+  beginIssueWork,
+  changeIssue,
+  createIssue,
+  issuesLiveStatement,
+  listIssues,
+  readIssue,
+} from "../issue-store.js";
 
 /**
  * A workspace's issues over a real dialect: numbered from one in the order
@@ -42,6 +51,17 @@ const openWorkspace = (userId: string) =>
       .insert(member)
       .values({ id: randomUUID(), organizationId, userId, role: "owner", createdAt: now });
     return organizationId;
+  });
+
+/** The workspace's standing issues as the desktop builds them from the live statement's rows, run as Realtime runs it. */
+const liveIssues = (userId: string, organizationId: string) =>
+  Effect.gen(function* () {
+    const statement = Option.getOrThrow(issuesLiveStatement(userId, organizationId));
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql.unsafe(statement.sql, [...statement.params]);
+    return issuesOfLiveRows(
+      yield* Schema.decodeUnknownEffect(issuesLiveRowsSchema)({ issues: rows }),
+    );
   });
 
 it.layer(getTestDB())("the issue store", (it) => {
@@ -273,6 +293,52 @@ it.layer(getTestDB())("the issue store", (it) => {
         Option.some(["Orphan", null]),
       );
     }),
+  );
+
+  it.effect(
+    "the live statement reads what the list reads for a member, and nothing for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const db = yield* Database;
+        yield* db.insert(member).values({
+          id: randomUUID(),
+          organizationId: workspace,
+          userId: teammate,
+          role: "member",
+          createdAt: yield* DateTime.nowAsDate,
+        });
+        const first = Option.getOrThrow(
+          yield* createIssue(owner, { organizationId: workspace, title: "First" }),
+        );
+        yield* createIssue(teammate, {
+          organizationId: workspace,
+          title: "Second",
+          status: ISSUE_STATUS.IN_PROGRESS,
+          priority: ISSUE_PRIORITY.URGENT,
+          description: "## Why",
+        });
+        const shelved = Option.getOrThrow(
+          yield* createIssue(owner, { organizationId: workspace, title: "Shelved" }),
+        );
+        yield* TestClock.adjust("1 minute");
+        yield* changeIssue(teammate, first.id, { status: ISSUE_STATUS.DONE });
+        yield* changeIssue(owner, shelved.id, { archived: true });
+
+        const listed = Option.getOrThrow(
+          yield* listIssues(teammate, workspace, { archived: false }),
+        );
+
+        assert.deepEqual(yield* liveIssues(teammate, workspace), listed);
+        assert.deepEqual(
+          listed.map((issue) => issue.title),
+          ["First", "Second"],
+        );
+        assert.deepEqual(yield* liveIssues(outsider, workspace), []);
+      }),
   );
 });
 

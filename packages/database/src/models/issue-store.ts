@@ -11,7 +11,8 @@ import {
 import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { organization, user } from "../schemas/auth.js";
 import { issue } from "../schemas/issue.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -274,6 +275,54 @@ export function listIssues(
     const rows = yield* findIssues({ userId, organizationId, archived: options.archived });
     return Option.some(rows.map(issueOfRow));
   });
+}
+
+/**
+ * The workspace's standing issues written for Neon Realtime: the rows,
+ * bound, and rule of who may read them that `listIssues` reads, each column
+ * under the key `issue-live.ts` reads it by and each instant in epoch
+ * milliseconds. The bound is a subquery, so the statement names no window
+ * of the clock and the order is the reader's to keep, since Realtime keeps
+ * none. An account outside the workspace reads no row of it. None where the
+ * statement names a value Realtime cannot carry.
+ */
+export function issuesLiveStatement(
+  userId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  const standing = and(
+    eq(issue.organizationId, organizationId),
+    workspaceReachableBy(userId, issue.organizationId),
+    isNull(issue.archivedAt),
+  );
+  const latest = queryBuilder
+    .select({ id: issue.id })
+    .from(issue)
+    .where(standing)
+    .orderBy(desc(issue.updatedAt), desc(issue.number))
+    .limit(ISSUE_BOUNDS.MAX_ISSUES_READ);
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: issue.id,
+            workspaceId: issue.organizationId,
+            number: issue.number,
+            title: issue.title,
+            description: issue.description,
+            status: issue.status,
+            priority: issue.priority,
+            creatorId: user.id,
+            creatorName: user.name,
+          },
+          { createdAt: issue.createdAt, updatedAt: issue.updatedAt },
+        ),
+      )
+      .from(issue)
+      .leftJoin(user, eq(user.id, issue.creatorId))
+      .where(and(standing, inArray(issue.id, latest))),
+  );
 }
 
 /** One issue, archived or not; nothing where it is gone or of a workspace the account is not a member of. */

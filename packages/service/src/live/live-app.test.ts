@@ -6,6 +6,7 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { issuesLiveAnswerSchema } from "@luke/features/issue-live";
 import {
   accountInboxLiveAnswerSchema,
   LIVE_USER_QUERY,
@@ -231,6 +232,40 @@ it.layer(getTestDB())("the live reads", (it) => {
             body: { error: HOSTED_API_ERROR.UNAVAILABLE },
           });
         }
+      }),
+  );
+
+  it.effect(
+    "a workspace's issues are sealed for the bearer and the workspace named, and a request naming none is refused",
+    () =>
+      Effect.gen(function* () {
+        const workspaceId = randomUUID();
+        const path = `/api/live/issues?workspaceId=${workspaceId}`;
+        const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(issuesLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.ok(answer.queries.issues.capability.includes('"user-dana"'), "read for the bearer");
+        assert.ok(
+          answer.queries.issues.capability.includes(`"${workspaceId}"`),
+          "of the workspace",
+        );
+        assert.deepEqual(
+          yield* ask({
+            bearer: "user-dana",
+            path: "/api/live/issues",
+            sealing: Option.some(SCRIPTED),
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+            body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+          },
+        );
+        assert.deepEqual(yield* ask({ bearer: "user-dana", path, sealing: Option.none() }), {
+          status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+        });
       }),
   );
 });

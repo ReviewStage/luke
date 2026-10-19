@@ -418,6 +418,10 @@
           "dest": "/api/default.js?route=live/inbox"
         },
         {
+          "src": "/api/live/issues",
+          "dest": "/api/default.js?route=live/issues"
+        },
+        {
           "src": "/api/live/task-inbox",
           "dest": "/api/default.js?route=live/task-inbox"
         },

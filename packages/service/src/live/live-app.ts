@@ -1,7 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { issuesLiveStatement } from "@luke/database/models/issue-store";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { ISSUE_LIST_QUERY } from "@luke/features/issue-wire";
 import { LIVE_USER_QUERY } from "@luke/features/live-wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
@@ -43,6 +45,9 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * latest settled ones as one statement, their threads and files as two
  * more, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
+ * `GET /api/live/issues?workspaceId=` answers a workspace's standing issues
+ * the same way, as one statement built with the account's id, which reads
+ * no row of a workspace the account is not a member of.
  * Nothing else here reads a row: the store is read by Realtime.
  *
  * Each read names the account the desktop started following for
@@ -163,6 +168,27 @@ function sameUser(resolveUserId: UserIdResolver): UserIdResolver {
     );
 }
 
+const issuesLiveEndpoint = /* @__PURE__ */ Effect.fn("web/issuesLiveEndpoint")(function* (
+  seams: LiveAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const request = yield* getRequest;
+  const userId = yield* resolvedUserId(seams, request);
+  const workspaceId = new URL(request.url).searchParams.get(ISSUE_LIST_QUERY.WORKSPACE_ID) ?? "";
+  if (workspaceId === "") return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const sealing = yield* LiveSealing;
+  const statement = issuesLiveStatement(userId, workspaceId);
+  if (Option.isNone(sealing) || Option.isNone(statement)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const { seal, url } = sealing.value;
+  const issues = yield* Effect.mapError(seal(statement.value), () => HOSTED_REFUSAL.UNAVAILABLE);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries: { issues } });
+});
+
 /** The group: each live read's path, and the hosted vocabulary's own refusal for any other. */
 export function liveApp(given: LiveAppSeams): WebRoutes<DatabaseServices> {
   const seams: LiveAppSeams = { resolveUserId: sameUser(given.resolveUserId) };
@@ -181,6 +207,11 @@ export function liveApp(given: LiveAppSeams): WebRoutes<DatabaseServices> {
       ANY_METHOD,
       HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX,
       hostedRefusing(agentInboxLiveEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.LIVE_ISSUES,
+      hostedRefusing(issuesLiveEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

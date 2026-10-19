@@ -16,6 +16,7 @@
     "./automation-view": "./src/automation-view.js",
     "./issue-wire": "./src/issue-wire.js",
     "./issue-view": "./src/issue-view.js",
+    "./issue-live": "./src/issue-live.js",
     "./avatar-grant": "./src/avatar-grant.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
