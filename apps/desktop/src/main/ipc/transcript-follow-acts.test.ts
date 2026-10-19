@@ -28,7 +28,7 @@ const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT: CodingAgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
 const WORKER: CodingAgentTranscriptKey = { ...AGENT, callId: "call-7" };
-const PLANNING_WORKER: CodingAgentTranscriptKey = {
+const TASK_WORKER: CodingAgentTranscriptKey = {
   kind: TRANSCRIPT_KIND.TASK_WORKER,
   taskId: TASK_ID,
   callId: "call-0-0",
@@ -123,11 +123,11 @@ it.effect(
 
       yield* follow(AGENT, one);
       yield* follow(WORKER, elsewhere);
-      yield* follow(PLANNING_WORKER, elsewhere);
+      yield* follow(TASK_WORKER, elsewhere);
       hostSays(pageOf(AGENT, "Reading the invites."));
       yield* follow(AGENT, other);
       hostSays(pageOf(AGENT, "Writing the expiry."));
-      hostSays(pageOf(PLANNING_WORKER, "Compared them."));
+      hostSays(pageOf(TASK_WORKER, "Compared them."));
 
       assert.deepEqual(asked, [
         `follow:${AGENT_ID}:own`,
@@ -140,7 +140,7 @@ it.effect(
         pageOf(AGENT, "Writing the expiry."),
       ]);
       assert.deepEqual(sentTo(other), [pageOf(AGENT, "Writing the expiry.")]);
-      assert.deepEqual(sentTo(elsewhere), [pageOf(PLANNING_WORKER, "Compared them.")]);
+      assert.deepEqual(sentTo(elsewhere), [pageOf(TASK_WORKER, "Compared them.")]);
     }),
 );
 
@@ -163,7 +163,7 @@ it.effect(
       assert.deepEqual(sentTo(one), []);
 
       yield* follow(WORKER, other);
-      yield* follow(PLANNING_WORKER, other);
+      yield* follow(TASK_WORKER, other);
       pageGone(other);
       yield* drain;
       assert.deepEqual(asked.slice(5).toSorted(), [
