@@ -48,9 +48,22 @@ const PANEL_ADDRESS = "/app";
 /** A path of this site: one slash, then anything but a second, or a backslash a browser reads as one, which would name another host. */
 const SAME_ORIGIN_PATH = /^\/(?![/\\])/u;
 
+/** The tabs and newlines a URL's parser drops before reading it, which could hide a second slash from `SAME_ORIGIN_PATH`. */
+const URL_DROPPED = /[\t\n\r]/gu;
+
+/** Whether `address` is a path of this site, as the browser reads it: one slash first once what its parser drops is gone, and this site's origin once read. */
+function sameOriginPath(address: string): boolean {
+  if (!SAME_ORIGIN_PATH.test(address.replace(URL_DROPPED, ""))) return false;
+  try {
+    return new URL(address, location.href).origin === location.origin;
+  } catch {
+    return false;
+  }
+}
+
 /** The entry as it is written: at its own address where that is a path of this site, else at the panel's page, so a bad address never throws. */
 function writable<State>(entry: HistoryEntry<State>): HistoryEntry<State> {
-  return SAME_ORIGIN_PATH.test(entry.address) ? entry : { ...entry, address: PANEL_ADDRESS };
+  return sameOriginPath(entry.address) ? entry : { ...entry, address: PANEL_ADDRESS };
 }
 
 /** The address the tab stands at, as the panel writes one: its path, query, and fragment. */

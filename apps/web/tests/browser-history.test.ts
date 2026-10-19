@@ -63,6 +63,10 @@ test("an address that is no path of this site, as a link with no workspace spell
   assert.equal(addressBar(), "/app");
   assert.doesNotThrow(() => history.replace({ address: "/\\x", state: "elsewhere" }));
   assert.equal(addressBar(), "/app");
+  for (const address of ["/\n/elsewhere/x", "/\t\\elsewhere/x"]) {
+    assert.doesNotThrow(() => history.replace({ address, state: "elsewhere" }));
+    assert.equal(addressBar(), "/app");
+  }
   assert.deepEqual(
     history.current().entries.map((entry) => entry.address),
     ["/acme/inbox", "/app"],
