@@ -1,4 +1,4 @@
-// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in.
+// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in, over the desktop's account source.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -31,6 +31,7 @@ import {
   SignInConsent,
 } from "./effect/seams.js";
 import { type HostKernel, hostKernelOver } from "./host-kernel.js";
+import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
 
 /**
@@ -90,13 +91,19 @@ const signedInAccount = (input: {
       input.machine,
       Layer.succeed(HostKernelTag, input.kernel),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      // The store keeps an account only where it can encrypt one.
-      Layer.succeed(SecretCipher, {
-        isAvailable: () => true,
-        encrypt: (plainText) => new TextEncoder().encode(plainText),
-        decrypt: (cipherText) => new TextDecoder().decode(cipherText),
-      }),
-      Layer.succeed(SignInConsent, { open: grantingConsent }),
+      // The desktop's own account source. The store keeps an account only
+      // where that source's cipher can encrypt one.
+      Layer.provide(
+        oauthAccountSourceLayer,
+        Layer.merge(
+          Layer.succeed(SecretCipher, {
+            isAvailable: () => true,
+            encrypt: (plainText) => new TextEncoder().encode(plainText),
+            decrypt: (cipherText) => new TextDecoder().decode(cipherText),
+          }),
+          Layer.succeed(SignInConsent, { open: grantingConsent }),
+        ),
+      ),
       NodeFileSystem.layer,
       NodePath.layer,
     );

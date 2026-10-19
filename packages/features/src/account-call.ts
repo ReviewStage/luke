@@ -52,6 +52,14 @@ export interface CallCredential {
    * payload under.
    */
   holder?: (() => Effect.Effect<string | undefined>) | undefined;
+  /**
+   * The credential this one stands for, read before every use: a caller built
+   * before the account it calls under holds one of these, and each call then
+   * reads what it resolves exactly as it would have read that credential
+   * itself, a header or none. A credential that resolves carries nothing else
+   * of its own.
+   */
+  resolve?: (() => Effect.Effect<CallCredential>) | undefined;
 }
 
 /** The ends a call reaches before any status is read. */
@@ -195,6 +203,13 @@ function readCredential(
   return read === undefined ? Effect.succeed(undefined) : read();
 }
 
+/** The credential a call reads: the one handed in, or what it resolves to, however many steps that takes. */
+export function resolvedCredential(credential: CallCredential): Effect.Effect<CallCredential> {
+  return credential.resolve === undefined
+    ? Effect.succeed(credential)
+    : Effect.flatMap(credential.resolve(), resolvedCredential);
+}
+
 /** The call as effects over the ambient `HttpClient`. */
 export function accountCall(options: AccountCallOptions): AccountCallEffects {
   const baseUrl = text(options.baseUrl);
@@ -290,16 +305,16 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
    * because a caller that took work off a queue to send it has to be able to
    * put it back.
    */
-  const identify: Effect.Effect<Identity | undefined> = Effect.gen(function* () {
-    const holder = yield* readCredential(credential.holder);
-    const authorization = yield* readCredential(credential.authorization);
-    if (credential.authorization && authorization === undefined) return undefined;
-    return { holder, authorization };
-  });
+  const identify = (current: CallCredential): Effect.Effect<Identity | undefined> =>
+    Effect.gen(function* () {
+      const holder = yield* readCredential(current.holder);
+      const authorization = yield* readCredential(current.authorization);
+      if (current.authorization && authorization === undefined) return undefined;
+      return { holder, authorization };
+    });
 
-  const renew: Effect.Effect<void> = Effect.ignore(
-    Effect.suspend(() => credential.renew?.() ?? Effect.void),
-  );
+  const renew = (current: CallCredential): Effect.Effect<void> =>
+    Effect.ignore(Effect.suspend(() => current.renew?.() ?? Effect.void));
 
   /**
    * The answer, read as the caller asked, under the one reading of a 401:
@@ -324,15 +339,16 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
       );
 
     return Effect.gen(function* () {
-      const identity = yield* identify;
+      const current = yield* resolvedCredential(credential);
+      const identity = yield* identify(current);
       if (!identity) return { failure: { fault: CALL_FAULT.NO_CREDENTIAL } };
 
       const first = yield* settled(attemptDecidingRefusal(request, identity.authorization, read));
       if (!("read" in first)) return first;
       if (!("refusal" in first.read)) return first.read;
 
-      yield* renew;
-      const renewal = yield* identify;
+      yield* renew(current);
+      const renewal = yield* identify(current);
       if (!renewal || renewal.authorization === identity.authorization) {
         const standing = yield* settled(withinDeadline(read(first.read.refusal)));
         return "read" in standing ? { answer: standing.read } : standing;
@@ -417,17 +433,20 @@ export function sessionBearer(token: AccountToken & AccountSessionToken): CallCr
  */
 export function sendInSession(
   call: AccountCallEffects,
-  session: Pick<CallCredential, "holder" | "renew">,
+  session: Pick<CallCredential, "holder" | "renew" | "resolve">,
 ): AccountCallEffects["send"] {
-  const holder = session.holder ?? (() => Effect.succeed(undefined));
-  const renew = Effect.ignore(Effect.suspend(() => session.renew?.() ?? Effect.void));
+  const resolved = resolvedCredential(session);
+  const holder = Effect.flatMap(resolved, (current) => readCredential(current.holder));
+  const renew = Effect.ignore(
+    Effect.flatMap(resolved, (current) => current.renew?.() ?? Effect.void),
+  );
   return (request) =>
     Effect.gen(function* () {
-      const asking = yield* holder();
+      const asking = yield* holder;
       const first = yield* call.send(request);
       if (callAnswered(first) || first.fault !== CALL_FAULT.NO_CREDENTIAL) return first;
       yield* renew;
-      if ((yield* holder()) !== asking) return { fault: CALL_FAULT.HOLDER_CHANGED };
+      if ((yield* holder) !== asking) return { fault: CALL_FAULT.HOLDER_CHANGED };
       return yield* call.send(request);
     });
 }
@@ -440,6 +459,15 @@ export function fixedBearer(credential: string): CallCredential {
 
 /** An endpoint that takes no identity: nothing to send, nothing to renew, nobody to answer for. */
 export const NO_CREDENTIAL: CallCredential = {};
+
+/**
+ * A credential that stands only once `credential` does, such as the account's
+ * for a client built before the account is: every call waits for it, then goes
+ * out as that credential would, a header or none.
+ */
+export function lateCredential(credential: Effect.Effect<CallCredential>): CallCredential {
+  return { resolve: () => credential };
+}
 
 function bearer(credential: string): string {
   return `Bearer ${credential}`;
