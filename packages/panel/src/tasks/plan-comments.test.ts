@@ -1074,7 +1074,7 @@ function bubbleOver(words: string, box: { top: number; bottom: number }): HTMLEl
   }
 }
 
-test("on a touch screen the comment bubble stands under the words selected, clear of the system's menu over them, and with a mouse over them", () => {
+test("on a touch screen the comment bubble stands under the words selected, clear of the system's menu over them, or over them where the window ends first, and with a mouse over them", () => {
   const box = { top: 100, bottom: 120 };
 
   answerPointer(true);
@@ -1082,6 +1082,15 @@ test("on a touch screen the comment bubble stands under the words selected, clea
   assert.ok(
     Number.parseFloat(touch.style.top) >= box.bottom,
     "a finger's bubble hangs under the words",
+  );
+
+  document.body.innerHTML = "";
+  answerPointer(true);
+  const low = { top: window.innerHeight - 30, bottom: window.innerHeight - 10 };
+  const atEnd = bubbleOver("withdraw an invite", low);
+  assert.ok(
+    Number.parseFloat(atEnd.style.top) <= low.top,
+    "with no room under the words, it rises over them",
   );
 
   document.body.innerHTML = "";

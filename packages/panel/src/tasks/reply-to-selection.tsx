@@ -98,7 +98,9 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
-  const finger = coarsePointerNow();
+  // Note that a finger's press stands under the words, clear of the system's menu over them, unless the window ends first.
+  const finger =
+    coarsePointerNow() && box.bottom + PRESS_GAP_TOUCH + PRESS_ROOM <= window.innerHeight;
   const below = finger || box.top < PRESS_ROOM;
   const centre = box.left + box.width / 2;
   return {

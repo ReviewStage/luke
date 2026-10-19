@@ -138,6 +138,9 @@ const REVEAL_ROOM = 96;
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
 
+/** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
+const BUBBLE_ROOM_TOUCH = 16 + 48;
+
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
   COMMENT: "Comment",
@@ -1334,8 +1337,8 @@ export function PlanCommentLayer({
       }
       const box = range.getBoundingClientRect();
       const own = element.getBoundingClientRect();
-      // Note that a finger's bubble stands under the words, because the system's own selection menu stands over them.
-      const below = coarsePointerNow();
+      // Note that a finger's bubble stands under the words, because the system's own selection menu stands over them, unless the window ends first.
+      const below = coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= window.innerHeight;
       const top = (below ? box.bottom : box.top) - own.top;
       // In the editor the words are measured through it, and its selection is left as it stands.
       if (editor !== undefined) {

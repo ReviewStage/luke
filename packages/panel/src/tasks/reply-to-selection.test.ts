@@ -295,6 +295,23 @@ test("on a touch screen Reply stands under a selection once it rests, though no 
   assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
 });
 
+test("on a touch screen Reply stands under the selection, clear of the system's menu over it, or over it where the window ends first", async () => {
+  answerPointer(true);
+  const tab = await mounted();
+  /** Where Reply stands once the words are selected at `top` to `bottom`. */
+  const pressAt = (top: number, bottom: number) => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(40, top, 120, bottom - top);
+    tab.select(AGENT_WORDS, "Option B", "review.");
+    const press = document.body.querySelector<HTMLElement>(".reply-to-selection");
+    assert.ok(press, "Reply stands");
+    return Number.parseFloat(press.style.top);
+  };
+
+  assert.ok(pressAt(300, 320) > 320, "under the words");
+  const end = window.innerHeight;
+  assert.ok(pressAt(end - 30, end - 10) < end - 30, "no room under the words, it stands over them");
+});
+
 test("with a mouse, a selection resting is offered nothing until the pointer lets it go", async () => {
   const tab = await mounted();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
