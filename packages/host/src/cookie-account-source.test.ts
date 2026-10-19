@@ -350,12 +350,13 @@ describe("the cookie account source", () => {
   );
 });
 
-/** Real event-loop turns until `holds`, since the settings store's file I/O is real. */
+/**
+ * Real event-loop turns until `holds`, since the settings store's file I/O is
+ * real; a wait that never holds is ended by the test's own timeout.
+ */
 const until = (holds: () => Effect.Effect<boolean>) =>
   Effect.gen(function* () {
-    for (let turn = 0; turn < 2_000 && !(yield* holds()); turn += 1) {
-      yield* Effect.promise(() => nextTurn());
-    }
+    while (!(yield* holds())) yield* Effect.promise(() => nextTurn());
   });
 
 it.effect("keys the account's preferences sync and experiments on the cookie session", () => {
@@ -443,12 +444,17 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
   );
 });
 
+/** Who a store's session names, moved by the test. */
+interface SignedIn {
+  email: string | undefined;
+}
+
 describe("a settings store that keeps no account of its own", () => {
   const ADA = "ada@example.com";
   const BOB = "bob@example.com";
 
   /** A cipher-less store over `directory`, its session naming whoever `signedIn` holds. */
-  const storeOver = (directory: string, signedIn: { email: string | undefined }) =>
+  const storeOver = (directory: string, signedIn: SignedIn) =>
     Effect.gen(function* () {
       return new SettingsStore({
         directory: () => directory,
@@ -463,7 +469,7 @@ describe("a settings store that keeps no account of its own", () => {
   it.effect("keeps the session account's experiments across a reopen, for that account alone", () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
-      const signedIn = { email: ADA as string | undefined };
+      const signedIn: SignedIn = { email: ADA };
       const store = yield* storeOver(directory, signedIn);
       assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.FACTORY]: true }), true);
 
@@ -479,7 +485,7 @@ describe("a settings store that keeps no account of its own", () => {
     () =>
       Effect.gen(function* () {
         const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
-        const signedIn = { email: ADA as string | undefined };
+        const signedIn: SignedIn = { email: ADA };
         const store = yield* storeOver(directory, signedIn);
         yield* store.set("voice", LIVE_VOICE.CEDAR);
         yield* store.setAccountPreferencesSyncBaseline(ADA, { voice: LIVE_VOICE.CEDAR });
