@@ -5,6 +5,7 @@ import { readBoard } from "@luke/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@luke/database/models/message-reads";
+import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { readTaskOfConversation, type StoredTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
@@ -443,11 +444,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task === undefined || !(yield* chatOnFor(task))
             ? { messages: [], more: false }
             : yield* chatSince(admitted.caller, task.task.id);
+        const comments =
+          task === undefined
+            ? Option.none()
+            : yield* readPlanCommentThreads(admitted.caller, task.task.id);
         const text = brainStandingContext(
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
           seams.now(),
+          Option.getOrElse(comments, () => []),
         );
         return chat.through === undefined ? { text } : { text, chatThrough: chat.through };
       }),

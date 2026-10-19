@@ -17,6 +17,7 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { CodingAgentsPage } from "@luke/panel/settings/coding-agents-page";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,7 +30,6 @@ import {
   segment,
   segmentedGroup,
 } from "#testing/segmented";
-import { CodingAgentsPage } from "./coding-agents-page";
 
 /**
  * Settings › Coding agents' Default model over a bridge answering as the host

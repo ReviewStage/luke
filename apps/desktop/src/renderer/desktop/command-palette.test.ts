@@ -21,14 +21,22 @@ import {
   useAppCommand,
   useMenuCommands,
 } from "@luke/panel/app-commands";
+import { CommandPalette } from "@luke/panel/desktop/command-palette";
+import { DesktopSidebar } from "@luke/panel/desktop/desktop-sidebar";
+import { ListedAutomations } from "@luke/panel/desktop/listed-automations";
+import { panelEntries } from "@luke/panel/desktop/side-panel";
+import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "@luke/panel/links-at-hand";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { sidebarProps } from "@luke/panel/testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { codingAgentsControl, tasksControl } from "@luke/panel/testing/tasks-control";
 import { newestToastSays } from "@luke/panel/testing/toast";
 import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -43,14 +51,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { sidebarProps } from "#testing/desktop-sidebar";
-import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
-import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { CommandPalette } from "./command-palette";
-import { DesktopSidebar } from "./desktop-sidebar";
-import { ListedAutomations } from "./listed-automations";
-import { panelEntries } from "./side-panel";
 
 /** Where the palette sent the window: each tab and each Settings page it asked for, in order. */
 interface Sent {

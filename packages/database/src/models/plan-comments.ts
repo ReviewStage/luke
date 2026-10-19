@@ -11,6 +11,7 @@ import {
   type PlanCommentActionRequest,
   type PlanCommentAnchors,
   type PlanCommentAsked,
+  type PlanCommentAskRequest,
   type PlanCommentEntry,
   type PlanCommentEntryKind,
   type PlanCommentRefusal,
@@ -241,6 +242,29 @@ const findKeyedThread = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({ threadId: planComment.threadId })
+        .from(planComment)
+        .where(and(eq(planComment.taskId, taskId), eq(planComment.clientKey, clientKey))),
+    ),
+});
+
+/** The entry a key was written under: its thread, its kind, and whom it asked, where it is an ask. */
+const findKeyedEntry = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, clientKey: Schema.String }),
+  Result: Schema.Struct({
+    threadId: Schema.String,
+    kind: Schema.String,
+    askedActor: Schema.NullOr(Schema.String),
+    askedAgentId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ taskId, clientKey }) =>
+    Database.use((db) =>
+      db
+        .select({
+          threadId: planComment.threadId,
+          kind: planComment.kind,
+          askedActor: planComment.askedActor,
+          askedAgentId: planComment.askedAgentId,
+        })
         .from(planComment)
         .where(and(eq(planComment.taskId, taskId), eq(planComment.clientKey, clientKey))),
     ),
@@ -507,6 +531,32 @@ function replied(
   });
 }
 
+/** The line saying who sent the thread to whom, written once under its key: what an ask that was handed over leaves in the thread. */
+function askedOf(
+  taskId: string,
+  thread: PlanCommentThread,
+  writer: PlanCommentWriterRef,
+  ask: { readonly clientKey: string; readonly to: PlanCommentAsked },
+  now: Date,
+): TaskStoreEffect<PlanCommentOutcome> {
+  return Effect.gen(function* () {
+    // Note that a key answers as a retry only for the same ask of the same thread, so no other entry's key hands the thread over unrecorded.
+    const taken = yield* findKeyedEntry({ taskId, clientKey: ask.clientKey });
+    if (Option.isSome(taken)) {
+      const { threadId, kind, askedActor, askedAgentId } = taken.value;
+      const same =
+        threadId === thread.id &&
+        kind === PLAN_COMMENT_ENTRY.ASKED &&
+        askedActor === ask.to.actor &&
+        askedAgentId === (ask.to.agentId ?? null);
+      return same ? yield* answered(taskId, thread.id) : refused(PLAN_COMMENT_REFUSAL.KEY_TAKEN);
+    }
+    const entry = { kind: PLAN_COMMENT_ENTRY.ASKED, asked: ask.to, clientKey: ask.clientKey };
+    yield* writeEntry(taskId, thread.id, writer, entry, now);
+    return yield* answered(taskId, thread.id);
+  });
+}
+
 /** The thread deleted, its entries with it. */
 function deletedThread(threadId: string): TaskStoreEffect<PlanCommentOutcome> {
   return Effect.as(
@@ -549,7 +599,7 @@ export function actOnPlanCommentThread(
   writer: PlanCommentWriterRef,
   taskId: string,
   threadId: string,
-  request: PlanCommentActionRequest,
+  request: PlanCommentActionRequest | PlanCommentAskRequest,
 ): TaskStoreEffect<PlanCommentOutcome> {
   return inTransaction(
     Effect.gen(function* () {
@@ -569,6 +619,8 @@ export function actOnPlanCommentThread(
           return yield* settled(taskId, thread, writer, PLAN_COMMENT_STATUS.OPEN, now);
         case PLAN_COMMENT_ACTION.DELETE_THREAD:
           return yield* deletedThread(threadId);
+        case PLAN_COMMENT_ACTION.ASK:
+          return yield* askedOf(taskId, thread, writer, request, now);
         case PLAN_COMMENT_ACTION.EDIT:
         case PLAN_COMMENT_ACTION.DELETE: {
           const entry = entryIn(thread, entries, request.entry);
@@ -593,6 +645,31 @@ export function actOnPlanCommentThread(
           return yield* answered(taskId, threadId);
         }
       }
+    }),
+  );
+}
+
+/**
+ * The line an ask wrote taken back, where its hand-over to Luke or the agent
+ * did not land, so the thread never says someone was asked who was not.
+ */
+export function withdrawPlanCommentAsk(taskId: string, clientKey: string): TaskStoreEffect<void> {
+  return inTransaction(
+    Effect.gen(function* () {
+      const taken = yield* findKeyedThread({ taskId, clientKey });
+      if (Option.isNone(taken)) return;
+      yield* Database.use((db) =>
+        db
+          .delete(planComment)
+          .where(
+            and(
+              eq(planComment.taskId, taskId),
+              eq(planComment.clientKey, clientKey),
+              eq(planComment.kind, PLAN_COMMENT_ENTRY.ASKED),
+            ),
+          ),
+      );
+      yield* movedOn(taken.value.threadId, yield* DateTime.nowAsDate);
     }),
   );
 }

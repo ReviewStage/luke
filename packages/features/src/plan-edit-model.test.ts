@@ -80,3 +80,18 @@ test("a text rebased on a save's merged answer saves only what the developer typ
 
   assert.deepEqual(pendingSave(rebased), { document: { base: merged, value: `${merged}More.\n` } });
 });
+
+test("an editor carrying comment anchors sends where they stand with its save, and keeps the last it reported", () => {
+  const thread = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+  const anchors = { anchors: [{ thread, from: 12, to: 20 }], carried: [thread] };
+  const deleted = { anchors: [], carried: [thread] };
+
+  const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`, anchors);
+  const typedOn = editorTyped(typed, `${TEXT}Mine and more.\n`);
+  const cut = editorTyped(typedOn, "# Context\n", deleted);
+
+  assert.deepEqual(saved(typed).comments, anchors);
+  assert.deepEqual(saved(typedOn).comments, anchors);
+  assert.deepEqual(saved(cut).comments, deleted);
+  assert.equal(saved(editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`)).comments, undefined);
+});

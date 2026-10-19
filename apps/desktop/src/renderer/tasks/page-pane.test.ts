@@ -5,12 +5,12 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { PagePane, type ReadPageSource } from "@luke/panel/tasks/page-pane";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { PagePane, type ReadPageSource } from "./page-pane";
 
 /**
  * A page's tab as the developer meets it: the page drawn in a frame that
@@ -72,7 +72,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   };
   // The source's lines as drawn, each its number then its text.
   const sourceLines = () =>
-    [...container.querySelectorAll(".file-tab-lines .code-line")].map(
+    [...container.querySelectorAll(".code-lines .code-line")].map(
       (line) =>
         `${line.querySelector(".code-line-number")?.textContent} ${line.querySelector(".code-line-text")?.textContent}`,
     );
@@ -103,7 +103,7 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   const tag = container.querySelector<HTMLElement>(".code-line-text span");
   assert.equal(tag?.textContent, "<h1>");
   assert.notEqual(tag?.getAttribute("style") ?? "", "");
-  assert.ok(container.querySelector(".file-tab-lines")?.closest(".ph-no-capture"));
+  assert.ok(container.querySelector(".code-lines")?.closest(".ph-no-capture"));
 
   await press("View page");
 
@@ -124,7 +124,7 @@ test("the source stays shown while the versions are stepped, each version's own"
   await press("View page");
   await press("Later version");
 
-  assert.equal(container.querySelector(".file-tab-lines"), null);
+  assert.equal(container.querySelector(".code-lines"), null);
   assert.ok(container.querySelector(`iframe[src="${versionUrl(3)}"]`));
 });
 

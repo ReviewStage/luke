@@ -1,0 +1,387 @@
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { FOR_YOU } from "@luke/ui/chat-model";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import type { SummaryPin } from "../desktop/task-summary.js";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
+import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
+import {
+  AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
+  type TasksControl,
+  type VersionHistoryControl,
+} from "../tasks/use-tasks-tab.js";
+
+const ignore = () => undefined;
+
+/** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
+export function waitingOf(item: InboxItem): AppInboxWaitingItem {
+  return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
+}
+
+/** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
+export const UNPINNED_SUMMARY: SummaryPin = {
+  pinned: false,
+  onToggle: ignore,
+  wide: true,
+  onMeasured: ignore,
+};
+
+/** A task whose version history is shut, its history still being read, no version chosen, every press ignored. */
+function versionHistoryControl(
+  overrides: Partial<VersionHistoryControl> = {},
+): VersionHistoryControl {
+  return {
+    open: false,
+    onOpen: ignore,
+    onReturn: ignore,
+    onClose: ignore,
+    list: { kind: HISTORY_READ.READING },
+    selected: undefined,
+    viewing: undefined,
+    onSelect: ignore,
+    spot: undefined,
+    onOpenSections: ignore,
+    onChooseSection: ignore,
+    onCloseSections: ignore,
+    onRetry: ignore,
+    onLoadEarlier: () => Promise.resolve(false),
+    onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    ...overrides,
+  };
+}
+
+/** A repository chip's list read from nowhere, which answers that the service did not. */
+const NO_REPOSITORIES = {
+  recent: [],
+  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+  openGitHub: ignore,
+  pictures: true,
+  manages: true,
+} as const satisfies TasksControl["repositories"];
+
+/** A task with no agents and no repository, every press ignored. */
+export function codingAgentsControl(
+  overrides: Partial<CodingAgentsControl> = {},
+): CodingAgentsControl {
+  return {
+    me: undefined,
+    chatOn: true,
+    agents: [],
+    archived: [],
+    agentIds: [],
+    // A task with no archived agent holds exactly the agents given.
+    heldIds: overrides.agentIds ?? [],
+    keywords: [],
+    readSkills: undefined,
+    draft: undefined,
+    onNewDraft: () => "draft",
+    onForkDraft: () => "draft",
+    onContinueDraft: () => "draft",
+    onDropFork: ignore,
+    onDraftChange: ignore,
+    onHandDraft: ignore,
+    onTaskStarted: ignore,
+    onDraftAttachments: ignore,
+    onDiscardDraft: ignore,
+    startPrompt: () => Promise.resolve(undefined),
+    startFork: () => Promise.resolve(undefined),
+    listFailed: false,
+    listMissing: false,
+    onRetryList: ignore,
+    models: undefined,
+    readModels: ignore,
+    readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onUnarchive: undefined,
+    continueAgent: undefined,
+    start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
+    onStop: () => Promise.resolve(),
+    onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onOpenIntegrations: ignore,
+    onOpenApiKeys: ignore,
+    onRename: () => Promise.resolve(false),
+    onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
+    // An agent read again stands as the control's list has it.
+    readAgent: (agentId) =>
+      Promise.resolve(
+        [...(overrides.agents ?? []), ...(overrides.archived ?? [])].find(
+          (agent) => agent.id === agentId,
+        ),
+      ),
+    onStatus: ignore,
+    onTitle: ignore,
+    readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    pullRequests: new Map(),
+    readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewPullRequest: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readReviewOptions: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewChecks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readOverviewConversation: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequestViewed: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    changesPeople: new Map(),
+    readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    ...overrides,
+  };
+}
+
+/**
+ * A signed-in Tasks tab on screen on its home page with no tasks, every
+ * press ignored, bound for whichever task it is given as open.
+ */
+export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
+  return {
+    page: TASKS_PAGE.HOME,
+    restoring: false,
+    shown: true,
+    signedIn: true,
+    me: undefined,
+    tasks: [],
+    archived: [],
+    listed: {
+      tasks: overrides.tasks ?? [],
+      archived: overrides.archived ?? [],
+      inbox: overrides.inbox ?? [],
+      inboxTasks: overrides.inboxTasks ?? [],
+    },
+    listedAgents: { standing: [], archived: [] },
+    workspaces: [],
+    workspacesFailed: false,
+    onRetryWorkspaces: ignore,
+    workspace: undefined,
+    onChooseWorkspace: ignore,
+    onLeftWorkspace: ignore,
+    onCreateWorkspace: () => Promise.resolve(undefined),
+    onOpenWorkspaceSettings: ignore,
+    onOpenWorkspaceGitHub: ignore,
+    onMoveTask: () => Promise.resolve(false),
+    github: undefined,
+    onConnectAccountGitHub: () => Promise.resolve(false),
+    onDisconnectAccountGitHub: () => Promise.resolve(false),
+    activeTaskId: undefined,
+    boundFor: overrides.activeTaskId,
+    listFailed: false,
+    listRead: true,
+    region: { kind: DOCUMENT_REGION.NONE },
+    copy: { onPress: ignore },
+    edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    microphone: { label: "Talk about this task", enabled: true, muted: false, onPress: ignore },
+    speaker: { muted: false, onPress: ignore },
+    stop: { shown: false, onPress: ignore },
+    status: undefined,
+    live: false,
+    mainTabs: {
+      tabs: [MAIN_TAB.PLAN],
+      tab: MAIN_TAB.PLAN,
+      openAgents: undefined,
+      newTabAsked: false,
+      onChoose: ignore,
+      onShow: ignore,
+      onClose: ignore,
+      onInboxRead: ignore,
+      onMove: ignore,
+      onNewTab: ignore,
+      onNewTabAnswered: ignore,
+    },
+    sidePanel: {
+      open: false,
+      fullScreen: false,
+      newTabAsked: false,
+      tabs: SIDE_PANEL_TABS,
+      order: [],
+      closedTabs: [],
+      used: SIDE_PANEL_TABS,
+      pins: [],
+      subagents: [],
+      files: [],
+      changes: [],
+      pages: [],
+      terminals: [],
+      lastTerminal: undefined,
+      browsers: [],
+      pullRequestViews: {},
+      onPullRequestView: () => undefined,
+      strip: SIDE_PANEL_TABS,
+      tab: SIDE_PANEL_TAB.BOARD,
+      width: SIDE_PANEL_WIDTH.DEFAULT,
+      onToggle: ignore,
+      onSetOpen: ignore,
+      onToggleFullScreen: ignore,
+      onNewTab: ignore,
+      onNewTabAnswered: ignore,
+      onChoose: ignore,
+      onShow: ignore,
+      onClose: ignore,
+      onMove: ignore,
+      onReopen: ignore,
+      onPin: ignore,
+      onUnpin: ignore,
+      onRenamePins: ignore,
+      onPlacePins: ignore,
+      onOpenFile: ignore,
+      onBrowseFile: ignore,
+      onFileHistory: ignore,
+      onFoldNote: ignore,
+      onResize: ignore,
+      onOpenBrowser: ignore,
+      onCloseBrowsers: ignore,
+      onBrowserOpened: ignore,
+    },
+    unreadTabs: [],
+    board: undefined,
+    shownCode: undefined,
+    workFailed: false,
+    onRetryWork: ignore,
+    pages: undefined,
+    transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
+    work: {
+      conversation: undefined,
+      onLoadEarlier: () => Promise.resolve(),
+      readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
+    },
+    agents: codingAgentsControl(),
+    history: versionHistoryControl(),
+    onSelect: ignore,
+    onShowAgent: ignore,
+    onShowSource: ignore,
+    onShowTask: ignore,
+    onShowMention: ignore,
+    onOpenLink: ignore,
+    messageReveal: undefined,
+    onMessageRevealed: ignore,
+    sectionReveal: undefined,
+    commentReveal: undefined,
+    onSectionRevealed: ignore,
+    onShowInbox: ignore,
+    onShowChat: ignore,
+    secondCall: {
+      confirm: {
+        stage: CONFIRM_STAGE.RESTING,
+        rejection: undefined,
+        busy: false,
+        ask: ignore,
+        keep: ignore,
+        clear: ignore,
+        run: ignore,
+        standing: false,
+      },
+      question: { title: "", body: "", verb: "", running: "" },
+    },
+    inbox: [],
+    inboxShown: null,
+    chatShown: null,
+    inboxTasks: [],
+    inboxView: {
+      open: false,
+      chosen: undefined,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+      pages: undefined,
+      onRereadPages: () => undefined,
+    },
+    agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    personView: {
+      userId: undefined,
+      name: undefined,
+      workspaceId: undefined,
+      onOpen: ignore,
+      onClose: ignore,
+    },
+    inboxTaskless: [],
+    failedRuns: [],
+    factoryView: { open: false, onOpen: ignore, onClose: ignore },
+    automationsView: {
+      open: false,
+      place: { kind: AUTOMATIONS_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
+    issuesView: {
+      open: false,
+      place: { kind: ISSUES_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+      peeked: undefined,
+      onPeek: ignore,
+    },
+    callTaskId: undefined,
+    chatView: {
+      open: false,
+      available: false,
+      chat: undefined,
+      failed: false,
+      onRetry: ignore,
+      place: FOR_YOU,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+      onShow: ignore,
+      onPost: () => Promise.resolve(undefined),
+      onAnswer: () => Promise.resolve(undefined),
+    },
+    onShowFile: ignore,
+    onOpenPinnedTab: ignore,
+    onReopenClosedTab: undefined,
+    chosenPin: undefined,
+    repositories: NO_REPOSITORIES,
+    repositoryMenu: undefined,
+    onChangeRepository: ignore,
+    onSetRepository: () => Promise.resolve(undefined),
+    onOpenOnGitHub: ignore,
+    onRetryList: ignore,
+    onRetryDocument: ignore,
+    onNewTask: ignore,
+    onNewTaskIn: ignore,
+    onNewTaskFrom: ignore,
+    newTask: {
+      open: false,
+      preset: undefined,
+      workspaces: [],
+      workspaceId: undefined,
+      repositoriesIn: () => NO_REPOSITORIES,
+      start: () => Promise.resolve(undefined),
+      models: undefined,
+      readModels: ignore,
+      readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+      onClose: ignore,
+      linearIssuesIn: () => undefined,
+    },
+    onLeaveTask: ignore,
+    onGoHome: ignore,
+    onRenameTask: () => Promise.resolve(true),
+    onDraftName: ignore,
+    onMarkTask: ignore,
+    onArchiveTasks: ignore,
+    pinnedRepositories: [],
+    onPinRepository: ignore,
+    taskSections: NO_TASK_SECTIONS,
+    onWriteSections: ignore,
+    onPinAgent: ignore,
+    onMovePins: ignore,
+    onDeleteTask: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    back: () => false,
+    // No page asks before it is left, so every way out goes at once.
+    leaveGuard: {
+      stand: () => ignore,
+      pass: (leave) => leave(),
+      guard: (leave) => leave,
+    },
+    ...overrides,
+  };
+}

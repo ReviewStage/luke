@@ -41,6 +41,7 @@
     "./use-setting-write": "./src/use-setting-write.js",
     "./use-state-with-ref": "./src/use-state-with-ref.js",
     "./use-inline-rename": "./src/use-inline-rename.js",
+    "./plan-comments": "./src/plan-comments.js",
     "./use-disclosure": "./src/use-disclosure.js",
     "./use-clipped": "./src/use-clipped.js",
     "./tasks-model": "./src/tasks-model.js",

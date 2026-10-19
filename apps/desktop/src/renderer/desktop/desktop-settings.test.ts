@@ -7,7 +7,11 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { type CallCardInput, callControls } from "@luke/panel/call/call-card";
+import { DesktopSettings } from "@luke/panel/desktop/desktop-settings";
 import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
+import type { SettingsPanelProps } from "@luke/panel/settings/settings-panel";
+import type { WorkspaceSettingsControl } from "@luke/panel/settings/workspace-page";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -24,10 +28,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { type CallCardInput, callControls } from "../call/call-card";
-import type { SettingsPanelProps } from "../settings/settings-panel";
-import type { WorkspaceSettingsControl } from "../settings/workspace-page";
-import { DesktopSettings } from "./desktop-settings";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,

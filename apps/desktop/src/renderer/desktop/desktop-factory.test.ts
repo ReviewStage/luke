@@ -17,18 +17,18 @@ import {
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { DesktopFactory } from "@luke/panel/desktop/desktop-factory";
 import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import type { InboxChoice, TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { tasksControl } from "#testing/tasks-control";
-import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
-import { DesktopFactory } from "./desktop-factory";
 
 const NOW = Date.now();
 const MINUTE = 60_000;

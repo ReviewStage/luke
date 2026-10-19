@@ -23,6 +23,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import { fixtureChat } from "@luke/panel/tasks/chat-fixture";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
@@ -43,10 +44,13 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { fixtureChat } from "../tasks/chat-fixture";
 import "@luke/panel/file-tree/index";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { DesktopTasks } from "./desktop-tasks";
+import { DesktopTasks } from "@luke/panel/desktop/desktop-tasks";
+import {
+  codingAgentsControl,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "@luke/panel/testing/tasks-control";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",

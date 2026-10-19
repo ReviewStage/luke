@@ -45,7 +45,9 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { appBridge } from "@luke/panel/app-bridge";
 import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import { DesktopInbox } from "@luke/panel/desktop/desktop-inbox";
 import { DRAFT_WORD } from "@luke/panel/draft-mark";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import {
@@ -59,6 +61,7 @@ import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { tasksControl, waitingOf } from "@luke/panel/testing/tasks-control";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -73,9 +76,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
-import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
-import { DesktopInbox } from "./desktop-inbox";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 

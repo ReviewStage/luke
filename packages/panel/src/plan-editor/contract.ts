@@ -33,8 +33,8 @@ export interface PlanEditorProps {
   readonly placeholder?: string | undefined;
   /** The read view's own classes, so the editor's words stand where the drawn words stood. */
   readonly className: string;
-  /** The text as it would be saved now, after each change. */
-  readonly onDraft: (markdown: string) => void;
+  /** The text as it would be saved now, after each change, and where the comment threads' words stand in it, where the editor carries any. */
+  readonly onDraft: (markdown: string, anchors?: EditorAnchors) => void;
   /** Esc or ⌘↩, with the section the caret stood in, counted as `planSections` counts them. */
   readonly onFinish: (section: number) => void;
   /** ↑ from the first line of the text, which goes to the title above it. */
@@ -50,6 +50,25 @@ export interface PlanEditorProps {
   readonly drawDiagram?: ((element: HTMLElement, diagram: EditorDiagram) => () => void) | undefined;
   /** What the text's pictures are drawn and taken in with; none where the text takes no pictures, as a template does not. */
   readonly pictures?: PlanEditorPictures | undefined;
+  /** The open comment threads' words, in offsets of `markdown`, which the editor carries as its words move; none where the text has no comments. */
+  readonly anchors?: readonly EditorAnchor[] | undefined;
+}
+
+/** The words one comment thread is on, as offsets into a plan's Markdown. */
+export interface EditorAnchor {
+  readonly thread: string;
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * Where the editor's comment threads stand in a draft's Markdown, and the
+ * threads it carries: a carried thread with no anchor had its words deleted
+ * in the editor; one with its anchor back had them brought back by undo.
+ */
+export interface EditorAnchors {
+  readonly anchors: readonly EditorAnchor[];
+  readonly carried: readonly string[];
 }
 
 /**
@@ -156,6 +175,14 @@ export interface PlanEditorMentions {
   readonly namesMention: (target: string) => boolean;
 }
 
+/** Words of the editor a thread is started on: where they stand in `text`, the Markdown the editor would hand over now, and the words themselves. */
+export interface EditorSpan {
+  readonly from: number;
+  readonly to: number;
+  readonly quote: string;
+  readonly text: string;
+}
+
 /** An editor as mounted. */
 export interface PlanEditorHandle {
   /**
@@ -176,6 +203,10 @@ export interface PlanEditorHandle {
   readonly settlePicture: (upload: string, src: string) => void;
   /** The picture waiting on `upload` taken out of the text, as its Remove does. */
   readonly removePicture: (upload: string) => void;
+  /** The words selected, as a thread started on them anchors them; nothing where none are. */
+  readonly selectionSpan: () => EditorSpan | undefined;
+  /** The block `element` is drawn in, whole, as a thread started on it anchors it; nothing where it is no block of the text, a diagram's preview say. */
+  readonly blockSpan: (element: Element) => EditorSpan | undefined;
   readonly destroy: () => void;
 }
 

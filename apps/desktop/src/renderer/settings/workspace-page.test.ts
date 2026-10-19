@@ -27,6 +27,7 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { OpenPersonProvider } from "@luke/panel/person-door";
+import { WorkspacePage, type WorkspaceSettingsControl } from "@luke/panel/settings/workspace-page";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
@@ -44,7 +45,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
  * Settings' Workspace page over a bridge answering as the host would: it

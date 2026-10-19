@@ -106,6 +106,8 @@ export const planCommentWriterSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
+
 /** Who a thread was sent to: Luke, or a coding agent by its id. */
 export const planCommentAskedSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
@@ -194,6 +196,8 @@ export const PLAN_COMMENT_ACTION = {
   RESOLVE: "resolve",
   REOPEN: "reopen",
   DELETE_THREAD: "delete-thread",
+  /** Sends the thread to Luke or one of the task's coding agents, to read with the plan and answer in the thread. */
+  ASK: "ask",
 } as const;
 
 export const planCommentActionRequestSchema = EffectSchema.Union([
@@ -218,6 +222,17 @@ export const planCommentActionRequestSchema = EffectSchema.Union([
 
 export type PlanCommentActionRequest = typeof planCommentActionRequestSchema.Type;
 
+/**
+ * An ask written in a thread under its own key, saying whom a comment's
+ * mention handed it to. The service writes it as it hands the thread over;
+ * no client sends one, since a mention in the words is how a member asks.
+ */
+export interface PlanCommentAskRequest {
+  readonly action: typeof PLAN_COMMENT_ACTION.ASK;
+  readonly clientKey: string;
+  readonly to: PlanCommentAsked;
+}
+
 /** Why a write to a thread took nothing, answered in band. */
 export const PLAN_COMMENT_REFUSAL = {
   /** The plan already holds `PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN` threads, or the thread its bound of comments. */
@@ -236,7 +251,11 @@ export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN
 
 /** What a write to a thread answers: the thread as it now stands, that it was deleted, or why nothing was taken. */
 export const planCommentThreadAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ thread: planCommentThreadSchema }),
+  EffectSchema.Struct({
+    thread: planCommentThreadSchema,
+    /** The ones a comment's mentions asked who could not take the thread, an agent whose session is not running say; absent where every one did. */
+    unsent: EffectSchema.optionalKey(EffectSchema.Array(planCommentAskedSchema)),
+  }),
   EffectSchema.Struct({ deleted: wireUuidSchema }),
   EffectSchema.Struct({ refused: EffectSchema.Literals(Object.values(PLAN_COMMENT_REFUSAL)) }),
 ]);
@@ -260,3 +279,11 @@ export const planCommentAnchorsSchema = EffectSchema.Struct({
 });
 
 export type PlanCommentAnchors = typeof planCommentAnchorsSchema.Type;
+
+/** The tools Luke and every coding agent on the task read and answer the plan's comments with, by the name the model calls each. */
+export const PLAN_COMMENT_TOOL = {
+  READ: "read_comments",
+  REPLY: "reply_to_comment",
+  RESOLVE: "resolve_thread",
+  REOPEN: "reopen_thread",
+} as const;

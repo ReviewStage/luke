@@ -31,6 +31,8 @@ import {
   TASKS_READ,
   type TaskCodeShowing,
   type TaskShownCode,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
   type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
@@ -62,6 +64,9 @@ import {
   type TaskWorkTurn,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksCommentActParamsSchema,
+  tasksCommentStartParamsSchema,
+  tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
@@ -328,6 +333,9 @@ export type TasksClient = Pick<
   | "readPageVersion"
   | "readPicture"
   | "keepPicture"
+  | "comments"
+  | "startComment"
+  | "actOnComment"
   | "restore"
   | "stopWork"
   | "repositories"
@@ -1407,6 +1415,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           client.readPicture(read.success.planId, read.success.attachmentId),
         );
         return carried<TasksPictureAnswer>(picture);
+      }),
+    // A plan's comments are read past the window's cursor, held by the service while nothing changed.
+    [GATEWAY_METHOD.TASKS_COMMENTS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentsParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading a plan's comments names the plan and a cursor");
+        if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(client.comments(read.success.planId, read.success.after));
+        return carried<TasksCommentsAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentStartParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("starting a comment names a plan and the thread");
+        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(client.startComment(read.success.planId, read.success.start));
+        return carried<TasksCommentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentActParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("changing a comment names a plan, a thread, and what to do");
+        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(
+          client.actOnComment(read.success.planId, read.success.threadId, read.success.action),
+        );
+        return carried<TasksCommentAnswer>(answer);
       }),
     // The picture is kept and its id answered to the editor that took it;
     // the plan's text names it once the editor lays its address in.

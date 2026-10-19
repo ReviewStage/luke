@@ -10,16 +10,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
-import { onRegistry } from "@luke/panel/testing/copy-feedback";
-import { relayout } from "@luke/panel/testing/resize-observer";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import type { HeldTranscripts } from "./strip-tabs";
+import type { HeldTranscripts } from "@luke/panel/desktop/strip-tabs";
 import {
   SummaryButton,
   type SummaryLayout,
@@ -27,7 +18,16 @@ import {
   TaskSummary,
   useSummaryLayout,
   useSummaryPin,
-} from "./task-summary";
+} from "@luke/panel/desktop/task-summary";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { codingAgentsControl, tasksControl } from "@luke/panel/testing/tasks-control";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, test, vi } from "vitest";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 
 /**
  * task-summary.test.ts -- the summary's pull request row hangs the Changes

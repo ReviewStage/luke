@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
-import { signingModeDefine } from "./package-config.mjs";
+import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -91,7 +91,10 @@ const markdownHtmlParserOnDemand = {
 // them would be. The CommonJS file is read in a namespace of its own, so the
 // resolver never takes it for the package and keeps answering the named
 // imports with the ES build.
-const LUCIDE_WHOLE = createRequire(path.join(appRoot, "package.json")).resolve("lucide-react");
+// Note that the copy is the one the panel (`@luke/panel`), which draws the icons, resolves.
+const LUCIDE_WHOLE = createRequire(path.join(appRoot, "../../packages/panel/package.json")).resolve(
+  "lucide-react",
+);
 const LUCIDE_WHOLE_FILE = "lucide-whole-file";
 const lucideWholeOnDemand = {
   name: "lucide-whole-on-demand",
@@ -387,10 +390,11 @@ const rendererBuild = build({
     "process.env.IS_PREACT": '"false"',
     // The analytics project the screen recorder files into, from the
     // packaging environment rather than source, where secret scanners
-    // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
-    // kill switch the site's own counting has, so a local run or an
-    // unconfigured build cannot record into a stranger's project.
-    PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
+    // cannot tell a published project key from a real secret, and only for a
+    // Developer ID release build. A build without one records nothing at
+    // all — the same kill switch the site's own counting has, so a local run
+    // or an unconfigured build cannot record into production's project.
+    ...replayProjectKeyDefine(process.env),
     DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   },
 });

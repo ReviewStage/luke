@@ -29,6 +29,13 @@ import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   TASK_SECTION_WRITE,
@@ -118,6 +125,9 @@ function summary({
 /** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
   tasks: Task[];
+  /** Each task's comment threads, by task id, and every comment call asked, in order. */
+  threads: Record<string, PlanCommentThread[]>;
+  commentCalls: string[];
   /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
   agents: Record<string, TaskAgentsSummary>;
   /** The agents with no plan the list carries beside the plans. */
@@ -265,6 +275,45 @@ const EDITED_AT = 7_000;
 function fakeService(tasks: Task[]): FakeService {
   const service: FakeService = {
     tasks,
+    threads: {},
+    commentCalls: [],
+    comments: (planId, after) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`read:${planId}:${after}`);
+        return { threads: service.threads[planId] ?? [], cursor: "c1" };
+      }),
+    // The service starts the thread as asked, the member its writer, and holds it on the plan.
+    startComment: (planId, start) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`start:${planId}:${start.quote}`);
+        const thread: PlanCommentThread = {
+          id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
+          scope: start.scope,
+          quote: start.quote,
+          anchor: start.anchor,
+          section: "Goal",
+          status: PLAN_COMMENT_STATUS.OPEN,
+          entries: [
+            {
+              id: "5f2b0c1e-8d3a-4c7b-9e6f-1a2b3c4d5e6f",
+              kind: PLAN_COMMENT_ENTRY.COMMENT,
+              writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
+              words: start.words,
+              at: 1,
+            },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+          revision: 1,
+        };
+        service.threads[planId] = [...(service.threads[planId] ?? []), thread];
+        return { thread };
+      }),
+    actOnComment: (planId, threadId, action) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
+        return { deleted: threadId };
+      }),
     agents: {},
     tasklessAgents: [],
     listFails: false,
@@ -955,6 +1004,33 @@ it.effect(
         { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" },
       );
       assert.deepEqual(third, { failure: PICTURE_KEEP_FAILURE.TOO_MANY });
+    }),
+);
+
+it.effect(
+  "a plan's comments are read past the window's cursor, and a thread started on it is answered as the service holds it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service);
+      const start = {
+        clientKey: "key-1",
+        scope: PLAN_COMMENT_SCOPE.WORDS,
+        quote: "Invites",
+        anchor: { from: 2, to: 9 },
+        text: "# Invites",
+        words: "Why invites?",
+      };
+
+      const started = yield* call(GATEWAY_METHOD.TASKS_COMMENT_START, {
+        planId: INVITES,
+        start,
+      });
+      const read = yield* call(GATEWAY_METHOD.TASKS_COMMENTS, { planId: INVITES, after: "0" });
+
+      assert.deepEqual(started, { thread: service.threads[INVITES]?.[0] });
+      assert.deepEqual(read, { threads: service.threads[INVITES], cursor: "c1" });
+      assert.deepEqual(service.commentCalls, [`start:${INVITES}:Invites`, `read:${INVITES}:0`]);
     }),
 );
 

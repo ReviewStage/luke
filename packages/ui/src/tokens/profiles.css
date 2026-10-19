@@ -85,7 +85,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
-  --luke-dialog-composer-width: 620px;
+  --luke-dialog-composer-width: 720px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
@@ -200,7 +200,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
-  --luke-dialog-composer-width: 620px;
+  --luke-dialog-composer-width: 720px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);

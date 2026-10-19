@@ -86,6 +86,7 @@ export function ComposerField({
   quote,
   mentions,
   takesFocus = true,
+  focus,
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
@@ -113,6 +114,8 @@ export function ComposerField({
   mentions?: ComposerFieldMentions | undefined;
   /** Whether the editor takes the caret as it mounts, unless the developer is typing elsewhere; a box that stands beside a list the keys step through takes none. */
   takesFocus?: boolean;
+  /** Whether the editor takes the caret as it mounts, over `takesFocus` and whoever is typing elsewhere; left out, those decide. Read as it mounts. */
+  focus?: boolean | undefined;
   /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -131,6 +134,7 @@ export function ComposerField({
     onTrigger,
     mentions,
     takesFocus,
+    focus,
   });
   latest.current = {
     draft,
@@ -142,6 +146,7 @@ export function ComposerField({
     onTrigger,
     mentions,
     takesFocus,
+    focus,
   };
 
   /** A chip the editor asked for, drawn into its node's element until the node goes. */
@@ -161,7 +166,7 @@ export function ComposerField({
       maxLength,
       label,
       className: FIELD_CLASS,
-      focus: now.takesFocus && !typingElsewhere(),
+      focus: now.focus ?? (now.takesFocus && !typingElsewhere()),
       onDraft: (text) => {
         emitted.current = text;
         latest.current.setDraft(text);

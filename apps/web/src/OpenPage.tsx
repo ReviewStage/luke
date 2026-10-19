@@ -51,6 +51,7 @@ const WORDS = {
 const TITLE = {
   [LINK_PLACE.TASK]: "Open this task in Luke",
   [LINK_PLACE.SECTION]: "Open this section in Luke",
+  [LINK_PLACE.COMMENT]: "Open this comment in Luke",
   [LINK_PLACE.VERSION]: "Open this version in Luke",
   [LINK_PLACE.PAGE]: "Open this page in Luke",
   [LINK_PLACE.CALL]: "Open this call in Luke",
@@ -81,7 +82,9 @@ const LANDING_URL = "/";
  * line that follows a press, centred as the card's words are.
  */
 export function OpenPage(): React.JSX.Element {
-  const [target] = useState(() => openTargetOf(window.location.pathname, window.location.hash));
+  const [target] = useState(() =>
+    openTargetOf(window.location.pathname, window.location.hash, window.location.search),
+  );
   const [pressed, setPressed] = useState(false);
   return (
     <AuthPage

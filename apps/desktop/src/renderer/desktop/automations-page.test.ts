@@ -28,12 +28,20 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { AutomationsPage } from "@luke/panel/desktop/automations-page";
 import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  useLeaveGuard,
+} from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { playMotions } from "@luke/panel/testing/pane-motion";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { ToastHost } from "@luke/panel/toast";
 import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
@@ -44,10 +52,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { layContainersAt } from "#testing/container-width";
-import { playMotions } from "#testing/pane-motion";
-import { tasksControl } from "#testing/tasks-control";
-import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
-import { AutomationsPage } from "./automations-page";
 
 /**
  * automations-page.test.ts -- the Automations page as the window draws it: the listed workspace's automations, the workspace's before the personal ones, each naming its owner, an automation turned off saying so, a failed run marked, a switch's write taken in place, and a read that did not land said with a retry.

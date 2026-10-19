@@ -77,6 +77,11 @@
     var(--luke-control-height) +
     var(--luke-control-gap)
   );
+  /* The margin a comment thread stands in beside the reading width, and the
+     gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
+  --comment-card-width: 288px;
+  --comment-margin-gap: var(--luke-space-48);
+  --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
@@ -2286,6 +2291,15 @@ ul.actor-stack {
   max-width: var(--luke-page-measure);
   margin-right: auto;
   margin-left: auto;
+}
+
+/* With comments in its margin, the document stands left of the column's
+   middle by half the margin, so the reading width and the margin beside it
+   are centred together, as a document's margin comments are. */
+.desktop-document
+  .plan-document-scroll[data-comments="margin"]
+  :is(.plan-body, .plan-crumb, .plan-edit-note, .plan-changed-note) {
+  margin-left: max(0px, calc((100% - var(--luke-page-measure) - var(--comment-margin-room)) / 2));
 }
 
 .desktop-document .plan-body {
@@ -6695,6 +6709,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: contents;
 }
 
+/* New task's composer (`new-task-composer.tsx`) at the top of the page's
+   content, the card as wide as the content, the sections a little under it. */
+.home-composer {
+  margin-bottom: var(--luke-space-32);
+}
+
+/* Signed out, the page draws no composer, and its box takes no room. */
+.home-composer:empty {
+  display: none;
+}
+
+/* Where the page or the welcome lays the composer's one box
+   (`desktop-home.tsx`'s `useComposerSlot`), which lays nothing out itself. */
+.home-composer-slot {
+  display: contents;
+}
+
 .home-section {
   display: flex;
   flex-direction: column;
@@ -6868,7 +6899,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-bottom: 0;
 }
 
-/* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
+/* A new account's welcome: Luke's face on a tile and a title, centred over
+   New task's composer, the card as wide as the page's measure. */
 .home-welcome {
   display: flex;
   min-height: 0;
@@ -6879,6 +6911,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-12);
   padding: var(--luke-page-inset);
   text-align: center;
+}
+
+.home-welcome .home-composer {
+  width: min(var(--luke-page-measure), 100%);
+  margin: var(--luke-space-8) 0 0;
+  text-align: start;
 }
 
 .home-welcome-face {

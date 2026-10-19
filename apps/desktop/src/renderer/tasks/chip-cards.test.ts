@@ -20,7 +20,11 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { TaskCard } from "@luke/panel/desktop/task-card";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { ChipCards, type TaskFocus } from "@luke/panel/tasks/chip-cards";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -32,10 +36,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { TaskCard } from "../desktop/task-card";
-import { ChipCards, type TaskFocus } from "./chip-cards";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * chip-cards.test.ts -- a chip of a place in Luke hangs the card the window

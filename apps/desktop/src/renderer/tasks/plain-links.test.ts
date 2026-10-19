@@ -4,6 +4,13 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MARKDOWN_MARK, MarkdownMessage } from "@luke/panel/markdown-message";
+import { notesBefore } from "@luke/panel/tasks/file-note";
+import { PlanBody } from "@luke/panel/tasks/plan-body";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
+import { VersionView } from "@luke/panel/tasks/version-view";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "@luke/panel/testing/composer";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
@@ -15,13 +22,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
-import { notesBefore } from "./file-note";
-import { PlanBody } from "./plan-body";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { TranscriptWords } from "./transcript-blocks";
-import { HISTORY_READ } from "./use-plan-history";
-import { VersionView } from "./version-view";
 
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain

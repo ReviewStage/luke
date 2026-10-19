@@ -18,6 +18,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -32,6 +33,12 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
+import {
+  COMMENT_TOOL_REFUSAL,
+  type CommentToolName,
+  commentToolRejected,
+  runCommentTool,
+} from "../../tasks/comment-tools.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
 import {
   PICTURE_LOOK_REFUSAL,
@@ -386,6 +393,12 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
   ): Effect.Effect<PictureLookResult, never, DatabaseServices>;
+  /** Runs one call of a comment tool (`tasks/comment-tools.ts`) on the agent's plan, as the member whose turn it is, written under the agent. */
+  comment(
+    admitted: AdmittedConversation,
+    name: CommentToolName,
+    input: UnparsedWireValue,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
@@ -895,6 +908,23 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
       ),
 
+    comment: (admitted, name, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return commentToolRejected(found.failure);
+        const { id: agentId, taskId } = found.success;
+        if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
+        // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
+        const writer = {
+          actor: PLAN_COMMENT_ACTOR.AGENT,
+          userId: admitted.caller,
+          agentId,
+        } as const;
+        return yield* runCommentTool(name, { taskId, writer }, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),
+      ),
     chatOffered: (admitted, prompt) =>
       (prompt.chatOn === true
         ? chatEnabledFor(admitted.target.userId)

@@ -30,7 +30,10 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { DesktopAgentPage } from "@luke/panel/desktop/desktop-agent-page";
+import { archiveWords } from "@luke/panel/tasks/coding-agent-model";
 import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import {
   DESKTOP_CAPABILITIES,
@@ -46,6 +49,7 @@ import {
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { codingAgentsControl, tasksControl } from "@luke/panel/testing/tasks-control";
 import { newestToastSays } from "@luke/panel/testing/toast";
 import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
@@ -58,10 +62,6 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { archiveWords } from "../tasks/coding-agent-model";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { DesktopAgentPage } from "./desktop-agent-page";
 
 /**
  * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it cannot, deleted or the experiment off, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.

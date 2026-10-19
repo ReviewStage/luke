@@ -81,8 +81,8 @@ const DOCUMENT_BEFORE = new Set(["copy", "edit", "per", "to"]);
 /** AI Elements' Plan card, which draws the plan an agent is handed, and the two places that draw it. */
 const PLAN_CARD_FILES = [
   "packages/panel/src/ai-elements/plan.tsx",
-  "apps/desktop/src/renderer/tasks/agent-tab.tsx",
-  "apps/desktop/src/renderer/tasks/replay-card.tsx",
+  "packages/panel/src/tasks/agent-tab.tsx",
+  "packages/panel/src/tasks/replay-card.tsx",
 ];
 
 /**
@@ -97,12 +97,12 @@ const SCOPED_AFTER = {
   icon: PLAN_CARD_FILES,
   title: PLAN_CARD_FILES,
   // The line under the plan's title: who started its task and who last edited it.
-  byline: ["apps/desktop/src/renderer/tasks/plan-body.tsx"],
+  byline: ["packages/panel/src/tasks/plan-body.tsx"],
   // The Plan tab's row, and the shell's toggle onto the document.
-  row: ["apps/desktop/src/renderer/desktop/main-tabs.tsx"],
-  toggle: ["apps/desktop/src/renderer/desktop/desktop-shell.tsx"],
+  row: ["packages/panel/src/desktop/main-tabs.tsx"],
+  toggle: ["packages/panel/src/desktop/desktop-shell.tsx"],
   // The New task dialog's Plan switch, in its test.
-  switch: ["apps/desktop/src/renderer/tasks/new-task-dialog.test.ts"],
+  switch: ["packages/panel/src/tasks/new-task-dialog.test.ts"],
   // Who wrote a revision of the plan, and a save that lost to another or was not made.
   writer: [
     "packages/database/src/models/plan-revisions.ts",
@@ -168,11 +168,11 @@ const WIRE_NAME = {
     "apps/desktop/src/renderer/desktop/automations-page.test.ts",
     "apps/desktop/src/renderer/desktop/command-palette.test.ts",
     "apps/desktop/src/renderer/desktop/desktop-agent-page.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-home.test.ts",
+    "packages/panel/src/desktop/desktop-home.test.ts",
     "apps/desktop/src/renderer/desktop/desktop-inbox.test.ts",
     "apps/desktop/src/renderer/desktop/person-page.test.ts",
     "apps/desktop/src/renderer/settings/workspace-page.test.ts",
-    "apps/desktop/src/renderer/tasks/agent-automation.test.ts",
+    "packages/panel/src/tasks/agent-automation.test.ts",
     "apps/desktop/src/renderer/tasks/chip-cards.test.ts",
   ],
   // The inbox's agents with no task (`account-inbox-wire.ts`).
@@ -200,8 +200,8 @@ const WIRE_NAME = {
     "packages/service/src/voice/live-exchange.ts",
     "packages/ui/src/tasks-model.ts",
     "packages/ui/src/call-card-model.test.ts",
-    "apps/desktop/src/renderer/tasks/task-board.tsx",
-    "apps/desktop/src/renderer/tasks/tasks-fixture.ts",
+    "packages/panel/src/tasks/task-board.tsx",
+    "packages/panel/src/tasks/tasks-fixture.ts",
   ],
   // The main tabs' kept choice, under the key it was first stored as.
   planClosed: ["packages/panel/src/tasks/use-main-tabs.ts"],
@@ -209,9 +209,9 @@ const WIRE_NAME = {
 
 /** New task's Plan mode: whether Luke writes a plan for the task it starts. */
 const PLAN_SWITCH_FILES = [
-  "apps/desktop/src/renderer/tasks/new-task-dialog.tsx",
-  "apps/desktop/src/renderer/tasks/new-task-composer.tsx",
-  "apps/desktop/src/renderer/tasks/use-tasks-tab.test.ts",
+  "packages/panel/src/tasks/new-task-dialog.tsx",
+  "packages/panel/src/tasks/new-task-composer.tsx",
+  "packages/panel/src/tasks/use-tasks-tab.test.ts",
 ];
 
 /** Names that hold a plan word without being the concept: a build's bundle plan, a billing plan, and the preview probe's plan. */
@@ -349,9 +349,9 @@ export const CANARY = {
     ["MAX_PER_PLAN", "packages/features/src/anywhere.ts"],
     ["planet", "packages/features/src/anywhere.ts"],
     ["PlanTitle", "packages/panel/src/ai-elements/plan.tsx"],
-    ["PLAN_ROW", "apps/desktop/src/renderer/desktop/main-tabs.tsx"],
+    ["PLAN_ROW", "packages/panel/src/desktop/main-tabs.tsx"],
     ["planClosed", "packages/panel/src/tasks/use-main-tabs.ts"],
-    ["useNewTaskPlanning", "apps/desktop/src/renderer/tasks/new-task-composer.tsx"],
+    ["useNewTaskPlanning", "packages/panel/src/tasks/new-task-composer.tsx"],
   ],
   /** The SQL names the schema clause must refuse, and those it must let stand. */
   SQL_REFUSED: ["plan", "plan_id", "plan_board", "plan_board2", "plan_pin"],

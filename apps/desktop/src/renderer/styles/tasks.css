@@ -1020,36 +1020,31 @@
   background: var(--code-ground);
 }
 
-.file-tab-lines {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+/* How a run of lines filling its place is drawn (code-lines.tsx), as
+   the File tabs' settings say (file-view-settings.ts): lines unwrapped,
+   which scroll on both axes together, stand as wide as the longest or the
+   place, so the lit lines' ground runs under the whole of every one; and
+   the numbers' gutter may be gone. The frame around them is as wide as
+   the place, which a note between them measures itself by. */
+.code-lines-frame {
+  container-type: inline-size;
 }
 
-/* The File tabs' settings (file-view-settings.ts): lines unwrapped scroll
-   sideways together, each as wide as the longest, so the lit lines' ground
-   runs under the whole of every one; and the numbers' gutter may be gone. */
-.file-tab-lines[data-wrap="false"] {
-  overflow-x: auto;
-}
-
-.file-tab-lines[data-wrap="false"] > .code-line {
+.code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
 }
 
-.file-tab-lines[data-wrap="false"] .code-line-text {
+.code-lines[data-wrap="false"] .code-line-text {
   overflow-wrap: normal;
   white-space: pre;
 }
 
-.file-tab-lines[data-line-numbers="false"] .code-line-number {
+.code-lines[data-line-numbers="false"] .code-line-number {
   display: none;
 }
 
-.file-tab-lines[data-line-numbers="false"] .code-line-text {
+.code-lines[data-line-numbers="false"] .code-line-text {
   padding-left: var(--luke-space-12);
 }
 
@@ -1496,11 +1491,18 @@
 
 /* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
    (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
-   the panel's look (diff-view/index.ts); the list's box fills the File
-   tab's place and scrolls as a File tab's lines do. */
+   the panel's look (diff-view/index.ts). */
 .diff-view {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* The list fills the File tab's place, its scroll area the whole of it. */
+.diff-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 /* Files changed's list of diffs (diff-list.tsx): every file under a header
@@ -2696,9 +2698,13 @@
   line-height: var(--luke-type-body-leading);
 }
 
-.file-tab-lines[data-wrap="false"] > .file-note {
+/* Note that the note is stuck within the lines, which are as wide as the
+   longest, so it stays in view across the whole of them, and is as wide
+   as the place they scroll in, less its margins. */
+.code-lines[data-wrap="false"] > .file-note {
   position: sticky;
   left: var(--luke-space-12);
+  width: calc(100cqi - 2 * var(--luke-space-12));
 }
 
 /* The fold's line, its age and link beside it, then its words the card's
@@ -2848,7 +2854,7 @@
   white-space: pre-wrap;
 }
 
-/* Each run carries its colour in both appearances (`code-pane.tsx`); a run
+/* Each run carries its colour in both appearances (`code-lines.tsx`); a run
    in the theme's own foreground carries neither and takes the pane's. A
    transcript's fenced block is coloured the same way. */
 .code-line-text > span,
@@ -4485,11 +4491,12 @@ ol.transcript-list {
   transition: transform var(--duration-quick) var(--motion-pane);
 }
 
+/* A text file's lines fill the card under its header and scroll there
+   (code-lines.tsx), on the code's ground. */
 .attachment-viewer-lines {
-  overflow-x: hidden;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--code-ground);
-  user-select: text;
 }
 
 .attachment-viewer-other {
@@ -5572,4 +5579,543 @@ button.picture-frame {
   opacity: 0.45;
   outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
   outline-offset: 2px;
+}
+
+/* Comments on the plan (`plan-comments.tsx`) -------------------------------- */
+
+/* The words a thread is on, a block's whole or a few of them alike: a wash
+   under them and an edge beneath, stronger while its thread is open or the
+   pointer is on them. */
+.plan-comment-mark {
+  padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
+  border-bottom: 1.5px solid var(--comment-mark-edge);
+  border-radius: 2px;
+  background: var(--comment-mark);
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--duration-hover) ease;
+}
+
+.plan-comment-mark:hover,
+.plan-comment-mark[data-active="true"] {
+  border-bottom-color: var(--comment-mark-active-edge);
+  background: var(--comment-mark-active);
+}
+
+/* Words under two threads in the editor stand in a mark inside another,
+   which the read view draws as one mark; the inner one adds nothing, so they
+   read the same in both. */
+.plan-comment-mark .plan-comment-mark {
+  padding-bottom: 0;
+  border-bottom: 0;
+  background: none;
+}
+
+/* The body is the room its comments are measured and stood in. */
+.desktop-document .plan-body {
+  position: relative;
+}
+
+/* Everything the comments draw over the body, one box laid over it whole, so the
+   gap the body opens between its children opens none here, and only what is
+   drawn in it takes the pointer. */
+.desktop-document .plan-body > .comment-layer {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.comment-layer > * {
+  pointer-events: auto;
+}
+
+.comment-margin {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--comment-margin-gap));
+  width: var(--comment-card-width);
+}
+
+.comment-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+}
+
+/* A card already in the margin travels to its next place, as threads above
+   it open, grow, or arrive, on the spring every move rides; one arriving
+   lands where it belongs and fades in. */
+.comment-slot[data-moves="true"] {
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+@keyframes comment-slot-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
+/* The button stands in the gutter past the column's end, its start level
+   with a folded line's count, which stands in its place on a line holding
+   threads. */
+.comment-block-button {
+  position: absolute;
+  left: calc(100% + var(--luke-space-2));
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-body:hover .comment-block-button,
+.comment-block-button:focus-within {
+  opacity: 1;
+}
+
+/* The bubble that rises over words selected, one button in a menu's surface. */
+.comment-bubble {
+  position: absolute;
+  z-index: 3;
+  transform: translateY(calc(-100% - var(--luke-space-6)));
+}
+
+/* Where the margin folds: a line's comments counted at its end, in the
+   gutter past the column where the block's button stands, a quiet button
+   lit while its threads stand under it; the open thread floats under it. */
+.comment-count {
+  position: absolute;
+  left: calc(100% + var(--luke-space-2));
+}
+
+.comment-float {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--luke-space-6) * -1);
+  display: flex;
+  width: var(--comment-card-width);
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+/* A line's other threads stand closed beside the open one, each on the
+   same raised surface, so the stack reads as one set over the page. */
+.comment-float .comment-card[data-open="false"] {
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+/* Note that the hover's fill is translucent, so over the page it is laid on the card's own surface, never the words beneath. */
+.comment-float .comment-card[data-open="false"]:is(:hover, [data-pointed="true"]) {
+  background: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover))
+    var(--luke-color-overlay);
+}
+
+/* A thread: at rest its words on the column's ground, open on a menu's surface. */
+.comment-card {
+  --comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
+  border: 1px solid transparent;
+  border-radius: var(--luke-menu-radius);
+  color: var(--luke-color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.comment-card[data-open="false"] {
+  border-color: var(--luke-color-border);
+  cursor: pointer;
+}
+
+.comment-card[data-open="false"]:hover,
+.comment-card[data-open="false"][data-pointed="true"] {
+  background: var(--luke-color-fill-hover);
+}
+
+.comment-card[data-open="true"] {
+  padding-top: var(--luke-space-8);
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.comment-entry {
+  position: relative;
+  padding: var(--luke-space-4) 0;
+}
+
+.comment-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* The writer gives way first, cut short at its end, so the time and the
+   tools beside it always stand whole. */
+.comment-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The row's end: the time, and in its place under the pointer the thread's
+   tools, both in one cell, so the row never reflows and nothing stands
+   over the writer's name. */
+.comment-head-end {
+  display: grid;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+
+.comment-head-end > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.comment-time {
+  color: var(--luke-color-text-subtle);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* A comment's words, as Markdown spaces a message's blocks, under the name. */
+.comment-words {
+  display: block;
+  margin-left: var(--comment-indent);
+  color: var(--luke-color-text-body);
+  overflow-wrap: anywhere;
+}
+
+/* The thread's quote under its first comment's writer, level with the words. */
+.comment-entry > :is(.comment-quote, .comment-gone) {
+  margin-left: var(--comment-indent);
+}
+
+.comment-entry > .comment-quote-link {
+  width: calc(100% - var(--comment-indent));
+}
+
+.comment-entry > .comment-quote {
+  margin-top: var(--luke-space-4);
+}
+
+/* A thread at rest shows its first comment's first lines, chips and all. */
+.comment-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* A thread at rest is one press over its words and replies. */
+.comment-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+/* The keyboard on a thread at rest rings its card, since its button may
+   hold nothing to see but its name for a screen reader. */
+.comment-card[data-open="false"]:has(> .comment-open:focus-visible) {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(var(--luke-focus-ring-width) / -2);
+}
+
+.comment-replies {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-2) 0 0 var(--comment-indent);
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+}
+
+.comment-faces {
+  display: inline-flex;
+}
+
+/* A comment's tools stand at its corner under the pointer or the keyboard. */
+.comment-tools {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  margin-right: calc(var(--luke-space-6) * -1);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-head-end > .comment-time {
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-entry:hover .comment-tools,
+.comment-tools:focus-within,
+.comment-tools:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+/* Note that the time gives the tools its place under the pointer, presses
+   included, so a press over where it stood lands on the tools. */
+.comment-entry:hover .comment-head-end > .comment-time {
+  pointer-events: none;
+}
+
+.comment-entry:hover .comment-head-end > .comment-time,
+.comment-head-end:has(.comment-tools:focus-within) > .comment-time,
+.comment-head-end:has([aria-expanded="true"]) > .comment-time {
+  opacity: 0;
+}
+
+/* What happened to a thread, a line drawn as a comment's head: its writer
+   level with every name above it, what they did in the quiet ink, and the
+   time at the row's end. */
+.comment-event {
+  padding: var(--luke-space-4) 0;
+}
+
+.comment-event-words {
+  flex: none;
+  color: var(--luke-color-text-muted);
+  font-weight: 400;
+  white-space: pre;
+}
+
+.comment-note {
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-danger-text);
+  font-size: 12px;
+}
+
+.comment-gone {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-bottom: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+.comment-gone svg {
+  width: 13px;
+  height: 13px;
+}
+
+.comment-quote {
+  display: -webkit-box;
+  margin: 0 0 var(--luke-space-8);
+  padding-left: var(--luke-space-8);
+  overflow: hidden;
+  border-left: 2px solid var(--comment-mark-edge);
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.comment-quote[data-gone="true"] {
+  border-left-color: var(--luke-color-border-strong);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* The field that answers a thread, or starts one, in the composer's well. */
+.comment-field {
+  --comment-field-inline: var(--luke-space-8);
+  margin-top: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}
+
+.comment-text {
+  display: block;
+  width: 100%;
+  min-height: 36px; /* off-scale: one line and its padding */
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  line-height: 1.45;
+  resize: none;
+}
+
+.comment-text::placeholder {
+  color: var(--luke-color-text-muted);
+}
+
+/* The agent box's editor as a comment's field, its placeholder and its
+   paragraphs at the comment field's padding. */
+.comment-field .agent-composer-placeholder {
+  padding: var(--luke-space-8) var(--comment-field-inline) 0;
+}
+
+.comment-field .agent-composer-input {
+  min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
+  max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
+  line-height: 1.45;
+}
+
+.comment-field-foot {
+  --luke-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+  display: flex;
+  min-height: 26px; /* off-scale: as its tools */
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+.comment-field-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin-left: auto;
+}
+
+/* A dictation stands in the foot's place while it records, at its height. */
+.comment-field-foot .dictation-strip {
+  height: 26px; /* off-scale: as the foot's tools */
+  flex: 1;
+}
+
+/* A thread's first comment is the card itself: its words on the card's own
+   surface, no well inside it, its tools along the card's foot. */
+.comment-field[data-variant="first"] {
+  --comment-field-inline: 0;
+  margin-top: 0;
+  border: 0;
+  background: none;
+}
+
+.comment-field[data-variant="first"] .comment-field-foot {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+/* A reply is a composer as every box in the window is (`PromptInput`): the
+   card's ground, its hairline, and its larger round, ringed while it holds
+   the caret. */
+.comment-field[data-variant="reply"] {
+  border-color: var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
+.comment-editing {
+  margin-left: var(--comment-indent);
+}
+
+/* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
+/* The Comments tab: its head over a list that scrolls under it, fading at
+   its ends as every scroller in the window does. */
+.comments-tab {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The tab's head, as the sidebar's section heads are: the list's name in
+   the quiet ink, how many it holds after it, and its toggle at the end. */
+.comments-head {
+  display: flex;
+  height: var(--luke-control-height);
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--luke-space-6) var(--column-inset) var(--luke-space-2) var(--luke-space-16);
+}
+
+.comments-head-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  padding-left: var(--luke-space-12);
+}
+
+/* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
+.comments-list:has(.luke-empty-state) {
+  display: flex;
+  flex-direction: column;
+}
+
+.comments-list {
+  min-height: 0;
+  flex: 1;
+  padding: 0 var(--luke-space-16) var(--luke-space-24);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.comments-row + .comments-row {
+  margin-top: var(--luke-space-8);
+}
+
+/* In the tab every thread stands whole, on the panel's ground with a
+   hairline round it rather than floating over the page. */
+.comments-list .comment-card[data-open="true"] {
+  border-color: var(--luke-color-border);
+  background: none;
+  box-shadow: none;
+}
+
+/* A quote that shows its words in the plan: the quote's look, pressed. */
+.comment-quote-link {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.comment-quote-link:hover {
+  color: var(--luke-color-text);
+}
+
+/* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
+   the line that opens the agent, a toggle at its end, and the words whole
+   under it, set in to the line's words as a call's body is. */
+.tool-opening-row {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.tool-opening-row > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-sent-block {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.tool-sent-note {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }

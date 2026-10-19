@@ -155,6 +155,11 @@ import {
   TASK_CALL_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksCommentActParams,
+  type TasksCommentAnswer,
+  type TasksCommentStartParams,
+  type TasksCommentsAnswer,
+  type TasksCommentsParams,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -216,6 +221,8 @@ import {
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  tasksCommentAnswerSchema,
+  tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
@@ -437,6 +444,12 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
+  /** One task's comment threads past a cursor, held by the service while nothing changed; or why there are none. */
+  tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+  /** A comment thread started on one task's plan, answered as it stands, or why not. */
+  tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
+  /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
+  tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -1183,6 +1196,46 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(tasksRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksComments: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
+          planId: params.planId,
+          after: params.after,
+        }),
+        (answer): TasksCommentsAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksCommentStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENT_START, {
+          planId: params.planId,
+          start: params.start,
+        }),
+        (answer): TasksCommentAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksCommentAct: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
+          planId: params.planId,
+          threadId: params.threadId,
+          action: params.action,
+        }),
+        (answer): TasksCommentAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),

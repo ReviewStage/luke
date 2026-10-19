@@ -15,7 +15,9 @@ import {
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
+  PRODUCT_EVENT_BUILD_FIELD,
   type ProductEvent,
+  type ProductEventBuild,
   type ProductEventName,
   type ProductEventPropertiesFor,
   productEventFromWire,
@@ -92,6 +94,8 @@ export interface ProductEventSenderOptions extends AccountToken {
   serviceBaseUrl: string;
   /** The running build's version, as the packaged app reports it. */
   appVersion: string;
+  /** Whether this build runs from a packaged bundle rather than a development checkout. */
+  packaged: boolean;
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
@@ -135,6 +139,8 @@ export class ProductEventSender {
   readonly #call: AccountCallEffects;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #appVersion: string;
+  /** What every batch says about the build it came from, for the service to stamp on each event. */
+  readonly #build: ProductEventBuild;
   readonly #sends: boolean;
   readonly #now: () => number;
   readonly #flushIntervalMs: number;
@@ -193,6 +199,10 @@ export class ProductEventSender {
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
     this.#appVersion = options.appVersion;
+    this.#build = {
+      [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: options.appVersion,
+      [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: options.packaged,
+    };
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
     this.#readAccountKey = options.readAccountKey ?? (() => Effect.succeed(UNNAMED_ACCOUNT));
@@ -364,7 +374,7 @@ export class ProductEventSender {
         this.#call.send({
           method: HTTP_METHOD.POST,
           path: HOSTED_SERVICE_PATH.EVENTS,
-          body: JSON.stringify({ events: queued.map(({ event }) => event) }),
+          body: JSON.stringify({ events: queued.map(({ event }) => event), build: this.#build }),
         }),
         (answer) => {
           // The service answered, so whatever it made of the batch, a day it

@@ -209,7 +209,11 @@ the workspace sees every comment, as they see the plan. Comments are stored
 as written and readable by our own operators, like the plan. Deleting a
 comment or a thread deletes it at once; deleting the task deletes all of its
 comments; deleting your account leaves the comments you wrote on a task that
-stays, naming nobody, as it leaves the words you wrote.
+stays, naming nobody, as it leaves the words you wrote. Luke's planning model and the task's coding agents read the
+open threads beside the plan, and a thread in which a member mentions one of
+them with @ is handed to it whole as a request; either way the comments' words
+and their writers' names go to that agent's model provider, as the plan does
+(see "Who we send it to").
 
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
@@ -859,7 +863,9 @@ keeps in its settings file on your Mac, for each account it was sent for, the
 email address and the UTC day it was last sent, and only the newest day; it is
 never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
-paths, prompts, or error text.
+paths, prompts, or error text. Each count also carries Luke's version, whether
+it is a released build or a development one, and which deployment of our
+service recorded it.
 
 Our service also counts, under the same account, the work done through it:
 a task or a workspace made (with where it was started from and whether from an issue), a coding agent started (with the model and effort
@@ -898,7 +904,8 @@ masking cannot reach, so leaving them out is
 their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
-clicked.
+clicked. Each recording carries Luke's version and whether it is a released
+build or a development one; only a released build records at all.
 
 **Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
 web page you choose, your own `localhost` included, in a view of its own on
