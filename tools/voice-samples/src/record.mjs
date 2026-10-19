@@ -8,9 +8,13 @@
  * With no voice named it records every voice `@luke/live` offers. Each is
  * spoken by the model and voice a call uses, over the Live WebSocket, so a
  * preview sounds as the voice does in a call rather than as a text-to-speech
- * model's reading of it. The model is asked to say one fixed line; a take
- * whose transcript is not that line is recorded again, and a voice that never
- * says it fails the run. The audio is trimmed of the quiet around it, brought
+ * model's reading of it. The model is asked to say its language's line
+ * (`SCRIPTS`): an English voice the one line every English voice says, so
+ * they are compared on the same words, and a voice of another language a
+ * greeting in English and then a sentence in its own, since Luke's calls are
+ * in English and the voice is made for its language. A take whose transcript
+ * is not close to that line is recorded again, and a voice that never says it
+ * fails the run. The audio is trimmed of the quiet around it, brought
  * to one level, and written as AAC in an MPEG-4 file (`afconvert`, which every Mac has) under
  * `packages/panel/voices/`, the folder the panel serves (its `build-table.mjs`).
  *
@@ -25,14 +29,85 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 // Note that the vocabulary is read from its source rather than through `@luke/live`, because
 // Node strips the types of one TypeScript file but resolves no `.js` specifier to a `.ts` one.
-import { LIVE_DEFAULTS, LIVE_VOICE_LIST } from "../../../packages/live/src/voices.ts";
+import {
+  LIVE_DEFAULTS,
+  LIVE_VOICE_LANGUAGE,
+  LIVE_VOICE_LIST,
+  LIVE_VOICE_PROFILE,
+} from "../../../packages/live/src/voices.ts";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const VOICES_DIRECTORY = path.join(repositoryRoot, "packages/panel/voices");
 
-/** What every voice says, so the voices are compared on the same words. */
-const SAMPLE_LINE =
-  "Hi, I'm Luke. Tell me what you're working on, and I'll write the plan down as we talk.";
+/** How every voice opens, in English, whatever its language. */
+const GREETING = "Hi, I'm Luke.";
+
+/**
+ * What a voice of each language says, and the language's name the model is
+ * told. Each line after the greeting says the same thing, what Luke does, in
+ * the language as it is spoken day to day; the Hindi is worded in the
+ * passive, because Hindi verbs agree with the speaker's gender and a voice
+ * of either may say it.
+ */
+const SCRIPTS = new Map([
+  [
+    LIVE_VOICE_LANGUAGE.ENGLISH,
+    {
+      name: "English",
+      line: `${GREETING} Tell me what you're working on, and I'll write the plan down as we talk.`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.PORTUGUESE,
+    {
+      name: "Brazilian Portuguese",
+      line: `${GREETING} Me conta no que você está trabalhando, e eu escrevo o plano enquanto a gente conversa.`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.FRENCH,
+    {
+      name: "French",
+      line: `${GREETING} Dites-moi sur quoi vous travaillez, et j'écris le plan pendant qu'on parle.`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.GERMAN,
+    {
+      name: "German",
+      line: `${GREETING} Erzähl mir, woran du arbeitest, und ich schreibe den Plan mit, während wir reden.`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.HINDI,
+    {
+      name: "Hindi",
+      line: `${GREETING} मुझे बताइए कि आप किस पर काम कर रहे हैं, और बातचीत के साथ-साथ योजना लिखी जाएगी।`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.JAPANESE,
+    {
+      name: "Japanese",
+      line: `${GREETING} 取り組んでいることを教えてください。話しながらプランを書いていきます。`,
+    },
+  ],
+  [
+    LIVE_VOICE_LANGUAGE.KOREAN,
+    {
+      name: "Korean",
+      line: `${GREETING} 어떤 작업을 하고 계신지 말씀해 주세요. 이야기하면서 계획을 적어 드릴게요.`,
+    },
+  ],
+]);
+
+/**
+ * How close a take's transcript must come to its line, as the share of the
+ * line's letters it matches. Note that this is not an exact match, because
+ * a transcript of Japanese or Hindi may spell a word in another of its
+ * scripts while the speech is right.
+ */
+const LEAST_LIKENESS = 0.8;
 
 const LIVE_URL = "wss://api.openai.com/v1/live/sessions";
 const SAMPLE_RATE = 24_000;
@@ -60,13 +135,41 @@ const TARGET_RMS = 0.1 * 32_767;
 const PEAK_CEILING = 0.95 * 32_767;
 const AAC_BIT_RATE = 48_000;
 
-/** Lowercase words alone, so a take is compared on what was said and not on its punctuation. */
-function wordsOf(text) {
+/** The letters and digits alone, in lowercase, so a take is compared on what was said and not on its punctuation or spacing. */
+function lettersOf(text) {
   return text
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[’']/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, "");
+}
+
+/** How alike two texts' letters are: one less their edit distance over the longer one's length. */
+function likeness(said, line) {
+  const a = [...lettersOf(said)];
+  const b = [...lettersOf(line)];
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const swap = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      row.push(Math.min(previous[j] + 1, row[j - 1] + 1, swap));
+    }
+    previous = row;
+  }
+  return 1 - previous[b.length] / Math.max(a.length, b.length, 1);
+}
+
+/** What the voice says, and the words the model is asked to say it in. */
+function scriptOf(voice) {
+  const script = SCRIPTS.get(LIVE_VOICE_PROFILE[voice].language);
+  if (script === undefined) throw new Error(`${voice}: no script for its language`);
+  const languages =
+    script.name === "English"
+      ? "in English"
+      : `the first sentence in English and the rest in ${script.name}`;
+  // Worded as the guide words a greeting, the one way it documents to have the model speak first.
+  const instruction = `Greet the caller now by saying exactly this, ${languages}, and nothing more: ${script.line} Then pause and listen.`;
+  return { line: script.line, instruction };
 }
 
 /** Whether any sample of the PCM is louder than quiet. */
@@ -133,11 +236,11 @@ function wav(pcm) {
 }
 
 /**
- * One take: a session in the voice, asked to say the line, with silence as
- * its microphone, ended once the model has spoken and gone quiet. Answers the
- * audio and the transcript of what was said.
+ * One take: a session in the voice, asked to say its line as the instruction
+ * words it, with silence as its microphone, ended once the model has spoken
+ * and gone quiet. Answers the audio and the transcript of what was said.
  */
-function recordTake(voice, apiKey) {
+function recordTake(voice, apiKey, instruction) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(LIVE_URL, { headers: { Authorization: `Bearer ${apiKey}` } });
     const audio = [];
@@ -183,8 +286,7 @@ function recordTake(voice, apiKey) {
                 content: [
                   {
                     type: "input_text",
-                    // Worded as the guide words a greeting, the one way it documents to have the model speak first.
-                    text: `Greet the caller now in English by saying exactly this, and nothing more: ${SAMPLE_LINE} Then pause and listen.`,
+                    text: instruction,
                   },
                 ],
               },
@@ -231,17 +333,21 @@ function recordTake(voice, apiKey) {
   });
 }
 
-/** Records the voice until a take says the line, and writes it as the voice's clip. */
+/** Records the voice until a take says its line, and writes it as the voice's clip. */
 async function recordVoice(voice, apiKey, scratch) {
+  const { line, instruction } = scriptOf(voice);
   for (let take = 1; take <= TAKES_PER_VOICE; take += 1) {
-    const recorded = await recordTake(voice, apiKey).catch((error) => {
+    const recorded = await recordTake(voice, apiKey, instruction).catch((error) => {
       console.error(`${voice}: take ${take} failed: ${error.message}`);
       return undefined;
     });
     if (recorded === undefined) continue;
     const { pcm, transcript } = recorded;
-    if (wordsOf(transcript) !== wordsOf(SAMPLE_LINE) || pcm.length === 0) {
-      console.error(`${voice}: take ${take} said ${JSON.stringify(transcript.trim())}`);
+    const alike = likeness(transcript, line);
+    if (alike < LEAST_LIKENESS || pcm.length === 0) {
+      console.error(
+        `${voice}: take ${take} said ${JSON.stringify(transcript.trim())} (${alike.toFixed(2)})`,
+      );
       continue;
     }
     const source = path.join(scratch, `${voice}.wav`);
