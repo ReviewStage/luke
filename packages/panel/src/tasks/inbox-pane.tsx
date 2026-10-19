@@ -50,7 +50,7 @@ import {
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
+import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
@@ -71,6 +71,7 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   archivedHolder,
+  CLOSED_WORDS,
   decidedOf,
   decisionsOf,
   fieldValueOf,
@@ -898,11 +899,12 @@ function Offered({ item }: { item: InboxItem }): React.JSX.Element | null {
   );
 }
 
-/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, or a message on the thread. */
+/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, or a message on the thread. */
 const COMMENT = {
   ASKED: "asked",
   ANSWERED: "answered",
   WITHDRAWN: "withdrawn",
+  CLOSED: "closed",
   MESSAGE: "message",
 } as const;
 
@@ -1066,7 +1068,7 @@ function Answered({
   const answerer = usePerson(item.answeredBy);
   const settled = settlementOf(item);
   if (settled === undefined) return null;
-  if (settled.by === SETTLED_BY.AGENT) return null;
+  if (settled.by !== SETTLED_BY.DEVELOPER) return null;
   // Files alone are the developer's own words where they wrote none, so no "Answered it" chip stands over them.
   const filesSay =
     (item.answerFiles ?? []).length > 0 && item.answer?.reply === INBOX_REPLY.ANSWERED
@@ -1154,6 +1156,46 @@ function Withdrawn({
           {settled.words}
         </p>
       )}
+    </Comment>
+  );
+}
+
+/** A member closing an item without an answer, as one more comment of theirs: who, when, and whether the agent was told. */
+function Closed({
+  item,
+  by,
+  now,
+}: {
+  item: InboxItem;
+  by: ItemAgent;
+  now: number;
+}): React.JSX.Element | null {
+  const closer = usePerson(item.closedBy);
+  if (settlementOf(item)?.by !== SETTLED_BY.CLOSER) return null;
+  return (
+    <Comment
+      kind={COMMENT.CLOSED}
+      face={closer}
+      head={
+        <>
+          <CommentName>
+            <ActorRef actor={closer} nameOnly />
+          </CommentName>
+          <span className="inbox-comment-when">
+            <RelativeTime
+              className={THREAD_TIME_CLASS}
+              at={settledAt(item) ?? item.updatedAt}
+              now={now}
+            />{" "}
+            · <Delivered item={item} by={by} />
+          </span>
+        </>
+      }
+    >
+      <span className="inbox-pick" data-inbox-pick="">
+        <CircleSlashIcon aria-hidden="true" />
+        <span>{CLOSED_WORDS}</span>
+      </span>
     </Comment>
   );
 }
@@ -1284,7 +1326,7 @@ function ThreadAfter({
   );
 }
 
-/** The comment a settled item was settled by: the developer's answer, or the agent taking it back. */
+/** The comment a settled item was settled by: the developer's answer, the agent taking it back, or a member closing it. */
 function SettledComments({
   item,
   by,
@@ -1311,6 +1353,7 @@ function SettledComments({
         onRetryImage={onRetryImage}
       />
       <Withdrawn item={item} by={by} now={now} />
+      <Closed item={item} by={by} now={now} />
     </>
   );
 }
@@ -1348,6 +1391,17 @@ function useScrollToOwnMessage(
     if (under > 0) scroller.scrollTop += Math.min(under, box.top - room.top);
   }, [board, item.id, last, own]);
 }
+
+/** The pane's Close, which settles an open item without an answer: its words, and what its tooltip says it does. */
+const CLOSE_ITEM = {
+  LABEL: "Close",
+  HINT: "Close without answering",
+} as const;
+
+/** The Close's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
+const CloseHint: FoldingButtonHint = ({ children }) => (
+  <Tooltip label={CLOSE_ITEM.HINT}>{children}</Tooltip>
+);
 
 /** What stands in the box's place while the item's task is archived. */
 const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
@@ -1563,6 +1617,15 @@ export function InboxPane({
           <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
+        {answerable ? (
+          <FoldingButton
+            label={CLOSE_ITEM.LABEL}
+            icon={<CircleSlashIcon />}
+            disabled={control.sending.has(item.id)}
+            onClick={() => control.onClose(item)}
+            hint={CloseHint}
+          />
+        ) : null}
         {pager === undefined ||
         (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
           <InboxPagerControls pager={pager} />

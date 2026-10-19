@@ -204,6 +204,10 @@
     "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
   },
   {
+    "src": "/api/inbox/([^/]+)/close",
+    "dest": "/api/default.js?route=inbox/close&id=$1"
+  },
+  {
     "src": "/api/inbox/([^/]+)/messages",
     "dest": "/api/default.js?route=inbox/messages&id=$1"
   },

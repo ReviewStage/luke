@@ -46,6 +46,8 @@ import {
   inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
+  inboxClosedMessage,
+  inboxCloseRequestSchema,
   inboxCursorSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
@@ -127,6 +129,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
+  closeInboxItemAsMember,
   INBOX_MESSAGE_OUTCOME,
   inboxItemArchived,
   markInboxItemRead,
@@ -137,6 +140,7 @@ import {
   readInboxItem,
   type StoredInboxItem,
   withdrawInboxAnswer,
+  withdrawInboxClose,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
@@ -289,6 +293,8 @@ const AGENTS_PATH = {
   INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
+  /** POST closes one open inbox item without an answer, as a member; the rewrite moves the path's item id into the `id` query. */
+  INBOX_CLOSE: "/api/inbox/close",
   /** POST writes a member's message on one inbox item's thread; the rewrite moves the path's item id into the `id` query. */
   INBOX_MESSAGES: "/api/inbox/messages",
   /** PUT marks one inbox item read for the asking member and DELETE marks it unread, where the rewrite moves the path's item id into the `id` query; PUT with no `id` marks every item their Inbox lists read. */
@@ -1448,6 +1454,86 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   return inboxAnswered(taken, true);
 });
 
+/** A close is a revision and a key, so a few hundred bytes hold it. */
+const MAXIMUM_INBOX_CLOSE_BODY_BYTES = 1_024;
+
+/**
+ * POST closes one open item of a task of the account's workspaces without
+ * an answer, whichever member started its agent, at the revision the member
+ * was shown, and answers as an answer does: the item as it then stands, and
+ * whether the close was taken, which it is not where the agent changed the
+ * item first or it was settled already. A close taken is handed to the
+ * agent, under its own lead, only where the item asks to be heard back, so
+ * an agent waiting on it is not left waiting; otherwise the agent reads it
+ * the next time it reads its inbox. A hand-off that fails, is interrupted,
+ * or dies opens the item again, so it never reads closed while an agent
+ * waiting on it was not told; a close sent again under the key it was taken
+ * by is handed off again, which the steer's own key makes reach the agent
+ * once. An agent whose session has ended for good can hear nothing again,
+ * so its item stays closed.
+ */
+const inboxCloseEndpoint = /* @__PURE__ */ Effect.fn("web/inboxCloseEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const itemId = yield* idOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+  if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // An item put away with its task is read but not closed, as it is not answered, until the task is back.
+  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  }
+  const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_CLOSE_BODY_BYTES);
+  const asked = readEither(inboxCloseRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { revision, clientKey } = asked.success;
+  const { item, answerKey } = stored.value;
+  const taken =
+    answerKey === clientKey
+      ? item
+      : item.status !== INBOX_STATUS.OPEN || item.revision !== revision
+        ? undefined
+        : Option.getOrUndefined(
+            yield* hostedStoreOrUnavailable(
+              closeInboxItemAsMember(userId, itemId, revision, clientKey),
+            ),
+          );
+  if (taken === undefined) {
+    // Not taken: the item moved on, or an answer or a close settled it; it is answered as it now stands.
+    const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+    if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
+  }
+  if (!taken.needsReply) return inboxAnswered(taken, true);
+  const handedOver = Effect.gen(function* () {
+    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
+    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+    const eve = yield* eveFor(seams, request, userId);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text: inboxClosedMessage(taken),
+      attachments: [],
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.catchIf(retiredRefusal, () => Effect.void),
+    Effect.onError(() =>
+      withdrawInboxClose(userId, itemId, clientKey).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.ignore,
+      ),
+    ),
+  );
+  return inboxAnswered(taken, true);
+});
+
 /** A message is its words and the files a message may carry: the words' bound at JSON's widest escape, the files, and room for the key. */
 const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
   6 * INBOX_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048;
@@ -1665,6 +1751,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.INBOX_ITEM,
           hostedRefusing(inboxAnswerEndpoint(seams, writer)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.INBOX_CLOSE,
+          hostedRefusing(inboxCloseEndpoint(seams, writer)),
         ),
         HttpRouter.add(
           ANY_METHOD,

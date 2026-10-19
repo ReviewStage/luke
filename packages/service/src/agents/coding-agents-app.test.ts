@@ -136,6 +136,7 @@ import {
 import {
   INBOX_ANSWER_LEAD,
   INBOX_BLOCK,
+  INBOX_CLOSE_LEAD,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_LEAD,
@@ -4853,6 +4854,7 @@ const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const INBOX_MESSAGES = "/api/inbox/messages";
+const INBOX_CLOSE = "/api/inbox/close";
 const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
@@ -4884,6 +4886,9 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       /** The owner's answer to an item, as the route answers it. */
       const answer = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
         opened.ask(request(INBOX_ITEM, bearer, { method: "POST", id: itemId, body }));
+      /** A member's close of an item without an answer, as the route answers it. */
+      const close = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
+        opened.ask(request(INBOX_CLOSE, bearer, { method: "POST", id: itemId, body }));
       /** What waits across the account, as the bearer reads it past the cursor. */
       const waiting = (after?: string, bearer = opened.owner) =>
         Effect.map(
@@ -4914,6 +4919,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         post,
         read,
         answer,
+        close,
         waiting,
         message,
         transcript,
@@ -5346,6 +5352,85 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
         assert.equal((yield* answer(asked.success.id, body)).status, HOSTED_HTTP_STATUS.OK);
         assert.equal(countedFor(owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
+      }),
+  );
+
+  it.effect(
+    "a member closes an item without an answer: an agent waiting to hear back is told under the close's own lead, once however often it is sent under its key, one that asks nothing back is not, and a close of an item the agent changed since is not taken",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, post, close, waiting } = yield* openInbox(eve);
+        const asked = yield* post(QUESTION);
+        const quiet = yield* post({
+          key: "flag",
+          title: "Turn on the agent-mail flag in staging",
+          response: { type: INBOX_RESPONSE.TODO },
+          needsReply: false,
+        });
+        assert.ok(Result.isSuccess(asked) && Result.isSuccess(quiet));
+        const before = eve.sent.length;
+
+        const stale = yield* close(asked.success.id, {
+          revision: asked.success.revision + 1,
+          clientKey: randomUUID(),
+        });
+        const notTaken = readAnswer(inboxAnsweredSchema, HOSTED_HTTP_STATUS.OK, stale);
+        assert.equal(notTaken.taken, false);
+        assert.equal(notTaken.item.status, INBOX_STATUS.OPEN);
+
+        const body = { revision: asked.success.revision, clientKey: randomUUID() };
+        const closed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* close(asked.success.id, body),
+        );
+        assert.equal(closed.taken, true);
+        assert.equal(closed.item.status, INBOX_STATUS.CLOSED);
+        assert.equal(closed.item.closedBy?.userId, owner);
+        assert.equal(eve.sent.length, before + 1, "the waiting agent is told");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(`${INBOX_CLOSE_LEAD} on`), "it reads as an Inbox close");
+        assert.ok(handed.includes(`(key ${QUESTION.key})`), "it names the item's key");
+        const again = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* close(asked.success.id, body),
+        );
+        assert.equal(again.taken, true, "a close sent again under its key is the one taken");
+        assert.equal(eve.sent.length, before + 1, "and reaches the agent once");
+
+        const pressed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* close(quiet.success.id, {
+            revision: quiet.success.revision,
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(pressed.taken, true);
+        assert.equal(eve.sent.length, before + 1, "an item that asks nothing back messages nobody");
+        assert.deepEqual((yield* waiting()).items, [], "nothing waits on the developer");
+      }),
+  );
+
+  it.effect(
+    "a close the agent's session did not take opens the item again, so it never reads closed while the waiting agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, close } = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+
+        const sent = yield* close(asked.success.id, {
+          revision: asked.success.revision,
+          clientKey: randomUUID(),
+        });
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
+        assert.equal(kept?.status, INBOX_STATUS.OPEN);
+        assert.equal(kept?.closedBy, undefined);
       }),
   );
 

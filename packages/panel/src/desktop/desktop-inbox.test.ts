@@ -885,6 +885,51 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
+test("an open item's Close settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Close", async () => {
+  onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
+  const { page } = mount();
+  await settle();
+  const sent: { itemId: string; revision: number; clientKey: string }[] = [];
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return bridge.act(request);
+      sent.push(request.payload);
+      const closed: InboxItem = {
+        ...THRESHOLD,
+        response: { type: INBOX_RESPONSE.APPROVAL },
+        status: INBOX_STATUS.CLOSED,
+        closedBy: READER,
+        settledAt: 6_000,
+        updatedAt: 6_000,
+      };
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { item: closed, taken: true },
+      });
+    },
+  });
+  const closeButton = () =>
+    [...itemPane(page).querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
+      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Close",
+    );
+
+  await act(async () => (closeButton() ?? assert.fail("an open item offers Close")).click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ itemId, revision }) => ({ itemId, revision })),
+    [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }],
+  );
+  const closed =
+    itemPane(page).querySelector('[data-inbox-comment="closed"]') ??
+    assert.fail("the close is a comment of the closer's");
+  assert.match(wordsOf(closed.querySelector(".inbox-comment-head")) ?? "", /Sent to/u);
+  assert.equal(closed.querySelector("[data-inbox-pick]")?.textContent, "Closed without answering");
+  assert.equal(closeButton(), undefined, "a settled item offers no Close");
+});
+
 test("a teammate's open item leads with its title alone, and its box still takes your answer", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: CHARLES }, RETRY]);

@@ -1148,6 +1148,15 @@ test("an item its agent took back previews that it was withdrawn and why, or tha
   assert.equal(inboxPreview(unexplained, previewName), "Withdrawn");
 });
 
+test("an item a member closed without an answer previews who closed it, You for the reader, and never reads as withdrawn by its agent", () => {
+  const closed = item({ id: "f2", status: INBOX_STATUS.CLOSED, closedBy: YOU });
+  assert.equal(inboxPreview(closed, previewName), "You: Closed without answering");
+  assert.equal(
+    inboxPreview({ ...closed, closedBy: CHARLES }, previewName),
+    "Charles Pan: Closed without answering",
+  );
+});
+
 test("the latest message on an item's thread is its preview, open or settled, led by the agent, You, or the teammate who wrote it, a message of files alone saying so; a settlement after the last message is the preview instead", () => {
   const thread = [
     message({ text: "Is 80% too eager?", createdAt: 2_000, member: CHARLES }),

@@ -103,11 +103,13 @@ import {
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxImageTypeSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
@@ -155,6 +157,7 @@ import {
   agentStopPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
+  inboxClosePath,
   inboxItemPath,
   inboxItemReadPath,
   inboxMessagesPath,
@@ -1076,6 +1079,28 @@ export class HostedCodingAgentClient {
       this.#call.send({
         method: HTTP_METHOD.POST,
         path: inboxItemPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * Closes one open item of the inbox without an answer, against the
+   * revision the window drew, under the key the window made for the close,
+   * which a retry carries again, and answers the item as it then stands with
+   * whether the close was taken, as an answer does.
+   */
+  closeInbox(
+    itemId: string,
+    request: InboxCloseRequest,
+  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxCloseRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxClosePath(itemId),
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),

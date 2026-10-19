@@ -41,6 +41,7 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
@@ -643,6 +644,10 @@ export interface HostOperator {
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
+  ): Effect.Effect<CodingAgentInboxAnsweredView>;
+  /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
+  codingAgentInboxClose(
+    params: CodingAgentInboxCloseParams,
   ): Effect.Effect<CodingAgentInboxAnsweredView>;
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
   codingAgentInboxMessage(
@@ -1816,6 +1821,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("values" in params ? { values: params.values } : undefined),
           ...("note" in params ? { note: params.note } : undefined),
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          clientKey: params.clientKey,
+        }),
+        codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
+      ),
+    codingAgentInboxClose: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+          itemId: params.itemId,
+          revision: params.revision,
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxAnsweredViewSchema),

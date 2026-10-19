@@ -482,10 +482,11 @@ export function proposedOptions(item: InboxItem): readonly ProposedOption[] {
   );
 }
 
-/** Who settled an item: the developer, by answering it, or its agent, by taking it back. */
+/** Who settled an item: the developer, by answering it; its agent, by taking it back; or a member, by closing it without an answer. */
 export const SETTLED_BY = {
   DEVELOPER: "developer",
   AGENT: "agent",
+  CLOSER: "closer",
 } as const;
 
 /** What each answer's kind says its answerer did, after who they are. */
@@ -505,7 +506,8 @@ const REPLY_WORDS = {
  * `answeredBy`, whom its line names before what they did in a few words
  * (`did`: "chose Postgres"), with a form's values one per line and the note
  * they wrote, which is Markdown as their box wrote it, its mentions links;
- * or taken back by its agent, said whole, and why.
+ * taken back by its agent, said whole, and why; or closed by a member
+ * without an answer, by the item's `closedBy`.
  */
 export type Settlement =
   | {
@@ -514,7 +516,13 @@ export type Settlement =
       readonly values?: string;
       readonly note?: string;
     }
-  | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string };
+  | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string }
+  | { readonly by: typeof SETTLED_BY.CLOSER };
+
+/** Whether an item was closed by a member without an answer, whom it names, rather than taken back by its agent. */
+export function closedByMember(item: InboxItem): boolean {
+  return item.status === INBOX_STATUS.CLOSED && item.closedBy !== undefined;
+}
 
 /** A form's values as the developer filled them, one per line; nothing where they filled none. */
 function valueLines(answer: InboxReply): string | undefined {
@@ -527,6 +535,7 @@ function valueLines(answer: InboxReply): string | undefined {
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
 export function settlementOf(item: InboxItem): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
+  if (closedByMember(item)) return { by: SETTLED_BY.CLOSER };
   if (item.status === INBOX_STATUS.CLOSED) {
     return {
       by: SETTLED_BY.AGENT,
@@ -552,6 +561,9 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
 
 /** A member named on an item, as an answer's or a message's writer. */
 type InboxMember = NonNullable<InboxItem["answeredBy"]>;
+
+/** What an item a member closed without an answer says of it, after who closed it. */
+export const CLOSED_WORDS = "Closed without answering";
 
 /** What parts a preview's words, as a menu's detail parts them. */
 const PREVIEW_PART = " · ";
@@ -719,7 +731,8 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
  * led by who said it: a message on the thread by its writer, "Agent" for
  * the item's own and a member by `nameOf`, which says "You" for the
  * reader; the answer by its answerer, in a few words; the agent taking the
- * item back as "Withdrawn" and why; and, on an open item nobody has
+ * item back as "Withdrawn" and why; a member's close by who closed it;
+ * and, on an open item nobody has
  * written on, what it asks, "Choice · 3 options, one recommended".
  */
 export function inboxPreview(
@@ -734,6 +747,7 @@ export function inboxPreview(
     const words = plainWords(message.text);
     return `${who}: ${words === "" ? (filesWords(message.files) ?? "") : words}`;
   }
+  if (closedByMember(item)) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
   if (item.status === INBOX_STATUS.CLOSED) {
     const why = item.closedReason === undefined ? "" : plainWords(item.closedReason);
     return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;

@@ -5,6 +5,7 @@ import {
   INBOX_ANSWER_LEAD,
   INBOX_BLOCK,
   INBOX_BOUNDS,
+  INBOX_CLOSE_LEAD,
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
   INBOX_MESSAGE_LEAD,
@@ -121,7 +122,10 @@ export const INBOX_TOOLS = {
     name: INBOX_TOOL.READ,
     description:
       "Read every item you have put in the developer's inbox as it stands now: what is still open, what they answered and how, " +
-      "and what you closed. Read it before you rely on a to-do you posted without needsReply being done.",
+      "and what was closed: by you, with your reason, or by a member without an answer, whom closedBy names. " +
+      `A member's close of an item you need a reply on reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
+      "take it as their not wanting what the item asked. " +
+      "Read it before you rely on a to-do you posted without needsReply being done.",
     inputSchema: inboxReadInputSchema,
   },
   REPLY: {
@@ -160,6 +164,8 @@ interface AgentInboxLine {
   /** The names of the files the answer carried, in the order they were attached. */
   readonly answerFiles?: readonly string[];
   readonly closedReason?: string;
+  /** The member who closed the item without answering it, by name: a former member's where their account is gone. */
+  readonly closedBy?: string;
   /** The item's thread, oldest first, where anyone wrote on it. */
   readonly thread?: readonly AgentThreadLine[];
 }
@@ -237,6 +243,18 @@ function threadLineOf(message: InboxMessage): AgentThreadLine {
 }
 
 /**
+ * Who closed an item without answering it, as the agent reads it: the
+ * member by name. Note that the agent's own close always says why, so a
+ * closed item without a reason or a member is one a member closed whose
+ * account is gone.
+ */
+function closerOf(item: InboxItem): { readonly closedBy?: string } {
+  if (item.status !== INBOX_STATUS.CLOSED) return {};
+  if (item.closedBy !== undefined) return { closedBy: item.closedBy.name };
+  return item.closedReason === undefined ? { closedBy: "a former member" } : {};
+}
+
+/**
  * An item as the agent reads it back, an answer's files by their names,
  * since the files themselves reached it with the answer. Note that an open item carries what
  * it asks whole, its blocks, its response, and whether the agent waits to
@@ -260,14 +278,15 @@ function lineOf(item: InboxItem): AgentInboxLine {
       ? undefined
       : { answerFiles: item.answerFiles.map((file) => file.name) }),
     ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
+    ...closerOf(item),
     ...(item.messages === undefined ? undefined : { thread: item.messages.map(threadLineOf) }),
   };
 }
 
 /**
  * The agent's inbox as it reads it: what is open first, then what was
- * answered, then what it closed, each the latest changed first. Note that
- * closed items are read last, because they are the agent's own decisions
+ * answered, then what was closed, each the latest changed first. Note that
+ * closed items are read last, because they are settled without an answer
  * and the open and answered ones are what it acts on.
  */
 function inboxOf(items: readonly InboxItem[]): readonly AgentInboxLine[] {

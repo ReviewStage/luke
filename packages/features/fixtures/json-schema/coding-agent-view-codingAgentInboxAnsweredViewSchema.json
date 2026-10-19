@@ -488,6 +488,22 @@
             "closedReason": {
               "type": "string"
             },
+            "closedBy": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
             "messages": {
               "type": "array",
               "items": {

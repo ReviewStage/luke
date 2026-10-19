@@ -36,6 +36,7 @@ import {
   codingAgentGitHubImageParamsSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAttachmentParamsSchema,
+  codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentInboxReadStateParamsSchema,
@@ -133,6 +134,7 @@ export type CodingAgentClient = Pick<
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
+  | "closeInbox"
   | "messageInbox"
   | "markInboxItemRead"
   | "markInboxItemUnread"
@@ -541,6 +543,16 @@ function composed(
           "answering an inbox item names the item, the revision it answers, the answer, and the answer's key",
         );
         const answer = yield* asked(client.answerInbox(itemId, request));
+        return carried<CodingAgentInboxAnsweredView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, ...request } = yield* read(
+          codingAgentInboxCloseParamsSchema,
+          params,
+          "closing an inbox item names the item, the revision it closes, and the close's key",
+        );
+        const answer = yield* asked(client.closeInbox(itemId, request));
         return carried<CodingAgentInboxAnsweredView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE]: (params) =>
