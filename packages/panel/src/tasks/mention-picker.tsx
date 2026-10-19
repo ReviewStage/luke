@@ -970,7 +970,7 @@ export const MENTION_MENU_SIDE = {
   ABOVE: "above",
 } as const;
 
-type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
+export type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
 
 /** A page an agent showed on the plan, as the list offers it: its id and its newest version's title. */
 export interface MentionablePage {
