@@ -4,6 +4,7 @@ import {
   ACCOUNT_CHAT_REASON,
   type AccountChatEntry,
   type AccountInboxEntry,
+  accountInboxAnswerSchema,
 } from "@luke/features/account-inbox-wire";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
@@ -54,7 +55,7 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type { LiveClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
@@ -516,11 +517,13 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
     const service = fakeService();
     const realtime = fakeRealtime();
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    // The host's clock, which `advance` moves with the test's.
+    let elapsed = 0;
     const composer = yield* composeCodingAgents({
       kernel: {
         runMode: { sendsNetwork: options.sendsNetwork ?? true },
         emit: (kind, payload) => void events.push({ kind, payload }),
-        now: () => NOW,
+        now: () => NOW + elapsed,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
@@ -543,12 +546,24 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       realtime,
       inboxes,
       reset: composer.reset,
+      /** The host's clock and the test's moved on together, a minute at a time, so neither runs far ahead of the other. */
+      advance: (millis: number) =>
+        Effect.gen(function* () {
+          for (let left = millis; left > 0; left -= MINUTE) {
+            const step = Math.min(left, MINUTE);
+            elapsed += step;
+            yield* TestClock.adjust(Duration.millis(step));
+          }
+        }),
     };
   });
 }
 
 /** The host's clock, which an answer read live is stamped with. */
 const NOW = 1_800_000_100_000;
+
+const MINUTE = 60 * 1_000;
+const DAY = 24 * 60 * MINUTE;
 
 /** A sealed statement as the service answers one, named by the part it follows. */
 function sealed(part: string, expiresAt = NOW + 60_000) {
@@ -1057,7 +1072,13 @@ it.effect(
       ]);
       yield* settled;
 
-      assert.deepEqual(inboxes(), [
+      // The cursor is a digest of what the answer holds, opaque to a reader but for comparing.
+      const published = inboxes().map((inbox) => {
+        const { cursor: _cursor, ...rest } =
+          Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox);
+        return rest;
+      });
+      assert.deepEqual(published, [
         {
           items: [NEWER, WAITING],
           plans: [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }],
@@ -1065,12 +1086,52 @@ it.effect(
           automations: [],
           failedRuns: [failedRun(recent, 1)],
           chat: [direct, ask],
-          cursor: "",
           readAt: NOW,
         },
       ]);
       assert.deepEqual(asked, ["account-inbox-live"]);
       assert.ok(!JSON.stringify(inboxes()).includes("capability"));
+    }),
+);
+
+it.effect(
+  "a failed run that ages out of the last week with no row moving is let go: the answer is published again as it does",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime, inboxes, advance } = yield* subject();
+      seal({
+        ...SEALED,
+        // Sealed for a month, so no renewal falls in the week the test spans.
+        queries: {
+          items: sealed("items", NOW + 30 * DAY),
+          planless: sealed("planless", NOW + 30 * DAY),
+          plans: sealed("plans", NOW + 30 * DAY),
+          automations: sealed("automations", NOW + 30 * DAY),
+          failedRuns: sealed("failedRuns", NOW + 30 * DAY),
+          chatAsks: sealed("chatAsks", NOW + 30 * DAY),
+          chatNotices: sealed("chatNotices", NOW + 30 * DAY),
+        },
+      });
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      const ageing = failedRun("3b4c5d6e-7f8a-4b9c-8d1e-2f3a4b5c6d7e", 6);
+      for (const part of ["items", "planless", "plans", "automations", "chatAsks", "chatNotices"]) {
+        realtime.deliver(part, []);
+      }
+      realtime.deliver("failedRuns", [ageing]);
+      yield* settled;
+      const failedRunsOf = () =>
+        inboxes().map(
+          (inbox) => Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox).failedRuns,
+        );
+      assert.deepEqual(failedRunsOf(), [[ageing]]);
+
+      yield* advance(DAY - 1_000);
+      yield* settled;
+      assert.deepEqual(failedRunsOf(), [[ageing]], "a day short of a week, it still stands");
+      yield* advance(2_000);
+      yield* settled;
+      assert.deepEqual(failedRunsOf(), [[ageing], []]);
     }),
 );
 

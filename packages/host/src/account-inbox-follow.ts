@@ -4,6 +4,7 @@ import {
   type AccountInboxLiveRows,
   accountInboxLiveRowSchemas,
   accountInboxOfLiveRows,
+  nextFailedRunExpiry,
   type SealedLiveQueryWire,
 } from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "effect";
@@ -30,6 +31,9 @@ const RENEW_EARLY = Duration.seconds(10);
 const RENEW_RETRY = Duration.seconds(1);
 /** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
 const LIVE_RESTART = Duration.seconds(5);
+
+/** How often a follower holding no failed run looks again for one to age out, since one may arrive meanwhile. */
+const EXPIRY_RECHECK = Duration.hours(1);
 
 /** A subscription that stopped for good: Realtime said so, or a row did not decode. */
 class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
@@ -184,6 +188,19 @@ function liveAnswers(
           Effect.sync(() => {
             for (const subscription of Object.values(standing)) subscription.unsubscribe();
           }),
+      );
+      // A failed run ages out of the last week with no row moving, so the answer is published again as it does.
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.suspend(() => {
+            const now = dependencies.now();
+            const next =
+              rows.failedRuns === undefined ? undefined : nextFailedRunExpiry(rows.failedRuns, now);
+            return next === undefined
+              ? Effect.sleep(EXPIRY_RECHECK)
+              : Effect.andThen(Effect.sleep(Duration.millis(next - now + 1)), Effect.sync(changed));
+          }),
+        ),
       );
       let expiresAt = earliestExpiry(first);
       const renewal = Effect.gen(function* () {
