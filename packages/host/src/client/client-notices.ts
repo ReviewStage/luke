@@ -101,11 +101,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
-    automationsOn: () =>
-      experimentOn(
-        state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
-        EXPERIMENT.AUTOMATIONS,
-      ),
     chatOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
     report,

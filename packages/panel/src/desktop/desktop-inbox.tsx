@@ -7,7 +7,6 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import type { StripTab } from "@luke/ui/tab-strip-model";
@@ -65,7 +64,6 @@ import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-pane
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import { useTasklessInboxItems } from "../tasks/use-taskless-inbox-items.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { type InboxViewChoices, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups.js";
 import {
   COLUMN,
@@ -228,7 +226,6 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const now = useMinute();
   const choices = useInboxViewChoices();
   const folds = useInboxTaskFolds();
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
@@ -580,12 +577,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   return (
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-        <AutomationDirectory
-          workspace={tasks.workspace}
-          on={automationsOn}
-          wanted
-          onOpen={openAutomation}
-        >
+        <AutomationDirectory workspace={tasks.workspace} wanted onOpen={openAutomation}>
           <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
             {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
             <PageFind
@@ -680,7 +672,6 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                           act,
                           openLink: openItemLink,
                           now,
-                          automationsOn,
                           panelFor,
                         })}
                       />
@@ -823,7 +814,6 @@ function paneDoors(
     act: ReturnType<typeof useAct>["act"];
     openLink: (url: string) => void;
     now: number;
-    automationsOn: boolean;
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
   },
@@ -852,7 +842,7 @@ function paneDoors(
   const { automationId } = holder;
   return {
     onOpenHolder:
-      seams.automationsOn && automationId !== null
+      automationId !== null
         ? () => tasks.automationsView.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
         : undefined,
     taskCard: undefined,

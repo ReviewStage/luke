@@ -446,12 +446,10 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.AUTOMATIONS]: {
     label: "Automations",
     chord: { key: SHORTCUT_KEY.U, shift: true },
-    experiment: EXPERIMENT.AUTOMATIONS,
   },
   [APP_COMMAND.EXIT_AUTOMATIONS]: {
     label: "Exit automations",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.AUTOMATIONS,
   },
   [APP_COMMAND.ISSUES]: {
     label: "Issues",

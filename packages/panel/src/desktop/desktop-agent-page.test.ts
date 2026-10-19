@@ -29,9 +29,7 @@ import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -49,12 +47,7 @@ import {
   fakeAppPlatform,
   QUIET_PANEL,
 } from "../testing/app-platform.js";
-import {
-  DESKTOP_CAPABILITIES,
-  handCapabilities,
-  handState,
-  stateWith,
-} from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, stateWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -65,7 +58,7 @@ import { ToastHost } from "../toast.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it cannot, deleted or the experiment off, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
@@ -948,7 +941,6 @@ function origin(page: HTMLElement): OpenedOrigin {
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
   const opened: unknown[] = [];
@@ -970,7 +962,6 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
 });
 
 test("a deleted automation's agent still names it, plainly, with nothing to open", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
   transcript = handedTranscript();
   const page = mount(tasksControl({ workspaces: [ACME] }));
@@ -978,17 +969,6 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
 
   const { sender } = origin(page);
   assert.equal(words(sender), "Flaky-test sweep (deleted)");
-  assert.equal(sender?.querySelector("button"), null, "nothing opens it");
-});
-
-test("with the Automations experiment off, an automation's agent names it plainly, with nothing to open", async () => {
-  pages = [{ agent: RUN_PAGE }];
-  transcript = handedTranscript();
-  const page = mount(tasksControl({ workspaces: [ACME] }));
-  await settle();
-
-  const { sender } = origin(page);
-  assert.equal(words(sender), "Flaky-test sweep");
   assert.equal(sender?.querySelector("button"), null, "nothing opens it");
 });
 

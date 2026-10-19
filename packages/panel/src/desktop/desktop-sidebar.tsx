@@ -1327,10 +1327,9 @@ function SidebarColumn({
     inChat ||
     inIssues ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Factory, the Automations page, Chat, and the Issues page are experiments: each row stands only while the account has it on.
+  // Factory, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
@@ -1632,14 +1631,12 @@ function SidebarColumn({
             onOpen={chosen(openFactory)}
           />
         ) : null}
-        {automationsOn ? (
-          <SidebarAutomationsRow
-            current={inAutomations}
-            failed={automationFailed}
-            disabled={!tasks.signedIn}
-            onOpen={chosen(openAutomations)}
-          />
-        ) : null}
+        <SidebarAutomationsRow
+          current={inAutomations}
+          failed={automationFailed}
+          disabled={!tasks.signedIn}
+          onOpen={chosen(openAutomations)}
+        />
         {issuesOn ? (
           <SidebarIssuesRow
             current={inIssues}

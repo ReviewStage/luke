@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCreateParams,
@@ -29,6 +30,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -1317,19 +1319,54 @@ test("the Runs panel's edge resizes it within its bounds, and the width stands o
   window.localStorage.clear();
 });
 
-test("the list and an automation's page each say they are an experiment, and each Send feedback is about Automations", async () => {
+/** A code review as its preset makes it, standing in the workspace. */
+const REVIEW = automation(10, {
+  name: "Code review",
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: codeReviewPreset().prompt },
+});
+
+/** Whether the page wears the Experimental tag and offers Send feedback, each or neither. */
+function saysExperimental(page: HTMLElement): boolean {
+  const tagged = page.querySelector(".experiment-tag")?.textContent === "Experimental";
+  const feedback = [...page.querySelectorAll("button")].some(
+    (each) => each.textContent === "Send feedback",
+  );
+  assert.equal(tagged, feedback, "the tag and Send feedback stand together");
+  return tagged;
+}
+
+test("the list and an automation's page are no experiment, so neither wears the Experimental tag or offers Send feedback", async () => {
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.equal(list.querySelector(".experiment-tag")?.textContent, "Experimental");
-  act(() => button("Send feedback").click());
+  assert.equal(saysExperimental(list), false);
   act(() => root?.unmount());
 
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  assert.equal(page.querySelector(".experiment-tag")?.textContent, "Experimental");
-  act(() => button("Send feedback").click());
+  assert.equal(saysExperimental(page), false);
+});
 
-  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
+test("a code review's page says it is an experiment while Code review is on, its Send feedback about Code review, and is a plain automation's page, its settings in its prompt alone, while it is off", async () => {
+  standing = [DIGEST, SWEEP, REVIEW];
+  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
+  const on = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
+  await settle();
+  assert.equal(saysExperimental(on), true);
+  assert.ok(cards(on).includes("Code review"));
+  act(() => button("Send feedback").click());
+  assert.deepEqual(feedbackAbout, [EXPERIMENT.CODE_REVIEW]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  const off = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
+  await settle();
+  assert.equal(saysExperimental(off), false);
+  assert.ok(!cards(off).includes("Code review"));
+  assert.match(
+    off.querySelector<HTMLTextAreaElement>("textarea[aria-label='Prompt']")?.value ?? "",
+    /^Code review settings:/u,
+  );
 });
 
 /** The pill the pointer resting on `element` raises, or nothing where it raises none. */
@@ -1340,12 +1377,12 @@ function pillOver(element: Element): string | undefined {
   return pill;
 }
 
-test("an automation's toolbar too narrow for its acts' words beside its name folds the way back, Send feedback, and Run now to their glyphs, each raising its words in its pill", async () => {
+test("an automation's toolbar too narrow for its acts' words beside its name folds the way back and Run now to their glyphs, each raising its words in its pill", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   const toolbar = page.querySelector(".automation-toolbar") ?? assert.fail("no toolbar");
   const acts = () =>
-    ["Automations", "Send feedback", "Run now"].map((name) => {
+    ["Automations", "Run now"].map((name) => {
       const press =
         [...toolbar.querySelectorAll("button")].find((each) => each.textContent === name) ??
         assert.fail(`no ${name}`);
@@ -1358,7 +1395,6 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
     act(() => relayout());
     assert.deepEqual(acts(), [
       { name: "Automations", pill: "Automations" },
-      { name: "Send feedback", pill: "Send feedback" },
       { name: "Run now", pill: "Run now" },
     ]);
   } finally {
@@ -1369,7 +1405,6 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
     act(() => relayout());
     assert.deepEqual(acts(), [
       { name: "Automations", pill: undefined },
-      { name: "Send feedback", pill: undefined },
       { name: "Run now", pill: undefined },
     ]);
   } finally {
@@ -2383,6 +2418,7 @@ function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
 }
 
 test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
+  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
   standing = [];
   const empty = mount();
   await settle();
@@ -2408,7 +2444,35 @@ test("Code review is suggested under an empty list as under a full one, and a bl
   );
 });
 
+test("while Code review is off nothing is suggested, under an empty list or a full one, and a page sent to its preset starts blank", async () => {
+  handState({});
+  standing = [];
+  const empty = mount();
+  await settle();
+  assert.match(empty.textContent ?? "", /No automations yet/u);
+  assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  standing = [DIGEST, SWEEP, FAILING];
+  const full = mount();
+  await settle();
+  assert.equal(rows(full).length, 3);
+  assert.equal(full.querySelector("[aria-label='Suggested']"), null);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const sent = mountPages({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
+  await settle();
+  assert.deepEqual(cards(sent).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
+  assert.equal(
+    sent.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "",
+  );
+});
+
 test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 

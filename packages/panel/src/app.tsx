@@ -361,7 +361,6 @@ export function App(): React.JSX.Element {
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
@@ -373,7 +372,6 @@ export function App(): React.JSX.Element {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
-      automationsOn,
       issuesOn,
     });
     if (route.kind === LINK_ROUTE.SETTINGS) {
@@ -711,7 +709,7 @@ export function App(): React.JSX.Element {
                       disconnect: tasks.onDisconnectAccountGitHub,
                     }}
                   >
-                    <ListedAutomations tasks={tasks} on={automationsOn}>
+                    <ListedAutomations tasks={tasks}>
                       <div
                         ref={stage.ref}
                         className="app-stage"

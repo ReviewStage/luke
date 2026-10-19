@@ -245,7 +245,7 @@ test("a person's page opened again with a newer name keeps that name in its step
 });
 
 test("an automation opened from the Automations list is a step of its own, which Back leaves for the list", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const opened: (AutomationsPlace | undefined)[] = [];
   const window = mount(
     tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
@@ -260,7 +260,7 @@ test("an automation opened from the Automations list is a step of its own, which
 });
 
 test("the automation a new automation's page made takes that page's step, so Back from it returns to the list it was opened from", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const opened: (AutomationsPlace | undefined)[] = [];
   const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   await settle();
@@ -276,7 +276,7 @@ test("the automation a new automation's page made takes that page's step, so Bac
 });
 
 test("another automation opened over a new automation's page, as a notification opens one, is a visit after it, which Back leaves for the new page", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const opened: (AutomationsPlace | undefined)[] = [];
   const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   await settle();
@@ -289,7 +289,7 @@ test("another automation opened over a new automation's page, as a notification 
 });
 
 test("an automation's page is of the workspace it stood in, so once another is listed Back passes over it", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const opened: (AutomationsPlace | undefined)[] = [];
   const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   await settle();
@@ -303,7 +303,7 @@ test("an automation's page is of the workspace it stood in, so once another is l
 });
 
 test("a deleted automation's page is passed over by Back, which returns to the page before it", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   const opened: (AutomationsPlace | undefined)[] = [];
   const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, opened));
   await settle();

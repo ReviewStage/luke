@@ -20,7 +20,6 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { EXPERIMENT } from "@luke/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -121,9 +120,9 @@ const AUDIT: AutomationSummary = {
   name: "Weekly audit",
 };
 
-/** Main's document holding the plan, its page, and an Inbox item waiting on it, the Automations experiment on. */
+/** Main's document holding the plan, its page, and an Inbox item waiting on it. */
 const STATE: AppStateSnapshot = (() => {
-  const snapshot = stateWith({ [EXPERIMENT.AUTOMATIONS]: true }, {});
+  const snapshot = stateWith({}, {});
   return {
     ...snapshot,
     tasks: {

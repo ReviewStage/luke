@@ -50,7 +50,6 @@ import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-
 import { Fragment, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { FoldingButton } from "../folding-button.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -58,6 +57,7 @@ import { momentText, useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
+import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AutomationEditor } from "./automation-editor.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
@@ -80,13 +80,13 @@ import { useAutomations } from "./use-automations.js";
  * heading each where both stand, and every row names its owner besides, a
  * building for the workspace and a lock for Personal. A row's glyph wears
  * where its newest run stands, a failure keeps its mark at the row's end,
- * and an automation turned off reads "Off" where its next run would. It is
- * an experiment (`EXPERIMENT.AUTOMATIONS`): every door to it is gated on the
- * account's switch, and its toolbar says so with a quiet badge and Send
- * feedback. Under the list, or under the line saying there is none yet,
- * stand the suggested automations, Code review among them: a press opens a
- * new automation's page filled in from the suggestion's preset, to look
- * over and Create.
+ * and an automation turned off reads "Off" where its next run would.
+ * Under the list, or under the line saying there is none yet, stand the
+ * suggested automations: a press opens a new automation's page filled in
+ * from the suggestion's preset, to look over and Create. Code review, the
+ * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
+ * nothing is suggested, and no page opens filled in from it, while the
+ * account has it off.
  */
 
 /** What an automation's row's right-click menu is called. */
@@ -129,7 +129,7 @@ const SKELETON_NAME = "40%";
 const SKELETON_CRUMB = "120px";
 const SKELETON_CONTROL = "160px";
 
-/** The presets the list suggests, in its order, each by the glyph of what fires it. */
+/** The presets the list suggests while Code review's experiment is on, in its order, each by the glyph of what fires it. */
 const SUGGESTIONS: readonly {
   readonly name: AutomationPresetName;
   readonly glyph: React.ReactNode;
@@ -323,7 +323,8 @@ function SuggestedAutomations({
 }: {
   disabled: boolean;
   onStart: (preset: AutomationPresetName) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (!useExperiment(EXPERIMENT.CODE_REVIEW)) return null;
   return (
     <section className="automation-suggestions" aria-label="Suggested">
       <div className="automation-suggestions-head">
@@ -404,10 +405,8 @@ function ListPage({
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
             <h1 className="desktop-toolbar-title">Automations</h1>
-            <ExperimentTag />
           </div>
           <div className="desktop-toolbar-actions">
-            <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               icon={<PlusIcon />}
@@ -572,10 +571,6 @@ function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
                 <Skeleton width={SKELETON_CRUMB} />
               </span>
             </nav>
-            <ExperimentTag />
-          </div>
-          <div className="desktop-toolbar-actions">
-            <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
           </div>
         </div>
       </header>
@@ -616,6 +611,7 @@ export function AutomationsPage({ tasks }: { tasks: TasksControl }): React.JSX.E
 function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
+  const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
   // Note that no list is asked for while no workspace is listed, which is
   // while the workspaces are still read, so the pages stand as quiet blocks
   // until one is, rather than calling the list empty or an automation gone;
@@ -647,7 +643,8 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;
-  const preset = place.kind === AUTOMATIONS_PAGE.NEW ? place.preset : undefined;
+  // Code review, the one preset, is an experiment, so a new page opened from it while it is off starts blank.
+  const preset = place.kind === AUTOMATIONS_PAGE.NEW && codeReviewOn ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   return (
     // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
