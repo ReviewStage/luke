@@ -326,14 +326,19 @@ if [[ -n "$hand_rolled_fixtures" ]]; then
 fi
 
 # BRIDGE is the one renderer-to-main declaration, and registerBridgeHost is
-# the one place that may attach it to Electron. A handler registered beside its
-# domain logic would bypass the manifest's sender and wire guards, and an act
-# registered on a channel of its own would bypass the router.
-direct_ipc_registration=$(grep -rnaE --exclude-dir=node_modules --include='*.ts' 'ipcMain\.(handle|on)\(' \
+# the one place that may attach it to Electron, the act port included. A
+# handler registered beside its domain logic would bypass the manifest's
+# sender and wire guards, an act registered on a channel of its own would
+# bypass the router, and a renderer port upgraded anywhere else would bypass
+# the act port's trust check and context. A port main opens to stream a
+# terminal's bytes to a window is not a door into main, and stays where its
+# act opens it.
+direct_ipc_registration=$(grep -rnaE --exclude-dir=node_modules --include='*.ts' --include='*.tsx' \
+    'ipcMain\.(handle|handleOnce|on|once|addListener)\(|\.upgrade\(|@orpc/server/message-port' \
     "$LUKE_REPO_ROOT/apps/desktop/src" |
     grep -v '/main/bridge-host.ts:' || true)
 if [[ -n "$direct_ipc_registration" ]]; then
-    printf 'error: Electron IPC handlers must be registered through registerBridgeHost:\n%s\n' \
+    printf 'error: Electron IPC handlers and renderer ports must be registered and upgraded through registerBridgeHost:\n%s\n' \
         "$direct_ipc_registration" >&2
     exit 1
 fi

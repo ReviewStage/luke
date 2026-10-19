@@ -14,8 +14,9 @@ import {
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
+import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
-import { chatMessage, workspaceChat } from "../../schemas/chat.js";
+import { chatAttachment, chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
@@ -41,6 +42,7 @@ import {
   markNoticed,
   memberNamed,
   messageAt,
+  moveTaskChat,
   openAsksOf,
   openTopicChannel,
   peekUnread,
@@ -1598,6 +1600,105 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
         true,
       );
     }),
+  );
+
+  it.effect(
+    "the one attachment table keeps the same pictures under the same ids, drops the ones the message drops, and moves them with the task's chat",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const room = yield* openRoom;
+        const png = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array([137, 80, 78, 71]),
+        };
+        const webp = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.WEBP,
+          bytes: new Uint8Array([82, 73, 70, 70]),
+        };
+        const message = yield* pictured(room, [png.id, webp.id]);
+        const shared = Effect.map(
+          db
+            .select({
+              id: attachment.id,
+              organizationId: attachment.organizationId,
+              contentType: attachment.contentType,
+              byteCount: attachment.byteCount,
+              bytes: attachment.bytes,
+            })
+            .from(attachment)
+            .where(eq(attachment.chatMessageId, message.id)),
+          (rows) => rows.toSorted((a, b) => a.id.localeCompare(b.id)),
+        );
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [
+          png,
+          webp,
+        ]);
+        assert.deepEqual(
+          (yield* shared).map((row) => [row.id, row.contentType, row.byteCount, [...row.bytes]]),
+          [png, webp]
+            .toSorted((a, b) => a.id.localeCompare(b.id))
+            .map((image) => [
+              image.id,
+              image.contentType,
+              image.bytes.byteLength,
+              [...image.bytes],
+            ]),
+        );
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [webp]);
+        assert.deepEqual(
+          (yield* shared).map((row) => row.id),
+          [webp.id],
+        );
+
+        const elsewhere = yield* openWorkspace(room.owner);
+        yield* moveTaskChat(room.plan, elsewhere);
+        assert.deepEqual(
+          (yield* shared).map((row) => row.organizationId),
+          [elsewhere],
+        );
+      }),
+  );
+
+  it.effect(
+    "a picture kept before the one table, written again with other bytes under its id, is copied there as it was first kept",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const room = yield* openRoom;
+        const id = randomUUID();
+        const message = yield* pictured(room, [id]);
+        const first = new Uint8Array([137, 80, 78, 71, 1]);
+        yield* db.insert(chatAttachment).values({
+          id,
+          organizationId: room.workspace,
+          messageId: message.id,
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          byteCount: first.byteLength,
+          bytes: first,
+          createdAt: yield* DateTime.nowAsDate,
+        });
+
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [
+          { id, contentType: CHAT_IMAGE_TYPE.PNG, bytes: new Uint8Array([137, 80, 78, 71, 2]) },
+        ]);
+        const [copied] = yield* db
+          .select({ bytes: attachment.bytes })
+          .from(attachment)
+          .where(eq(attachment.id, id));
+        assert.deepEqual([...(copied?.bytes ?? [])], [...first]);
+        assert.deepEqual(
+          [
+            ...Option.getOrThrow(yield* readAttachment(room.owner, room.workspace, message.id, id))
+              .bytes,
+          ],
+          [...first],
+        );
+      }),
   );
 });
 

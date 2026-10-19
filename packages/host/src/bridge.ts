@@ -41,6 +41,9 @@ import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./acts.js";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 
+/** The act port's handshake, which the page and the preload each take their half of. */
+export { ACT_PORT, actPortForwarder } from "./contract/kinds.js";
+
 type BridgeArguments = readonly unknown[];
 type BridgeKind = "invoke" | "send" | "subscribe";
 type BridgeEntry<

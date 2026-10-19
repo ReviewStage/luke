@@ -288,6 +288,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
+- **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,

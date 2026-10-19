@@ -4,6 +4,7 @@ import path from "node:path";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
+import { createActPortHandler } from "@luke/host/act-port";
 import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -55,6 +56,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     testNotification,
     avatar,
     run,
+    services: effectServices,
   } = services;
   const { launch } = config;
   const { panels, voiceWindow, callWindow, hotkeys } = windows;
@@ -198,7 +200,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       codingAgents: { host: operator.host, notices },
       integrations: { host: operator.host },
       automations: { host: operator.host },
-      issues: { host: operator.host },
       factory: { host: operator.host },
     },
     platformRows,
@@ -247,6 +248,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     router,
     run,
+    actPort: createActPortHandler({ issues: { host: operator.host } }),
+    services: effectServices,
     reports,
     /**
      * The document as one window stands, answered before anything is drawn

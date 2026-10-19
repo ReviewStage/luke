@@ -16,6 +16,7 @@ import {
 } from "../act-router/index.js";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind } from "../acts.js";
 import type { AppStateSnapshot } from "../app-state.js";
+import { isPortActKind } from "../contract/index.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
@@ -94,7 +95,9 @@ function settingsHost(reporterOf: (sender: symbol) => string): SettingsHost {
 /** Every kind the host's rows leave, refused: the table of a shell that carries none of them. */
 function everyPlatformKindRefused(): PlatformActRows<symbol> {
   const hosts = new Set<string>(Object.keys(hostActRows(UNREACHED)));
-  const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter((kind) => !hosts.has(kind));
+  const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter(
+    (kind): kind is ActKind => !hosts.has(kind) && !isPortActKind(kind),
+  );
   // SAFETY: the kinds are exactly those the host's rows leave, each once.
   return refusedRows(kinds) as unknown as PlatformActRows<symbol>;
 }

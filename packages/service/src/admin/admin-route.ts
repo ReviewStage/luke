@@ -4,6 +4,7 @@ import { authSecrets, socialClientConfigured } from "../auth/auth-deployment.js"
 import { HOSTED_OPENAI_ENVIRONMENT } from "../providers/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
+import { readAdminAccountSource } from "./admin-account-queries.js";
 import type { AdminSeams } from "./admin-app.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations, buildAdminMetrics } from "./admin-metrics.js";
@@ -87,8 +88,14 @@ export function hostedAdminSeams(): AdminSeams {
       ),
     readUser: (userId, now, windowDays) =>
       Effect.map(
-        readAdminUserSource({ userId, now, windowDays }),
-        (source) => source && buildAdminUserDetail(source, now, windowDays),
+        Effect.all(
+          [
+            readAdminUserSource({ userId, now, windowDays }),
+            readAdminAccountSource({ userId, now, windowDays }),
+          ],
+          { concurrency: "unbounded" },
+        ),
+        ([source, support]) => source && buildAdminUserDetail(source, support, now, windowDays),
       ),
     readDay: (day, now, scope) =>
       Effect.map(readAdminDaySource({ day, scope }), (source) =>

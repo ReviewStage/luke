@@ -139,16 +139,6 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
-import {
-  type IssueListView,
-  type IssueView,
-  issueChangeParamsSchema,
-  issueCreateParamsSchema,
-  issueIdParamsSchema,
-  issueListParamsSchema,
-  issueListViewSchema,
-  issueViewSchema,
-} from "@luke/features/issue-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
   type MacRepositoriesAnswer,
@@ -305,6 +295,7 @@ import {
   wireResult,
 } from "@luke/wire/wire-guard";
 import { Schema as EffectSchema, Result } from "effect";
+import { PORT_ACT_KIND, type PortActKind } from "./contract/kinds.js";
 
 /**
  * Every effect a window may ask this build's main process for, named once.
@@ -522,11 +513,6 @@ export const ACT_KIND = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** The listed workspace's issues: listed, one read, one filed, and one changed. */
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
   /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
   FACTORY_WORLD: "factory.world",
   /**
@@ -661,9 +647,16 @@ export const ACT_KIND = {
   WINDOW_COPY_TEXT: "window.copyText",
   WINDOW_SAVE_FILE: "window.saveFile",
   FEEDBACK_SEND: "feedback.send",
+  /**
+   * The kinds the window's act port answers rather than `app:act`
+   * (`contract/kinds.ts`), spelled here beside the rest so a caller names
+   * every act the same way.
+   */
+  ...PORT_ACT_KIND,
 } as const;
 
-export type ActKind = (typeof ACT_KIND)[keyof typeof ACT_KIND];
+/** A kind `app:act` carries: every kind but the ones the act port answers. */
+export type ActKind = Exclude<(typeof ACT_KIND)[keyof typeof ACT_KIND], PortActKind>;
 
 /**
  * One act payload's parser. The `s` combinators from `@luke/wire` satisfy
@@ -1461,26 +1454,6 @@ export const ACT = {
     result: wireResult<AutomationView>(isReadable(automationViewSchema)),
     refusal: "Could not make a new webhook secret on this system.",
   },
-  [ACT_KIND.ISSUES_LIST]: {
-    payload: actSchema(issueListParamsSchema),
-    result: wireResult<IssueListView>(isReadable(issueListViewSchema)),
-    refusal: "Could not read the issues on this system.",
-  },
-  [ACT_KIND.ISSUES_READ]: {
-    payload: actSchema(issueIdParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not read the issue on this system.",
-  },
-  [ACT_KIND.ISSUES_CREATE]: {
-    payload: actSchema(issueCreateParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not create the issue on this system.",
-  },
-  [ACT_KIND.ISSUES_CHANGE]: {
-    payload: actSchema(issueChangeParamsSchema),
-    result: wireResult<IssueView>(isReadable(issueViewSchema)),
-    refusal: "Could not change the issue on this system.",
-  },
   [ACT_KIND.FACTORY_WORLD]: {
     payload: actSchema(factoryWorldParamsSchema),
     result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
@@ -1816,7 +1789,7 @@ export type ActOutcome<Kind extends ActKind = ActKind> =
   | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
   | { readonly status: typeof ACT_OUTCOME_STATUS.UNKNOWN_ACT };
 
-const ACT_KINDS: readonly string[] = Object.values(ACT_KIND);
+const ACT_KINDS: readonly string[] = Object.keys(ACT);
 
 function isActKind(value: UnparsedWireValue): value is ActKind {
   return isWireString(value) && ACT_KINDS.includes(value);
