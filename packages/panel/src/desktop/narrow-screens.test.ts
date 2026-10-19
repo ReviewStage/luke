@@ -373,6 +373,14 @@ test("a link to a Settings page on a narrow stage opens on that page, with the w
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 });
 
+test("a link to Settings that names no page opens on the page list on a narrow stage", async () => {
+  const page = await mount(
+    PHONE,
+    createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.ACCOUNT, listed: true } }),
+  );
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+});
+
 test("Find on a narrow Settings lands in the search shown: a page with none shows the list for it, and the list takes it from a hidden page's own", async () => {
   const page = await mount(
     PHONE,

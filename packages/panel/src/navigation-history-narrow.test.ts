@@ -337,6 +337,12 @@ test("on a narrow stage a version chosen from the list is a step, which Back lea
   assert.deepEqual(window.addresses(), [TASK_PATH, `${TASK_PATH}/version/2`]);
   assert.equal(window.standingAddress(), copiedHere());
   backAndForth(window, (at) => at.versions.listed, true, false);
+
+  // The list has no link of its own, so its step is the task's, though a version stays chosen behind it.
+  act(() => window.history().onBack());
+  assert.equal(window.standingAddress(), TASK_PATH);
+  assert.equal(window.standingAddress(), copiedHere());
+  act(() => window.history().onForward());
   assert.equal(window.at().versions.revision, 2, "the version chosen comes back");
 });
 

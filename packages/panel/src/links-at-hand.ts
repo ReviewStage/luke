@@ -154,7 +154,9 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   };
   if (tasks.history.open) {
     const revision = tasks.history.selected;
-    return revision === undefined
+    // A narrow room's version list stands alone, and has no link of its own, so it is the task's step.
+    const listedAlone = at.narrow === true && tasks.history.listed;
+    return revision === undefined || listedAlone
       ? [{ ...task, step: true }]
       : [
           {

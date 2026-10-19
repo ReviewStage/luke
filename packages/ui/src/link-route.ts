@@ -52,10 +52,15 @@ export function linkRoute(
       const home = window.workspaces.find(
         (each) => each.slug === workspace || each.id === workspace,
       );
-      const page = SETTINGS_PAGE_LIST.find((each) => each === place.page) ?? SETTINGS_VIEW.ACCOUNT;
+      const known = SETTINGS_PAGE_LIST.find((each) => each === place.page);
+      // Note that a link naming no page this window knows names the page list, which stands on its first page.
+      const page =
+        known === undefined
+          ? { page: SETTINGS_VIEW.ACCOUNT, listed: true as const }
+          : { page: known };
       return {
         kind: LINK_ROUTE.SETTINGS,
-        settings: home === undefined ? { page } : { page, workspaceId: home.id },
+        settings: home === undefined ? page : { ...page, workspaceId: home.id },
       };
     }
     case LINK_PLACE.FACTORY:

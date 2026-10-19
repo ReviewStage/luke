@@ -162,9 +162,10 @@ export function useInboxColumns(
   backable: boolean,
   kept?: InboxListing,
 ): InboxColumns {
-  const [single, setSingle] = useState(false);
+  // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
+  const [measured, setMeasured] = useState<boolean | undefined>(undefined);
+  const single = measured === true;
   const { asked: listAsked, onAsk: setListAsked } = useListing(kept);
-  const wasSingle = useRef(single);
   // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
@@ -175,20 +176,19 @@ export function useInboxColumns(
     if (element === null) return undefined;
     const measure = () => {
       const width = element.getBoundingClientRect().width;
-      if (width > 0) setSingle((was) => oneColumn(width, was));
+      if (width > 0) setMeasured((was) => oneColumn(width, was === true));
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // Note that an Inbox split again forgets the list was asked for, so narrowing it lands on its
-  // item; only a split counts, since an Inbox not yet measured has never been one column.
+  // Note that an Inbox measured split forgets the list was asked for, so narrowing it lands on its
+  // item; one not yet measured keeps it, since the list a holder kept may be what it narrows onto.
+  const split = measured === false;
   useLayoutEffect(() => {
-    const split = wasSingle.current && !single;
-    wasSingle.current = single;
     if (split && listAsked) setListAsked(false);
-  }, [single, listAsked, setListAsked]);
+  }, [split, listAsked, setListAsked]);
   const shown = shownColumns(single, chosen, listAsked, backable);
 
   useLayoutEffect(() => {
