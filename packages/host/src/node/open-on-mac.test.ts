@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
@@ -19,7 +19,9 @@ import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./o
  * deleted once its pull request merged opens at that pull request's last
  * head; a worktree folder deleted by hand is made again; one an earlier
  * Luke kept under its application data is left there and said; two opens of
- * the shared clone at once each bring in their own branch; and no two
+ * the shared clone at once each bring in their own branch; one waits on a
+ * clone another holds while it lives, and takes the lock over once it is
+ * gone; and no two
  * branches share a worktree or reach outside its repository's folder.
  */
 
@@ -484,6 +486,50 @@ test(
 test("the shared root sits in the home folder, its path holding no space", () => {
   assert.equal(worktreesRoot("/Users/someone"), "/Users/someone/.luke");
 });
+
+test(
+  "an open waits on a clone another holds while it lives, and takes the lock over once it is gone",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const root = path.join(state, ".luke");
+    const clone = cloneFolder(root, "acme/app");
+    const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
+    const holder = spawn("sleep", ["60"]);
+    mkdirSync(`${clone}.lock`, { recursive: true });
+    writeFileSync(path.join(`${clone}.lock`, "pid"), String(holder.pid));
+    const file = path.join(scratch, "open.sh");
+    writeFileSync(
+      file,
+      openOnMacScript({
+        repository: "acme/app",
+        clone,
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+      { mode: 0o700 },
+    );
+    const ended = new Promise<void>((resolve) =>
+      execFile(
+        "/bin/bash",
+        [file],
+        { env: { ...GIT_ENVIRONMENT, HOME: scratch, SHELL: shell } },
+        () => resolve(),
+      ),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    assert.equal(existsSync(path.join(clone, ".git")), false);
+    assert.equal(existsSync(`${clone}.lock`), true);
+    holder.kill();
+    await ended;
+
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
+    assert.equal(existsSync(`${clone}.lock`), false);
+  },
+  GIT_DEADLINE,
+);
 
 test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
   const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b", "luke+2Fa-b"].map((branch) =>
