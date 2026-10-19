@@ -118,8 +118,6 @@ export function openOnMacScript(input: {
     '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
     "  fi",
     '  cd "$clone" || return 1',
-    // Note that the clone, which checks nothing out, holds no branch, so a worktree may hold any, its default branch among them.
-    "  if git symbolic-ref --quiet HEAD >/dev/null; then git update-ref --no-deref HEAD HEAD || return 1; fi",
     '  echo "▸ Fetching $branch"',
     '  if ! git fetch origin "$branch"; then',
     // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
@@ -136,6 +134,13 @@ export function openOnMacScript(input: {
     '    git worktree move "$legacy" "$worktree" ||',
     '      echo "▸ Could not move it; left at $legacy, and a fresh worktree made"',
     "  fi",
+    // Note that a commit is the developer's own where neither GitHub, the head just fetched, nor the head Luke last checked out holds it; one that cannot be read is taken for theirs.
+    "  unpushed() {",
+    '    found="$(git rev-list --max-count=1 "$1" --not --remotes "$head" ${opened:+"$opened"})" || return 0',
+    '    [ -n "$found" ]',
+    "  }",
+    "  opened=",
+    "  current=",
     '  if [ -e "$worktree/.git" ]; then',
     '    cd "$worktree" || return 1',
     '    changes="$(git status --porcelain)" || return 1',
@@ -143,13 +148,23 @@ export function openOnMacScript(input: {
     '      echo "▸ The worktree has changes of its own; left as it stands rather than overwritten."',
     "      return 1",
     "    fi",
-    // Note that the head Luke last checked out is kept as a ref of the worktree's own; one moved on from it to a commit the fetched head does not hold is a commit of the developer's.
+    // Note that the head Luke last checked out is kept as a ref of the worktree's own, so an agent's force-push over it is taken.
     '    current="$(git rev-parse --verify --quiet HEAD)" || return 1',
     '    opened="$(git rev-parse --verify --quiet refs/worktree/luke-opened)"',
-    '    if [ -n "$opened" ] && [ "$current" != "$opened" ] && ! git merge-base --is-ancestor "$current" "$head"; then',
+    '    if unpushed "$current"; then',
     '      echo "▸ The worktree has commits of its own not on GitHub; left as it stands rather than overwritten."',
     "      return 1",
     "    fi",
+    "  fi",
+    '  if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null && unpushed "refs/heads/$branch"; then',
+    '    echo "▸ The branch $branch in $clone has commits of its own not on GitHub; left as it stands rather than overwritten."',
+    "    return 1",
+    "  fi",
+    // Note that the clone, which checks nothing out, may hold the branch as its own HEAD, which no worktree may hold beside it.
+    '  if [ "$(git -C "$clone" symbolic-ref --quiet HEAD)" = "refs/heads/$branch" ]; then',
+    '    git -C "$clone" update-ref --no-deref HEAD HEAD || return 1',
+    "  fi",
+    '  if [ -n "$current" ]; then',
     // Note that the branch is reset to the fetched head, which takes it as it now stands, a force-push or a rebase among it; with nothing changed there it has nothing to overwrite, and it leaves ignored files alone.
     '    git checkout --quiet -B "$branch" "$head" || return 1',
     "  else",

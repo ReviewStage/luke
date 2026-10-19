@@ -285,6 +285,66 @@ test(
 );
 
 test(
+  "a worktree from before Luke marked its head, detached with a commit of the developer's own, is left as it stands",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = openOnMacScript({
+      repository: "acme/app",
+      clone: cloneFolder(state, "acme/app"),
+      worktree,
+      branch: "luke/fix-relay",
+      command: "touch ran",
+      remotes: { https: origin, ssh: origin },
+    });
+    run(scratch, shell, script);
+    git(worktree, ["update-ref", "-d", "refs/worktree/luke-opened"]);
+    git(worktree, ["checkout", "--quiet", "--detach"]);
+    git(worktree, ["clean", "--quiet", "--force"]);
+    writeFileSync(path.join(worktree, "README.md"), "mine\n");
+    git(worktree, ["commit", "--quiet", "-am", "mine"]);
+    const mine = git(worktree, ["rev-parse", "HEAD"]);
+
+    const printed = run(scratch, shell, script);
+
+    assert.match(printed, /commits of its own/u);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), mine);
+    assert.equal(existsSync(path.join(worktree, "ran")), false);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a branch the developer committed to in Luke's clone is left as it stands",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = openOnMacScript({
+      repository: "acme/app",
+      clone,
+      worktree,
+      branch: "luke/fix-relay",
+      remotes: { https: origin, ssh: origin },
+    });
+    run(scratch, shell, script);
+    git(clone, ["worktree", "remove", "--force", worktree]);
+    git(clone, ["checkout", "--quiet", "luke/fix-relay"]);
+    writeFileSync(path.join(clone, "README.md"), "mine\n");
+    git(clone, ["commit", "--quiet", "-am", "mine"]);
+    const mine = git(clone, ["rev-parse", "HEAD"]);
+
+    const printed = run(scratch, shell, script);
+
+    assert.match(printed, /has commits of its own/u);
+    assert.equal(git(clone, ["rev-parse", "luke/fix-relay"]), mine);
+  },
+  GIT_DEADLINE,
+);
+
+test(
   "a branch GitHub deleted once its pull request merged opens at the pull request's last head",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
