@@ -1,6 +1,3 @@
-import { type FileDiffMetadata, type Hunk, parseDiffFromFile } from "@pierre/diffs";
-import type { DiffFileTexts } from "./contract.js";
-
 /**
  * whole-diff.ts -- a Files changed file drawn whole, as stage-cli's Expand full file draws one: its texts before and after diffed as one hunk holding every line.
  *
@@ -10,6 +7,9 @@ import type { DiffFileTexts } from "./contract.js";
  * laid out here as one hunk of context, numbered alike on both sides, and
  * a file of no line stays as it was parsed.
  */
+
+import { type FileDiffMetadata, type Hunk, parseDiffFromFile } from "@pierre/diffs";
+import type { DiffFileTexts } from "./contract.js";
 
 /**
  * A file drawn whole: its texts before and after diffed with every line

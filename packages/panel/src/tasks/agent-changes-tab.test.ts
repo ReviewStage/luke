@@ -2001,6 +2001,13 @@ test("a file that only moved, shown whole, draws its review threads on their lin
     { key: `${PAGE}#on-2`, side: "additions", line: 2 },
   ]);
   assert.equal(drawnAs("src/empty.ts")?.lead, true, "a file of no line says it moved still");
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/empty.ts", "lead")
+      .querySelector('button[aria-label^="Show file"]'),
+    null,
+    "with nothing more to show",
+  );
 });
 
 test("a whole file read for an earlier answer, landing after a refresh, leaves the files expanded since as they are", async () => {

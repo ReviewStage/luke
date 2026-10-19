@@ -474,7 +474,7 @@ function entryOf(
   const notice = drawnWhole === undefined ? fileNotice(file) : undefined;
   // A file that only moved offers its lines from what it says, its read waiting for the press.
   const shown =
-    notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered ? (
+    notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
       <>
         {" · "}
         <TextButton
