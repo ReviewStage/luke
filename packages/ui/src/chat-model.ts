@@ -137,6 +137,8 @@ export interface ChatRailRow {
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
   readonly unread: number;
+  /** The newest root or reply the channel holds as read, which its row previews; none in an empty one. */
+  readonly latest: ChatMessage | undefined;
 }
 
 export interface ChatRail {
@@ -327,6 +329,7 @@ export function chatRail(
       sub: who?.agent?.title ?? who?.taskName,
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
+      latest: messagesIn(chat, channel.id).at(-1),
     };
   };
   const shown = chat.channels.filter((channel) => !channel.archived);

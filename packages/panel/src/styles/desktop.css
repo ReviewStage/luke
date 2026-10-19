@@ -351,15 +351,10 @@ body,
 }
 
 /* The buttons over the open sidebar, or the floating one, stand on its
-   ground, and so do the folded sidebar's over Chat's rail, which stands on
-   the sidebar's ground too. */
+   ground. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(
-    .desktop-main > .chat-view > .chat-rail:not([hidden])
-  )
-  .title-bar-controls:not([data-edge]) {
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--luke-color-sidebar);
 }
 
@@ -3209,7 +3204,8 @@ ul.actor-stack {
   > .desktop-task
   > .page-find
   > .inbox-view
-  .inbox-tasks-bar {
+  .inbox-tasks-bar,
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .chat-view .chat-rail-bar {
   display: grid;
   grid-template-columns:
     minmax(
@@ -3227,6 +3223,11 @@ ul.actor-stack {
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
+  .desktop-toolbar-heading,
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .chat-view
+  .chat-rail-bar
   .desktop-toolbar-heading {
   grid-column: 2;
 }
@@ -3237,6 +3238,11 @@ ul.actor-stack {
   > .page-find
   > .inbox-view
   .inbox-tasks-bar
+  .desktop-toolbar-actions,
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .chat-view
+  .chat-rail-bar
   .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
@@ -4833,54 +4839,42 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* Chat ----------------------------------------------------------------------- */
 
 /* The window's Chat, in the plan's place beside the sidebar as the Inbox
-   stands: the rail of places on the sidebar's ground under a bar the work
-   column's height, and the place chosen beside it at a reading measure. */
+   stands, and drawn as the Inbox's list and item are (`.inbox-view`): the
+   rail a list column on the page's ground, as wide as it was dragged, its
+   bar the work column's height, and the place chosen beside it. */
 .chat-view {
+  container-type: inline-size;
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 .chat-rail {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--luke-color-border);
-  background: var(--luke-color-sidebar);
 }
 
-/* While the sidebar is folded the rail is the window's first column, so its
-   name clears the title bar's buttons as the Inbox's list's does. */
-.desktop-shell[data-sidebar-collapsed="true"] .chat-rail-bar {
-  padding-left: var(--sidebar-toggle-clearance);
+/* A place's glyph (#, @, a document) stands at the size an actor's row
+   mark does beside it, as a menu's glyph does. */
+.chat-rail .inbox-row-mark > svg {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  color: var(--luke-color-text-muted);
 }
 
-/* The rail's places, inside the `ScrollArea` that scrolls them. */
+/* Its buttons end as far in from the rail's edge as the Inbox list's do. */
+.chat-rail-bar {
+  padding-right: var(--column-inset);
+}
+
+/* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
 .chat-rail-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
-}
-
-/* Channels and direct messages each stand under their heading in the
-   headings' voice (`.section-heading`), a section's room apart, as
-   Settings' page list's groups do. */
-.chat-rail-group {
-  margin-top: var(--luke-section-gap);
-}
-
-/* Within Tasks, each group of the reader's own (Pinned, a section, the
-   rest) stands under a quieter name of its own, a step apart. */
-.chat-rail-tasks + .chat-rail-tasks {
-  margin-top: var(--luke-space-8);
-}
-
-.chat-rail-subheading {
-  margin: 0 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-regular);
 }
 
 /* The task's own Chat tab fills its column as an agent's tab does, the
