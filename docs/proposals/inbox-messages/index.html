@@ -1,0 +1,1242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inbox items: today and proposed</title>
+<style>
+/* Tokens copied from @luke/ui palettes.css / profiles.css (desktop profile). */
+:root {
+  color-scheme: dark;
+  --text: light-dark(rgba(0,0,0,.88), rgba(255,255,255,.95));
+  --muted: light-dark(rgba(0,0,0,.6), rgba(255,255,255,.56));
+  --subtle: light-dark(rgba(0,0,0,.56), rgba(255,255,255,.5));
+  --body: light-dark(rgba(0,0,0,.8), rgba(255,255,255,.86));
+  --ground: light-dark(#fcfcfc, #0c0c0e);
+  --surface: light-dark(#fff, rgba(255,255,255,.022));
+  --overlay: light-dark(#fff, #111114);
+  --sidebar: light-dark(#f3f3f4, #111114);
+  --well: light-dark(#f8f8f9, #0f0f12);
+  --fill-hover: light-dark(rgba(0,0,0,.035), rgba(255,255,255,.05));
+  --fill-strong: light-dark(rgba(0,0,0,.06), rgba(255,255,255,.09));
+  --fill-selected: light-dark(rgba(0,0,0,.07), rgba(255,255,255,.2));
+  --border: light-dark(rgba(0,0,0,.08), rgba(255,255,255,.08));
+  --border-strong: light-dark(rgba(0,0,0,.1), rgba(255,255,255,.12));
+  --border-selected: light-dark(rgba(0,0,0,.3), rgba(255,255,255,.32));
+  --input: light-dark(#fff, rgba(0,0,0,.4));
+  --accent: #0071e3;
+  --accent-text: light-dark(#0a72a8, #5cd5ff);
+  --danger: light-dark(#e0383e, #ff7e7e);
+  --danger-text: light-dark(#b8232a, #ff9b9b);
+  --attention: light-dark(#a65400, #ffa049);
+  --attention-tint: color-mix(in srgb, var(--attention) 14%, transparent);
+  --complete: light-dark(#18794e, #6fdca4);
+  --complete-tint: color-mix(in srgb, var(--complete) 14%, transparent);
+  --merged: light-dark(#8250df, #c3a0ff);
+  --id1: light-dark(#4a5fc0, #4f63b8);
+  --id2: light-dark(#23766f, #2b7f78);
+  --id4: light-dark(#a8435f, #a24a63);
+  --shadow: light-dark(rgba(0,0,0,.12), rgba(0,0,0,.5));
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --r6: 6px; --r8: 8px; --r14: 14px; --face: 20px;
+}
+:root[data-theme="light"] { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--ground); color: var(--text); font: 13px/20px var(--sans); -webkit-font-smoothing: antialiased; }
+svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+svg.i.s12 { width: 12px; height: 12px; vertical-align: -1px; }
+a { color: inherit; }
+
+/* ---------- page chrome ---------- */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 10px 32px; background: color-mix(in srgb, var(--ground) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+.top h1 { margin: 0; font-size: 13px; font-weight: 600; }
+.top .tabs { display: flex; gap: 2px; margin-left: 12px; }
+.top .tabs button, .seg button { appearance: none; border: 0; background: none; color: var(--muted); font: 500 13px/18px var(--sans); padding: 5px 10px; border-radius: var(--r8); cursor: pointer; }
+.top .tabs button:hover { background: var(--fill-hover); color: var(--text); }
+.top .tabs button[aria-selected="true"] { background: var(--fill-strong); color: var(--text); }
+.spacer { flex: 1; }
+.seg { border: 0; margin: 0; display: inline-flex; padding: 2px; border-radius: var(--r8); background: var(--fill-strong); }
+.seg button[aria-pressed="true"] { background: light-dark(#fff, rgba(255,255,255,.13)); color: var(--text); }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 32px 96px; }
+section.view { display: none; }
+section.view.on { display: block; }
+.lede { max-width: 760px; color: var(--body); font-size: 15px; line-height: 1.6; margin: 0 0 28px; }
+.lede b { color: var(--text); }
+h2.sec { font-size: 22px; line-height: 30px; margin: 40px 0 6px; font-weight: 600; }
+h2.sec:first-child { margin-top: 0; }
+h3.sub { font-size: 13px; font-weight: 600; margin: 28px 0 10px; color: var(--text); }
+p.note { color: var(--muted); max-width: 760px; margin: 0 0 16px; }
+.grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); align-items: start; }
+.grid.two { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.cap { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; font-size: 13px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: var(--r6); background: var(--fill-strong); color: var(--muted); font: 500 11px/18px var(--mono); }
+.tag.att { background: var(--attention-tint); color: var(--attention); font-family: var(--sans); }
+.tag.ok { background: var(--complete-tint); color: var(--complete); font-family: var(--sans); }
+.tag.new { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); font-family: var(--sans); }
+
+/* ---------- anatomy diagram ---------- */
+.anatomy { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: start; }
+.tree { border: 1px solid var(--border); border-radius: var(--r14); background: var(--surface); padding: 18px 20px; font-size: 13px; }
+.tree .row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.tree .row:last-child { border-bottom: 0; }
+.tree .k { font: 500 12px/20px var(--mono); color: var(--text); }
+.tree .v { color: var(--muted); }
+.tree .v .tag { margin: 0 4px 4px 0; }
+
+/* ---------- the pane (today) ---------- */
+.pane { border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; background: var(--ground); box-shadow: 0 8px 24px var(--shadow); }
+.pane-bar { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--fill-hover); color: var(--muted); font-size: 12px; }
+.pane-bar .crumb { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
+.pane-bar .sep { color: var(--subtle); }
+.board { padding: 20px 22px 18px; }
+.subject { padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.subject h4 { margin: 0; font-size: 16.25px; line-height: 1.3; font-weight: 600; }
+ol.thread { list-style: none; margin: 0; padding: 0; --face: 20px; }
+.cm { position: relative; display: grid; grid-template-columns: var(--face) minmax(0,1fr); column-gap: 12px; padding-bottom: 20px; }
+.cm:last-child { padding-bottom: 0; }
+.cm:not(:last-child)::before { content: ""; position: absolute; top: 26px; bottom: 6px; left: 9px; width: 2px; border-radius: 1px; background: var(--border); }
+.face { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; color: #fff; font: 600 10px/1 var(--sans); background: var(--id1); }
+.face.p { border-radius: 50%; background: var(--id4); }
+.face.agent { background: linear-gradient(135deg, #d97757, #b4532f); }
+.cm-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: 12px; }
+.cm-name { color: var(--text); font-size: 13px; font-weight: 500; }
+.cm-body { display: flex; flex-direction: column; gap: 8px; color: var(--text); line-height: 1.6; }
+.cm-body p { margin: 0; }
+.cm-body ul, .cm-body ol { margin: 0; padding-left: 20px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: var(--r6); background: var(--fill-strong); color: var(--text); font-weight: 500; font-size: 12.5px; line-height: 20px; vertical-align: baseline; white-space: nowrap; }
+.chip .i { width: 13px; height: 13px; vertical-align: -2px; color: var(--muted); }
+.chip.pr .i { color: var(--complete); }
+.chip.page .i { color: var(--accent-text); }
+.tlink { color: var(--accent-text); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent); text-underline-offset: 2px; }
+code { font: 12px/1.5 var(--mono); background: var(--fill-strong); padding: 1px 4px; border-radius: 4px; }
+
+.codecard { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--well); }
+.codecard-h { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-bottom: 1px solid var(--border); font: 12px/1 var(--mono); color: var(--muted); }
+.codecard-h b { color: var(--text); font-weight: 500; }
+.codecard-h .spacer { flex: 1; }
+.codecard pre { margin: 0; padding: 6px 0; font: 12px/19px var(--mono); overflow: hidden; }
+.codecard pre span.l { display: block; padding: 0 12px 0 0; white-space: pre; }
+.codecard pre span.l::before { content: attr(data-n); display: inline-block; width: 36px; padding-right: 12px; text-align: right; color: var(--subtle); }
+.codecard pre span.l.hit { background: color-mix(in srgb, #ffd60a 12%, transparent); }
+.kw { color: light-dark(#cf222e, #ff7b72); } .fn { color: light-dark(#8250df, #d2a8ff); } .st { color: light-dark(#0a3069, #a5d6ff); } .cn { color: light-dark(#0550ae, #79c0ff); } .co { color: light-dark(#6e7781, #8b949e); }
+
+/* fake screenshots */
+.shot { position: relative; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; background: #f6f6f7; aspect-ratio: 16/10; color: #111; font: 9px/1.3 var(--sans); }
+.shot .sb { position: absolute; inset: 0 auto 0 0; width: 26%; background: #ececee; border-right: 1px solid #ddd; padding: 10px 8px; }
+.shot .sb i { display: block; height: 6px; margin: 0 0 7px; border-radius: 3px; background: #d4d4d8; }
+.shot .sb i:nth-child(2) { width: 70%; } .shot .sb i:nth-child(3) { width: 82%; background: #c7d2fe; }
+.shot .mn { position: absolute; inset: 0 0 0 26%; padding: 12px 14px; }
+.shot .mn h5 { margin: 0 0 8px; font-size: 11px; }
+.shot .banner { padding: 6px 8px; border-radius: 5px; margin-bottom: 8px; font-weight: 600; }
+.shot .banner.bad { background: #fde2e2; color: #9b1c1c; }
+.shot .banner.good { background: #dcfce7; color: #166534; }
+.shot .rowx { display: flex; gap: 6px; align-items: center; padding: 5px 0; border-bottom: 1px solid #e4e4e7; }
+.shot .rowx .av { width: 12px; height: 12px; border-radius: 50%; background: #a5b4fc; }
+.shot .rowx .ln { height: 5px; flex: 1; background: #e4e4e7; border-radius: 3px; }
+.shot .btn { display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 4px; background: #2563eb; color: #fff; font-weight: 600; }
+.shot.dark { background: #161618; color: #eee; } .shot.dark .sb { background: #1d1d20; border-color: #2a2a2e; } .shot.dark .sb i { background: #2f2f34; } .shot.dark .rowx { border-color: #2a2a2e; } .shot.dark .rowx .ln { background: #2a2a2e; }
+.picture { display: block; max-width: 100%; }
+figure { margin: 0; }
+figcaption { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
+
+/* choice list (@luke/ui ChoiceList) */
+.choices { display: flex; flex-direction: column; gap: 4px; }
+.choices.across { flex-direction: row; } .choices.across > .ch { flex: 1 1 0; }
+.ch { display: flex; gap: 12px; align-items: flex-start; padding: 8px 12px; border-radius: var(--r8); background: var(--fill-hover); cursor: default; user-select: none; }
+.ch:hover { background: var(--fill-strong); }
+.ch.on { background: var(--fill-strong); box-shadow: inset 0 0 0 1px var(--border-selected); }
+.ch .ctl { width: 16px; height: 16px; margin-top: 2px; flex: none; border: 1.5px solid var(--subtle); border-radius: 4px; display: grid; place-items: center; }
+.ch .ctl.radio { border-radius: 50%; }
+.ch.on .ctl { border-color: var(--accent); background: var(--accent); }
+.ch.on .ctl.radio::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+.ch.on .ctl.box::after { content: ""; width: 8px; height: 4px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); }
+.ch.on.ok .ctl { background: var(--complete); border-color: var(--complete); }
+.ch.on.no .ctl { background: var(--danger); border-color: var(--danger); }
+.ch.on.ok .ctl.radio::after, .ch.on.no .ctl.radio::after { background: var(--ground); }
+.ch .w { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ch .hd { display: flex; justify-content: space-between; gap: 8px; }
+.ch .lb { font-weight: 500; }
+.ch .dt { color: var(--muted); font-size: 12px; line-height: 17px; }
+.ch .end { display: inline-flex; gap: 8px; align-items: center; color: var(--subtle); font-size: 12px; font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; align-items: center; padding: 0 6px; border-radius: 5px; font: 500 11px/18px var(--sans); background: var(--fill-strong); color: var(--muted); }
+.badge.att { background: var(--attention-tint); color: var(--attention); }
+.badge.ok { background: var(--complete-tint); color: var(--complete); }
+.ch.settled-off { background: none; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { min-height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); font-size: 12px; background: var(--fill-hover); }
+.pill.on { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field .nm { font-weight: 500; font-size: 13px; line-height: 18px; }
+.field .opt { margin-left: 6px; color: var(--subtle); font-size: 12px; font-weight: 400; }
+.tf { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--r8); background: var(--input); padding: 0 12px; display: flex; align-items: center; color: var(--subtle); }
+.tf.short { max-width: 160px; }
+.tf.val { color: var(--text); }
+.cbx { display: flex; gap: 8px; align-items: center; }
+.cbx .ctl { width: 16px; height: 16px; border: 1.5px solid var(--subtle); border-radius: 4px; }
+.fields { display: flex; flex-direction: column; gap: 16px; }
+
+/* docked answer box (agent composer) */
+.dock { padding: 0 14px 14px; }
+.box { border: 1px solid var(--border-strong); border-radius: 14px; background: var(--overlay); }
+.box .in { padding: 10px 12px 4px; color: var(--subtle); min-height: 30px; }
+.box .ft { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px 8px; }
+.box .quiet { flex: 1; color: var(--subtle); font-size: 12px; }
+.ib { width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--r8); color: var(--muted); }
+.send { height: 26px; padding: 0 10px; border-radius: var(--r8); background: var(--text); color: var(--ground); font-weight: 500; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.send.dim { opacity: .35; }
+
+/* settled */
+.pick { display: inline-flex; align-self: flex-start; gap: 4px; align-items: center; padding: 1px 6px; border-radius: var(--r6); background: var(--fill-strong); font-size: 12px; font-weight: 500; }
+.fold { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.next { margin: 0 14px 8px; padding: 8px 12px; border-radius: 10px; background: var(--fill-hover); display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+.next b { color: var(--text); font-weight: 500; }
+.placeholder { color: var(--muted); }
+
+/* list rows */
+.list { border: 1px solid var(--border-strong); border-radius: 12px; background: var(--sidebar); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.lr { display: grid; grid-template-columns: 7px 20px 1fr auto; column-gap: 8px; row-gap: 2px; align-items: center; padding: 7px 8px; border-radius: var(--r8); }
+.lr.cur { background: var(--fill-selected); }
+.lr .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.lr .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lr .meta { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+.lr .att { width: 12px; height: 12px; border-radius: 50%; background: var(--attention); }
+.lr .pv { grid-column: 3 / 5; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lr .media { grid-column: 3 / 5; display: flex; gap: 6px; margin-top: 4px; }
+.lr .media .shot { height: 48px; aspect-ratio: 16/10; border-radius: 8px; font-size: 3px; }
+.lr .kind { grid-column: 3/5; }
+.kicon { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; }
+.kicon .i { width: 13px; height: 13px; }
+.k-decide { background: var(--attention-tint); color: var(--attention); }
+.k-do { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); }
+.k-fill { background: color-mix(in srgb, var(--merged) 16%, transparent); color: var(--merged); }
+.k-review { background: var(--complete-tint); color: var(--complete); }
+.k-fyi { background: var(--fill-strong); color: var(--muted); }
+
+/* findings */
+.findings { counter-reset: f; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.finding { border: 1px solid var(--border); border-radius: var(--r14); background: var(--surface); padding: 16px 18px; }
+.finding h4 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 10px; align-items: baseline; }
+.finding h4::before { counter-increment: f; content: counter(f); display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--attention-tint); color: var(--attention); font-size: 11px; flex: none; }
+.finding p { margin: 0 0 6px; color: var(--body); }
+.finding .src { color: var(--subtle); font: 11px/16px var(--mono); }
+
+/* ---------- proposed ---------- */
+.pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
+.pillar { border: 1px solid var(--border); border-radius: var(--r14); padding: 14px 16px; background: var(--surface); }
+.pillar h4 { margin: 8px 0 4px; font-size: 13px; }
+.pillar p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 18px; }
+.pillar .kicon { width: 26px; height: 26px; border-radius: 8px; }
+.pillar .kicon .i { width: 15px; height: 15px; }
+
+/* the item as a card, the chat ask's Card */
+.card { border: 1px solid var(--border-strong); border-radius: var(--r14); background: var(--surface); overflow: hidden; }
+.card-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 0; color: var(--muted); font-size: 12px; }
+.card-head .who { display: inline-flex; gap: 6px; align-items: center; color: var(--text); font-weight: 500; font-size: 13px; }
+.card-title { margin: 8px 16px 0; font-size: 16.25px; line-height: 1.3; font-weight: 600; }
+.card-body { padding: 10px 16px 0; display: flex; flex-direction: column; gap: 10px; line-height: 1.6; color: var(--text); }
+.card-body p { margin: 0; }
+.card-ask { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.card-ask .lbl { font-size: 12px; color: var(--muted); font-weight: 500; }
+.card-foot { display: flex; align-items: center; gap: 8px; padding: 14px 16px 14px; margin-top: 14px; border-top: 1px solid var(--border); background: var(--fill-hover); }
+.btn { height: 30px; padding: 0 12px; border-radius: var(--r8); display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; background: var(--fill-strong); color: var(--text); white-space: nowrap; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.ok { background: var(--complete); color: var(--ground); }
+.btn.outline { background: none; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.btn.quiet { background: none; color: var(--muted); }
+.btn.dim { opacity: .4; }
+.kbd { font: 11px/16px var(--sans); color: inherit; opacity: .6; margin-left: 2px; }
+.waits { display: inline-flex; gap: 5px; align-items: center; }
+.waits .i { width: 13px; height: 13px; }
+
+/* unfurled cards */
+.unfurl { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--well); }
+.unfurl .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+.unfurl .ico.pr { background: var(--complete-tint); color: var(--complete); }
+.unfurl .ico.pg { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); }
+.unfurl .w { flex: 1; min-width: 0; }
+.unfurl .t1 { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unfurl .t2 { color: var(--muted); font-size: 12px; line-height: 16px; }
+.unfurl .diff { font: 11px var(--mono); } .unfurl .diff .a { color: var(--complete); } .unfurl .diff .d { color: var(--danger-text); }
+.pageprev { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--well); }
+.pageprev .frame { height: 110px; padding: 10px 12px; background: linear-gradient(180deg, var(--fill-hover), transparent); display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; align-items: end; }
+.pageprev .bar { border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.pageprev .meta { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); }
+.pageprev .meta .t1 { font-weight: 500; flex: 1; }
+.pageprev .meta .t2 { color: var(--muted); font-size: 12px; }
+.set { display: grid; gap: 8px; }
+.set.n2 { grid-template-columns: 1fr 1fr; }
+.set .lab { position: absolute; top: 6px; left: 6px; padding: 0 6px; border-radius: 5px; background: rgba(0,0,0,.56); color: #fff; font: 500 10px/16px var(--sans); }
+
+/* to-do steps */
+.steps { display: flex; flex-direction: column; gap: 4px; }
+.step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: var(--r8); background: var(--fill-hover); cursor: default; user-select: none; }
+.step .ctl { width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--subtle); border-radius: 4px; flex: none; display: grid; place-items: center; }
+.step.on .ctl { background: var(--complete); border-color: var(--complete); }
+.step.on .ctl::after { content: ""; width: 8px; height: 4px; border: 2px solid var(--ground); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); }
+.step.on .w { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--subtle); }
+.step .w { flex: 1; }
+
+/* compact thread under a card */
+.cthread { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); margin-top: 14px; }
+.cthread .cm { padding-bottom: 0; }
+.cthread .cm::before { display: none; }
+.replybox { margin: 12px 16px 16px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--overlay); display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; color: var(--subtle); }
+.replybox .spacer { flex: 1; }
+
+/* table */
+table.map { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid var(--border); border-radius: var(--r14); overflow: hidden; background: var(--surface); }
+table.map th, table.map td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.map th { color: var(--muted); font-weight: 500; font-size: 12px; background: var(--fill-hover); }
+table.map tr:last-child td { border-bottom: 0; }
+table.map td .tag { margin-right: 4px; }
+pre.wire { white-space: pre-wrap; word-break: break-word; margin: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r14); background: var(--well); font: 12px/19px var(--mono); overflow: auto; color: var(--body); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.qs { display: grid; gap: 10px; }
+.q { border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; background: var(--surface); }
+.q b { display: block; margin-bottom: 2px; }
+.q span { color: var(--muted); }
+.vs { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; align-items: start; margin-bottom: 36px; }
+.vs-h { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-weight: 600; }
+.callouts { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 18px; }
+.callouts li { margin-bottom: 4px; }
+.callouts b { color: var(--text); font-weight: 500; }
+
+/* ---------- v2: the item as a document ---------- */
+.kbd { display: inline-flex; align-items: center; height: 18px; min-width: 18px; justify-content: center; padding: 0 4px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; font: 500 10.5px/1 var(--mono); color: var(--muted); opacity: 1; margin: 0; background: var(--fill-hover); }
+.btn .kbd { border-color: color-mix(in srgb, currentColor 25%, transparent); background: none; color: inherit; opacity: .7; height: 16px; margin-left: 4px; }
+.btn.prim { background: var(--text); color: var(--ground); }
+.btn.sec { background: none; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.btn.ghost { background: none; color: var(--muted); padding: 0 8px; }
+.btn.ghost:hover, .btn.sec:hover { background: var(--fill-hover); color: var(--text); }
+.btn[aria-disabled="true"] { opacity: .35; }
+.mono { font-family: var(--mono); font-size: 12px; }
+
+/* the whole Inbox, list and document */
+.ibx { display: grid; grid-template-columns: 300px minmax(0, 1fr); border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; background: var(--ground); box-shadow: 0 12px 32px var(--shadow); }
+.ibx-list { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.ibx-bar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.ibx-bar b { color: var(--text); font-weight: 600; font-size: 13px; }
+.ibx-rows { padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.r2 { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 1px; padding: 8px 10px 8px 8px; border-radius: var(--r8); cursor: default; }
+.r2:hover { background: var(--fill-hover); }
+.r2.cur { background: var(--fill-selected); }
+.r2 .st { width: 6px; height: 6px; border-radius: 50%; align-self: center; justify-self: center; }
+.r2 .st.wait { background: var(--attention); box-shadow: 0 0 0 3px var(--attention-tint); }
+.r2 .st.quiet { box-shadow: inset 0 0 0 1.5px var(--subtle); }
+.r2 .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r2.read .t { font-weight: 400; color: var(--muted); }
+.r2 .tm { color: var(--subtle); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.r2 .m { grid-column: 2 / 4; color: var(--subtle); font: 12px/16px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibx-sep { padding: 10px 10px 4px 26px; color: var(--subtle); font-size: 11.5px; }
+
+.doc-wrap { display: flex; flex-direction: column; min-width: 0; }
+.doc-bar { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.doc-bar .crumb { color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.doc-bar .crumb.here { color: var(--text); }
+.doc-bar .sep { color: var(--subtle); }
+.doc-bar .pos { font-variant-numeric: tabular-nums; margin-right: 4px; }
+.doc { padding: 32px 40px 36px; max-width: 720px; width: 100%; }
+.doc.solo { padding: 24px 28px 28px; }
+.doc h1 { margin: 0 0 6px; font-size: 22.5px; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; }
+.byline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 20px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.byline .face { width: 16px; height: 16px; border-radius: 5px; font-size: 9px; }
+.byline .who { color: var(--text); font-weight: 500; }
+.byline .dot { color: var(--subtle); }
+.byline .waiting { display: inline-flex; gap: 6px; align-items: center; color: var(--attention); }
+.byline .waiting::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--attention); }
+.byline .noreply { color: var(--subtle); }
+.byline .done { display: inline-flex; gap: 4px; align-items: center; color: var(--complete); }
+
+.prose { font-size: 15px; line-height: 1.6; color: var(--body); }
+.prose > * { margin: 0 0 14px; }
+.prose > *:last-child { margin-bottom: 0; }
+.prose ul, .prose ol { padding-left: 22px; }
+.prose li { margin: 2px 0; }
+.prose code { font-size: 12.5px; }
+.prose .chip { font-size: 13px; }
+.prose figcaption { font-size: 12.5px; }
+ul.tasks { list-style: none; padding-left: 0; }
+ul.tasks li { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0; cursor: default; user-select: none; }
+ul.tasks .cb { width: 16px; height: 16px; flex: none; margin-top: 4px; border: 1.5px solid var(--subtle); border-radius: 4px; display: grid; place-items: center; }
+ul.tasks li.on .cb { background: var(--text); border-color: var(--text); }
+ul.tasks li.on .cb::after { content: ""; width: 8px; height: 4px; border: 2px solid var(--ground); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+ul.tasks li.on .w { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--subtle); }
+
+/* a lone link, unfurled: one quiet line */
+.unf { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; line-height: 18px; background: var(--well); }
+.unf .i { color: var(--muted); }
+.unf .i.pr { color: var(--complete); }
+.unf .t1 { flex: 1; min-width: 0; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unf .t2 { color: var(--subtle); font: 11.5px var(--mono); white-space: nowrap; }
+.unf .a { color: var(--complete); } .unf .d { color: var(--danger-text); }
+.pics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pics figure .shot, .prose > figure .shot { border-radius: 8px; }
+
+/* the answer box: the ask and the composer as one thing, at the document's end */
+.ans { margin-top: 28px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--overlay); overflow: hidden; }
+.ans-opts { display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
+.opt { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding: 10px 14px; cursor: default; user-select: none; }
+.opt + .opt { border-top: 1px solid var(--border); }
+.opt:hover { background: var(--fill-hover); }
+.opt.on { background: var(--fill-strong); }
+.opt .rd { width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--subtle); border-radius: 50%; display: grid; place-items: center; }
+.opt.box .rd { border-radius: 4px; }
+.opt.on .rd { border-color: var(--text); background: var(--text); }
+.opt.on .rd::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ground); }
+.opt.box.on .rd::after { width: 8px; height: 4px; border-radius: 0; background: none; border: 2px solid var(--ground); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+.opt .lb { font-weight: 500; color: var(--text); }
+.opt .dt { display: block; color: var(--muted); font-size: 12px; line-height: 17px; margin-top: 1px; }
+.opt .rt { display: inline-flex; align-items: center; gap: 8px; color: var(--subtle); font: 11px var(--mono); }
+.ans-fields { display: flex; flex-direction: column; gap: 14px; padding: 14px; border-bottom: 1px solid var(--border); }
+.ans-fields .row { display: flex; gap: 14px; } .ans-fields .row > .field { flex: 1 1 0; min-width: 0; }
+.ans-fields .field .nm { font-size: 12px; font-weight: 500; color: var(--muted); }
+.ans-note { padding: 12px 14px 4px; color: var(--subtle); min-height: 44px; font-size: 13px; }
+.ans-note.big { min-height: 76px; }
+.ans-foot { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px 8px; }
+.ans-foot .hint { color: var(--subtle); font-size: 12px; margin-left: 4px; }
+.ans-foot .spacer { flex: 1; }
+
+/* the answer, given: one line in the activity */
+.act { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border); }
+.act h5 { margin: 0 0 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ev { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; padding: 5px 0; font-size: 13px; line-height: 20px; color: var(--muted); }
+.ev .face { width: 20px; height: 20px; }
+.ev .mk { width: 20px; height: 20px; display: grid; place-items: center; color: var(--subtle); }
+.ev .mk .i { width: 14px; height: 14px; }
+.ev .mk.ok { color: var(--complete); }
+.ev b { color: var(--text); font-weight: 500; }
+.ev .val { color: var(--text); font-weight: 500; padding: 0 5px; border-radius: 5px; background: var(--fill-strong); font-size: 12.5px; }
+.ev .tm { color: var(--subtle); }
+.ev .txt { grid-column: 2; color: var(--text); margin-top: 2px; }
+.comment-in { display: flex; align-items: center; gap: 8px; margin-top: 12px; height: 36px; padding: 0 8px 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--subtle); background: var(--overlay); }
+.comment-in .spacer { flex: 1; }
+
+.kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.sheet { border: 1px solid var(--border-strong); border-radius: 12px; background: var(--ground); overflow: hidden; }
+.k-cap { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.k-cap b { color: var(--text); font-size: 13px; font-weight: 600; }
+
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 0 0 36px; }
+.rule { padding: 16px 18px; border-right: 1px solid var(--border); }
+.rule:last-child { border-right: 0; }
+.rule .n { font: 11px var(--mono); color: var(--subtle); }
+.rule h4 { margin: 4px 0 4px; font-size: 13px; }
+.rule p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 18px; }
+.vs2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; margin-bottom: 40px; }
+ul.plain { margin: 0; padding-left: 18px; color: var(--body); line-height: 1.7; max-width: 820px; }
+ul.plain b { color: var(--text); font-weight: 500; }
+
+/* ---------- v3: a thread of document-style messages ---------- */
+.tp { display: flex; flex-direction: column; min-width: 0; }
+.tp-scroll { padding: 28px 36px 8px; max-width: 760px; width: 100%; }
+.tp-scroll.solo { padding: 22px 24px 6px; }
+.tp-title { margin: 0 0 4px; font-size: 20px; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; }
+.tp-sub { display: flex; gap: 6px; align-items: center; margin: 0 0 22px; color: var(--muted); font-size: 12px; }
+.tp-sub .waiting { display: inline-flex; gap: 6px; align-items: center; color: var(--attention); }
+.tp-sub .waiting::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--attention); }
+.tp-sub .dot { color: var(--subtle); }
+
+.msgs { list-style: none; margin: 0; padding: 0; }
+.msg { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 12px; padding-bottom: 26px; }
+.msg:not(:last-child)::before { content: ""; position: absolute; top: 30px; bottom: 4px; left: 11px; width: 2px; border-radius: 1px; background: var(--border); }
+.msg .face { width: 24px; height: 24px; font-size: 11px; border-radius: 7px; }
+.msg .face.p { border-radius: 50%; }
+.mh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; color: var(--subtle); font-size: 12px; }
+.mh .nm { color: var(--text); font-weight: 600; font-size: 13px; }
+.mh .role { color: var(--subtle); font-size: 11.5px; }
+.mb { margin-top: 4px; font-size: 14px; line-height: 1.6; color: var(--body); }
+.mb > * { margin: 0 0 12px; }
+.mb > *:last-child { margin-bottom: 0; }
+.mb code { font-size: 12px; }
+.mb .chip { font-size: 12.5px; }
+.mb .pics { gap: 10px; }
+.mb figcaption { font-size: 12px; }
+.mb ul.tasks li .cb { margin-top: 3px; }
+
+/* what a reply answered, stamped at its head */
+.stamp { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; height: 22px; border-radius: 6px; font-size: 12px; font-weight: 500; background: var(--fill-strong); color: var(--text); }
+.stamp .i { width: 12px; height: 12px; }
+.stamp.ok .i { color: var(--complete); }
+.stamp.no .i { color: var(--danger-text); }
+
+/* an ask, closing the message that asks it */
+.ask { border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; background: var(--overlay); }
+.ask-h { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.ask-h .aq { color: var(--text); font-weight: 500; }
+.ask-h .spacer { flex: 1; }
+.ask-h .waiting { display: inline-flex; gap: 6px; align-items: center; color: var(--attention); }
+.ask-h .waiting::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--attention); }
+.ask-h .settled { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); }
+.ask-h .settled .i { width: 12px; height: 12px; color: var(--complete); }
+.ask .opt { padding: 9px 12px; }
+.ask .opt + .opt { border-top: 1px solid var(--border); }
+.ask .opt .lb { font-size: 13px; }
+.ask-btns { display: flex; gap: 6px; padding: 10px 12px; }
+.ask-fields { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.ask-fields .row { display: flex; gap: 12px; }
+.ask-fields .row > .field { flex: 1 1 0; min-width: 0; }
+.ask-fields .field .nm { font-size: 12px; font-weight: 500; color: var(--muted); }
+.ask.settled .opt { cursor: default; }
+.ask.settled .opt:not(.on) { color: var(--muted); }
+.ask.settled .opt:not(.on) .lb { color: var(--muted); font-weight: 400; }
+.ask.gone { opacity: .55; }
+.ask.gone .ask-h .aq { text-decoration: line-through; text-decoration-color: var(--subtle); }
+
+/* a small event between messages */
+.evt { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 12px; padding-bottom: 20px; color: var(--subtle); font-size: 12px; line-height: 20px; position: relative; }
+.evt:not(:last-child)::before { content: ""; position: absolute; top: 22px; bottom: 2px; left: 11px; width: 2px; background: var(--border); }
+.evt .mk { width: 24px; height: 20px; display: grid; place-items: center; }
+.evt .mk .i { width: 13px; height: 13px; }
+.evt b { color: var(--muted); font-weight: 500; }
+
+/* the composer: every reply, and the answer to the open ask */
+.cmp { margin: 0 20px 18px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--overlay); }
+.cmp.solo { margin: 0 14px 14px; }
+.cmp-ctx { display: flex; align-items: center; gap: 6px; padding: 8px 12px 0; color: var(--subtle); font-size: 12px; }
+.cmp-ctx .aq { color: var(--muted); }
+.cmp-in { padding: 8px 12px 2px; min-height: 40px; color: var(--subtle); font-size: 13px; }
+.cmp-ft { display: flex; align-items: center; gap: 6px; padding: 4px 8px 8px; }
+.cmp-ft .spacer { flex: 1; }
+.cmp-ft .hint { color: var(--subtle); font-size: 12px; margin-left: 2px; }
+
+.threads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.model { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 0 0 36px; }
+.model > div { padding: 16px 18px; border-right: 1px solid var(--border); }
+.model > div:last-child { border-right: 0; }
+.model .n { font: 11px var(--mono); color: var(--subtle); }
+.model h4 { margin: 4px 0 4px; font-size: 13px; }
+.model p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 18px; }
+.optl { margin-left: 6px; color: var(--subtle); font-weight: 400; }
+.btn.sm { height: 26px; padding: 0 10px; font-size: 12.5px; }
+.ask-btns { border-top: 1px solid var(--border); }
+.ask .ask-btns:first-child { border-top: 0; }
+.ask-btns .btn.sec[data-tone="ok"].picked { box-shadow: inset 0 0 0 1px var(--complete); color: var(--complete); }
+.ask-btns .btn.sec[data-tone="no"].picked { box-shadow: inset 0 0 0 1px var(--danger-text); color: var(--danger-text); }
+.cmp-att { display: flex; align-items: center; gap: 6px; padding: 8px 10px 0; }
+.cmp-att[hidden] { display: none; }
+.cmp-att .stamp.ok .i { color: var(--complete); } .cmp-att .stamp.no .i { color: var(--danger-text); }
+button.att-x, button.use { appearance: none; border: 0; background: none; font: inherit; padding: 0; }
+.att-x { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; color: var(--subtle); cursor: default; font-size: 14px; line-height: 1; }
+.att-x:hover { background: var(--fill-strong); color: var(--text); }
+.att-note { color: var(--subtle); font-size: 12px; }
+.tf.sug { justify-content: space-between; gap: 8px; }
+.tf.sug .sug-v { color: var(--subtle); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tf.sug.filled .sug-v { color: var(--text); font-style: normal; }
+.tf.sug.filled .use { display: none; }
+.use { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--muted); font-size: 12px; cursor: default; }
+.use:hover { color: var(--text); }
+.use .kbd { height: 16px; }
+.rec { margin-left: 6px; color: var(--subtle); font: 10.5px var(--mono); }
+.pill { cursor: default; }
+.cbx { cursor: default; user-select: none; }
+.cbx.on .ctl { background: var(--text); border-color: var(--text); }
+</style>
+</head>
+<body>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute">
+  <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+  <symbol id="img" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+  <symbol id="ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="listc" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="split" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="input" viewBox="0 0 24 24"><path d="M5 4h1a3 3 0 0 1 3 3 3 3 0 0 1 3-3h1"/><path d="M13 20h-1a3 3 0 0 1-3-3 3 3 0 0 1-3 3H5"/><path d="M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1"/><path d="M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7"/><path d="M9 7v10"/></symbol>
+  <symbol id="hour" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></symbol>
+  <symbol id="page" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/></symbol>
+  <symbol id="reply" viewBox="0 0 24 24"><path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+</svg>
+
+<header class="top">
+  <svg aria-hidden="true" class="i"><use href="#inbox"/></svg>
+  <h1>Inbox items</h1>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-v="proposal" aria-selected="true">Proposed</button>
+    <button type="button" role="tab" data-v="today" aria-selected="false">Every type today</button>
+    <button type="button" role="tab" data-v="wire" aria-selected="false">Notes</button>
+  </div>
+  <span class="spacer"></span>
+  <fieldset class="seg" aria-label="Theme">
+    <button type="button" data-theme="dark" aria-pressed="true">Dark</button>
+    <button type="button" data-theme="light" aria-pressed="false">Light</button>
+  </fieldset>
+</header>
+
+<main>
+<!-- =============================== PROPOSED (v3) =============================== -->
+<section class="view on" id="proposal">
+  <p class="lede">An inbox item is <b>a thread</b>, and <b>every message in it is a small document</b>. An agent or a person can post at any point, and every message takes the same Markdown: chips, captioned pictures, code, steps. An agent's message can end with an <b>ask</b>. <b>Replying never answers it</b>: you can talk it over as long as you like. To answer, press one of the ask's answers. That attaches the answer to your reply, which you then send.</p>
+
+  <div class="model">
+    <div><span class="n">thread</span><h4>A title and its messages</h4><p>Anyone in the workspace, or the agent, adds to it at any time. It's waiting on you while an ask in it is open.</p></div>
+    <div><span class="n">message</span><h4>A freeform document</h4><p>The same Markdown for agents and people: <code>[@chip](url)</code>, <code>![alt](src "caption")</code>, a lone link expanded into its card, <code>- [ ]</code> steps.</p></div>
+    <div><span class="n">ask</span><h4>Closes an agent's message</h4><p>Decide, do, or answer. It stays open through any number of replies. At most one is open per thread; a newer one replaces it. The reply that answers it carries a stamp: <span class="stamp ok"><svg aria-hidden="true" class="i"><use href="#check"/></svg>Approved</span></p></div>
+  </div>
+
+  <div class="ibx">
+    <div class="ibx-list">
+      <div class="ibx-bar"><b>Inbox</b><span class="spacer"></span><span>Needs you</span><span class="kbd">3</span></div>
+      <div class="ibx-rows">
+        <div class="r2 cur"><span class="st wait"></span><span class="t">Expired-invite page</span><span class="tm">10m</span><span class="m">Charles: Copy reads well. Dean, the dark one…</span></div>
+        <div class="r2"><span class="st wait"></span><span class="t">Invite expiry</span><span class="tm">4m</span><span class="m">Fix invite expiry: The link expires after 48 hours…</span></div>
+        <div class="r2"><span class="st wait"></span><span class="t">Reminder email settings</span><span class="tm">20m</span><span class="m">Fix invite expiry: I need these before I wire…</span></div>
+        <div class="r2"><span class="st quiet"></span><span class="t">RESEND_API_KEY on Vercel</span><span class="tm">1h</span><span class="m">Fix invite expiry: The team one. Yours sends…</span></div>
+        <div class="ibx-sep">Earlier</div>
+        <div class="r2 read"><span class="st"></span><span class="t">Expired invites by week</span><span class="tm">2h</span><span class="m">Invite metrics: Weekly expired invites, before…</span></div>
+      </div>
+    </div>
+    <div class="tp">
+      <div class="doc-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">/</span><span class="crumb here"><span class="face agent" style="width:14px;height:14px;font-size:8px;border-radius:4px">C</span>Fix invite expiry</span><span class="spacer"></span><span class="pos">1 of 4</span><span class="kbd">J</span><span class="kbd">K</span></div>
+      <div class="tp-scroll">
+        <h1 class="tp-title">Expired-invite page</h1>
+        <div class="tp-sub">6 messages<span class="dot">·</span>Dean, Charles, Fix invite expiry<span class="dot">·</span><span class="waiting">Waiting on you</span></div>
+        <ol class="msgs">
+          <li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 2h</div>
+            <div class="mb">
+              <p>I rebuilt the page shown when an invite link is stale. It now says when the link expired and offers a new one.</p>
+              <div class="pics">
+                <figure><div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner bad">Something went wrong</div></div></div><figcaption>Before</figcaption></figure>
+                <figure><div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner good">This invite expired 2 days ago</div><span class="btn">Ask for a new link</span></div></div><figcaption>After</figcaption></figure>
+              </div>
+              <div class="unf"><svg aria-hidden="true" class="i pr"><use href="#pr"/></svg><span class="t1">#3871 Expired invite page says when and offers a new link</span><span class="t2"><span class="a">+142</span> <span class="d">−38</span></span></div>
+              <div class="ask settled"><div class="ask-h"><span class="aq">Approve the new page?</span><span class="spacer"></span><span class="settled"><svg aria-hidden="true" class="i"><use href="#reply"/></svg>Dean requested changes</span></div></div>
+            </div>
+          </div></li>
+          <li class="msg"><span class="face p">DM</span><div>
+            <div class="mh"><span class="nm">Dean</span>· 1h</div>
+            <div class="mb">
+              <p><span class="stamp no"><svg aria-hidden="true" class="i"><use href="#reply"/></svg>Requested changes</span></p>
+              <p>Close. Two things:</p>
+              <ul><li>The button should say who it asks: <i>Ask Charles for a new link</i>.</li><li>The dark theme loses the banner. It's set in <span class="chip"><svg aria-hidden="true" class="i"><use href="#doc"/></svg>expired-invite.tsx:41</span>.</li></ul>
+              <figure style="max-width:280px"><div class="shot dark"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="rowx"><span class="ln"></span></div><span class="btn">Ask for a new link</span></div></div><figcaption>Pasted from my screen</figcaption></figure>
+            </div>
+          </div></li>
+          <li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 40m</div>
+            <div class="mb">
+              <p>Both fixed in two new commits on <span class="chip pr"><svg aria-hidden="true" class="i"><use href="#pr"/></svg>#3871</span>.</p>
+              <div class="pics">
+                <figure><div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner good">This invite expired 2 days ago</div><span class="btn">Ask Charles for a new link</span></div></div><figcaption>Light</figcaption></figure>
+                <figure><div class="shot dark"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner good">This invite expired 2 days ago</div><span class="btn">Ask Charles for a new link</span></div></div><figcaption>Dark</figcaption></figure>
+              </div>
+              <div class="ask"><div class="ask-h"><span class="aq">Approve the new page?</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div><div class="ask-btns"><span class="btn sm sec" data-answer="Approve" data-tone="ok" data-verb="Approve">Approve</span><span class="btn sm sec" data-answer="Request changes" data-tone="no" data-verb="Request changes">Request changes</span></div></div>
+            </div>
+          </div></li>
+          <li class="msg"><span class="face p">DM</span><div>
+            <div class="mh"><span class="nm">Dean</span>· 30m</div>
+            <div class="mb"><p>Not approving yet. What does the button say when the inviter has left the workspace?</p></div>
+          </div></li>
+          <li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 28m</div>
+            <div class="mb"><p>It falls back to <i>Ask an admin for a new link</i>. See <span class="chip"><svg aria-hidden="true" class="i"><use href="#doc"/></svg>expired-invite.tsx:58</span>. The ask above still stands.</p></div>
+          </div></li>
+          <li class="msg"><span class="face p" style="background:var(--id1)">CP</span><div>
+            <div class="mh"><span class="nm">Charles</span>· 10m</div>
+            <div class="mb"><p>Copy reads well. <span class="chip">@Dean</span>, the dark one matches the sign-in page now.</p></div>
+          </div></li>
+        </ol>
+      </div>
+      <div class="cmp" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="hint" data-open-hint>Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:12px">Dean's second message is just a reply, so the ask stays open and the thread keeps waiting on you. The reply box only replies. Pressing one of the ask's answers attaches it to the box, and then ⌘↩ sends your words and the answer together.</p>
+  <div class="threads" style="margin-top:8px">
+    <div><div class="k-cap"><b>Just replying</b><span class="mono">the default</span></div>
+      <div class="cmp solo" style="margin:0"><div class="cmp-in" style="color:var(--text)">Not approving yet. What does the button say when the inviter has left?</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="hint">Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim">Reply<span class="kbd">⌘↩</span></span></div></div></div>
+    <div><div class="k-cap"><b>Answering</b><span class="mono">after pressing Request changes in the ask</span></div>
+      <div class="cmp solo" style="margin:0"><div class="cmp-att"><span class="stamp no"><svg aria-hidden="true" class="i"><use href="#reply"/></svg>Request changes</span><span class="att-x">×</span><span class="att-note">Sending answers the ask</span></div><div class="cmp-in" style="color:var(--text)">The button should name the inviter.</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="spacer"></span><span class="btn prim">Request changes<span class="kbd">⌘↩</span></span></div></div></div>
+  </div>
+
+  <h2 class="sec">Every ask, in a thread</h2>
+  <p class="note">Clickable: pick an option or press an answer and it attaches to that thread's reply box. Press × to go back to a plain reply.</p>
+  <div class="threads">
+
+    <div>
+      <div class="k-cap"><b>Decide</b><span class="mono">ask: decide · options</span></div>
+      <div class="sheet" data-thread>
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Invite expiry</h1>
+          <div class="tp-sub">1 message<span class="dot">·</span><span class="waiting">Waiting on you</span></div>
+          <ol class="msgs"><li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 4m</div>
+            <div class="mb">
+              <p>The link expires after 48 hours:</p>
+              <div class="codecard"><div class="codecard-h"><b>src/members/invite.ts</b>:6<span class="spacer"></span><svg aria-hidden="true" class="i s12"><use href="#ext"/></svg></div><pre><span class="l hit" data-n="6"><span class="kw">const</span> <span class="cn">INVITE_TTL_HOURS</span> = <span class="cn">48</span>;</span></pre></div>
+              <p>but <span class="chip"><svg aria-hidden="true" class="i"><use href="#doc"/></svg>invite-email.tsx:12</span> promises 7 days.</p>
+              <div class="ask" data-pick><div class="ask-h"><span class="aq">Which expiry should invites use?</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div>
+                <div class="opt"><span class="rd"></span><span><span class="lb">7 days</span><span class="dt">One constant; matches what members were told.</span></span><span class="rt">recommended<span class="kbd">1</span></span></div>
+                <div class="opt"><span class="rd"></span><span><span class="lb">48 hours</span><span class="dt">I'll fix the email instead.</span></span><span class="rt"><span class="kbd">2</span></span></div>
+              </div>
+            </div>
+          </div></li></ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="hint" data-open-hint>Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>Decided</b><span class="mono">the answer is a reply with a stamp</span></div>
+      <div class="sheet">
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Invite expiry</h1>
+          <div class="tp-sub">3 messages<span class="dot">·</span>Resolved</div>
+          <ol class="msgs">
+            <li class="msg"><span class="face agent">C</span><div>
+              <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 4h</div>
+              <div class="mb"><p>The link expires after 48 hours, but the email promises 7 days.</p>
+                <div class="ask settled"><div class="ask-h"><span class="aq">Which expiry should invites use?</span><span class="spacer"></span><span class="settled"><svg aria-hidden="true" class="i"><use href="#check"/></svg>You chose 7 days</span></div></div></div>
+            </div></li>
+            <li class="msg"><span class="face p">DM</span><div>
+              <div class="mh"><span class="nm">You</span>· 3h</div>
+              <div class="mb"><p><span class="stamp ok"><svg aria-hidden="true" class="i"><use href="#check"/></svg>Chose 7 days</span></p><p>And say it in the reminder too.</p></div>
+            </div></li>
+            <li class="msg"><span class="face agent">C</span><div>
+              <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 3h</div>
+              <div class="mb"><p>Done in <span class="chip pr"><svg aria-hidden="true" class="i"><use href="#pr"/></svg>#3868</span>; the reminder says "expires in 7 days" too.</p></div>
+            </div></li>
+          </ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>Do</b><span class="mono">ask: do · the steps are in the ask</span></div>
+      <div class="sheet" data-thread>
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">RESEND_API_KEY on Vercel</h1>
+          <div class="tp-sub">3 messages<span class="dot">·</span>No reply needed</div>
+          <ol class="msgs">
+            <li class="msg"><span class="face agent">C</span><div>
+              <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 1h</div>
+              <div class="mb"><p>The preview deploy can't send mail without it.</p>
+                <div class="ask" data-steps><div class="ask-h"><span class="aq">Add the key</span><span class="spacer"></span><span data-count>0 of 3</span></div>
+                  <ul class="tasks" style="margin:0;padding:8px 12px">
+                    <li><span class="cb"></span><span class="w">Open <span class="tlink">Environment variables</span> for luke-web</span></li>
+                    <li><span class="cb"></span><span class="w">Add <code>RESEND_API_KEY</code> for Preview and Production</span></li>
+                    <li><span class="cb"></span><span class="w">Redeploy the latest preview</span></li>
+                  </ul><div class="ask-btns" style="padding-top:0"><span class="btn sm sec" data-answer="Mark done" data-tone="ok" data-verb="Mark done" data-done aria-disabled="true">Mark done</span><span class="btn sm sec" data-answer="Couldn't do it" data-tone="no" data-verb="Couldn't do it">Couldn't do it</span></div></div></div>
+            </div></li>
+            <li class="msg"><span class="face p">DM</span><div>
+              <div class="mh"><span class="nm">Dean</span>· 40m</div>
+              <div class="mb"><p>Which key, the team one or mine?</p></div>
+            </div></li>
+            <li class="msg"><span class="face agent">C</span><div>
+              <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 38m</div>
+              <div class="mb"><p>The team one. Yours sends from your own domain.</p></div>
+            </div></li>
+          </ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="hint" data-open-hint>Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>Answer, with fields</b><span class="mono">recommended values shown, never filled in</span></div>
+      <div class="sheet">
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Reminder email settings</h1>
+          <div class="tp-sub">1 message<span class="dot">·</span><span class="waiting">Waiting on you</span></div>
+          <ol class="msgs"><li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 20m</div>
+            <div class="mb"><p>I need these before I wire up the reminder job. The draft, with the subject left blank:</p>
+              <figure style="max-width:300px"><div class="shot dark"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Subject: ▁▁▁▁▁</h5><div class="rowx"><span class="ln"></span></div><span class="btn">Accept invite</span></div></div><figcaption>The reminder in Gmail</figcaption></figure>
+              <div class="ask"><div class="ask-h"><span class="aq">Reminder settings</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div>
+                <div class="ask-fields">
+                  <div class="field"><span class="nm">Subject line</span><div class="tf sug" data-sug="Your invite to {workspace} expires soon"><span class="sug-v">Your invite to {workspace} expires soon</span><button type="button" class="use">Use <span class="kbd">⇥</span></button></div></div>
+                  <div class="row"><div class="field"><span class="nm">Hours before expiry</span><div class="tf short sug" data-sug="24"><span class="sug-v">24</span><button type="button" class="use">Use <span class="kbd">⇥</span></button></div></div><div class="field"><span class="nm">Send from<span class="optl">optional</span></span><div class="pills" data-pills><span class="pill">team@<span class="rec">recommended</span></span><span class="pill">noreply@</span></div></div></div>
+                  <div class="cbx" data-cbx><span class="ctl"></span>Also send to admins<span class="rec">recommended: no</span></div>
+                </div><div class="ask-btns" style="padding-top:0"><span class="btn sm sec" data-answer="Submit" data-tone="ok" data-verb="Submit" aria-disabled="true">Submit</span><span class="hint" style="color:var(--subtle);font-size:12px;align-self:center">Subject line is required</span></div></div></div>
+          </div></li></ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="hint" data-open-hint>Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>Answer, in words</b><span class="mono">ask: answer · your reply is the answer</span></div>
+      <div class="sheet">
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Expired page copy</h1>
+          <div class="tp-sub">1 message<span class="dot">·</span><span class="waiting">Waiting on you</span></div>
+          <ol class="msgs"><li class="msg"><span class="face agent">C</span><div>
+            <div class="mh"><span class="nm">Fix invite expiry</span><span class="role">agent</span>· 30m</div>
+            <div class="mb"><p>Today it says "Something went wrong". I'll match the sign-in page's tone.</p>
+              <div class="ask"><div class="ask-h"><span class="aq">What should the expired page say?</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div><div class="ask-btns"><span class="btn sm sec" data-answer="Answer" data-tone="ok" data-verb="Answer">Answer</span><span style="color:var(--subtle);font-size:12px;align-self:center">Your next reply becomes the answer</span></div></div></div>
+          </div></li></ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in" style="min-height:56px">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="hint" data-open-hint>Replying keeps the ask open</span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>No ask</b><span class="mono">just a thread; read and reply if you like</span></div>
+      <div class="sheet">
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Expired invites by week</h1>
+          <div class="tp-sub">2 messages<span class="dot">·</span>No reply needed</div>
+          <ol class="msgs">
+            <li class="msg"><span class="face agent" style="background:var(--id2)">M</span><div>
+              <div class="mh"><span class="nm">Invite metrics</span><span class="role">agent</span>· 2h</div>
+              <div class="mb"><p>Expired invites fell after <span class="chip pr"><svg aria-hidden="true" class="i"><use href="#pr"/></svg>#3868</span> merged:</p>
+                <div class="pageprev"><div class="frame"><div class="bar" style="height:80%"></div><div class="bar" style="height:62%"></div><div class="bar" style="height:24%"></div></div><div class="meta"><svg aria-hidden="true" class="i" style="color:var(--muted)"><use href="#page"/></svg><span class="t1">Expired invites by week</span><span class="t2">page · v3</span></div></div></div>
+            </div></li>
+            <li class="msg"><span class="face p" style="background:var(--id1)">CP</span><div>
+              <div class="mh"><span class="nm">Charles</span>· 1h</div>
+              <div class="mb"><p>Can you split it by workspace size?</p></div>
+            </div></li>
+          </ol>
+        </div>
+        <div class="cmp solo" data-cmp><div class="cmp-att" hidden><span class="stamp"><svg aria-hidden="true" class="i"><use href="#check"/></svg><span data-att-label></span></span><button type="button" class="att-x" title="Remove">×</button><span class="att-note">Sending answers the ask</span></div><div class="cmp-in">Reply…</div><div class="cmp-ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="spacer"></span><span class="btn prim" data-send><span data-send-label>Reply</span><span class="kbd">⌘↩</span></span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="k-cap"><b>A newer ask replaces one</b><span class="mono">and a withdrawn ask</span></div>
+      <div class="sheet">
+        <div class="tp-scroll solo">
+          <h1 class="tp-title">Webhook retries</h1>
+          <div class="tp-sub">2 messages<span class="dot">·</span><span class="waiting">Waiting on you</span></div>
+          <ol class="msgs">
+            <li class="msg"><span class="face agent" style="background:var(--id2)">G</span><div>
+              <div class="mh"><span class="nm">Webhook retries</span><span class="role">agent</span>· 3h</div>
+              <div class="mb"><p>How many retries should a failed webhook get?</p>
+                <div class="ask gone"><div class="ask-h"><span class="aq">Retry budget</span><span class="spacer"></span><span>Replaced</span></div></div></div>
+            </div></li>
+            <li class="msg"><span class="face agent" style="background:var(--id2)">G</span><div>
+              <div class="mh"><span class="nm">Webhook retries</span><span class="role">agent</span>· 2h</div>
+              <div class="mb"><p>The provider caps retries at 5, so the only question left is the backoff.</p>
+                <div class="ask"><div class="ask-h"><span class="aq">Backoff between retries?</span><span class="spacer"></span><span class="waiting">Waiting on you</span></div>
+                  <div class="opt"><span class="rd"></span><span><span class="lb">Exponential, 30s to 8m</span></span><span class="rt">recommended<span class="kbd">1</span></span></div>
+                  <div class="opt"><span class="rd"></span><span><span class="lb">Fixed, every 2m</span></span><span class="rt"><span class="kbd">2</span></span></div>
+                </div></div>
+            </div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =============================== NOTES (v3) =============================== -->
+<section class="view" id="wire">
+  <h2 class="sec">What changes from today</h2>
+  <ul class="plain">
+    <li><b>The thread is the item.</b> Today's question, answer and messages are three separate kinds of thing. Now they're all messages in one list, in the order they were written.</li>
+    <li><b>Every message is Markdown in the plan's dialect</b>, an agent's or a person's: chips, captioned pictures, side-by-side pairs, code from a line link, steps. No more block list, link block or image list.</li>
+    <li><b>An ask belongs to a message.</b> An agent can ask again later in the same thread instead of reposting the item, and a newer ask replaces the open one.</li>
+    <li><b>An answer is a reply.</b> It's a normal message with a stamp (Approved, Chose 7 days, Done) and whatever you wrote, pasted or linked.</li>
+    <li><b>Replying never answers.</b> The reply box only replies. The ask's answers sit in the ask; pressing one attaches it to your reply as a stamp you can remove, and the send button takes its name (Approve ⌘↩).</li>
+    <li><b>One status</b>: waiting on you while an ask is open, shown as the orange dot on the row and in the thread's line under the title.</li>
+  </ul>
+
+  <h2 class="sec">How today's types map</h2>
+  <table class="map">
+    <tr><th>Today</th><th>Proposed</th><th>The ask's answers</th></tr>
+    <tr><td><span class="tag">markdown</span><span class="tag">link</span><span class="tag">code</span><span class="tag">image</span> blocks</td><td>A message's <code>body</code>, Markdown</td><td></td></tr>
+    <tr><td>thread message, answer, close reason</td><td>Messages; an answer is a reply with a stamp; a withdrawal is a line on the ask</td><td></td></tr>
+    <tr><td><span class="tag">choice</span></td><td><code>decide</code> with options</td><td>Its options</td></tr>
+    <tr><td><span class="tag">approval</span></td><td><code>decide</code> with two short options</td><td>Approve · Decline</td></tr>
+    <tr><td><span class="tag">task</span></td><td><code>do</code> with steps</td><td>Mark done · Couldn't do it</td></tr>
+    <tr><td><span class="tag">form</span> / <span class="tag">text</span></td><td><code>answer</code>, with fields or without</td><td>Submit / Answer</td></tr>
+    <tr><td><span class="tag">none</span></td><td>No ask</td><td>None; just replies</td></tr>
+  </table>
+
+  <div class="cols" style="margin-top:28px">
+    <div>
+      <h3 class="sub" style="margin-top:0">The agent's tools, sketched</h3>
+<pre class="wire"><span class="co">// One tool to write: the first post under a key opens the</span>
+<span class="co">// thread; a later one adds a message to it.</span>
+post_to_inbox({
+  key: string,
+  title?: string,           <span class="co">// on the first post</span>
+  body: string,             <span class="co">// Markdown; pictures by sandbox path</span>
+  ask?:
+    | { type: <span class="st">"decide"</span>, options, multiple?, recommended? }
+    | { type: <span class="st">"do"</span>, steps: string[] }
+    | { type: <span class="st">"answer"</span>, fields?: Field[] },  <span class="co">// a field may name a recommended value</span>
+  waits?: boolean,          <span class="co">// was needsReply</span>
+})
+withdraw_ask({ key, reason })
+read_inbox()</pre>
+    </div>
+    <div>
+      <h3 class="sub" style="margin-top:0">What a message is</h3>
+<pre class="wire">{
+  id, author: agent | member,
+  body: string,             <span class="co">// the same for both</span>
+  files?: File[],           <span class="co">// pasted pictures, drawn inline</span>
+  ask?: Ask,                <span class="co">// agent messages</span>
+  answers?: {               <span class="co">// a reply that answers the open ask</span>
+    ask: messageId,
+    reply: chose | approved | declined | done
+         | not-done | submitted | answered,
+    choices?, values?, steps?
+  },
+  createdAt,
+}</pre>
+      <p class="note" style="margin-top:10px">This keeps today's routing: a reply to an ask that waits reaches the agent as an "Inbox answer"; any other reply reaches it as an "Inbox message".</p>
+    </div>
+  </div>
+
+  <h2 class="sec">Recommended values on fields</h2>
+  <ul class="plain">
+    <li><b>Every field may name a recommended value</b>, as a choice already names a recommended option: <code>{ type: "number", label: "Hours before expiry", recommended: 24 }</code>.</li>
+    <li><b>It's shown, never filled in</b>, following the decision in <code>inbox-recommended.md</code> that an answer is a deliberate press. A text or number field shows the value in muted italics with <b>Use ⇥</b>, and Tab in the empty field takes it. A select's option and a yes/no carry a quiet "recommended" tag.</li>
+    <li><b>Submit counts only what you filled in or took.</b> A required field left on its suggestion still needs a press.</li>
+  </ul>
+
+  <h2 class="sec">Open questions</h2>
+  <div class="qs">
+    <div class="aq"><b>Can a person make an ask too?</b><span>For example, Dean asks Charles to approve. As drawn, only agents ask, and people reply.</span></div>
+    <div class="aq"><b>Can anyone answer, or only the person who started the agent?</b><span>As drawn, anyone in the workspace can answer, as today, and the stamp says who.</span></div>
+    <div class="aq"><b>Can an agent edit a message it already posted?</b><span>As drawn, it only adds messages, so the thread is the history. Today, reposting replaces the item in place.</span></div>
+  </div>
+</section>
+
+<section class="view" id="today">
+  <p class="lede">An inbox item today is <b>a title, up to 8 blocks, and exactly one response</b>. Each block is a full-width row drawn in the order the agent sent it; the response decides which controls sit under the blocks, and every item is answered through the composer docked at the foot of the pane. Everything below is drawn with the app's own tokens, after <code>inbox-pane.tsx</code>, <code>inbox-list.tsx</code> and <code>desktop.css</code>.</p>
+
+  <h2 class="sec">Anatomy</h2>
+  <div class="anatomy">
+    <div class="tree">
+      <div class="row"><span class="k">key</span><span class="v">The agent's slug. Posting under it again replaces the item and reopens it.</span></div>
+      <div class="row"><span class="k">title</span><span class="v">One line, up to 160 characters. The thread's subject.</span></div>
+      <div class="row"><span class="k">blocks[≤8]</span><span class="v"><span class="tag">markdown</span><span class="tag">link</span><span class="tag">code</span><span class="tag">image</span><br>A flat stack. Pictures have no caption; links and code are rows of their own.</span></div>
+      <div class="row"><span class="k">response</span><span class="v"><span class="tag">choice</span><span class="tag">approval</span><span class="tag">text</span><span class="tag">task</span> (to-do) <span class="tag">form</span><span class="tag">none</span><br>Exactly one. Each type draws its own controls.</span></div>
+      <div class="row"><span class="k">needsReply</span><span class="v">Whether the answer reaches the agent as a message. You don't see it until after you answer ("Sent to…" or "Saved for the agent to read").</span></div>
+      <div class="row"><span class="k">status</span><span class="v"><span class="tag">open</span><span class="tag">answered</span><span class="tag">closed</span> plus a thread of messages from members and the agent.</span></div>
+    </div>
+    <div>
+      <div class="cap"><b>List rows</b> the Inbox's left column</div>
+      <div class="list">
+        <div class="lr cur"><span class="dot"></span><span class="face agent">C</span><span class="t">Which expiry should invites use?</span><span class="meta"><span class="att"></span>4m</span><span class="pv">The invite link expires after 48h but the email says 7 days…</span></div>
+        <div class="lr"><span class="dot"></span><span class="face agent">C</span><span class="t">Review the expired-invite page</span><span class="meta"><span class="att"></span>12m</span><span class="pv">I rebuilt the page that shows when an invite link is stale…</span>
+          <div class="media"><div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><div class="banner bad">x</div></div></div><div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><div class="banner good">x</div></div></div></div></div>
+        <div class="lr"><span></span><span class="face agent">C</span><span class="t">Add RESEND_API_KEY to Vercel</span><span class="meta">1h</span><span class="pv">You: Done</span></div>
+        <div class="lr"><span></span><span class="face agent" style="background:var(--id2)">G</span><span class="t">Retry budget for webhook sends</span><span class="meta">3h</span><span class="pv">Withdrawn: found the limit in the provider docs</span></div>
+      </div>
+      <p class="note" style="margin-top:10px">A row says nothing of what kind of answer the item wants: a decision, a to-do and an FYI wear the same dot and the same attention mark.</p>
+    </div>
+  </div>
+
+  <h2 class="sec">Every response, open</h2>
+  <p class="note">Click the options: picking never sends. Every item still needs the composer's Send (or "Got it").</p>
+  <div class="grid">
+
+    <!-- CHOICE -->
+    <div>
+      <div class="cap"><b>Choice</b><span class="tag">choice</span> one option, recommended badge, numbered keys, with a code block</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb"><span class="face agent" style="width:14px;height:14px;font-size:8px;border-radius:4px">C</span>Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Which expiry should invites use?</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>4m ago</div><div class="cm-body">
+            <p>The invite link expires after 48h but the email says 7 days. <span class="chip"><svg aria-hidden="true" class="i"><use href="#doc"/></svg>invite.ts</span> sets it here:</p>
+            <div class="codecard"><div class="codecard-h"><b>src/members/invite.ts</b>:6<span class="spacer"></span><svg aria-hidden="true" class="i s12"><use href="#ext"/></svg></div><pre><span class="l" data-n="5"><span class="kw">import</span> { mail } <span class="kw">from</span> <span class="st">"../mail"</span>;</span><span class="l hit" data-n="6"><span class="kw">const</span> <span class="cn">INVITE_TTL_HOURS</span> = <span class="cn">48</span>;</span><span class="l" data-n="7"></span></pre></div>
+            <div class="choices" data-one>
+              <div class="ch"><span class="ctl radio"></span><span class="w"><span class="hd"><span class="lb">7 days, as the email says</span><span class="end"><span class="badge">Recommended</span>1</span></span><span class="dt">One constant; matches what members were told.</span></span></div>
+              <div class="ch"><span class="ctl radio"></span><span class="w"><span class="hd"><span class="lb">48 hours, fix the email</span><span class="end">2</span></span><span class="dt">Shorter window, safer links.</span></span></div>
+            </div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet">Pick an option</span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- CHOICE MULTI -->
+    <div>
+      <div class="cap"><b>Choice, several</b><span class="tag">choice · multiple</span> checkboxes, the box counts picks</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Which emails should carry the new footer?</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>9m ago</div><div class="cm-body">
+            <p>Pick every template that should say how long the link lasts.</p>
+            <div class="choices">
+              <div class="ch on"><span class="ctl box"></span><span class="w"><span class="hd"><span class="lb">Invite</span><span class="end">1</span></span></span></div>
+              <div class="ch on"><span class="ctl box"></span><span class="w"><span class="hd"><span class="lb">Invite reminder</span><span class="end">2</span></span></span></div>
+              <div class="ch"><span class="ctl box"></span><span class="w"><span class="hd"><span class="lb">Password reset</span><span class="end">3</span></span></span></div>
+            </div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet">2 picked</span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- APPROVAL -->
+    <div>
+      <div class="cap"><b>Approval</b><span class="tag">approval</span> two cards across; green or red once picked</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Backfill expiry on 1,284 pending invites?</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>2m ago</div><div class="cm-body">
+            <p>The migration rewrites <code>expires_at</code> on every pending invite. It runs in one transaction and can be rolled back.</p>
+            <div class="choices across" data-one>
+              <div class="ch ok"><span class="ctl radio"></span><span class="w"><span class="hd"><span class="lb">Approve</span><span class="end">1</span></span></span></div>
+              <div class="ch no"><span class="ctl radio"></span><span class="w"><span class="hd"><span class="lb">Decline</span><span class="end">2</span></span></span></div>
+            </div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet">Pick one</span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- TODO -->
+    <div>
+      <div class="cap"><b>To-do</b><span class="tag">task</span> the title becomes the checkbox; the link block lands last</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Add RESEND_API_KEY to Vercel</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>1h ago</div><div class="cm-body">
+            <p>The preview deploy can't send mail without it.</p>
+            <ol><li>Open the project's environment variables.</li><li>Add <code>RESEND_API_KEY</code> for Preview and Production.</li><li>Redeploy the latest preview.</li></ol>
+            <p><span class="tlink">Vercel → luke-web → Environment variables</span></p>
+            <div class="choices" data-one>
+              <div class="ch ok"><span class="ctl box"></span><span class="w"><span class="hd"><span class="lb">Add RESEND_API_KEY to Vercel</span><span class="end">1</span></span></span></div>
+              <div class="ch no"><span class="ctl radio"></span><span class="w"><span class="hd"><span class="lb">Couldn't do it</span><span class="end">2</span></span></span></div>
+            </div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet">Won't message the agent unless you write</span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- FORM -->
+    <div>
+      <div class="cap"><b>Form</b><span class="tag">form</span> text, number, select (pills), yes/no</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Settings for the reminder email</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>20m ago</div><div class="cm-body">
+            <p>I need these before I wire up the reminder job.</p>
+            <div class="fields">
+              <div class="field"><span class="nm">Subject line</span><div class="tf">Your invite to {workspace} expires soon</div></div>
+              <div class="field"><span class="nm">Hours before expiry</span><div class="tf short val">24</div></div>
+              <div class="field"><span class="nm">Send from<span class="opt">Optional</span></span><div class="pills"><span class="pill on"><svg aria-hidden="true" class="i s12"><use href="#check"/></svg>team@</span><span class="pill">noreply@</span><span class="pill">the inviter</span></div></div>
+              <div class="cbx"><span class="ctl"></span>Also send to admins<span class="opt" style="color:var(--subtle);font-size:12px">Optional</span></div>
+            </div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet">Fill in Subject line</span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- TEXT -->
+    <div>
+      <div class="cap"><b>Text</b><span class="tag">text</span> no control at all: the answer is the composer</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>What should the expired page say?</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>30m ago</div><div class="cm-body">
+            <p>Today it says "Something went wrong". Give me the line you want; I'll match the tone of the sign-in page.</p>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Your answer…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet"></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- NONE -->
+    <div>
+      <div class="cap"><b>Nothing, acknowledge</b><span class="tag">none</span> image blocks stack full width, no caption, no pairing</div>
+      <div class="pane">
+        <div class="pane-bar"><span class="crumb"><svg aria-hidden="true" class="i s12"><use href="#doc"/></svg>Invite links</span><span class="sep">›</span><span class="crumb">Fix invite expiry</span></div>
+        <div class="board">
+          <div class="subject"><h4>Review the expired-invite page</h4></div>
+          <ol class="thread"><li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>12m ago</div><div class="cm-body">
+            <p>I rebuilt the page that shows when an invite link is stale. Before, then after. PR is <span class="chip pr"><svg aria-hidden="true" class="i"><use href="#pr"/></svg>#3871 Expired invite page</span>.</p>
+            <div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner bad">Something went wrong</div><div class="rowx"><span class="av"></span><span class="ln"></span></div></div></div>
+            <div class="shot"><div class="sb"><i></i><i></i><i></i></div><div class="mn"><h5>Join Acme</h5><div class="banner good">This invite expired 2 days ago</div><div class="rowx"><span class="av"></span><span class="ln"></span></div><span class="btn">Ask for a new link</span></div></div>
+          </div></div></li></ol>
+        </div>
+        <div class="dock"><div class="box"><div class="in">Add a note…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet"></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send">Got it</span></div></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2 class="sec">Settled states</h2>
+  <div class="grid">
+    <div>
+      <div class="cap"><b>Answered</b> options fold to one line; the pick is a chip; where it went is a footnote</div>
+      <div class="pane">
+        <div class="board">
+          <div class="subject"><h4>Which expiry should invites use?</h4></div>
+          <ol class="thread">
+            <li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>4h ago</div><div class="cm-body">
+              <p>The invite link expires after 48h but the email says 7 days…</p>
+              <div class="fold"><svg aria-hidden="true" class="i s12"><use href="#chev"/></svg>2 options · You picked 7 days, as the email says</div>
+            </div></div></li>
+            <li class="cm"><span class="face p">DM</span><div class="cm-main"><div class="cm-head"><span class="cm-name">You</span>3h ago · Sent to <span class="cm-name" style="font-size:12px">Fix invite expiry</span></div><div class="cm-body">
+              <span class="pick"><svg aria-hidden="true" class="i s12"><use href="#check"/></svg>7 days, as the email says</span>
+              <p>And add it to the reminder too.</p>
+            </div></div></li>
+            <li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>3h ago</div><div class="cm-body"><p>Done in <span class="chip pr"><svg aria-hidden="true" class="i"><use href="#pr"/></svg>#3868</span>.</p></div></div></li>
+          </ol>
+        </div>
+        <div class="next"><svg aria-hidden="true" class="i s12"><use href="#up"/></svg>Next up <b>Backfill expiry on 1,284 pending invites?</b></div>
+        <div class="dock"><div class="box"><div class="in">Reply…</div><div class="ft"><span class="ib"><svg aria-hidden="true" class="i"><use href="#plus"/></svg></span><span class="quiet"></span><span class="ib"><svg aria-hidden="true" class="i"><use href="#mic"/></svg></span><span class="send dim">Send</span></div></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="cap"><b>Acknowledged, kept</b> and <b>withdrawn</b>; a newer block type reads as a placeholder</div>
+      <div class="pane">
+        <div class="board">
+          <div class="subject"><h4>Add RESEND_API_KEY to Vercel</h4></div>
+          <ol class="thread">
+            <li class="cm"><span class="face agent">C</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Fix invite expiry</span>1h ago</div><div class="cm-body"><p>The preview deploy can't send mail without it.</p><p class="placeholder">Open this in a newer Luke to see the rest.</p><div class="fold"><svg aria-hidden="true" class="i s12"><use href="#chev"/></svg>2 options · You picked Add RESEND_API_KEY to Vercel</div></div></div></li>
+            <li class="cm"><span class="face p">DM</span><div class="cm-main"><div class="cm-head"><span class="cm-name">You</span>50m ago · Saved for the agent to read</div><div class="cm-body"><span class="pick"><svg aria-hidden="true" class="i s12"><use href="#check"/></svg>Add RESEND_API_KEY to Vercel</span></div></div></li>
+          </ol>
+          <div style="height:18px"></div>
+          <div class="subject"><h4>Retry budget for webhook sends</h4></div>
+          <ol class="thread">
+            <li class="cm"><span class="face agent" style="background:var(--id2)">G</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Webhook retries</span>3h ago</div><div class="cm-body"><p>How many retries should a failed webhook get?</p><div class="fold"><svg aria-hidden="true" class="i s12"><use href="#chev"/></svg>3 options offered</div></div></div></li>
+            <li class="cm"><span class="face agent" style="background:var(--id2)">G</span><div class="cm-main"><div class="cm-head"><span class="cm-name">Webhook retries</span>withdrew this 2h ago</div><div class="cm-body"><p>Found the limit in the provider docs.</p></div></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+</main>
+<script>
+const root = document.documentElement;
+const all = (selector, within = document) => [...within.querySelectorAll(selector)];
+const unpick = (selector, within, name) => {
+  for (const each of all(selector, within)) each.classList.remove(name);
+};
+
+for (const tab of all(".top .tabs button")) {
+  tab.addEventListener("click", () => {
+    for (const each of all(".top .tabs button")) each.setAttribute("aria-selected", each === tab);
+    for (const view of all("section.view")) view.classList.toggle("on", view.id === tab.dataset.v);
+    window.scrollTo(0, 0);
+  });
+}
+for (const button of all(".seg button")) {
+  button.addEventListener("click", () => {
+    for (const each of all(".seg button")) each.setAttribute("aria-pressed", each === button);
+    root.dataset.theme = button.dataset.theme;
+  });
+}
+
+// Today's options: a list that takes one picks one; the rest toggle.
+for (const list of all(".choices")) {
+  for (const option of all(".ch", list)) {
+    option.addEventListener("click", () => {
+      if (!list.hasAttribute("data-one")) {
+        option.classList.toggle("on");
+        return;
+      }
+      const was = option.classList.contains("on");
+      unpick(".ch", list, "on");
+      if (!was) option.classList.add("on");
+    });
+  }
+}
+
+// Every reply box only replies, until an answer from its thread's ask is attached.
+function attach(holder, label, tone) {
+  const box = holder.querySelector("[data-cmp]");
+  if (!box) return;
+  const stamp = box.querySelector(".cmp-att");
+  const send = box.querySelector("[data-send-label]");
+  const hint = box.querySelector("[data-open-hint]");
+  stamp.hidden = label === null;
+  if (hint) hint.hidden = label !== null;
+  send.textContent = label ?? "Reply";
+  if (label === null) return;
+  stamp.querySelector(".stamp").className = `stamp ${tone}`;
+  stamp.querySelector(".stamp use").setAttribute("href", tone === "no" ? "#reply" : "#check");
+  stamp.querySelector("[data-att-label]").textContent = label;
+}
+const holderOf = (element) => element.closest(".sheet") ?? element.closest(".ibx");
+
+for (const remove of all("[data-cmp] .att-x")) {
+  remove.addEventListener("click", () => {
+    const holder = holderOf(remove);
+    attach(holder, null);
+    unpick(".ask .opt.on", holder, "on");
+    unpick(".ask-btns .picked", holder, "picked");
+  });
+}
+for (const answer of all(".ask [data-answer]")) {
+  answer.addEventListener("click", () => {
+    if (answer.getAttribute("aria-disabled") === "true") return;
+    unpick(".picked", answer.parentElement, "picked");
+    answer.classList.add("picked");
+    attach(holderOf(answer), answer.dataset.verb, answer.dataset.tone);
+  });
+}
+for (const ask of all(".ask[data-pick]")) {
+  for (const option of all(".opt", ask)) {
+    option.addEventListener("click", () => {
+      const was = option.classList.contains("on");
+      unpick(".opt", ask, "on");
+      if (!was) option.classList.add("on");
+      const picked = ask.querySelector(".opt.on .lb");
+      attach(holderOf(ask), picked ? `Choose \u201c${picked.textContent}\u201d` : null, "ok");
+    });
+  }
+}
+
+// A do's steps tick off; Mark done once every one is.
+for (const ask of all(".ask[data-steps]")) {
+  const sync = () => {
+    const steps = all("li", ask).length;
+    const done = all("li.on", ask).length;
+    ask.querySelector("[data-count]").textContent = `${done} of ${steps}`;
+    ask.querySelector("[data-done]")?.setAttribute("aria-disabled", done === steps ? "false" : "true");
+  };
+  for (const step of all("li", ask)) {
+    step.addEventListener("click", () => {
+      step.classList.toggle("on");
+      sync();
+    });
+  }
+  sync();
+}
+
+// Fields: a recommended value is taken with Use; Submit once one is filled.
+for (const use of all(".tf.sug .use")) {
+  use.addEventListener("click", () => {
+    use.closest(".tf").classList.add("filled");
+    const ask = use.closest(".ask");
+    ask.querySelector('[data-answer="Submit"]').setAttribute("aria-disabled", "false");
+    const hint = ask.querySelector(".ask-btns .hint");
+    if (hint) hint.textContent = "";
+  });
+}
+for (const pill of all("[data-pills] .pill")) {
+  pill.addEventListener("click", () => {
+    const was = pill.classList.contains("on");
+    unpick(".pill", pill.parentElement, "on");
+    if (!was) pill.classList.add("on");
+  });
+}
+for (const box of all("[data-cbx]")) {
+  box.addEventListener("click", () => {
+    box.classList.toggle("on");
+  });
+}
+</script>
+</body>
+</html>
