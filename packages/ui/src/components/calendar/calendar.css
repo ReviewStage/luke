@@ -143,23 +143,29 @@
 
   /* A band that runs on past a week's edge rounds there, so each week's
      stretch of it reads as one piece. */
-  .luke-calendar-cell:is([data-place="between"], [data-place="start"]):last-child {
+  .luke-calendar-cell[data-place="between"]:last-child,
+  .luke-calendar-cell[data-place="start"]:last-child {
     border-start-end-radius: var(--luke-control-radius);
     border-end-end-radius: var(--luke-control-radius);
   }
 
-  .luke-calendar-cell:is([data-place="between"], [data-place="end"]):first-child {
+  .luke-calendar-cell[data-place="between"]:first-child,
+  .luke-calendar-cell[data-place="end"]:first-child {
     border-start-start-radius: var(--luke-control-radius);
     border-end-start-radius: var(--luke-control-radius);
   }
 
-  .luke-calendar-cell:is([data-place="single"], [data-place="start"], [data-place="end"])
-    > .luke-calendar-day {
+  .luke-calendar-cell[data-place="single"] > .luke-calendar-day,
+  .luke-calendar-cell[data-place="start"] > .luke-calendar-day,
+  .luke-calendar-cell[data-place="end"] > .luke-calendar-day {
     color: var(--luke-color-on-accent);
   }
 
-  .luke-calendar-cell:is([data-place="single"], [data-place="start"], [data-place="end"])
-    > .luke-calendar-day::before {
+  /* Note that each selector is written out rather than folded into :is(),
+     so a reader that splits a rule's selectors on their commas reads each whole. */
+  .luke-calendar-cell[data-place="single"] > .luke-calendar-day::before,
+  .luke-calendar-cell[data-place="start"] > .luke-calendar-day::before,
+  .luke-calendar-cell[data-place="end"] > .luke-calendar-day::before {
     background: var(--luke-color-accent);
   }
 }
