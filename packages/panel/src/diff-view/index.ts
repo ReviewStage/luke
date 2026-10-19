@@ -189,6 +189,46 @@ const LOOK_CSS = `
   [data-utility-button] {
     margin-right: 0;
   }
+  /* A band between hunks is one surface across its width: Pierre fills
+     the band's row with the code's ground and its arrows and its words
+     with the band's, a box pasted onto a strip. Its row takes the band's
+     ground, the arrows and the words stand on it with no ground of their
+     own, and only the arrow fills under the pointer; the words, a bigger
+     target opening the same lines, lift their ink. */
+  [data-separator="line-info-basic"] [data-separator-wrapper] {
+    /* Pierre's own band ground, which a list sets (LIST_CSS). */
+    background-color: var(--diffs-bg-separator, var(--luke-color-fill-hover));
+  }
+  [data-separator="line-info-basic"] [data-expand-button],
+  [data-separator="line-info-basic"] [data-separator-content] {
+    background-color: transparent;
+    border: 0;
+  }
+  [data-separator="line-info-basic"] [data-expand-button]:hover {
+    background-color: var(--luke-color-fill-pressed);
+  }
+  /* The words open what the arrow opens: Pierre opens a gap's both ends
+     from its words, which at the file's top or foot is not the arrow's, so
+     the words let the pointer through to the arrow, whose press reaches
+     across the band. A gap of two arrows keeps its words' own press,
+     which opens both of its ends, so neither arrow is covered. */
+  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
+    [data-separator-content] {
+    pointer-events: none;
+  }
+  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
+    [data-expand-button]::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    /* The arrow's column stands in the gutter alone, its words running on
+       past it over the code, so its press runs the file's width. */
+    width: 100cqi;
+  }
+  [data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-separator-content] {
+    color: var(--luke-color-text-muted);
+  }
   /* Lines lit, a comment's or a thread's, light their own rows alone: a
      note under them, the comment being written or a thread, keeps its own
      ground rather than standing in the band. */
