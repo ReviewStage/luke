@@ -50,6 +50,23 @@ function DashboardIcon(): React.JSX.Element {
   );
 }
 
+function CostIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M10 5.9c-.4-.6-1.1-.9-2-.9-1.2 0-2 .6-2 1.5 0 2 4 1 4 3 0 .9-.8 1.5-2 1.5-.9 0-1.6-.3-2-.9M8 3.9V5M8 11v1.1" />
+    </svg>
+  );
+}
+
 /** A workspace as a stack of shared layers, apart from the Users glyph's one person. */
 function WorkspacesIcon(): React.JSX.Element {
   return (
@@ -207,12 +224,13 @@ export function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="grid grid-cols-[auto_repeat(5,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(6,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
       >
         <span className="mr-1 inline-flex w-6 shrink-0 text-(--luke-color-text)" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
+        {barItem("cost", "Cost", <CostIcon />)}
         {barItem("reliability", "Reliability", <ReliabilityIcon />)}
         {barItem("workspaces", "Workspaces", <WorkspacesIcon />)}
         {barItem("users", "Users", <UsersIcon />)}
@@ -238,6 +256,7 @@ export function AdminSidebar({
         </div>
         <div className="mt-8 grid gap-1 px-4">
           {item("dashboard", "Dashboard", <DashboardIcon />)}
+          {item("cost", "Cost", <CostIcon />)}
           {item("reliability", "Reliability", <ReliabilityIcon />)}
           {item("workspaces", "Workspaces", <WorkspacesIcon />)}
           {item("users", "Users", <UsersIcon />)}
