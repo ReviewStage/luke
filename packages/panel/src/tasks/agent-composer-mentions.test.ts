@@ -1557,6 +1557,27 @@ test("an @ typed again where a closed one stood reads the workspace's issues aga
   ]);
 });
 
+test("an issue's page pasted into the box becomes its chip, and one of another workspace pastes as the words it is", async () => {
+  const { container, sent } = await box(taskPage());
+  const here = `https://tryluke.dev/acme/issue/${REFRESH_ISSUE.id}`;
+  const elsewhere = `https://tryluke.dev/other/issue/${LINK_ISSUE.id}`;
+
+  typeInComposer(container, "Fix ");
+  pasteInComposer(container, here);
+  typeInComposer(container, "not ");
+  pasteInComposer(container, elsewhere);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["Issue"],
+  );
+  assert.deepEqual(sent, [`Fix [@Issue](${here}) not ${elsewhere}`]);
+});
+
 test("with Issues off an @ offers no issue and reads none", async () => {
   const { container } = await issuesBox(false);
 

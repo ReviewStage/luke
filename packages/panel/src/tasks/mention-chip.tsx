@@ -908,7 +908,7 @@ function pastedName(mention: Mention, said: string, names: PastedNames): string 
  * or the app's own, named as its bare link's chip is (`pastedName`); or a
  * page of an integration's, named by its address's readable form; nothing
  * for any other words, a file of the plan's repository among them, or a
- * person's page in another workspace than the place's.
+ * person's or an issue's page in another workspace than the place's.
  */
 export function pastedMentionNode(
   words: string,
@@ -916,9 +916,9 @@ export function pastedMentionNode(
   names: PastedNames,
 ): MentionNode | undefined {
   const link = pastedLinkMention(words, place.repository);
-  // A person's page is their page in the workspace its link names, so one of another workspace stays the link it is.
+  // A person's or an issue's page is of the workspace its link names, so one of another workspace stays the link it is.
   const elsewhere =
-    link?.mention.kind === MENTION_KIND.PERSON &&
+    (link?.mention.kind === MENTION_KIND.PERSON || link?.mention.kind === MENTION_KIND.ISSUE) &&
     readLink(words.trim())?.workspace !== place.workspace;
   return link === undefined || elsewhere
     ? undefined
