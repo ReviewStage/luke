@@ -5,7 +5,9 @@
  * `send`, so everything that call owns stays its own: the credential read
  * fresh for every attempt, the one renew-and-retry of a 401 while the
  * holder stands, the no-credential fault, the deadline, and the ambient
- * `HttpClient` a test fakes with `fakeCloudApi`. Wrapped in
+ * `HttpClient` a test fakes with `fakeCloudApi`. The answer's body is read
+ * whole within a deadline of its own before oRPC reads it, so a body that
+ * stalls after its headers is let go rather than awaited forever. Wrapped in
  * `createEffectClient`, so a procedure is a lazy Effect.
  *
  * The link reads the wire as the service writes it (`contract/errors.ts`):
@@ -32,7 +34,7 @@ import {
 } from "@orpc/contract";
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
-import { Cause, type Context, Data, Effect, Exit, Result, Schema } from "effect";
+import { Cause, type Context, Data, Duration, Effect, Exit, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   accountCall,
@@ -198,6 +200,42 @@ function outputWireSchema(path: readonly string[]): Schema.Codec<unknown> | unde
   return isWireSchema(declared) ? Schema.flip(declared) : undefined;
 }
 
+/** A body's text, read to its end. */
+function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<string, unknown> {
+  return Effect.gen(function* () {
+    const decoder = new TextDecoder();
+    let text = "";
+    for (;;) {
+      const { done, value } = yield* Effect.tryPromise(() => reader.read());
+      if (done) return text + decoder.decode();
+      text += decoder.decode(value, { stream: true });
+    }
+  });
+}
+
+/**
+ * A response's body read whole within the deadline, so the link reads it
+ * from memory; nothing, its stream cancelled so its connection is let go,
+ * where it has not ended by then or could not be read.
+ * Note that the account call's own deadline ends with the headers, and a
+ * renewal can spend all of it before an answer that did arrive is read, so
+ * the body is given one deadline more of its own rather than what is left.
+ */
+function textWithin(
+  response: Response,
+  deadline: Duration.Duration,
+): Effect.Effect<string | undefined> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return Effect.succeed("");
+  return textOf(reader).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.timeoutOrElse({
+      duration: deadline,
+      orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
+    }),
+  );
+}
+
 /**
  * The account call run on the services the caller handed over, under the
  * deadline it named, aborted with the caller. A call that ended before any
@@ -225,10 +263,22 @@ async function sent(
   );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
   const answer = exit.value;
-  if (callAnswered(answer)) return answer.response;
-  throw new HostedUnanswered({
-    fault: answer.fault,
-    ...(answer.errorName === undefined ? undefined : { errorName: answer.errorName }),
+  if (!callAnswered(answer)) {
+    throw new HostedUnanswered({
+      fault: answer.fault,
+      ...(answer.errorName === undefined ? undefined : { errorName: answer.errorName }),
+    });
+  }
+  const { response } = answer;
+  const text = await Effect.runPromiseWith(context.services)(
+    textWithin(response, Duration.millis(call.requestTimeoutMs)),
+    init.signal ? { signal: init.signal } : undefined,
+  );
+  if (text === undefined) throw new HostedUnanswered({});
+  return new Response(text, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
   });
 }
 

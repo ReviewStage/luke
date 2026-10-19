@@ -1,9 +1,7 @@
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { factoryWorldApp } from "@luke/service/factory/factory-world-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * A workspace's Factory world, read as it stands now by a member of it (POST). The logic lives in
- * `packages/service/src/factory/factory-world-app.ts`; this file only hands it the deployment's real seams.
+ * A workspace's Factory world, read as it stands now by a member of it (POST), answered by the hosted oRPC router
+ * (`packages/service/src/factory/factory-world-procedures.ts`).
  */
-export default routeFromHttpRouter(factoryWorldApp({ resolveUserId: resolveHostedUserId }));
+export default orpcRoute;

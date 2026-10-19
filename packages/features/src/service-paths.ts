@@ -308,11 +308,6 @@ export function automationRunsPath(automationId: string): string {
   return `${automationPath(automationId)}/runs`;
 }
 
-/** One issue of a workspace the account is a member of: read it (GET) or change it (PATCH). */
-export function issuePath(issueId: string): string {
-  return `${HOSTED_SERVICE_PATH.ISSUES}/${encodeURIComponent(issueId)}`;
-}
-
 /** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;

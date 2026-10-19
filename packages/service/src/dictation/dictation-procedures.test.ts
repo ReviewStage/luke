@@ -11,15 +11,15 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+import { Cause, type Context, Effect, Layer, Logger, Option, Redacted } from "effect";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { dictationApp } from "./dictation-app.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
+import { dictationProcedures } from "./dictation-procedures.js";
 
 /**
- * A dictated clip answered by the group the way a function answers it, over
+ * A dictated clip answered by the hosted oRPC router the way the web route answers it, over
  * a real dialect and OpenAI faked at its HTTP door: the clip and its words
  * go to the transcription model on Luke's key, the text comes back, the
  * account's day is metered, and nothing of the clip or the text is logged.
@@ -83,7 +83,7 @@ const openAccount = (options: { model?: ModelAnswer; key?: string | undefined } 
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const model = recordingHttpClient(() => modelResponse(options.model ?? { text: SAID }));
     const logged: string[] = [];
-    const app = dictationApp({
+    const procedures = dictationProcedures({
       resolveUserId: (incoming) =>
         Effect.succeed(
           Option.fromNullishOr(
@@ -92,12 +92,13 @@ const openAccount = (options: { model?: ModelAnswer; key?: string | undefined } 
         ),
     });
     const key = "key" in options ? options.key : OPENAI_KEY;
-    const ask = (request: Request) => answer(app, request, { key, model: model.layer, logged });
+    const ask = (request: Request) =>
+      answer(procedures, request, { key, model: model.layer, logged });
     return { userId, ask, calls: model.requests, logged };
   });
 
 const answer = (
-  app: ReturnType<typeof dictationApp>,
+  procedures: ReturnType<typeof dictationProcedures>,
   request: Request,
   seams: {
     readonly key: string | undefined;
@@ -106,32 +107,31 @@ const answer = (
   },
 ) =>
   Effect.gen(function* () {
-    const client = yield* SqlClient.SqlClient;
     const environment: HostedEnvironmentValues = {
       ...NO_ENVIRONMENT,
       openAiKey: seams.key === undefined ? undefined : Redacted.make(seams.key),
     };
-    // Every line the handler logs is kept, so the test can read what it says.
+    // Every line the procedure logs is kept, so the test can read what it says.
     const recorder = Logger.make(({ message, cause }) => {
       seams.logged.push(`${JSON.stringify(message)} ${Cause.pretty(cause)}`);
     });
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, client),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, environment),
-      seams.model,
-      Logger.layer([recorder]),
+    // The procedure runs on the services handed to it: the test's own, with the key, the model, and the recorder beside them.
+    const services = yield* Effect.context<never>().pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(HostedEnvironment, environment),
+          seams.model,
+          Logger.layer([recorder]),
+        ),
+      ),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
+    // SAFETY: the dictation procedure yields the database, the clock, the environment, and the model's HTTP client alone, which the context above holds.
+    const webServices = services as Context.Context<WebServices>;
+    const response = yield* Effect.promise(() =>
+      hostedFetch({ dictation: procedures })(request, webServices),
     );
-    const response = yield* Effect.promise(() => handler(request));
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -143,7 +143,10 @@ function clipRequest(
   const body = init.raw ?? (init.body === undefined ? undefined : JSON.stringify(init.body));
   return new Request(new URL(DICTATION_PATH, ORIGIN), {
     method: init.method ?? "POST",
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
+    headers: {
+      "content-type": "application/json",
+      ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+    },
     ...(body === undefined ? undefined : { body }),
   });
 }
@@ -222,6 +225,28 @@ it.layer(getTestDB())("the dictation route", (it) => {
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
         assert.equal(calls.length, 0);
+      }),
+  );
+
+  it.effect(
+    "a clip past two minutes is refused as too large, and a deployment without a key answers unavailable before it reads the clip at all",
+    () =>
+      Effect.gen(function* () {
+        const { userId, ask, calls } = yield* openAccount();
+        const keyless = yield* openAccount({ key: undefined });
+
+        const long = yield* ask(clip(userId, { durationMs: 120_001 }));
+        const unkeyed = yield* keyless.ask(clipRequest(keyless.userId, { body: { audio: 7 } }));
+
+        assert.deepEqual(
+          long,
+          refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+        assert.deepEqual(
+          unkeyed,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(calls.length + keyless.calls.length, 0);
       }),
   );
 });

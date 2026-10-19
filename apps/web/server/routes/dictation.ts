@@ -1,6 +1,7 @@
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { dictationApp } from "@luke/service/dictation/dictation-app";
-import { routeFromHttpRouter } from "../route-effect.js";
+import { orpcRoute } from "../orpc-route.js";
 
-/** A clip dictated into a message box, answered with its words (POST); nothing of either is kept. */
-export default routeFromHttpRouter(dictationApp({ resolveUserId: resolveHostedUserId }));
+/**
+ * A clip dictated into a message box, answered with its words (POST), answered by the hosted oRPC router
+ * (`packages/service/src/dictation/dictation-procedures.ts`).
+ */
+export default orpcRoute;
