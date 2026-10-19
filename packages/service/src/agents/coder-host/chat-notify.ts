@@ -37,6 +37,7 @@ import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import {
@@ -477,11 +478,11 @@ export const HOSTED_OF_CHAT_REFUSAL = {
 /**
  * Posts a message and tells the members it addresses: the one door a
  * coding agent's `post_chat` and the window's post both call. The pictures
- * handed in are kept under the ids its image blocks name once the message
- * stands and before anyone is told, as an agent's are (`chat.ts`'s
- * `writePost`), so a member told of it finds them. A post repeated under
- * its key answers the message it made, and is told again, which steers no
- * one twice. Refused as the store refuses the post, in the route's words.
+ * handed in are kept under the ids its image blocks name in the same
+ * transaction as the message, so no reader sees the message before its
+ * pictures stand, and before anyone is told. A post repeated under its key
+ * answers the message it made, and is told again, which steers no one
+ * twice. Refused as the store refuses the post, in the route's words.
  */
 export function postChat(
   telling: ChatTelling,
@@ -493,22 +494,19 @@ export function postChat(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
+    const { userId, organizationId } = telling;
+    const written = Effect.gen(function* () {
+      const posted = yield* postMessage(userId, organizationId, post);
+      if (Result.isFailure(posted) || images.length === 0) return posted;
+      const { id } = posted.success.message;
+      yield* attachMessageImages(userId, organizationId, post.authorMemberId, id, images);
+      return posted;
+    });
     const posted = yield* hostedStoreOrUnavailable(
-      postMessage(telling.userId, telling.organizationId, post),
+      Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written)),
     );
     if (Result.isFailure(posted)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[posted.failure]);
     const { message, repeated, unresolved } = posted.success;
-    if (images.length > 0) {
-      yield* hostedStoreOrUnavailable(
-        attachMessageImages(
-          telling.userId,
-          telling.organizationId,
-          post.authorMemberId,
-          message.id,
-          images,
-        ),
-      );
-    }
     const receipt = yield* tellMessage(telling, message, unresolved);
     return { message, repeated, receipt };
   });
