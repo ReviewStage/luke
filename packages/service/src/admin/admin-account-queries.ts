@@ -26,6 +26,7 @@ import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { accountPreference } from "@luke/database/schemas/preferences";
+import { turns } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { voiceSessionUsage } from "@luke/database/schemas/usage";
 import { voiceSessions } from "@luke/database/schemas/voice";
@@ -40,7 +41,21 @@ import {
 } from "@luke/features/provider-key-wire";
 import { experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
 import { WireValueSchema } from "@luke/wire";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, sql, sum } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  isNotNull,
+  max,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -143,7 +158,13 @@ const AGENT_COLUMNS = {
   pullRequestState: PULL_REQUEST_STATE_OF,
 };
 
-/** The account's newest agents started since `windowStart`, at most `limit`, the id breaking a tie in their start. */
+/**
+ * The account's newest agents at work in the window, at most `limit`, the id
+ * breaking a tie in their start: started since `windowStart`, or older with a
+ * turn that ended since, so an old agent that failed today is read too. The
+ * ones started inside the window are the newest, so the bound cuts the older
+ * ones first. Without a `windowStart`, the account's newest whenever.
+ */
 const findAgents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -161,7 +182,20 @@ const findAgents = SqlSchema.findAll({
             eq(codingAgent.userId, request.userId),
             request.windowStart === null
               ? undefined
-              : gte(codingAgent.createdAt, request.windowStart),
+              : or(
+                  gte(codingAgent.createdAt, request.windowStart),
+                  exists(
+                    db
+                      .select({ id: turns.id })
+                      .from(turns)
+                      .where(
+                        and(
+                          eq(turns.conversationId, codingAgent.conversationId),
+                          gte(turns.settledAt, request.windowStart),
+                        ),
+                      ),
+                  ),
+                ),
           ),
         )
         .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))

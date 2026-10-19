@@ -284,7 +284,7 @@ const CREDENTIAL_COLUMNS: readonly DataTableColumn<CredentialRow>[] = [
       </Inline>
     ),
   },
-  { key: "since", label: "Since", cell: (row) => formatInstant(row.at) },
+  { key: "changed", label: "Last changed", cell: (row) => formatInstant(row.at) },
 ];
 
 /** What failed, with the provider where a key or a connection did. */

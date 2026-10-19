@@ -98,7 +98,7 @@ const startAgent = (
   organizationId: string,
   daysAgo: number,
   options: {
-    turn?: { status: TurnStatus; failure?: string; failureDetail?: string };
+    turn?: { status: TurnStatus; failure?: string; failureDetail?: string; endedDaysAgo?: number };
     published?: PullRequestState;
   },
 ) =>
@@ -136,7 +136,7 @@ const startAgent = (
         failureDetail: options.turn.failureDetail ?? null,
         queuedAt: at(daysAgo),
         startedAt: at(daysAgo),
-        settledAt: at(daysAgo - 0.5),
+        settledAt: at(options.turn.endedDaysAgo ?? daysAgo - 0.5),
       });
     }
     return agent?.id ?? "";
@@ -277,7 +277,15 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
       firedAt: at(6),
       settledAt: at(6),
     });
-    return { own, merged, overflowed, neverStarted, older };
+    // Started long before the window, its turn failed inside it.
+    const lateFailure = yield* startAgent(userId, own, 45, {
+      turn: {
+        status: TURN_STATUS.FAILED,
+        failure: BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+        endedDaysAgo: 1,
+      },
+    });
+    return { own, merged, overflowed, neverStarted, older, lateFailure };
   });
 
 const read = (userId: string) =>
@@ -343,6 +351,12 @@ it.layer(getTestDB())("one account's support sections", (it) => {
             ADMIN_PULL_REQUEST.NONE,
           ],
           [agents.older, CODING_AGENT_STATUS.COMPLETED, null, ADMIN_PULL_REQUEST.CLOSED],
+          [
+            agents.lateFailure,
+            CODING_AGENT_STATUS.FAILED,
+            CODING_AGENT_FAILURE.SESSION_ENDED,
+            ADMIN_PULL_REQUEST.NONE,
+          ],
         ],
       );
       assert.deepEqual(
@@ -454,6 +468,7 @@ it.layer(getTestDB())("one account's support sections", (it) => {
       assert.deepEqual(
         support.failures.map((failure) => ({ ...failure, at: (NOW - failure.at) / DAY_MS })),
         [
+          { kind: ADMIN_FAILURE_KIND.AGENT, at: 1, reason: CODING_AGENT_FAILURE.SESSION_ENDED },
           {
             kind: ADMIN_FAILURE_KIND.AGENT,
             at: 1.5,

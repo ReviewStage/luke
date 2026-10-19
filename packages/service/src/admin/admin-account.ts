@@ -101,7 +101,11 @@ interface AdminAccountConnection {
   provider: IntegrationProvider;
   /** `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
   status: string;
-  /** When its status last moved, in epoch milliseconds. */
+  /**
+   * When the row last changed, in epoch milliseconds. No column keeps when
+   * a connection's status alone moved: a rename or a sign-in begun moves
+   * this too, so an expired connection is dated no earlier than that.
+   */
   at: number;
 }
 
@@ -116,7 +120,11 @@ export interface AdminAccountSource {
     pullRequestsMerged: number;
     callSeconds: number;
   };
-  /** The window's newest agents, at most `ADMIN_ACCOUNT_STATUS_READ_LIMIT`. */
+  /**
+   * The window's agents, at most `ADMIN_ACCOUNT_STATUS_READ_LIMIT`, newest
+   * first: those started in it, then older ones whose turn ended in it, so a
+   * failure in the window is read whenever its agent started.
+   */
   windowAgents: readonly AdminAccountAgentSource[];
   /** The account's newest agents, whenever they started. */
   recentAgents: readonly AdminAccountAgentSource[];
@@ -235,19 +243,27 @@ function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgen
   };
 }
 
-/** The window's failed agents as timeline entries, each at its newest turn's end or, with none, its start. */
-function agentFailures(source: AdminAccountSource, now: number): AdminAccountFailure[] {
+/** The agents failed inside the window as timeline entries, each at its newest turn's end or, with none, its start. */
+function agentFailures(
+  source: AdminAccountSource,
+  now: number,
+  windowStart: number,
+): AdminAccountFailure[] {
   const failures: AdminAccountFailure[] = [];
   for (const agent of source.windowAgents) {
     const read = agentOf(agent, now);
-    if (read.status !== CODING_AGENT_STATUS.FAILED) continue;
-    const at = agent.turn?.settledAt ?? agent.createdAt;
-    failures.push({ kind: ADMIN_FAILURE_KIND.AGENT, at: at.getTime(), reason: read.failure });
+    const at = (agent.turn?.settledAt ?? agent.createdAt).getTime();
+    if (read.status !== CODING_AGENT_STATUS.FAILED || at < windowStart) continue;
+    failures.push({ kind: ADMIN_FAILURE_KIND.AGENT, at, reason: read.failure });
   }
   return failures;
 }
 
-/** The keys and connections that went bad inside the window, at when their status last moved. */
+/**
+ * The keys and connections that stand bad and last changed inside the
+ * window: a key at when its status was set, a connection at its row's last
+ * change, the nearest instant its row keeps.
+ */
 function credentialFailures(
   source: AdminAccountSource,
   windowStart: number,
@@ -289,11 +305,14 @@ export function buildAdminAccountSupport(
   windowStart: number,
   lastActiveDay: string | null,
 ): AdminAccountSupport {
-  const windowRead = source.windowAgents.map((agent) => agentOf(agent, now));
+  // The failed share is of the agents started in the window, as the count beside it is.
+  const windowRead = source.windowAgents
+    .filter((agent) => agent.createdAt.getTime() >= windowStart)
+    .map((agent) => agentOf(agent, now));
   const chosen = source.defaults?.experiments ?? {};
 
   const failures = [
-    ...agentFailures(source, now),
+    ...agentFailures(source, now, windowStart),
     ...source.droppedCalls.map(
       (call): AdminAccountFailure => ({
         kind: ADMIN_FAILURE_KIND.CALL,
