@@ -690,6 +690,50 @@ it.effect(
     }),
 );
 
+test("a picture GitHub linked to itself opens over the window rather than in the browser: Enlarge walks that entry's pictures from the one pressed, from what was read already, and Open on GitHub opens the one shown; a badge keeps its link", async () => {
+  const tab = await draw(controlAnswering());
+  await settle();
+  const description =
+    tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  const read = [...images];
+  assert.equal(
+    description.querySelector('img[alt="before and after"]')?.closest("a"),
+    null,
+    "GitHub's link to the picture itself is gone",
+  );
+  assert.ok(
+    description.querySelector('a[href^="https://review.example.com"] img[alt="Request review"]'),
+    "a badge linked elsewhere keeps its link",
+  );
+  assert.equal(description.querySelector('[aria-label="Enlarge Request review"]'), null);
+
+  const enlarge =
+    description.querySelector<HTMLButtonElement>('[aria-label="Enlarge before and after"]') ??
+    assert.fail("the upload has Enlarge");
+  act(() => enlarge.click());
+  const viewer = () =>
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
+  const shown = () => [
+    viewer().querySelector(".attachment-viewer-title")?.textContent,
+    viewer().querySelector(".attachment-viewer-place")?.textContent,
+  ];
+  assert.deepEqual(shown(), ["before and after.png", "1 of 2"]);
+  assert.equal(
+    viewer().querySelector("img")?.getAttribute("src"),
+    `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+  );
+  act(() => viewer().querySelector<HTMLButtonElement>('[aria-label="Next file"]')?.click());
+  assert.deepEqual(shown(), ["Overview.png", "2 of 2"]);
+  const onGitHub =
+    [...viewer().querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Open on GitHub",
+    ) ?? assert.fail("the viewer offers Open on GitHub");
+  act(() => onGitHub.click());
+  await settle();
+  assert.deepEqual(opened, [SCREENSHOT]);
+  assert.deepEqual(images, read, "nothing is read again");
+});
+
 test("the Checks tab lists the head's deployments over its checks: each environment, where it stands, and a press opening the address it serves; a head with none lists no deployments", async () => {
   const deployed: CodingAgentOverviewChecks = {
     ...CHECKS,
