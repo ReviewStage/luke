@@ -1,3 +1,4 @@
+import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -11,6 +12,7 @@ import {
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -302,13 +304,34 @@ export function postTarget(chat: ChatAnswer, names: ChatNames, channel: ChatChan
 }
 
 /** What the composer offers to name: every member who has not left but the reader, and every channel standing that is not a DM. */
+/**
+ * The mention a chip writes a member as: a person by their account, an
+ * agent by its id. Note that Luke has none here: every task's Luke answers
+ * to `@luke`, which the service reads by the channel's task, so he is
+ * written as that word rather than as one task's link.
+ */
+function mentionOf(member: ChatMember): ChatMemberMention | undefined {
+  if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
+    return { kind: MENTION_KIND.PERSON, userId: member.userId };
+  }
+  if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
+    return { kind: MENTION_KIND.AGENT, agentId: member.agentId };
+  }
+  return undefined;
+}
+
 export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTarget[] {
   const members = chat.members
     .filter((member) => !member.left && member.id !== chat.self)
     .map((member): ChatTarget => {
       const who = chatWho(chat, names, member.id);
       const detail = member.kind === MEMBER_KIND.HUMAN ? undefined : who.name;
-      return { sigil: CHAT_TARGET_SIGIL.MEMBER, name: member.handle, detail };
+      return {
+        sigil: CHAT_TARGET_SIGIL.MEMBER,
+        name: member.handle,
+        detail,
+        mention: mentionOf(member),
+      };
     });
   const channels = chat.channels
     .filter((channel) => !channel.archived && channel.kind !== CHANNEL_KIND.DM)

@@ -219,7 +219,15 @@ export interface ChatPost {
   readonly to: { readonly channelId: string } | { readonly replyTo: number };
   readonly blocks: readonly ChatBlock[];
   readonly mentions: readonly string[];
+  /** The members the words name as mention links, each with the label it was written with, which stands for it where it names no member. */
+  readonly subjects?: readonly ChatNamedSubject[];
   readonly clientKey: string;
+}
+
+/** A member a post's words name by what it is, a person, an agent, or a task's Luke, rather than by its handle. */
+export interface ChatNamedSubject {
+  readonly subject: ChatMemberSubject;
+  readonly label: string;
 }
 
 /** What a post came to: the message, whether it already stood under the key, and the handles mentioned that name no member. */
@@ -1240,6 +1248,21 @@ function namedMember(
   return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, taskId: taskId.value });
 }
 
+/**
+ * The member a post names by what it is: a person or a task's Luke, minted
+ * as `@luke` mints him where none is yet, and an agent only where it is a
+ * member already, because an agent whose starter has Chat off joins no
+ * chat; nothing for a subject of another workspace.
+ */
+function subjectMember(
+  userId: string,
+  organizationId: string,
+  subject: ChatMemberSubject,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  if (subject.kind !== MEMBER_KIND.AGENT) return ensureMember(userId, organizationId, subject);
+  return findMemberOfSubject({ organizationId, kind: subject.kind, subjectId: subject.agentId });
+}
+
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
 function readerIn(
   userId: string,
@@ -1599,12 +1622,20 @@ function placePost(
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
     const taskId = yield* taskOfContext(channel.value, author.value);
-    const named = yield* Effect.forEach(post.mentions, (handle) =>
-      Effect.map(namedMember(userId, organizationId, handle, taskId), (found) => ({
-        handle,
-        found,
-      })),
-    );
+    const named = [
+      ...(yield* Effect.forEach(post.mentions, (handle) =>
+        Effect.map(namedMember(userId, organizationId, handle, taskId), (found) => ({
+          handle,
+          found,
+        })),
+      )),
+      ...(yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
+        Effect.map(subjectMember(userId, organizationId, subject), (found) => ({
+          handle: label,
+          found,
+        })),
+      )),
+    ];
     return Result.succeed({
       author: author.value,
       channelId,
