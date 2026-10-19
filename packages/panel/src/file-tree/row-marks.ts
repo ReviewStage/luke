@@ -97,9 +97,16 @@ function part(at: number): string {
   return `${RUN} > span:nth-child(${at + 1})`;
 }
 
-/** A run's threads where any stand on its file, and its toggle where it draws one. */
+/** A run's threads where any stand on its file, its toggle where it draws one, and the toggle once ticked. */
 const THREADS_SHOWN = `span:nth-child(${PART.THREADS + 1}):not(:empty)`;
-const TOGGLE_SHOWN = `span:nth-child(${PART.VIEWED + 1})`;
+const TOGGLE = `span:nth-child(${PART.VIEWED + 1})`;
+const TICKED = `${TOGGLE}:not(:empty)`;
+
+/** A row in reach of the pointer or the keyboard, which draws a toggle not yet ticked. */
+const REACHED = '[data-type="item"]:is(:hover, [data-item-focused])';
+
+/** The room the lane keeps for its threads and its toggle, each none until drawn. */
+const ROOM = { THREADS: "--file-row-threads-room", VIEWED: "--file-row-toggle-room" } as const;
 
 /** A row whose toggle is ticked. */
 const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > span > span:nth-child(${PART.VIEWED + 1}):not(:empty))`;
@@ -112,9 +119,9 @@ const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > 
  */
 const SHEET = `
 [data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }
-${LANE}:has(> span > ${THREADS_SHOWN}) { min-width: calc(${LEAST.THREADS}); }
-${LANE}:has(> span > ${TOGGLE_SHOWN}) { min-width: calc(${LEAST.VIEWED}); }
-${LANE}:has(> span > ${THREADS_SHOWN}):has(> span > ${TOGGLE_SHOWN}) { min-width: calc(${LEAST.THREADS} + ${LEAST.VIEWED}); }
+${LANE}:has(> span > span) { --file-row-threads-room: 0px; --file-row-toggle-room: 0px; min-width: calc(var(${ROOM.THREADS}) + var(${ROOM.VIEWED})); }
+${LANE}:has(> span > ${THREADS_SHOWN}) { --file-row-threads-room: calc(${LEAST.THREADS}); }
+${LANE}:has(> span > ${TICKED}), ${REACHED} > [data-item-section="decoration"]:has(> span > ${TOGGLE}) { --file-row-toggle-room: calc(${LEAST.VIEWED}); }
 ${RUN} { flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-start; align-content: flex-start; height: 1lh; column-gap: var(--luke-space-4); font-variant-numeric: tabular-nums; }
 ${RUN} > span { display: inline-flex; flex: none; height: 100%; align-items: center; gap: var(--luke-space-2); }
 ${RUN} > span:empty { display: none; }
@@ -125,7 +132,7 @@ ${part(PART.THREADS)}::before { content: ""; width: 1em; height: 1em; background
 ${part(PART.VIEWED)}, ${part(PART.VIEWED)}:empty { display: inline-flex; font-size: 0; cursor: default; }
 ${part(PART.VIEWED)}::before { content: ""; width: var(--luke-space-12); height: var(--luke-space-12); background: currentColor; mask: ${maskOf(GLYPH.CHECKED)} center / contain no-repeat; }
 ${part(PART.VIEWED)}:empty::before { mask-image: ${maskOf(GLYPH.CIRCLE)}; }
-[data-type="item"]:not(:hover, [data-item-focused]) > [data-item-section="decoration"] > span > span:nth-child(${PART.VIEWED + 1}):empty { visibility: hidden; }
+[data-type="item"]:not(:hover, [data-item-focused]) > [data-item-section="decoration"] > span > ${TOGGLE}:empty { display: none; }
 ${VIEWED_ROW}:not([data-item-selected]) { opacity: 0.6; }
 `;
 
