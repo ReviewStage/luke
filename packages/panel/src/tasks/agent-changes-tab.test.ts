@@ -236,13 +236,18 @@ let registry = AtomRegistry.make();
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(
-  options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
+  options: {
+    threads?: ChangesThreads;
+    treeOpen?: boolean;
+    beside?: ReactElement;
+    shown?: boolean;
+  } = {},
 ): Promise<DiffListProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab.js");
   const tab = createElement(AgentChangesTab, {
     agentId: AGENT.id,
     control,
-    shown: true,
+    shown: options.shown ?? true,
     repository: "acme/relay",
     tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
@@ -680,6 +685,18 @@ test("? inside the view opens a sheet of its keys by group, which Escape or ? ag
   press(listBox(), QUESTION_MARK);
   press(keysSheet() ?? assert.fail("the sheet opens again"), QUESTION_MARK);
   assert.equal(keysSheet(), null, "? again puts it away");
+});
+
+test("the sheet goes with the view when another of the Pull request tab's views is chosen, and stays away on coming back", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+  press(listBox(), QUESTION_MARK);
+  assert.ok(keysSheet(), "the sheet opens");
+
+  await redraw({ shown: false });
+  assert.equal(keysSheet(), null, "hidden with the view");
+  await redraw({ shown: true });
+  assert.equal(keysSheet(), null, "not opened again by coming back");
 });
 
 test("? outside Files changed, or typed into its tree's search, opens no sheet", async () => {

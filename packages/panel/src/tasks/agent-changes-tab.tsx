@@ -811,6 +811,13 @@ export function AgentChangesTab({
     [agentId, pullRequest, answered],
   );
   const { closeOver } = room;
+  const { hideKeys } = list;
+  // The sheet of the view's keys goes with the view: a Dialog stands over the
+  // whole window from document.body, so it would outlast the view's panel
+  // being hidden for another of the Pull request tab's views.
+  useEffect(() => {
+    if (!shown) hideKeys();
+  }, [shown, hideKeys]);
   const { go } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
@@ -930,7 +937,7 @@ export function AgentChangesTab({
       {/* The count stands under the tree, and under the list while the tree
           stands nowhere beside it, which the stylesheet says (tasks.css). */}
       <p className="file-tree-foot">{counted}</p>
-      {list.keysShown ? <FilesChangedKeysSheet onDismiss={list.hideKeys} /> : null}
+      {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
     </div>
   );
 }
