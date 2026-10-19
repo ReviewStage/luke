@@ -70,6 +70,7 @@ import type { WebServices } from "@luke/service/runtime";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
+import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -303,7 +304,10 @@ const answer = (
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
-    const routed = hostedFetch(hostedRouter(seams));
+    const routed = hostedFetch({
+      messages: messagesProcedures(seams),
+      plans: tasksProcedures(seams),
+    });
     const tasksRoute = { fetch: (each: Request) => routed(each, webServices) };
     /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry; the rest of the old group's flattened paths are its own. */
     const flattened = (each: Request): Promise<Response> => {
