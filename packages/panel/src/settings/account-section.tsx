@@ -34,16 +34,23 @@ function GitHubRow(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const { connection } = useGitHubConnection();
   const [managing, setManaging] = useState(false);
-  const connected = statuses.statusOf(INTEGRATION_PROVIDER.GITHUB) === INTEGRATION_STATUS.CONNECTED;
+  const status = statuses.statusOf(INTEGRATION_PROVIDER.GITHUB);
+  const connected = status === INTEGRATION_STATUS.CONNECTED;
   const login = connected ? (connection?.login ?? null) : null;
+  // Note that only a read that found GitHub unlinked says so, because an unread, failed, or unavailable read found nothing.
+  const line = connected
+    ? (login ?? "Connected")
+    : status === INTEGRATION_STATUS.DISCONNECTED || status === INTEGRATION_STATUS.EXPIRED
+      ? "Not connected"
+      : undefined;
   return (
-    <>
+    <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)}>
       <SettingsRow
         leading={
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
         label="GitHub"
-        description={login ?? (connected ? "Connected" : "Not connected")}
+        description={line}
       >
         {() =>
           connected ? (
@@ -60,7 +67,7 @@ function GitHubRow(): React.JSX.Element {
           onClose={() => setManaging(false)}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 

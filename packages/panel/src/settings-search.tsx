@@ -156,6 +156,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.GITHUB_ACCESS,
+          label: "GitHub",
+          page: SETTINGS_VIEW.ACCOUNT,
+          haystack: ["GitHub", "personal access token classic token Luke GitHub App manage"],
+        }
+      : undefined,
     // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
     ...EXPERIMENTS.map((entry) =>
       input.accountDrawn
