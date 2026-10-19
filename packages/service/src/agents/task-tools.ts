@@ -205,7 +205,7 @@ export const CREATE_TASK_TOOL = {
 } as const;
 
 /** A # title at a plan's head, as Markdown spells one: at most three spaces in, and a space, a tab, or the line's end after the #, so `#define` or a code line is no title. */
-const TITLE_HEADING = /^(?:[ \t]*\n)*[ ]{0,3}#(?:[ \t][^\n]*)?(?:\n|$)/u;
+const TITLE_HEADING = /^(?:[ \t]*\r?\n)*[ ]{0,3}#(?:[ \t][^\r\n]*)?\r?(?:\n|$)/u;
 
 /** A plan's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
 function planTextOf(plan: string): string {

@@ -1471,6 +1471,18 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
+  // A title in a plan written with CRLF line ends is dropped as well.
+  const crlf = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: "Seats", plan: "\r\n# Seats\r\n\r\n## Goal\r\n\r\nBill by seat." },
+    "call-crlf",
+  );
+  assert.ok(isRecord(crlf.task) && isWireString(crlf.task.id), JSON.stringify(crlf));
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(bob, crlf.task.id))).text,
+    "## Goal\r\n\r\nBill by seat.",
+  );
+
   // A line opening on # that is no Markdown title is the plan's own, and stays.
   const kept = await call(
     CODER_TOOL.CREATE_TASK,
@@ -1499,7 +1511,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   );
   assert.equal((await tasksNamed(bob, workspaceId, "Raced")).length, 1);
   assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
-  assert.equal(tasksCounted(bob), countedBefore + 3, "each task is counted once, as Bob's");
+  assert.equal(tasksCounted(bob), countedBefore + 4, "each task is counted once, as Bob's");
 
   // A start on it by its id, as any other task of the workspace.
   const started = await call(
