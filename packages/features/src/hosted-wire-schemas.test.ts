@@ -468,7 +468,6 @@ const EFFECT_MODULE_SCHEMAS = {
     linearIssueIdSchema: linearWire.linearIssueIdSchema,
     linearIdentifierSchema: linearWire.linearIdentifierSchema,
     linearIssueSummarySchema: linearWire.linearIssueSummarySchema,
-    taskLinearIssueSchema: linearWire.taskLinearIssueSchema,
     linearIssuesAnswerSchema: linearWire.linearIssuesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
   "transcript-wire": {

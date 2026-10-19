@@ -27,7 +27,7 @@ import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
 import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
@@ -926,12 +926,13 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", 
         const linked = yield* createTask(starter, {
           organizationId: workspace,
           name: "Invite expiry",
-          linearIssue: {
-            identifier: "ENG-7",
-            title: "Expire invitations",
-            url: "https://linear.app/acme/issue/ENG-7",
-            description: "",
-          },
+          issueLinks: [
+            linearIssueLink({
+              identifier: "ENG-7",
+              title: "Expire invitations",
+              url: "https://linear.app/acme/issue/ENG-7",
+            }),
+          ],
         });
         const archive = (agentId: string) =>
           Effect.asVoid(archiveCodingAgent(starter, agentId, true));

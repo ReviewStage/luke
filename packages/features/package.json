@@ -64,6 +64,7 @@
     "./plan-edit": "./src/plan-edit.js",
     "./plan-markdown": "./src/plan-markdown.js",
     "./plan-template": "./src/plan-template.js",
+    "./task-issue-wire": "./src/task-issue-wire.js",
     "./task-section-wire": "./src/task-section-wire.js",
     "./task-wire": "./src/task-wire.js",
     "./tasks-view": "./src/tasks-view.js",

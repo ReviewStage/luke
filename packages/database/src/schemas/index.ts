@@ -31,6 +31,7 @@ export * from "./sandbox-terminal-lease.js";
 export * from "./session-sandbox.js";
 export * from "./storage.js";
 export * from "./task.js";
+export * from "./task-issue.js";
 export * from "./task-pin.js";
 export * from "./task-section.js";
 export * from "./usage.js";
