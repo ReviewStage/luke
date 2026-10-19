@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   answerAsk,
+  type ChatImageWrite,
   type ChatMemberRow,
   type ChatPost,
   channelNamed,
@@ -16,6 +17,7 @@ import {
   readTo,
   resolveAsk,
 } from "@luke/database/models/chat-store";
+import { chatAttachmentId } from "@luke/database/models/ids";
 import { storeWriter } from "@luke/database/models/writer";
 import {
   CHAT_BLOCK,
@@ -31,10 +33,13 @@ import {
   MEMBER_KIND,
   replyRefusal,
 } from "@luke/features/chat-wire";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { sniffImageType } from "@luke/features/image-signature";
 import { workspaceIdSchema } from "@luke/features/task-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
+import { Base64 } from "effect/encoding";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -59,6 +64,7 @@ import {
   readsOf,
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
@@ -76,7 +82,10 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * (`hosted/coder-host/chat-notify.ts`); an answer to an ask, at the
  * revision the window drew, posted as the person's reply in its thread and
  * told to the ask's poster where it asked to hear back; a resolve of an
- * ask of the person's own; and how far the person has read. The workspace
+ * ask of the person's own; and how far the person has read. A post may
+ * carry pictures, each sniffed as the image its bytes are, kept under an
+ * id of the post's key and its place, and named by an image block after
+ * the words (`chat-attachment-app.ts` serves one back). The workspace
  * is named in the query as the members read names it. The bearer is
  * resolved before any row is touched, a workspace the account is not in
  * answers as one that names nothing, as does every workspace for an
@@ -89,9 +98,11 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 /** A cursor as the window hands it back: the next place in the workspace's sequence it has yet to read, in decimal. */
 const seqCursorSchema = chatCursorSchema.check(Schema.isPattern(/^(0|[1-9][0-9]{0,14})$/u));
 
-/** A write is at most a post's blocks at JSON's widest escape, and room for the keys around them. */
+/** A write is at most a post's blocks at JSON's widest escape, its pictures as a message to an agent carries files, and room for the keys around them. */
 export const MAXIMUM_CHAT_WRITE_BODY_BYTES =
-  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS + 4_096;
+  6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  4_096;
 
 export interface ChatSeams {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */
@@ -123,7 +134,7 @@ export const workspaceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * The account, refused as one in no workspace where it has not turned on
  * the Chat experiment, because Chat is off for it.
  */
-const chatAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const chatAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
   if (!(yield* hostedStoreOrUnavailable(chatEnabledFor(userId)))) {
@@ -219,6 +230,34 @@ function mentionsOf(blocks: readonly ChatBlock[]): ChatNamed {
   return namedIn(words.join("\n"));
 }
 
+/** One picture a person's post keeps: its bytes under the type they were sniffed to be, its id, and its file's name, which its block says. */
+interface PostedPicture extends ChatImageWrite {
+  readonly name: string;
+}
+
+/**
+ * A post's files as the pictures it keeps, in order, each under an id of
+ * the post's key and its place among them, so a post sent again keeps the
+ * pictures it kept; nothing where one is not a PNG, a JPEG, or a WebP of
+ * the type it was sent as, since a picture is served as what it is.
+ */
+function picturesOf(
+  clientKey: string,
+  files: readonly CodingAgentAttachment[],
+): readonly PostedPicture[] | undefined {
+  const pictures: PostedPicture[] = [];
+  for (const [place, file] of files.entries()) {
+    const bytes = Base64.decode(file.data);
+    if (Result.isFailure(bytes)) return undefined;
+    const contentType = sniffImageType(bytes.success);
+    if (contentType === undefined || contentType !== file.mediaType) return undefined;
+    // Note that a person's file has no path in a sandbox, so its place among the post's stands for one.
+    const id = chatAttachmentId(clientKey, String(place));
+    pictures.push({ id, contentType, bytes: bytes.success, name: file.name });
+  }
+  return pictures;
+}
+
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
@@ -226,23 +265,34 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   post: {
     readonly text?: string;
     readonly blocks?: readonly ChatBlock[];
+    readonly attachments?: readonly CodingAgentAttachment[];
     readonly to?: string;
     readonly replyTo?: number;
     readonly clientKey: string;
   },
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
-  const blocks =
+  const pictures = picturesOf(post.clientKey, post.attachments ?? []);
+  if (pictures === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const words =
     post.blocks ??
     (post.text === undefined ? [] : [{ type: CHAT_BLOCK.MARKDOWN, text: post.text }]);
+  const blocks: readonly ChatBlock[] = [
+    ...words,
+    ...pictures.map(({ id, name }) => ({ type: CHAT_BLOCK.IMAGE, attachmentId: id, alt: name })),
+  ];
   const to = yield* placeOf(writer, post.to, post.replyTo);
   const teller = yield* telling;
-  const told = yield* postChat(teller, {
-    authorMemberId: writer.self.id,
-    to,
-    blocks,
-    ...mentionsOf(blocks),
-    clientKey: post.clientKey,
-  });
+  const told = yield* postChat(
+    teller,
+    {
+      authorMemberId: writer.self.id,
+      to,
+      blocks,
+      ...mentionsOf(blocks),
+      clientKey: post.clientKey,
+    },
+    pictures.map(({ id, contentType, bytes }) => ({ id, contentType, bytes })),
+  );
   if (!told.repeated) {
     yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, teller.userId, {
       is_reply: post.replyTo !== undefined,

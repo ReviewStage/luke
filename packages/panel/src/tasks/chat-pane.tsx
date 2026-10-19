@@ -1,14 +1,17 @@
+import type { FileChip } from "@luke/features/attachment-model";
 import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   type ChatAnswer,
   type ChatChannel,
   type ChatCodeBlock,
+  type ChatImageBlock,
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
   AVATAR_SHAPE,
@@ -44,8 +47,11 @@ import {
   postsIn,
   postTarget,
 } from "@luke/ui/chat-model";
+import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import { AtSignIcon, HashIcon } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { PictureBlock } from "../picture-block.js";
+import { AttachmentViewer } from "./attachment-viewer.js";
 import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
 import { FileRef } from "./file-ref.js";
@@ -62,7 +68,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * naming the author, its handle, and when it was posted, and under it the
  * blocks it carries: Markdown as the transcript draws it, a link by its
  * label, a code block by the file and lines it points at as a transcript
- * names a file (`file-ref.tsx`), an image by its words, and a line naming a
+ * names a file (`file-ref.tsx`), a picture drawn as a plan's picture is
+ * (`../picture-block.tsx`), read once through the window's picture cache
+ * under its message and pressed to open it over the window, and a line naming a
  * newer Luke for a block this build does not know. A message carrying an ask draws as a card in its row, answered in
  * place (`chat-ask.tsx`). A root with replies says how many under it, and
  * a press folds the thread open there with a box to reply in under it; a
@@ -144,14 +152,68 @@ function CodeLine({ block }: { block: ChatCodeBlock }): React.JSX.Element {
   );
 }
 
+/** What a file's name may not spell on the Mac it is saved to. */
+const UNSAVEABLE = /[/\\:]/gu;
+
+/** The picture as the viewer takes a file: its file's name, under its type's own extension where the name lacks it, since the viewer saves it by that name. */
+function viewerFile(block: ChatImageBlock, url: string): FileChip {
+  const mediaType = url.slice("data:".length, url.indexOf(";"));
+  const extension = `.${mediaType.slice("image/".length)}`;
+  const name = block.alt.replace(UNSAVEABLE, "-");
+  return { name: name.endsWith(extension) ? name : `${name}${extension}`, mediaType, url };
+}
+
+/**
+ * A picture a message carries: its own block at its own size up to the
+ * column's, a quiet box while its bytes are read, its words where it is
+ * gone, and pressed to open it larger over the window.
+ */
+function ChatPicture({
+  messageId,
+  block,
+  readPicture,
+}: {
+  messageId: string;
+  block: ChatImageBlock;
+  readPicture: MessageContext["readPicture"];
+}): React.JSX.Element {
+  const [viewing, setViewing] = useState(false);
+  const read = useCallback(
+    (_message: string, attachmentId: string) => readPicture(messageId, attachmentId),
+    [readPicture, messageId],
+  );
+  const state = usePicture(messageId, block.attachmentId, read);
+  return (
+    <div className="chat-picture">
+      <PictureBlock
+        state={state}
+        alt={block.alt}
+        caption={undefined}
+        onOpen={() => setViewing(true)}
+      />
+      {viewing && state.kind === PICTURE_STATE.READY ? (
+        <AttachmentViewer
+          files={[viewerFile(block, state.url)]}
+          at={0}
+          onAt={() => undefined}
+          onClose={() => setViewing(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 /** One block of a message, drawn as its type is. */
 function Block({
+  messageId,
   block,
-  openLink,
+  context,
 }: {
+  messageId: string;
   block: ChatReadBlock;
-  openLink: (url: string) => void;
+  context: MessageContext;
 }): React.JSX.Element {
+  const { openLink } = context;
   if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
@@ -169,7 +231,7 @@ function Block({
     case CHAT_BLOCK.CODE:
       return <CodeLine block={block} />;
     case CHAT_BLOCK.IMAGE:
-      return <Text tone={TEXT_TONE.SUBTLE}>{block.alt}</Text>;
+      return <ChatPicture messageId={messageId} block={block} readPicture={context.readPicture} />;
   }
 }
 
@@ -186,6 +248,8 @@ interface MessageContext {
   readonly openLink: (url: string) => void;
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Reads one picture a message carries, by the message and the attachment its block names. */
+  readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
@@ -198,7 +262,7 @@ function Body({
 }): React.JSX.Element {
   const blocks = message.blocks.map((block, index) => (
     // Blocks have no key of their own and are never reordered.
-    <Block key={index} block={block} openLink={context.openLink} />
+    <Block key={index} messageId={message.id} block={block} context={context} />
   ));
   const { ask } = message;
   if (ask === undefined) return <>{blocks}</>;
@@ -339,7 +403,9 @@ function ThreadRow({
                 keywords={context.keywords}
                 place={context.mentionPlace}
                 compact
-                onSend={(text) => context.onPost({ text, replyTo: message.seq })}
+                onSend={(text, attachments) =>
+                  context.onPost({ ...postOf(text, attachments), replyTo: message.seq })
+                }
               />
             ) : null}
           </div>
@@ -347,6 +413,14 @@ function ThreadRow({
       </div>
     </li>
   );
+}
+
+/** A post's words and pictures as it carries them: each where there is any, since a post may be pictures alone. */
+function postOf(text: string, attachments: readonly CodingAgentAttachment[]): ChatPost {
+  return {
+    ...(text === "" ? undefined : { text }),
+    ...(attachments.length === 0 ? undefined : { attachments }),
+  };
 }
 
 /** Where For you says a message was posted: its channel, or a direct message. */
@@ -427,6 +501,7 @@ export function ChatPane({
   openLink,
   onPost,
   onAnswer,
+  readPicture,
   lead,
   channelActions,
   hidden,
@@ -442,6 +517,8 @@ export function ChatPane({
   onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask; answers why it was refused, or nothing once it is taken. */
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Reads one picture a message carries, by the message and the attachment its block names. */
+  readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
   /** What leads the place's head: the way back to the rail, where the place stands alone. */
   lead?: React.ReactNode;
   /** The presses a channel's head ends on, a topic's menu; none where the channel offers none. */
@@ -461,6 +538,7 @@ export function ChatPane({
     openLink,
     onPost,
     onAnswer,
+    readPicture,
   };
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
@@ -528,7 +606,9 @@ export function ChatPane({
           targets={targets}
           keywords={keywords}
           place={mentionPlace}
-          onSend={(text) => onPost({ text, to: postTarget(chat, names, channel) })}
+          onSend={(text, attachments) =>
+            onPost({ ...postOf(text, attachments), to: postTarget(chat, names, channel) })
+          }
         />
       ) : (
         <div className="chat-closed-foot">

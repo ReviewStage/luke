@@ -5065,6 +5065,27 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: var(--luke-space-6) 0 0;
 }
 
+/* The pictures a post will carry, as chips over the box's words at the
+   agent composer's inset (`.agent-composer .attached-files`); and files
+   dragged over the box brighten the card's edge, as the agent box's do. */
+.chat-composer .attached-files {
+  padding: var(--luke-space-12) var(--luke-space-12) 0;
+}
+
+.chat-composer[data-dropping] form {
+  border-color: var(--luke-color-border-selected);
+}
+
+/* A picture a message carries (`chat-pane.tsx`'s ChatPicture): a plan's
+   picture block, kept to a chat's height so the stream reads on past it. */
+.chat-picture > .picture-block {
+  margin: var(--luke-space-6) 0;
+}
+
+.chat-picture .picture-image {
+  max-height: 320px;
+}
+
 /* The list an `@` or `#` opens stands over the card at its left. */
 .chat-mention-menu {
   position: absolute;

@@ -1,7 +1,12 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  type CodingAgentAttachment,
+  codingAgentMessageRequestSchema,
+} from "./coding-agent-wire.js";
+import {
   fieldValueWords,
   INBOX_BOUNDS,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -187,6 +192,8 @@ export const CHAT_BOUNDS = {
   MAX_HANDLE_CHARS: 40,
   /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
   MAX_PURPOSE_CHARS: 250,
+  /** The most pictures one post from the window may carry: a message's blocks, its words' one left out. */
+  MAX_POST_PICTURES: INBOX_BOUNDS.MAX_BLOCKS - 1,
 } as const;
 
 /**
@@ -517,6 +524,17 @@ export const CHAT_CURSOR_START = "0";
  */
 export const CHAT_QUERY = { WORKSPACE_ID: "workspaceId", AFTER: "after" } as const;
 
+/**
+ * What a window's read of one picture a message carries names in its
+ * query: the workspace, the message, and the attachment its image block
+ * names.
+ */
+export const CHAT_ATTACHMENT_QUERY = {
+  WORKSPACE_ID: CHAT_QUERY.WORKSPACE_ID,
+  MESSAGE_ID: "messageId",
+  ATTACHMENT_ID: "attachmentId",
+} as const;
+
 /** Where a reader of a workspace's chat stands, as the service last handed it back. */
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
 
@@ -588,9 +606,32 @@ export function replyRefusal(response: InboxReadResponse, reply: InboxReply): st
   return inboxReplyRefusal({ response }, reply);
 }
 
-/** Whether a window's post carries its words one way: as text, or as blocks, never both or neither. */
-function wordsOnce(post: { readonly text?: string; readonly blocks?: unknown }): boolean {
-  return (post.text === undefined) !== (post.blocks === undefined);
+/** What a window's post carries: its words as text or as blocks, and the pictures under them. */
+interface WindowPost {
+  readonly text?: string;
+  readonly blocks?: readonly unknown[];
+  readonly attachments?: readonly CodingAgentAttachment[];
+}
+
+/** Whether a window's post carries its words one way at most, as text or as blocks, and carries something: words, pictures, or both. */
+function wordsOnce(post: WindowPost): boolean {
+  if (post.text !== undefined && post.blocks !== undefined) return false;
+  return (
+    post.text !== undefined || post.blocks !== undefined || (post.attachments ?? []).length > 0
+  );
+}
+
+/** The image types a picture may be, which a post's files are held to. */
+const CHAT_IMAGE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/** Whether every file a post carries is a picture, and the message its words and pictures make holds no more blocks than any message. */
+function picturesFit(post: WindowPost): boolean {
+  const pictures = post.attachments ?? [];
+  const words = post.blocks?.length ?? (post.text === undefined ? 0 : 1);
+  return (
+    pictures.every((picture) => CHAT_IMAGE_TYPES.has(picture.mediaType)) &&
+    words + pictures.length <= CHAT_BOUNDS.MAX_BLOCKS
+  );
 }
 
 /** Whether a window's post names one place: a `to`, or the message it replies to, never both. */
@@ -600,11 +641,14 @@ function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): 
 
 /**
  * A person's post from the window: the words, as Markdown text or as word
- * blocks, a link or lines of code among them and never a picture, which a
- * window has no way to hand in yet; where it goes, a channel by `#name` or
- * a member's DM by `@handle`, `#general` where unsaid, or the message it
- * replies to by its place; and the window's own key for the post, which a
- * retry carries again. An `@handle` in the words tells that member.
+ * blocks, a link or lines of code among them; the pictures under them, in
+ * the coding agent's file shape, PNG, JPEG, or WebP alone, which the
+ * service keeps and the message names as image blocks after the words, a
+ * post of pictures alone carrying no words; where it goes, a channel by
+ * `#name` or a member's DM by `@handle`, `#general` where unsaid, or the
+ * message it replies to by its place; and the window's own key for the
+ * post, which a retry carries again. An `@handle` in the words tells that
+ * member.
  */
 export const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
@@ -614,10 +658,15 @@ export const chatPostRequestSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_BLOCKS),
     ),
   ),
+  attachments: codingAgentMessageRequestSchema.fields.attachments,
   to: EffectSchema.optionalKey(chatTargetSchema),
   replyTo: EffectSchema.optionalKey(countedNumber),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
-}).check(EffectSchema.makeFilter(wordsOnce), EffectSchema.makeFilter(placedOnce));
+}).check(
+  EffectSchema.makeFilter(wordsOnce),
+  EffectSchema.makeFilter(picturesFit),
+  EffectSchema.makeFilter(placedOnce),
+);
 
 /** @public */
 export type ChatPostRequest = typeof chatPostRequestSchema.Type;

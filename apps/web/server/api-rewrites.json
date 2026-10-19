@@ -420,6 +420,10 @@
     "dest": "/api/default.js?route=workspaces/chat"
   },
   {
+    "src": "/api/workspaces/chat/attachment",
+    "dest": "/api/default.js?route=workspaces/chat/attachment"
+  },
+  {
     "src": "/api/workspaces/github/connect",
     "dest": "/api/default.js?route=workspaces/github/connect"
   },

@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK, CHAT_BOUNDS } from "@luke/features/chat-wire";
+import {
+  ASK_STATUS,
+  CHANNEL_KIND,
+  CHAT_ASK,
+  CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
+} from "@luke/features/chat-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
+import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -63,10 +71,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
+/** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them, its pictures read as the test answers them. */
 function mount(
   change: (chat: FixtureChat) => FixtureChat | undefined = (chat) => chat,
   workspace: Workspace | undefined = undefined,
+  readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer> = () =>
+    Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -100,6 +110,7 @@ function mount(
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
           onChannel: (change) => stage((held) => stagedChannel(held, change)),
+          readPicture,
         },
       }),
     });
@@ -836,4 +847,85 @@ test("where the editor's bundle could not be loaded, a date one word names after
   } finally {
     vi.useRealTimers();
   }
+});
+
+/** A PNG's signature, which is all of a picture the test hands in, and the same bytes in base64 as its read answers them. */
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_BASE64 = "iVBORw0KGgo=";
+
+/** Hands `files` to a box: picked in its hidden picker, or dropped on its card. */
+async function handFiles(box: HTMLElement, files: readonly File[], how: "pick" | "drop") {
+  if (how === "pick") {
+    const picker =
+      box.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
+    Object.defineProperty(picker, "files", { configurable: true, value: files });
+    act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
+  } else {
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files } });
+    act(() => box.dispatchEvent(drop));
+  }
+  // Note that a file is read off the disk before it lands in the box.
+  for (let round = 0; round < 4; round += 1) await settle();
+}
+
+/** The names of the files a box holds, as its chips say them. */
+function chipNames(box: HTMLElement): (string | null)[] {
+  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+    chip.getAttribute("title"),
+  );
+}
+
+test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them under words or alone, each drawn in the channel and opened larger on a press", async () => {
+  const asked: string[] = [];
+  const page = mount(
+    (chat) => chat,
+    undefined,
+    (messageId) => {
+      asked.push(messageId);
+      return Promise.resolve({ contentType: CHAT_IMAGE_TYPE.PNG, base64: PNG_BASE64 });
+    },
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  assert.ok(box.querySelector('button[aria-label="Attach images"]'), "the box offers its +");
+
+  const shot = new File([PNG_BYTES], "invite-email.png", { type: CHAT_IMAGE_TYPE.PNG });
+  const rows = new File(["email,role"], "rows.csv", { type: "text/csv" });
+  await handFiles(box, [shot, rows], "pick");
+  assert.deepEqual(chipNames(box), ["invite-email.png"]);
+  assert.equal(
+    box.querySelector('[role="alert"]')?.textContent,
+    "rows.csv can't be attached. Attach images.",
+  );
+  typeInComposer(box, "the new invite email");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.equal(boxWords(box), "");
+  assert.deepEqual(chipNames(box), [], "the box lets go of the pictures it sent");
+  const under = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.equal(under?.querySelector(".chat-words")?.textContent?.trim(), "the new invite email");
+  const drawn = under?.querySelector<HTMLImageElement>(".picture-block img");
+  assert.equal(drawn?.getAttribute("src"), `data:${CHAT_IMAGE_TYPE.PNG};base64,${PNG_BASE64}`);
+  assert.equal(drawn?.getAttribute("alt"), "invite-email.png");
+
+  await handFiles(
+    box,
+    [new File([PNG_BYTES], "second.png", { type: CHAT_IMAGE_TYPE.PNG })],
+    "drop",
+  );
+  assert.deepEqual(chipNames(box), ["second.png"]);
+  pressInComposer(box, "Enter");
+  await settle();
+  const alone = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.notEqual(alone, under, "pictures alone are a post of their own");
+  assert.equal(alone?.querySelector(".chat-words"), null, "a post of pictures alone has no words");
+  assert.equal(alone?.querySelector(".picture-block img")?.getAttribute("alt"), "second.png");
+  assert.equal(new Set(asked).size, 2, "each picture is read under its own message");
+
+  act(() => alone?.querySelector<HTMLButtonElement>("button.picture-frame")?.click());
+  assert.ok(
+    document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
+    "a press opens the picture over the window",
+  );
 });

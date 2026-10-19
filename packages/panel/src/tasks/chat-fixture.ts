@@ -465,10 +465,17 @@ export function stagedPost(read: FixtureChat, post: ChatPost, at: number): Stage
   // Note that a reply to a reply joins its root's thread, as every thread has one root.
   const replied = chat.messages.find((message) => message.seq === post.replyTo);
   const parentId = replied === undefined ? undefined : (replied.parentId ?? replied.id);
+  // A picture is named by an id of its own, as the service names one it keeps, after the words.
+  const pictures = (post.attachments ?? []).map((file) => ({
+    type: CHAT_BLOCK.IMAGE,
+    attachmentId: crypto.randomUUID(),
+    alt: file.name,
+  }));
+  const blocks = [...(post.text === undefined ? [] : words(post.text)), ...pictures];
   const answer = withMessage(
     chat,
     at,
-    { channelId: channel.id, blocks: words(post.text), parentId },
+    { channelId: channel.id, blocks, parentId },
     () => chat.messages,
   );
   return { chat: { ...read, answer } };

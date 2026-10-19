@@ -235,6 +235,12 @@ export const HOSTED_SERVICE_PATH = {
    * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
    */
   WORKSPACES_CHAT: "/api/workspaces/chat",
+  /**
+   * One picture a chat message carries, served as its bytes to a person in
+   * the workspace (GET), the workspace, the message, and the attachment
+   * named in `chat-wire.ts`'s `CHAT_ATTACHMENT_QUERY`.
+   */
+  WORKSPACES_CHAT_ATTACHMENT: "/api/workspaces/chat/attachment",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
