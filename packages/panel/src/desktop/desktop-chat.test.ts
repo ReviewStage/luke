@@ -155,9 +155,10 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "▸ For you (4)",
     "# Channels",
     "general",
+    "members-schema",
+    "# Tasks",
     "billing-export",
     "teammate-invitations (4)",
-    "members-schema",
     "# Direct messages",
     "agent-2 (1)",
     "luke",
@@ -706,10 +707,39 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   act(() => dialogButton("Archive channel").click());
   await settle();
   assert.equal(
-    [...page.querySelectorAll(".chat-rail button")].some((row) =>
+    [...page.querySelectorAll(".chat-rail li button")].some((row) =>
       row.textContent?.includes("release-train"),
     ),
     false,
+  );
+
+  // Archived channels fold apart, and a topic among them is brought back from its own menu.
+  const archived = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find((each) =>
+    each.textContent?.startsWith("Archived"),
+  );
+  assert.ok(archived, "the archive stands folded in the rail");
+  act(() => archived.click());
+  act(() => railRow(page, "release-train").click());
+  const back = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  act(() => back?.click());
+  const bring = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Bring back channel",
+  );
+  act(() => bring?.click());
+  act(() => dialogButton("Bring back").click());
+  await settle();
+  assert.ok(
+    rail(page).includes("▸ release-train"),
+    "the topic stands among the channels again, shown",
+  );
+  assert.equal(
+    [...page.querySelectorAll(".chat-rail button")].some((each) =>
+      each.textContent?.startsWith("Archived"),
+    ),
+    false,
+    "nothing is left archived",
   );
 });
 

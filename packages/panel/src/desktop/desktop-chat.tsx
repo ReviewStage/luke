@@ -1,5 +1,7 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
+import { inPinOrder } from "@luke/features/pin-order";
+import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   BackIcon,
@@ -16,18 +18,21 @@ import {
   PencilIcon,
   PlusIcon,
   ScrollArea,
+  UnarchiveIcon,
   useMenu,
 } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatPlace,
   type ChatRailRow,
+  type ChatTaskGrouping,
   chatNames,
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
+import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FoldingButton } from "../folding-button.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
@@ -36,8 +41,10 @@ import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
+import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
+import { SidebarGroupHeader } from "./sidebar-group-header.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -71,6 +78,57 @@ function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
 
 /** What the way back from a place to the rail says, in a narrow room. */
 const CHAT_LIST = "Chat";
+
+/**
+ * How the rail groups the tasks' channels: as the reader's sidebar groups
+ * the tasks, the pinned first in the pins' order, then each of the
+ * reader's sections in the listed workspace, while sections are on.
+ */
+function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGrouping {
+  const pinned = inPinOrder(
+    tasks.tasks.filter((task) => task.pinnedAt !== undefined),
+    (task) => ({ position: task.pinPosition, at: task.pinnedAt ?? 0 }),
+  ).map((task) => task.id);
+  const workspaceId = tasks.workspace?.id;
+  const state = tasks.taskSections;
+  const sections =
+    !sectionsOn || workspaceId === undefined
+      ? []
+      : workspaceSections(state, workspaceId).map((section) => ({
+          id: section.id,
+          title: section.title,
+          taskIds: sectionOrder(state, section.id).map((entry) => entry.taskId),
+        }));
+  return { pinned, sections };
+}
+
+/** What the archived group counts. */
+const CHANNEL_NOUN = { one: "channel", many: "channels" } as const;
+
+/** The archived channels, folded under the sidebar's own group header until a press opens them, each opened as any channel is. */
+function ArchivedChannels({
+  rows,
+  row,
+}: {
+  rows: readonly ChatRailRow[];
+  row: (each: ChatRailRow) => React.JSX.Element;
+}): React.JSX.Element {
+  const [folded, setFolded] = useState(true);
+  return (
+    <section className="chat-rail-group">
+      <SidebarGroupHeader
+        glyph={undefined}
+        name="Archived"
+        folded={folded}
+        count={rows.length}
+        noun={CHANNEL_NOUN}
+        steady
+        onToggle={() => setFolded((was) => !was)}
+      />
+      {folded ? null : <ul className="sidebar-tasks">{rows.map(row)}</ul>}
+    </section>
+  );
+}
 
 /** What the press that opens a topic channel is called. */
 const NEW_CHANNEL = "New channel";
@@ -134,6 +192,7 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
+  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
@@ -156,7 +215,7 @@ export function DesktopChat({
     );
   }
   const chat = read.answer;
-  const rail = chatRail(chat, names);
+  const rail = chatRail(chat, names, taskGrouping(tasks, sectionsOn));
   const hidden = hiddenColumns(room, view.listed);
   const row = (each: ChatRailRow) => (
     <RailRow
@@ -203,6 +262,22 @@ export function DesktopChat({
               </Inline>
               <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
             </section>
+            {rail.tasks.length === 0 ? null : (
+              <section className="chat-rail-group">
+                <h2 className="section-heading">Tasks</h2>
+                {rail.tasks.map((group) => (
+                  <div key={group.key} className="chat-rail-tasks">
+                    {group.title === undefined ? null : (
+                      <h3 className="chat-rail-subheading">{group.title}</h3>
+                    )}
+                    <ul className="sidebar-tasks">{group.rows.map(row)}</ul>
+                  </div>
+                ))}
+              </section>
+            )}
+            {rail.archived.length === 0 ? null : (
+              <ArchivedChannels rows={rail.archived} row={row} />
+            )}
             {rail.direct.length === 0 ? null : (
               <section className="chat-rail-group">
                 <h2 className="section-heading">Direct messages</h2>
@@ -222,7 +297,7 @@ export function DesktopChat({
         onPost={view.onPost}
         onAnswer={view.onAnswer}
         channelActions={(channel) =>
-          channel.kind === CHANNEL_KIND.TOPIC && !channel.archived ? (
+          channel.kind === CHANNEL_KIND.TOPIC ? (
             <TopicActions channel={channel} dialogs={dialogs} shown={view.open} />
           ) : undefined
         }
@@ -238,7 +313,7 @@ export function DesktopChat({
   );
 }
 
-/** A topic's menu at its head's end: edit its name and purpose, or archive it. */
+/** A topic's menu at its head's end: edit its name and purpose and archive it, or bring an archived one back. */
 function TopicActions({
   channel,
   dialogs,
@@ -250,16 +325,26 @@ function TopicActions({
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const label = `#${channel.name ?? ""} actions`;
-  const groups: MenuAction[][] = [
-    [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
-    [
-      {
-        label: "Archive channel",
-        icon: <ArchiveIcon />,
-        onSelect: () => dialogs.askArchive(channel),
-      },
-    ],
-  ];
+  const groups: MenuAction[][] = channel.archived
+    ? [
+        [
+          {
+            label: "Bring back channel",
+            icon: <UnarchiveIcon />,
+            onSelect: () => dialogs.askArchive(channel),
+          },
+        ],
+      ]
+    : [
+        [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
+        [
+          {
+            label: "Archive channel",
+            icon: <ArchiveIcon />,
+            onSelect: () => dialogs.askArchive(channel),
+          },
+        ],
+      ];
   return (
     <>
       <Tooltip label="Channel actions">
