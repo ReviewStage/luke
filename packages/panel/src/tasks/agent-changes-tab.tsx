@@ -40,7 +40,7 @@ import {
   ImageIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -94,6 +94,7 @@ import { useFileViewSettings } from "./file-view-settings.js";
 import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
+import { MinimizedThreads } from "./minimized-threads.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
@@ -340,6 +341,62 @@ function AboveThreads({
   );
 }
 
+/** Which of a file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one line's. */
+interface FileMinimized {
+  readonly shown: (side: DiffSelection["side"], line: number) => boolean;
+  readonly show: (side: DiffSelection["side"], line: number, shown: boolean) => void;
+}
+
+/**
+ * A file's threads on their lines while Minimize inline comments is on, as
+ * stage-cli draws them: each line's threads as one chip at the line's end
+ * (`MinimizedThreads`), standing in a row of no height, and under it, once
+ * the chip shows them, the threads as they are drawn otherwise. A line a
+ * comment is being written on always shows its threads, since the comment
+ * stands among them.
+ */
+function minimizedNotes(
+  placed: ReturnType<typeof threadsOn>["placed"],
+  draw: ChangesThreads["draw"] | undefined,
+  minimized: FileMinimized,
+  comment: DiffNote | undefined,
+): DiffNote[] {
+  const lines = new Map<DiffSelection["side"], Map<number, typeof placed>>();
+  for (const each of placed) {
+    const side = lines.get(each.side) ?? new Map<number, typeof placed>();
+    lines.set(each.side, side.set(each.line, [...(side.get(each.line) ?? []), each]));
+  }
+  return [...lines].flatMap(([side, onSide]) =>
+    [...onSide].flatMap(([line, threads]) => {
+      const drawn = threads.map((each) => (
+        <Fragment key={each.key}>{draw?.(each.thread, THREAD_PLACE.ON_LINE)}</Fragment>
+      ));
+      const [first] = threads;
+      if (first === undefined) return [];
+      // A line a comment is being written on shows its threads as they are, the comment among them.
+      const writing = comment?.side === side && comment.line === line;
+      return writing
+        ? threads.map((each, at) => ({ key: each.key, side, line, content: drawn[at] }))
+        : [
+            {
+              key: first.key,
+              side,
+              line,
+              content: (
+                <MinimizedThreads
+                  threads={threads.map((each) => each.thread)}
+                  shown={minimized.shown(side, line)}
+                  onShown={(shown) => minimized.show(side, line, shown)}
+                >
+                  {drawn}
+                </MinimizedThreads>
+              ),
+            },
+          ];
+    }),
+  );
+}
+
 /**
  * A file of the list as the bundle is handed it: its patch, its fold, its
  * header, and its notes: each review thread under its line, and those its
@@ -361,6 +418,8 @@ function entryOf(
   comment: DiffNote | undefined,
   /** Whether the lines between its hunks may be opened, and why they could not be where a read was refused. */
   gaps: { readonly open: boolean; readonly refused: ExpansionRefusal | undefined },
+  /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
+  minimized: FileMinimized | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -370,12 +429,30 @@ function entryOf(
   // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
   const { placed, above } = threadsOn(threads, drawnAs);
-  const notes: DiffNote[] = placed.map((each) => ({
-    key: each.key,
-    side: each.side,
-    line: each.line,
-    content: draw?.(each.thread, THREAD_PLACE.ON_LINE),
-  }));
+  const notes: DiffNote[] =
+    minimized === undefined
+      ? placed.map((each) => ({
+          key: each.key,
+          side: each.side,
+          line: each.line,
+          content: draw?.(each.thread, THREAD_PLACE.ON_LINE),
+        }))
+      : minimizedNotes(placed, draw, minimized, comment);
+  // The threads above the diff, as one list, or minimized to a chip of their own.
+  const aboveOf = (unplaced: typeof above, side: DiffSelection["side"]) => {
+    const list = <AboveThreads above={unplaced} draw={draw} />;
+    if (minimized === undefined) return list;
+    return (
+      <MinimizedThreads
+        threads={unplaced.map((each) => each.thread)}
+        shown={minimized.shown(side, FILE_NOTE_LINE)}
+        onShown={(shown) => minimized.show(side, FILE_NOTE_LINE, shown)}
+        above
+      >
+        {list}
+      </MinimizedThreads>
+    );
+  };
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
   const notice = fileNotice(file);
   const lead =
@@ -392,7 +469,7 @@ function entryOf(
       content: (
         <>
           {lead}
-          {above.length === 0 ? null : <AboveThreads above={above} draw={draw} />}
+          {above.length === 0 ? null : aboveOf(above, DIFF_SELECTION_SIDE.ADDITIONS)}
         </>
       ),
     });
@@ -404,7 +481,7 @@ function entryOf(
       key: ABOVE_KEY[side],
       side,
       line: FILE_NOTE_LINE,
-      content: <AboveThreads above={unplaced} draw={draw} />,
+      content: aboveOf(unplaced, side),
     });
   }
   if (lead === undefined && gaps.refused !== undefined) {
@@ -492,6 +569,7 @@ function useEntries(
   images: ImageSides | undefined,
   commenting: ListCommenting | undefined,
   texts: FileTexts,
+  minimizedOf: (path: string) => FileMinimized | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
@@ -499,21 +577,74 @@ function useEntries(
     const own = threads?.list.filter((thread) => thread.path === file.path) ?? [];
     const comment = commenting?.note?.path === file.path ? commenting.note.content : undefined;
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
+    const minimized = minimizedOf(file.path);
     const inputs = [
       ...entryInputs(file, list, own, threads?.draw, images, comment),
       gaps.open,
       gaps.refused,
+      minimized,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comment, gaps);
+        : entryOf(file, list, own, threads?.draw, images, comment, gaps, minimized);
     next.set(file.path, { inputs, entry });
     return entry;
   });
   kept.current = next;
   return entries;
+}
+
+/** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
+type ShownLines = ReadonlyMap<string, ReadonlyMap<DiffSelection["side"], ReadonlySet<number>>>;
+
+/** No line showing its threads. */
+const NONE_SHOWN: ShownLines = new Map();
+
+/**
+ * Which lines show their threads while Minimize inline comments is on,
+ * each file's answer the same object while none of its lines was shown or
+ * hidden since, so the files whose lines did not change keep their entries;
+ * none while it is off, and every line minimized again each time it is
+ * turned on, as stage-cli does.
+ */
+function useMinimizedLines(minimize: boolean): (path: string) => FileMinimized | undefined {
+  const [shown, setShown] = useState<{ readonly of: boolean; readonly lines: ShownLines }>({
+    of: minimize,
+    lines: NONE_SHOWN,
+  });
+  const lines = shown.of === minimize ? shown.lines : NONE_SHOWN;
+  const toggle = useCallback(
+    (path: string, side: DiffSelection["side"], line: number, open: boolean) =>
+      setShown((was) => {
+        const all = was.of === minimize ? was.lines : NONE_SHOWN;
+        const sides = all.get(path) ?? new Map<DiffSelection["side"], ReadonlySet<number>>();
+        const onSide = new Set(sides.get(side));
+        if (open) onSide.add(line);
+        else onSide.delete(line);
+        return { of: minimize, lines: new Map(all).set(path, new Map(sides).set(side, onSide)) };
+      }),
+    [minimize],
+  );
+  const kept = useRef(
+    new Map<
+      string,
+      { readonly of: unknown; readonly toggle: unknown; readonly answer: FileMinimized }
+    >(),
+  );
+  return (path) => {
+    if (!minimize) return undefined;
+    const own = lines.get(path);
+    const held = kept.current.get(path);
+    if (held !== undefined && held.of === own && held.toggle === toggle) return held.answer;
+    const answer: FileMinimized = {
+      shown: (side, line) => own?.get(side)?.has(line) === true,
+      show: (side, line, open) => toggle(path, side, line, open),
+    };
+    kept.current.set(path, { of: own, toggle, answer });
+    return answer;
+  };
 }
 
 /** The key a comment being written stands under its lines by; a review thread's note is keyed by its page, which this never is. */
@@ -820,7 +951,9 @@ function FilesList({
   boxRef: (element: HTMLDivElement | null) => void;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
-  const entries = useEntries(list, threads, images, commenting, texts);
+  const { settings } = useFileViewSettings();
+  const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
+  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -965,7 +1098,10 @@ export function AgentChangesTab({
     control.readPullRequestViewed,
     pullRequest === null ? undefined : reads.current.count,
   );
-  const list = useChangesList(changed.files, viewedFiles.marks);
+  const viewSettings = useFileViewSettings();
+  const minimize = () =>
+    viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
+  const list = useChangesList(changed.files, viewedFiles.marks, minimize);
   const answered = reads.current.count;
   // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
   const images = useMemo(

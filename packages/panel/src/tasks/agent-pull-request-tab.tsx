@@ -103,7 +103,6 @@ import {
   useConversationFilters,
 } from "./conversation-filters.js";
 import { PierreDiff, useDiffLook } from "./file-diff.js";
-import { useFileViewSettings } from "./file-view-settings.js";
 import type { PendingReview } from "./line-comment.js";
 import { blockedWords, MergeActions } from "./merge-box.js";
 import {
@@ -966,9 +965,9 @@ function ThreadComments({
 /**
  * A review thread drawn on its line in Files changed, as GitHub's own diff
  * draws one: whether it was resolved or a later push outdated it, at its
- * head, which folds it closed until opened, as Minimize inline comments
- * folds every one; then its comments. An outdated one, whose line is gone,
- * names the line it was made on.
+ * head, which folds it closed until opened; then its comments. An outdated
+ * one, whose line is gone, names the line it was made on. Minimize inline
+ * comments draws a line's threads as a chip instead (`minimized-threads.tsx`).
  */
 function InlineThread({
   thread,
@@ -982,15 +981,12 @@ function InlineThread({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const { settings } = useFileViewSettings();
   const labels = threadLabels(thread);
   const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
-  const folded = labels.length > 0 || settings.diffMinimizeComments;
   const first = thread.comments[0];
   return (
     <div className="diff-inline-thread">
-      {/* Note that the fold is drawn anew as the setting changes, so minimizing folds every thread at once. */}
-      <Fold key={String(settings.diffMinimizeComments)} defaultOpen={!folded}>
+      <Fold defaultOpen={labels.length === 0}>
         <FoldSummary className="pull-request-thread-head">
           {first === undefined ? null : <PersonRef person={first.by} />}
           {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}

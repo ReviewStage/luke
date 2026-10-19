@@ -36,7 +36,8 @@ import type { DiffListDoor } from "./diff-list.js";
  * next and the previous file, `;` collapses or expands the file stood on,
  * ⇧; collapses every file the filter keeps, or expands them all once all
  * are collapsed, V marks the file stood on viewed on GitHub, or unmarks it,
- * and steps on to the next, Escape lets go of the file stood on, and `?`
+ * and steps on to the next, I turns Minimize inline comments on or off, as
+ * stage-cli's does, Escape lets go of the file stood on, and `?`
  * opens the sheet that lists them all (`files-changed-keys.tsx`). Each is a
  * row of `@luke/settings/shortcuts`'s Files changed table, which the press is
  * matched against and the sheet and the Keyboard shortcuts page list, so a
@@ -170,6 +171,8 @@ export interface ChangesList {
 export function useChangesList(
   files: readonly CodingAgentChangedFile[],
   marks?: ViewedMarks | undefined,
+  /** Turns Minimize inline comments on or off, as I does; none leaves I to the window. */
+  onMinimize?: (() => void) | undefined,
 ): ChangesList {
   const [query, onQuery] = useState("");
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
@@ -286,8 +289,8 @@ export function useChangesList(
   const onFile = (run: (path: string) => void) =>
     current === undefined ? undefined : () => run(current);
   // What each of the view's keys does as the list stands, none where it has
-  // nothing to act on: every key but `?` needs a file to stand on, and V the
-  // marks read. Note that the record is total over the table, so a key
+  // nothing to act on: every key but `?` needs a file to stand on, V the
+  // marks read, and I a Minimize inline comments to turn. Note that the record is total over the table, so a key
   // added to the table does not build until it is handled here.
   const keyRuns = () =>
     ({
@@ -307,6 +310,8 @@ export function useChangesList(
               markViewed(path);
               stepFrom(path, 1);
             }),
+      [FILES_CHANGED_KEY.MINIMIZE_COMMENTS]:
+        onMinimize === undefined ? undefined : onFile(() => onMinimize()),
       [FILES_CHANGED_KEY.SHOW_SHORTCUTS]: () => setKeysShown(true),
     }) satisfies Record<FilesChangedKey, (() => void) | undefined>;
   const onKeyDown = (event: React.KeyboardEvent) => {

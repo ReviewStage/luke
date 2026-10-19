@@ -2860,7 +2860,7 @@ test("the title's edit is kept as the focus leaves its field, as it is on Enter"
   assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null, "the field closes");
 });
 
-test("Files changed draws each review thread under its line, its comments through the overview's own drawing, folded while Minimize inline comments is on", async () => {
+test("Files changed draws each review thread under its line, its comments through the overview's own drawing, and while Minimize inline comments is on, as one chip at the line's end that shows it", async () => {
   const review = {
     kind: CONVERSATION_ENTRY.REVIEW,
     by: CHARLES_ON_GITHUB,
@@ -2925,7 +2925,20 @@ test("Files changed draws each review thread under its line, its comments throug
   );
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
-  assert.equal(note.querySelector("details")?.open, false, "minimized, the thread stands folded");
+  const chip = note.querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+  assert.equal(chip.getAttribute("aria-label"), "1 comment by Charles Pan · 1 open, show");
+  assert.equal(
+    note.querySelector(".pull-request-thread-comment"),
+    null,
+    "minimized, no thread is drawn",
+  );
+  act(() => chip.click());
+  await settle();
+  assert.ok(note.querySelector(".pull-request-thread-comment"), "the chip shows the line's thread");
+  assert.equal(
+    note.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    "1 comment by Charles Pan · 1 open, hide",
+  );
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {

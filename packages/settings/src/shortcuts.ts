@@ -590,6 +590,7 @@ export const FILES_CHANGED_KEY = {
   TOGGLE_ALL_FILES: "files-changed-toggle-all-files",
   LET_GO: "files-changed-let-go",
   MARK_VIEWED: "files-changed-mark-viewed",
+  MINIMIZE_COMMENTS: "files-changed-minimize-comments",
   SHOW_SHORTCUTS: "files-changed-show-shortcuts",
 } as const;
 
@@ -605,8 +606,9 @@ interface FilesChangedShortcut {
  * Files changed's keys: the one table the view's handler matches a press
  * against, and its `?` sheet and the Keyboard shortcuts page list, so what
  * is listed is what answers. Escape lets go of the file stood on only while
- * one is, since otherwise it is the window's layered Escape, and V answers
- * only once the member's viewed marks are read.
+ * one is, since otherwise it is the window's layered Escape, V answers
+ * only once the member's viewed marks are read, and I only where Minimize
+ * inline comments can be turned.
  */
 export const FILES_CHANGED_SHORTCUTS = {
   [FILES_CHANGED_KEY.NEXT_FILE]: {
@@ -633,6 +635,10 @@ export const FILES_CHANGED_SHORTCUTS = {
     label: "Toggle viewed and go to next file",
     chord: { key: SHORTCUT_KEY.V, plain: true },
   },
+  [FILES_CHANGED_KEY.MINIMIZE_COMMENTS]: {
+    label: "Minimize or show inline comments",
+    chord: { key: SHORTCUT_KEY.I, plain: true },
+  },
   [FILES_CHANGED_KEY.SHOW_SHORTCUTS]: {
     label: "Show keyboard shortcuts",
     chord: { key: SHORTCUT_KEY.SLASH, plain: true, shift: true },
@@ -656,7 +662,10 @@ export const FILES_CHANGED_SHORTCUT_GROUPS = [
       FILES_CHANGED_KEY.LET_GO,
     ],
   },
-  { title: "Review", keys: [FILES_CHANGED_KEY.MARK_VIEWED] },
+  {
+    title: "Review",
+    keys: [FILES_CHANGED_KEY.MARK_VIEWED, FILES_CHANGED_KEY.MINIMIZE_COMMENTS],
+  },
 ] as const satisfies readonly { title: string; keys: readonly FilesChangedKey[] }[];
 
 /** The Keyboard shortcuts page's group of Files changed's keys, and its settings search's words for them. */
