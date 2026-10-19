@@ -269,8 +269,8 @@ Before you report, check that nothing you started is left standing: in
 Luke, `list_tasks` and `list_agents` show none of the rollout's tasks or
 workers unarchived, restack workers and replaced workers among them; in
 Conductor, none of the rollout's workspaces is left in the workspaces' list. Archive
-whatever is left. When every PR is merged and every worker is archived,
-report to the user,
+whatever is left. When every PR has merged, or been closed because it was
+cut, and every worker is archived, report to the user,
 naming the rollout's section in Luke, which you leave standing for the user
 to keep or delete:
 the merged PRs with links, anything that was cut or changed from the plan,
