@@ -1,6 +1,6 @@
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
-  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
@@ -54,10 +54,8 @@ const COMMENT_NOTE = {
   NO_WORDS: "The words this comment was on are no longer in the plan.",
   NOT_YOURS: "Only its writer can change this comment.",
   GONE: "This comment is no longer in the thread.",
-  NO_AGENT: "That agent is no longer on this task.",
-  AGENT_AWAY:
-    "That agent isn't running, so it couldn't take the thread. Send it to Luke or another agent.",
-  NOT_SENT: "The thread could not be sent.",
+  AGENT_AWAY: "That agent isn't running, so it couldn't take the thread.",
+  LUKE_AWAY: "Luke couldn't take the thread. Try again in a moment.",
 } as const;
 
 /** How one read is asked: the plan and the cursor to read past. */
@@ -94,6 +92,15 @@ export function openThread(thread: PlanCommentThread): boolean {
   return thread.status === PLAN_COMMENT_STATUS.OPEN;
 }
 
+/** What a comment's answer says of the ones its mentions asked who could not take the thread, Luke first; nothing where every one did. */
+function unsentWords(answer: TasksCommentAnswer): string | undefined {
+  const unsent = "thread" in answer ? (answer.unsent ?? []) : [];
+  if (unsent.length === 0) return undefined;
+  return unsent.some((asked) => asked.actor === PLAN_COMMENT_ACTOR.LUKE)
+    ? COMMENT_NOTE.LUKE_AWAY
+    : COMMENT_NOTE.AGENT_AWAY;
+}
+
 /** The words a refusal is said in on its thread. */
 function refusalWords(refusal: PlanCommentRefusal): string {
   switch (refusal) {
@@ -107,10 +114,6 @@ function refusalWords(refusal: PlanCommentRefusal): string {
       return COMMENT_NOTE.GONE;
     case PLAN_COMMENT_REFUSAL.KEY_TAKEN:
       return COMMENT_NOTE.NOT_CHANGED;
-    case PLAN_COMMENT_REFUSAL.NO_AGENT:
-      return COMMENT_NOTE.NO_AGENT;
-    case PLAN_COMMENT_REFUSAL.AGENT_AWAY:
-      return COMMENT_NOTE.AGENT_AWAY;
   }
 }
 
@@ -119,8 +122,11 @@ function withThread(
   threads: readonly PlanCommentThread[],
   thread: PlanCommentThread,
 ): readonly PlanCommentThread[] {
+  // Note that a write's answer may land after a read that already brought a later revision, as one whose mentions waited on the hand-over does, so the later one stays.
   return threads.some((each) => each.id === thread.id)
-    ? threads.map((each) => (each.id === thread.id ? thread : each))
+    ? threads.map((each) =>
+        each.id === thread.id && each.revision <= thread.revision ? thread : each,
+      )
     : [...threads, thread];
 }
 
@@ -226,9 +232,11 @@ export function usePlanComments(input: {
         .catch((): TasksCommentAnswer => UNANSWERED);
       if ("refused" in answer) return { note: refusalWords(answer.refused) };
       const thread = took(planId, answer);
-      return thread === undefined ? { note: COMMENT_NOTE.NOT_POSTED } : { thread };
+      if (thread === undefined) return { note: COMMENT_NOTE.NOT_POSTED };
+      note(thread.id, unsentWords(answer));
+      return { thread };
     },
-    [planId, took],
+    [planId, took, note],
   );
 
   const act = useCallback(
@@ -243,17 +251,11 @@ export function usePlanComments(input: {
         return false;
       }
       if ("failure" in answer) {
-        note(
-          threadId,
-          "words" in action
-            ? COMMENT_NOTE.NOT_POSTED
-            : action.action === PLAN_COMMENT_ACTION.ASK
-              ? COMMENT_NOTE.NOT_SENT
-              : COMMENT_NOTE.NOT_CHANGED,
-        );
+        note(threadId, "words" in action ? COMMENT_NOTE.NOT_POSTED : COMMENT_NOTE.NOT_CHANGED);
         return false;
       }
       took(planId, answer);
+      note(threadId, unsentWords(answer));
       return true;
     },
     [planId, note, took],

@@ -117,49 +117,6 @@
         "action"
       ],
       "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "action": {
-          "type": "string",
-          "enum": [
-            "ask"
-          ]
-        },
-        "clientKey": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        },
-        "to": {
-          "type": "object",
-          "properties": {
-            "actor": {
-              "type": "string",
-              "enum": [
-                "luke",
-                "agent"
-              ]
-            },
-            "agentId": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 36
-            }
-          },
-          "required": [
-            "actor"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "action",
-        "clientKey",
-        "to"
-      ],
-      "additionalProperties": false
     }
   ]
 }

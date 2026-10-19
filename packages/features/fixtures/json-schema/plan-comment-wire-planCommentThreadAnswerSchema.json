@@ -173,6 +173,30 @@
             "revision"
           ],
           "additionalProperties": false
+        },
+        "unsent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "actor": {
+                "type": "string",
+                "enum": [
+                  "luke",
+                  "agent"
+                ]
+              },
+              "agentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              }
+            },
+            "required": [
+              "actor"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -204,9 +228,7 @@
             "no-words",
             "not-yours",
             "no-entry",
-            "key-taken",
-            "no-agent",
-            "agent-away"
+            "key-taken"
           ]
         }
       },

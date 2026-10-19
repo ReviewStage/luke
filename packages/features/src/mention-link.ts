@@ -101,6 +101,8 @@ export const MENTION_KIND = {
   PAGE: "page",
   AGENT: "agent",
   PERSON: "person",
+  /** Luke on one task, whom a comment's mention sends its thread. */
+  LUKE: "luke",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -131,6 +133,7 @@ const LINK = {
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
   PERSON_STEP: "person",
+  LUKE_STEP: "luke",
 } as const;
 
 /** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
@@ -323,6 +326,10 @@ const mentionSchema = EffectSchema.Union([
     /** The person's account id, as the service names a member by. */
     userId: thingIdSchema,
   }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.LUKE),
+    taskId: taskIdSchema,
+  }),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
@@ -470,6 +477,10 @@ function legacyFields(url: URL) {
 /** The fields a page's or an agent's address spells after its task's id, or after the workspace for an agent on no task: `/page/<id>` or `/agent/<id>`, with no fragment. */
 function taskFields(taskId: string | undefined, rest: readonly string[], hash: string) {
   const [step, id, ...more] = rest;
+  // Luke stands on a task with no id of his own: `/luke`.
+  if (step === LINK.LUKE_STEP && id === undefined && hash === "") {
+    return taskId === undefined ? undefined : { kind: MENTION_KIND.LUKE, taskId };
+  }
   if (id === undefined || more.length > 0 || hash !== "") return undefined;
   // A page always stands on a task, so one with none reads as nothing to the schema.
   if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
@@ -773,6 +784,8 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
     }
     case MENTION_KIND.PERSON:
       return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PERSON_STEP}/${encodedPart(mention.userId)}`;
+    case MENTION_KIND.LUKE:
+      return `${taskTarget(mention.taskId, place, "")}/${LINK.LUKE_STEP}`;
   }
 }
 
@@ -842,6 +855,7 @@ const BARE_NAME = {
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
+  LUKE: "Luke",
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
@@ -878,6 +892,8 @@ function bareName(mention: Mention): string {
       return BARE_NAME.AGENT;
     case MENTION_KIND.PERSON:
       return BARE_NAME.PERSON;
+    case MENTION_KIND.LUKE:
+      return BARE_NAME.LUKE;
   }
 }
 
@@ -1015,6 +1031,36 @@ export function mentionsIn(
     if (mention !== undefined) found.push({ ...link, mention });
   }
   return found;
+}
+
+/** Whom a comment's words ask, as `askedInWords` reads them. */
+export interface AskedInWords {
+  /** Whether the words mention the comment's own task's Luke; another task's is a reference. */
+  readonly luke: boolean;
+  /** The coding agents the words mention, each once. */
+  readonly agentIds: readonly string[];
+}
+
+/**
+ * Whom a comment on the task's plan asks: its Luke, where the words mention
+ * him, and the coding agents they mention, each once, in the order written.
+ * A mention is a link the writer placed with `@`; a bare link to an agent
+ * asks no one.
+ */
+export function askedInWords(words: string, taskId: string): AskedInWords {
+  let luke = false;
+  const agentIds: string[] = [];
+  // Note that every mention of the comment's bounded words is read, beyond the twenty a message hands an agent, so no one asked is missed.
+  for (const { mention } of mentionsIn(words, null, Number.POSITIVE_INFINITY)) {
+    if (mention.kind === MENTION_KIND.LUKE && mention.taskId === taskId) luke = true;
+    if (
+      mention.kind === MENTION_KIND.AGENT &&
+      !agentIds.some((id) => id.toLowerCase() === mention.agentId.toLowerCase())
+    ) {
+      agentIds.push(mention.agentId);
+    }
+  }
+  return { luke, agentIds };
 }
 
 /** The quotes a link's title may stand between, after its destination. */

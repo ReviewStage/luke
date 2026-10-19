@@ -7,7 +7,7 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import { test } from "vitest";
-import { commentAskMessage, sectionExcerpt } from "./comment-ask.js";
+import { commentAskMessage } from "./comment-ask.js";
 
 const THREAD: PlanCommentThread = {
   id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
@@ -30,35 +30,17 @@ const THREAD: PlanCommentThread = {
   ],
 };
 
-test("a thread handed to a coding agent carries the section its words stand in, which it reads in the plan's place", () => {
-  const ask = {
+test("a thread is handed over as its quoted words, its section's name, and its comments, and never the plan's text", () => {
+  const message = commentAskMessage({
     taskName: "Invites",
     thread: THREAD,
     sender: "Dean",
     toLuke: false,
-    section: undefined,
-  };
+  });
 
-  const withSection = commentAskMessage({ ...ask, section: "## Testing\n\nWe test a retry." });
-  const without = commentAskMessage(ask);
-
-  assert.ok(withSection.includes("## Testing\n\nWe test a retry."));
-  assert.ok(withSection.includes("Read the thread and the section above"));
-  assert.ok(without.includes("Read the thread and the plan"));
-  assert.equal(without.includes("as the plan now reads"), false);
-});
-
-test("a long section is handed over as the stretch around the thread's words, marked where words were left out", () => {
-  const section = `${"a".repeat(12_000)}THE WORDS${"b".repeat(10_000)}`;
-
-  const near = sectionExcerpt(section, 12_000);
-  const start = sectionExcerpt(section, 0);
-  const short = sectionExcerpt("## Testing\n\nWe test a retry.", 14);
-
-  assert.ok(near.includes("THE WORDS"));
-  assert.ok(near.startsWith("[…]\n"));
-  assert.ok(near.endsWith("\n[…]"));
-  assert.equal(start.includes("THE WORDS"), false);
-  assert.ok(start.endsWith("\n[…]") && !start.startsWith("[…]"));
-  assert.equal(short, "## Testing\n\nWe test a retry.");
+  assert.ok(message.startsWith('Dean sent you a comment thread on the plan "Invites"'));
+  assert.ok(message.includes('On: "a retry" (section "Testing")'));
+  assert.ok(message.includes("Dean: Is this covered already?"));
+  assert.ok(message.includes("Read the thread, then answer"));
+  assert.equal(message.includes("as the plan now reads"), false);
 });

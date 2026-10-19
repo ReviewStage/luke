@@ -324,30 +324,22 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
 
 it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) => {
   it.effect(
-    "a thread sent to Luke opens his planning turn on the thread, and the thread says who asked him",
+    "a thread started with Luke mentioned opens his planning turn on the thread, and the thread says who asked him",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, taskId } = yield* openSharedTask;
+        const { teammate, taskId } = yield* openSharedTask;
+        const before = opened.length;
+
         const thread = threadIn(
           yield* answer(
             "comments",
-            request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
-          ),
-        );
-        const before = opened.length;
-
-        const asked = threadIn(
-          yield* answer(
-            "comments",
             request(
-              THREAD,
-              owner,
-              { id: taskId, thread: thread.id },
-              {
-                action: PLAN_COMMENT_ACTION.ASK,
-                clientKey: randomUUID(),
-                to: { actor: PLAN_COMMENT_ACTOR.LUKE },
-              },
+              COMMENTS,
+              teammate,
+              { id: taskId },
+              startBody(
+                `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) is withdrawing in v1?`,
+              ),
             ),
           ),
         );
@@ -356,11 +348,13 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
         assert.ok(message, "Luke's planning turn was opened");
         // Note that the message is read as eve was handed it, its words wherever its parts hold them.
         const words = JSON.stringify(message.message);
-        assert.ok(words.includes("Charles Pan: Is withdrawing in v1?"));
-        assert.ok(words.includes("Dean Stratakos sent you a comment thread"));
+        assert.ok(words.includes("Charles Pan sent you a comment thread"));
         assert.ok(words.includes(thread.id));
+        const [after] = threadsIn(
+          yield* answer("comments", request(COMMENTS, teammate, { id: taskId })),
+        );
         assert.deepEqual(
-          asked.entries.map((entry) => [entry.kind, entry.asked?.actor]),
+          after?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
           [
             [PLAN_COMMENT_ENTRY.COMMENT, undefined],
             [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
@@ -370,40 +364,7 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
   );
 
   it.effect(
-    "a thread sent to an agent that is not the plan's is refused, and says nobody was asked",
-    () =>
-      Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedTask;
-        const thread = threadIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
-        );
-
-        const refused = yield* answer(
-          "comments",
-          request(
-            THREAD,
-            owner,
-            { id: taskId, thread: thread.id },
-            {
-              action: PLAN_COMMENT_ACTION.ASK,
-              clientKey: randomUUID(),
-              to: { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: randomUUID() },
-            },
-          ),
-        );
-
-        assert.deepEqual(JSON.parse(refused.body), { refused: PLAN_COMMENT_REFUSAL.NO_AGENT });
-        const [after] = threadsIn(
-          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
-        );
-        assert.deepEqual(
-          after?.entries.map((entry) => entry.kind),
-          [PLAN_COMMENT_ENTRY.COMMENT],
-        );
-      }),
-  );
-  it.effect(
-    "a thread sent again by another member names that member, and a key a reply was written under sends nothing",
+    "a reply that mentions Luke hands him the thread once, sent again or not, and one that mentions an agent not on the task asks no one",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -413,43 +374,125 @@ it.layer(getTestDB())("a plan's comment thread sent to Luke or an agent", (it) =
             request(COMMENTS, teammate, { id: taskId }, startBody("Is withdrawing in v1?")),
           ),
         );
-        const ask = (userId: string, clientKey: string) =>
+        const reply = (words: string, clientKey: string) =>
           answer(
             "comments",
             request(
               THREAD,
-              userId,
+              owner,
               { id: taskId, thread: thread.id },
-              {
-                action: PLAN_COMMENT_ACTION.ASK,
-                clientKey,
-                to: { actor: PLAN_COMMENT_ACTOR.LUKE },
-              },
+              { action: PLAN_COMMENT_ACTION.REPLY, clientKey, words },
             ),
           );
-        yield* ask(owner, randomUUID());
+        const before = opened.length;
+        const key = randomUUID();
+        const words = `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) what do you think?`;
+
+        yield* reply(words, key);
+        yield* reply(words, key);
+        const elsewhere = threadIn(
+          yield* reply(
+            `[@Other](https://tryluke.dev/acme/plan/${randomUUID()}/agent/${randomUUID()}) saw this`,
+            randomUUID(),
+          ),
+        );
+
+        assert.equal(opened.length - before, 1, "Luke was handed the thread once");
+        assert.ok(
+          JSON.stringify(opened.at(-1)?.message).includes(
+            "Dean Stratakos sent you a comment thread",
+          ),
+        );
+        const [first] = threadsIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId })),
+        );
+        assert.deepEqual(
+          first?.entries.map((entry) => [entry.kind, entry.asked?.actor]),
+          [
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+            [PLAN_COMMENT_ENTRY.ASKED, PLAN_COMMENT_ACTOR.LUKE],
+            [PLAN_COMMENT_ENTRY.COMMENT, undefined],
+          ],
+        );
+        assert.equal(
+          elsewhere.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
+          1,
+          "the other task's agent was asked nothing",
+        );
+      }),
+  );
+
+  it.effect(
+    "a reply the store refuses hands no one the thread, though its words mention Luke",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const taken = randomUUID();
+        yield* answer(
+          "comments",
+          request(
+            COMMENTS,
+            owner,
+            { id: taskId },
+            { ...startBody("First thread"), clientKey: taken },
+          ),
+        );
+        const other = threadIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("Second"))),
+        );
         const before = opened.length;
 
-        yield* ask(teammate, randomUUID());
-        const [again] = opened.slice(before);
-        assert.ok(again, "Luke was handed the thread again");
-        assert.ok(JSON.stringify(again.message).includes("Charles Pan sent you a comment thread"));
-
-        const replyKey = randomUUID();
-        yield* answer(
+        const refused = yield* answer(
           "comments",
           request(
             THREAD,
             owner,
-            { id: taskId, thread: thread.id },
-            { action: PLAN_COMMENT_ACTION.REPLY, clientKey: replyKey, words: "Not in v1." },
+            { id: taskId, thread: other.id },
+            {
+              action: PLAN_COMMENT_ACTION.REPLY,
+              clientKey: taken,
+              words: `[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`,
+            },
           ),
         );
-        const handed = opened.length;
-        const reused = yield* ask(owner, replyKey);
 
-        assert.deepEqual(JSON.parse(reused.body), { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN });
-        assert.equal(opened.length, handed, "nothing was handed over under the reply's key");
+        assert.deepEqual(JSON.parse(refused.body), { refused: PLAN_COMMENT_REFUSAL.KEY_TAKEN });
+        assert.equal(opened.length, before, "Luke was handed nothing");
+      }),
+  );
+
+  it.effect(
+    "a reply sent again under its key with other words that mention Luke hands him nothing, since those words never posted",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        const thread = threadIn(
+          yield* answer("comments", request(COMMENTS, owner, { id: taskId }, startBody("v1?"))),
+        );
+        const key = randomUUID();
+        const reply = (words: string) =>
+          answer(
+            "comments",
+            request(
+              THREAD,
+              owner,
+              { id: taskId, thread: thread.id },
+              { action: PLAN_COMMENT_ACTION.REPLY, clientKey: key, words },
+            ),
+          );
+        yield* reply("No action needed.");
+        const before = opened.length;
+
+        const again = threadIn(
+          yield* reply(`[@Luke](https://tryluke.dev/acme/plan/${taskId}/luke) please answer`),
+        );
+
+        assert.equal(opened.length, before, "Luke was handed nothing");
+        assert.equal(
+          again.entries.filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED).length,
+          0,
+        );
       }),
   );
 });
