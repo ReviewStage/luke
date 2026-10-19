@@ -36,6 +36,7 @@ import {
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
+  codingAgentChatAttachmentParamsSchema,
   codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
@@ -386,6 +387,7 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   MICROPHONE_REQUEST: "microphone.request",
   /**
    * Where the developer's voice would be captured from, read afresh: the act
@@ -1147,6 +1149,13 @@ export const ACT = {
       isReadable(codingAgentChatWriteAnswerViewSchema),
     ),
     refusal: "Could not write to the workspace's chat on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]: {
+    payload: actSchema(codingAgentChatAttachmentParamsSchema),
+    result: wireResult<CodingAgentInboxAttachmentView>(
+      isReadable(codingAgentInboxAttachmentViewSchema),
+    ),
+    refusal: "Could not read the chat message's picture on this system.",
   },
   [ACT_KIND.MICROPHONE_REQUEST]: {
     payload: noPayload,

@@ -242,6 +242,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { chatAttachmentApp } from "./chat-attachment-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -305,6 +306,7 @@ const TASK_PATH =
   /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
+const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -574,7 +576,13 @@ const standing = (
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
     });
-    yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
+    const chatPictures = HttpRouter.toWebHandler(
+      chatAttachmentApp(seams).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => Promise.all([agents.dispose(), chatPictures.dispose()])),
+    );
     /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
@@ -586,6 +594,7 @@ const standing = (
           return routed(new Request(url, request), webServices);
         }
         if (pathname === CHAT) return routed(request, webServices);
+        if (pathname === CHAT_ATTACHMENT) return chatPictures.handler(request);
         return pathname === TASKS || TASK_PATH.test(pathname)
           ? routed(request, webServices)
           : agents.handler(request);
@@ -8825,6 +8834,103 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const self = (yield* chat.read).self;
         assert.equal(own.posted.authorId, self);
         assert.notEqual(own.posted.authorId, chat.agent.id);
+      }),
+  );
+
+  it.effect(
+    "a person's post keeps its pictures, named by image blocks after its words and served back as their bytes to a person in the workspace alone, the same pictures again under its key; a file whose bytes are no such picture is refused and posts nothing",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const png = { name: "invite-email.png", mediaType: CHAT_IMAGE_TYPE.PNG };
+        const send = {
+          text: "The new invite email.",
+          attachments: [{ ...png, data: Buffer.from(PNG).toString("base64") }],
+          clientKey: randomUUID(),
+        };
+
+        const sent = yield* chat.wrote(send);
+        assert.ok("posted" in sent);
+        const [words, picture] = sent.posted.blocks;
+        assert.deepEqual(words, { type: CHAT_BLOCK.MARKDOWN, text: "The new invite email." });
+        assert.ok(picture?.type === CHAT_BLOCK.IMAGE && "attachmentId" in picture);
+        assert.equal(picture.alt, "invite-email.png");
+        const at = (bearer: string | undefined, attachmentId = picture.attachmentId) => {
+          const url = new URL(CHAT_ATTACHMENT, ORIGIN);
+          url.searchParams.set("workspaceId", chat.workspace);
+          url.searchParams.set("messageId", sent.posted.id);
+          url.searchParams.set("attachmentId", attachmentId);
+          return new Request(url, {
+            headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+          });
+        };
+
+        const served = yield* chat.fetch(at(chat.owner));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), CHAT_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
+
+        const again = yield* chat.wrote(send);
+        assert.ok("posted" in again);
+        assert.deepEqual(
+          [again.posted.id, again.posted.blocks],
+          [sent.posted.id, sent.posted.blocks],
+        );
+        // A picture at its bound fits a write, its body stating its length, which holds many times a post's words.
+        const large = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES);
+        large.set(PNG);
+        const body = JSON.stringify({
+          attachments: [{ ...png, data: Buffer.from(large).toString("base64") }],
+          clientKey: randomUUID(),
+        });
+        const url = new URL(CHAT, ORIGIN);
+        url.searchParams.set("workspaceId", chat.workspace);
+        const big = readAnswer(
+          chatWriteAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chat.ask(
+            new Request(url, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${chat.owner}`,
+                "content-type": "application/json",
+                "content-length": String(Buffer.byteLength(body)),
+              },
+              body,
+            }),
+          ),
+        );
+        assert.ok("posted" in big);
+        assert.deepEqual(
+          big.posted.blocks.map((block) => block.type),
+          [CHAT_BLOCK.IMAGE],
+          "a post of a picture alone carries no words",
+        );
+
+        // Someone in another workspace reads nothing of this one's, even with Chat on.
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        yield* chooseChat(chat.other, true);
+        assert.deepEqual(yield* chat.ask(at(chat.other)), notFound);
+        assert.deepEqual(yield* chat.ask(at(chat.owner, randomUUID())), notFound);
+        assert.deepEqual(
+          yield* chat.ask(at(undefined)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        // A teammate in the workspace reads it as the poster does.
+        yield* joinWorkspace(chat.workspace, chat.other);
+        assert.equal((yield* chat.fetch(at(chat.other))).status, HOSTED_HTTP_STATUS.OK);
+
+        const before = (yield* chat.read).messages.length;
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        for (const data of [Buffer.from("%PDF-1.7").toString("base64"), "!!"]) {
+          assert.deepEqual(
+            yield* chat.write({ attachments: [{ ...png, data }], clientKey: randomUUID() }),
+            invalid,
+            data,
+          );
+        }
+        assert.equal((yield* chat.read).messages.length, before);
       }),
   );
 });

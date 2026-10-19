@@ -214,6 +214,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  /** One picture a chat message carries, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */

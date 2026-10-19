@@ -1,8 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
+  attachMessageImages,
   CHAT_REFUSAL,
   type ChatChannelRow,
+  type ChatImageWrite,
   type ChatMemberRow,
   type ChatMessageRow,
   type ChatPost,
@@ -474,14 +476,17 @@ export const HOSTED_OF_CHAT_REFUSAL = {
 
 /**
  * Posts a message and tells the members it addresses: the one door a
- * coding agent's `post_chat` and the window's post both call. A post
- * repeated under its key answers the message it made, and is told again,
- * which steers no one twice. Refused as the store refuses the post, in the
- * route's words.
+ * coding agent's `post_chat` and the window's post both call. The pictures
+ * handed in are kept under the ids its image blocks name once the message
+ * stands and before anyone is told, as an agent's are (`chat.ts`'s
+ * `writePost`), so a member told of it finds them. A post repeated under
+ * its key answers the message it made, and is told again, which steers no
+ * one twice. Refused as the store refuses the post, in the route's words.
  */
 export function postChat(
   telling: ChatTelling,
   post: ChatPost,
+  images: readonly ChatImageWrite[] = [],
 ): Effect.Effect<
   ChatPostTold,
   HostedRefusal,
@@ -493,6 +498,17 @@ export function postChat(
     );
     if (Result.isFailure(posted)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[posted.failure]);
     const { message, repeated, unresolved } = posted.success;
+    if (images.length > 0) {
+      yield* hostedStoreOrUnavailable(
+        attachMessageImages(
+          telling.userId,
+          telling.organizationId,
+          post.authorMemberId,
+          message.id,
+          images,
+        ),
+      );
+    }
     const receipt = yield* tellMessage(telling, message, unresolved);
     return { message, repeated, receipt };
   });

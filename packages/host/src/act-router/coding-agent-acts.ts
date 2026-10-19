@@ -5,6 +5,7 @@ import {
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatAttachmentParams,
   type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
@@ -145,6 +146,9 @@ export interface CodingAgentActsDependencies {
     codingAgentChatPost(
       params: CodingAgentChatPostParams,
     ): Effect.Effect<CodingAgentChatWriteAnswerView>;
+    codingAgentChatAttachment(
+      params: CodingAgentChatAttachmentParams,
+    ): Effect.Effect<CodingAgentInboxAttachmentView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -197,7 +201,8 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
   | typeof ACT_KIND.CODING_AGENTS_PICTURE
   | typeof ACT_KIND.CODING_AGENTS_CHAT
-  | typeof ACT_KIND.CODING_AGENTS_CHAT_POST;
+  | typeof ACT_KIND.CODING_AGENTS_CHAT_POST
+  | typeof ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT;
 
 /** The refusal a window that draws no Tasks tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -390,6 +395,11 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_CHAT_POST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHAT_POST, sender);
       return host.codingAgentChatPost(params);
+    },
+    // Note that the picture's answer, a failure among them, is the panel's to read, as an inbox image's is.
+    [ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, sender);
+      return host.codingAgentChatAttachment(params);
     },
   };
 }

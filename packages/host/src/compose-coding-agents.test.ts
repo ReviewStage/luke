@@ -481,6 +481,11 @@ function fakeService() {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
         return { readSeq: 4 };
       }),
+    chatAttachment: (workspaceId, messageId, attachmentId) =>
+      Effect.sync(() => {
+        asked.push(`chat-attachment:${workspaceId}:${messageId}:${attachmentId}`);
+        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      }),
   };
   return { client, asked };
 }
@@ -756,6 +761,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { readSeq: 4 },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT, {
+        workspaceId: WORKSPACE_ID,
+        messageId: "message-1",
+        attachmentId: ATTACHMENT_ID,
+      }),
+      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
 
     assert.deepEqual(asked, [
       "models",
@@ -797,6 +810,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `account-inbox:${INBOX_CURSOR_START}`,
       `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
+      `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
     ]);
   }),
 );

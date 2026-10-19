@@ -10,10 +10,10 @@ import {
   type ChatMember,
   type ChatMessage,
   type ChatOpenRequest,
+  type ChatPostRequest,
   type ChatReply,
   GENERAL_CHANNEL,
   MEMBER_KIND,
-  type postChatInputSchema,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -67,8 +67,8 @@ export const FOR_YOU_REASON = {
 
 type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
 
-/** A post the window sends: the words, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `postChatInputSchema`). */
-export type ChatPost = typeof postChatInputSchema.Type;
+/** A post the window sends: the words, the pictures under them, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `chatPostRequestSchema`, its key the sender's to mint). */
+export type ChatPost = Omit<ChatPostRequest, "blocks" | "clientKey">;
 
 /** A topic channel opened, or one renamed, its purpose said or cleared, or archived or brought back, as the window writes it. */
 export type ChatChannelChange = ChatOpenRequest | ChatEditRequest;
