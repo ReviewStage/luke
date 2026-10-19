@@ -33,6 +33,7 @@ export {
   reporterLayer,
   SecretCipher,
   ServiceOrigin,
+  SettingsChangedElsewhere,
   ShutdownSignal,
   SignInConsent,
   StateRoot,

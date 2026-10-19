@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { LINK_OPEN } from "@luke/features/link-open";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -599,3 +601,30 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
   assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });
+
+it.effect("two stores on one file, as two browser tabs are, each keep the other's change", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-tabs-");
+    // A browser tab's store: the cookie session hands it no cipher.
+    const tab = () =>
+      new SettingsStore({
+        directory: () => directory,
+        cipher: undefined,
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+        path: PATH,
+      });
+    const first = tab();
+    const second = tab();
+    // Both tabs have read the file before either writes.
+    yield* first.snapshot();
+    yield* second.snapshot();
+
+    yield* first.set("theme", THEME.DARK);
+    yield* second.set("zoom", 150);
+
+    const reopened = (yield* tab().snapshot()).stored;
+    assert.equal(reopened.theme, THEME.DARK);
+    assert.equal(reopened.zoom, 150);
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);

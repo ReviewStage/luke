@@ -34,7 +34,7 @@ import {
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Option, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -42,7 +42,12 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AccountSource, AppIdentity, type Environment } from "./effect/seams.js";
+import {
+  AccountSource,
+  AppIdentity,
+  type Environment,
+  SettingsChangedElsewhere,
+} from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
@@ -124,6 +129,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
+    const changedElsewhere = yield* Effect.serviceOption(SettingsChangedElsewhere);
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -153,6 +159,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       overrides,
       fileSystem,
       path,
+      // A file another writer shares, as the shell's change signal says, is written through a temporary file of this host's own.
+      ...(Option.isSome(changedElsewhere) ? { writer: kernel.createId() } : undefined),
     });
 
     /**
@@ -400,11 +408,26 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       endLiveSession: linked((links) => links.endLiveSession),
     });
 
+    /**
+     * Each setting's value as its host side effect last carried it, kept
+     * apart from the store's held copy: a write re-reads the file, so the
+     * held copy may already hold a value another tab chose that no side
+     * effect here has carried yet. Kept only where the file has another
+     * writer (`SettingsChangedElsewhere`), and filled when that watch starts.
+     */
+    const carriedValues = new Map<AppSettingField, string>();
+    const carry = (field: AppSettingField, stored: StoredSettings): void => {
+      carriedValues.set(field, JSON.stringify(stored[field]));
+    };
+
     const applyHostSettingSideEffect = (
       field: AppSettingField,
       settings: SettingsUpdateResult["settings"],
     ): Effect.Effect<void> =>
-      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
+      Effect.andThen(
+        sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored }),
+        Effect.sync(() => carry(field, settings.stored)),
+      );
 
     const applyAccountPreferenceSideEffects = /* @__PURE__ */ Effect.fnUntraced(function* (
       result: SettingsUpdateResult,
@@ -414,6 +437,24 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         yield* applyHostSettingSideEffect(field, result.settings);
       }
       emitSettingsSnapshot(result.settings);
+    });
+
+    /**
+     * The file as another writer left it, read again: each setting standing
+     * other than its side effect last carried it has that side effect here,
+     * as a write of this host's own has (a voice another tab chose reaches
+     * this tab's live source), and the panel is sent the settings as they
+     * now stand.
+     */
+    const applyChangedElsewhere = Effect.gen(function* () {
+      yield* store.reload();
+      const after = yield* store.snapshot();
+      for (const field of APP_SETTING_FIELDS) {
+        if (carriedValues.get(field) !== JSON.stringify(after.stored[field])) {
+          yield* applyHostSettingSideEffect(field, after);
+        }
+      }
+      emitSettingsSnapshot(after);
     });
 
     const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
@@ -593,6 +634,25 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         // own lifetime scope: the scope closing interrupts it before the stop
         // above gives back what the start took.
         yield* Effect.forkScoped(drainAccountPreferencesSync);
+        // Another writer's change to the file, where the shell can hear one:
+        // read again, and carried as any update is. A read that fails is
+        // written down and the next change is still heard.
+        if (Option.isSome(changedElsewhere)) {
+          // What this host was built on is what its side effects carry until one runs.
+          const built = yield* Effect.option(store.snapshot());
+          if (Option.isSome(built)) {
+            for (const field of APP_SETTING_FIELDS) carry(field, built.value.stored);
+          }
+          yield* Effect.forkScoped(
+            Stream.runForEach(changedElsewhere.value, () =>
+              catchAllButInterrupt(applyChangedElsewhere, (cause) =>
+                Effect.sync(() => {
+                  report(`Reading settings another tab changed failed: ${Cause.pretty(cause)}`);
+                }),
+              ),
+            ),
+          );
+        }
       }),
     };
   },

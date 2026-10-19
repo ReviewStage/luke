@@ -120,7 +120,7 @@ import { PullRequestMark } from "./pull-request-mark.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
-import { type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
+import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles } from "./viewed-files.js";
@@ -1027,17 +1027,20 @@ function revealedPlace(
 /** A reveal as the list takes it: the ask, and the file its thread is on, which the changes hold. */
 type ListReveal = ChangesReveal & { readonly file: CodingAgentChangedFile };
 
-/** A thread being landed on in the list: the ask, its file and place, and the lines lit for it, which stay lit until its ring ends. */
+/** A thread being landed on in the list: the ask, the thread by its id, and its file, whose entry places it once the list holds it. */
 interface ListLanding {
   readonly ask: number;
   readonly threadId: string;
-  readonly reveal: DiffListReveal;
-  readonly lines: DiffListSelection | undefined;
+  readonly thread: ReviewThread;
+  readonly file: CodingAgentChangedFile;
 }
 
 /** The thread being landed on in the list, and what its cards are handed to land on it. */
 interface ListLandingControl {
-  readonly landing: ListLanding | undefined;
+  /** The file and line to scroll to, once its entry places the thread. */
+  readonly reveal: DiffListReveal | undefined;
+  /** The lines lit for the thread, until its ring ends. */
+  readonly lines: DiffListSelection | undefined;
   readonly provided: ThreadLanding | undefined;
 }
 
@@ -1046,7 +1049,7 @@ const LANDING_FRAMES = 240;
 
 /** Whether a thread card stands inside the list's box, where Pierre has scrolled it, and a landing may end on it. */
 function standsIn(box: HTMLElement | null, card: HTMLElement): boolean {
-  if (box === null || !card.isConnected) return false;
+  if (box === null || !landable(card)) return false;
   const area = box.getBoundingClientRect();
   const { top } = card.getBoundingClientRect();
   return top >= area.top && top < area.bottom;
@@ -1068,28 +1071,35 @@ function useListLanding(
   box: React.RefObject<HTMLElement | null>,
 ): ListLandingControl {
   const [landing, setLanding] = useState<ListLanding | undefined>(undefined);
-  const latest = useRef({ reveal, list, entries, minimizedOf, wholeOf });
-  latest.current = { reveal, list, entries, minimizedOf, wholeOf };
+  const latest = useRef({ reveal, list });
+  latest.current = { reveal, list };
   const ask = reveal?.ask;
+  // A new ask opens the file at once, clearing a filter that leaves it out, so its entry is drawn.
   useEffect(() => {
-    const { reveal, list, entries, minimizedOf, wholeOf } = latest.current;
-    const thread = reveal?.thread;
-    const threadId = thread?.id;
-    if (reveal === undefined || thread === undefined || threadId === undefined) return;
-    const { file } = reveal;
-    // Note that a file the filter leaves out has no entry yet, so whether it stands as its notes alone is read off the file.
-    const lead =
-      entries.find((each) => each.path === file.path)?.lead ?? fileNotice(file) !== undefined;
-    const place = revealedPlace(thread, file, lead, wholeOf(file).texts);
-    list.expand(thread.path);
-    minimizedOf(thread.path)?.show(place.chip.side, place.chip.line, true);
-    setLanding({
-      ask: reveal.ask,
-      threadId,
-      reveal: { ask: reveal.ask, path: thread.path, at: place.at },
-      lines: place.at === undefined ? undefined : threadLines([thread], file),
-    });
+    const { reveal, list } = latest.current;
+    const threadId = reveal?.thread.id;
+    if (reveal === undefined || threadId === undefined) return;
+    list.expand(reveal.file.path);
+    setLanding({ ask: reveal.ask, threadId, thread: reveal.thread, file: reveal.file });
   }, [ask]);
+  // Note that the thread is placed by its file's entry as drawn, a picture's threads above it, as `entryOf` places them.
+  const entry =
+    landing === undefined ? undefined : entries.find((each) => each.path === landing.file.path);
+  const place =
+    landing === undefined || entry === undefined
+      ? undefined
+      : revealedPlace(landing.thread, landing.file, entry.lead, wholeOf(landing.file).texts);
+  // A minimized line's chip is shown once the thread is placed, each ask once.
+  const chipShown = useRef<number | undefined>(undefined);
+  const latestPlace = useRef({ landing, place, minimizedOf });
+  latestPlace.current = { landing, place, minimizedOf };
+  const placed = place !== undefined;
+  useEffect(() => {
+    const { landing, place, minimizedOf } = latestPlace.current;
+    if (landing === undefined || place === undefined || chipShown.current === landing.ask) return;
+    chipShown.current = landing.ask;
+    minimizedOf(landing.file.path)?.show(place.chip.side, place.chip.line, true);
+  }, [landing?.ask, placed]);
   const onLanded = reveal?.onLanded;
   const provided =
     landing === undefined || onLanded === undefined
@@ -1102,7 +1112,17 @@ function useListLanding(
           onLanded,
           onFaded: (faded: number) => setLanding((was) => (was?.ask === faded ? undefined : was)),
         };
-  return { landing, provided };
+  return {
+    reveal:
+      landing === undefined || place === undefined
+        ? undefined
+        : { ask: landing.ask, path: landing.file.path, at: place.at },
+    lines:
+      landing === undefined || place?.at === undefined
+        ? undefined
+        : threadLines([landing.thread], landing.file),
+    provided,
+  };
 }
 
 /** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
@@ -1385,7 +1405,7 @@ function FilesList({
     resting.hover,
     wholeOf,
   );
-  const { landing, provided } = useListLanding(reveal, list, entries, minimizedOf, wholeOf, box);
+  const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, box);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -1400,7 +1420,7 @@ function FilesList({
       {list.kept.length === 0 ? (
         <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
       ) : (
-        <ThreadLandingProvider value={provided}>
+        <ThreadLandingProvider value={landing.provided}>
           <PierreDiffList
             entries={entries}
             look={look}
@@ -1409,9 +1429,9 @@ function FilesList({
             boxRef={holdBox}
             onComment={commenting?.open}
             commentOn={commenting?.commentOn}
-            selected={landing?.lines ?? resting.lines ?? commenting?.lit}
+            selected={landing.lines ?? resting.lines ?? commenting?.lit}
             readTexts={texts.read}
-            reveal={landing?.reveal}
+            reveal={landing.reveal}
           />
         </ThreadLandingProvider>
       )}
