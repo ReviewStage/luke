@@ -1,6 +1,6 @@
 import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
 import { readerZone } from "@luke/features/date-mention";
-import { ComboboxList, comboboxOptionId } from "@luke/ui";
+import { ComboboxList, type ComboboxOption, comboboxOptionId } from "@luke/ui";
 import { type ChatMention, type ChatTarget, chatRows } from "@luke/ui/chat-mention";
 import { useId, useState } from "react";
 import type { ComposerTrigger } from "../plan-editor/contract.js";
@@ -51,11 +51,7 @@ export interface ChatMentionPicker {
 }
 
 /** A row as the list draws it: a member or a channel by its sigil and name, a date as its chip says it. */
-export function chatOption(target: ChatTarget): {
-  readonly id: string;
-  readonly label: string;
-  readonly detail: string | undefined;
-} {
+export function chatOption(target: ChatTarget): ComboboxOption {
   if (target.date !== undefined) {
     return {
       id: `date:${target.detail ?? target.name}`,
