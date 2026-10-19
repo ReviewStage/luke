@@ -36,7 +36,8 @@ type ResolvedSettingField =
   | "diffLightTheme"
   | "diffFont"
   | "diffFontSize"
-  | "diffLineHeight";
+  | "diffLineHeight"
+  | "linkOpen";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & RuntimeStatus & { experiments: ExperimentChoices };
@@ -57,6 +58,7 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     diffFont: settings.stored.diffFont ?? APP_SETTING_DEFAULTS.diffFont,
     diffFontSize: settings.stored.diffFontSize ?? APP_SETTING_DEFAULTS.diffFontSize,
     diffLineHeight: settings.stored.diffLineHeight ?? APP_SETTING_DEFAULTS.diffLineHeight,
+    linkOpen: settings.stored.linkOpen ?? APP_SETTING_DEFAULTS.linkOpen,
   };
 }
 

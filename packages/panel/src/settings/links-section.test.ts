@@ -7,6 +7,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
+import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -34,6 +35,13 @@ const SIGNED_IN: AccountSnapshot = {
   name: "Dev",
   provider: "github",
 };
+
+/** The settings a store sends that never held a link choice, drawn as the window draws them. */
+function neverChosen() {
+  const { stored, ...rest } = appSettingsWire(settingsView());
+  const { linkOpen: _never, ...held } = stored;
+  return appSettingsView({ ...rest, stored: held });
+}
 
 /** Settings on the Profile page for the account given, every press but a setting's write ignored. */
 function settingsOn(account: AccountSnapshot): SettingsPanelProps {
@@ -68,7 +76,7 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
       onInstall: ignore,
       onOpenLatest: ignore,
     },
-    settings: settingsView(),
+    settings: neverChosen(),
     shortcuts: {
       voiceHotkeyHeld: false,
       voiceChosen: false,
@@ -125,6 +133,8 @@ test("Profile asks where Luke links open, the browser until chosen, and a choice
   const choice =
     page.querySelector<HTMLButtonElement>('button[aria-label="Open Luke links in: Browser"]') ??
     assert.fail("the row is drawn, naming the browser");
+  // Note that the browser is the default, so a row that never chose wears no mark of a change.
+  assert.equal(page.textContent?.includes("Modified"), false);
 
   act(() => choice.click());
   const app =
