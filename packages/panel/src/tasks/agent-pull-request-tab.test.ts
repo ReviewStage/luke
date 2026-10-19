@@ -4200,6 +4200,16 @@ test("a link in the pull request's words to one of its own comments on GitHub op
     ) ?? assert.fail("the note is drawn");
   assert.equal(note.hasAttribute("data-search-landed"), true, "the note is ringed");
   assert.equal(document.activeElement, note, "the note takes the focus");
+  ringEnds(note);
+  act(() => note.blur());
+  await press("the note");
+  await frames();
+  assert.equal(
+    note.hasAttribute("data-search-landed"),
+    true,
+    "the same link pressed again lands again",
+  );
+  assert.equal(document.activeElement, note);
 
   await press("an older note");
   assert.deepEqual(

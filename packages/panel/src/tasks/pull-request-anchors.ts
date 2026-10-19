@@ -1,6 +1,3 @@
-import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
-import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
-
 /**
  * pull-request-anchors.ts -- which of a pull request's own comments a link on GitHub names, so a press on it in the pull request's tab opens the comment there rather than GitHub.
  *
@@ -14,6 +11,9 @@ import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
  * fragment, or to a comment the read did not reach, such as one of the
  * earlier entries left on GitHub, names nothing here, and opens on GitHub.
  */
+
+import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
+import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
 
 /** What a link to a pull request's own comment names: a review thread, or an entry of its conversation. */
 export const ANCHOR_KIND = {

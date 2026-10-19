@@ -1,3 +1,9 @@
+/**
+ * pull-request-anchors.test.ts -- a link on GitHub to one of a pull request's own comments names the thread
+ * or the entry its tab read, by the fragment GitHub writes; any other link
+ * names nothing, and opens on GitHub. Synthetic people throughout.
+ */
+
 import assert from "node:assert/strict";
 import {
   CONVERSATION_ENTRY,
@@ -8,12 +14,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
-
-/**
- * A link on GitHub to one of a pull request's own comments names the thread
- * or the entry its tab read, by the fragment GitHub writes; any other link
- * names nothing, and opens on GitHub. Synthetic people throughout.
- */
 
 const PAGE = "https://github.com/acme/relay/pull/42";
 const DANA = { login: "dana", bot: false };

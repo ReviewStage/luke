@@ -1939,6 +1939,8 @@ function useConversationAnchors(input: {
   const [entry, setEntry] = useState<{ readonly url: string; readonly ask: number } | undefined>(
     undefined,
   );
+  // Note that the asks are counted apart from the one standing, which a landing lets go, so the same link pressed again is a new ask its card answers.
+  const asks = useRef(0);
   const [kept, setKept] = useState<string | undefined>(undefined);
   const open: OpenHere = (href) => {
     const anchor =
@@ -1953,7 +1955,8 @@ function useConversationAnchors(input: {
     }
     onView(PULL_REQUEST_VIEW.CONVERSATION);
     setKept(anchor.entry.url);
-    setEntry((was) => ({ url: anchor.entry.url, ask: (was?.ask ?? 0) + 1 }));
+    asks.current += 1;
+    setEntry({ url: anchor.entry.url, ask: asks.current });
     return true;
   };
   const landing =
