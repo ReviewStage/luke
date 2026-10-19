@@ -130,6 +130,7 @@
     "./automations/automation-runs": "./src/automations/automation-runs.js",
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",
     "./automations/automation-webhook-app": "./src/automations/automation-webhook-app.js",
+    "./chapters/chapters-generator": "./src/chapters/chapters-generator.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
     "./dictation/dictation-app": "./src/dictation/dictation-app.js",
