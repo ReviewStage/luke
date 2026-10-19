@@ -2,20 +2,20 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mountComposer } from "@luke/panel/plan-editor/composer-editor";
-import {
-  COMPOSER_INPUT,
-  type ComposerEditorHandle,
-  type ComposerEditorProps,
-  type ComposerTrigger,
-} from "@luke/panel/plan-editor/contract";
+import { afterEach, beforeEach, test } from "vitest";
 import {
   composerEditor,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
-} from "@luke/panel/testing/composer";
-import { afterEach, beforeEach, test } from "vitest";
+} from "../testing/composer.js";
+import { mountComposer } from "./composer-editor.js";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type ComposerEditorProps,
+  type ComposerTrigger,
+} from "./contract.js";
 
 /**
  * The message box's editor through its mount and its handle: the words read
