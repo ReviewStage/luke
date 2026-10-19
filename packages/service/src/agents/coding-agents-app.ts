@@ -1494,21 +1494,26 @@ const inboxCloseEndpoint = /* @__PURE__ */ Effect.fn("web/inboxCloseEndpoint")(f
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { revision, clientKey } = asked.success;
   const { item, answerKey } = stored.value;
-  const taken =
-    answerKey === clientKey
-      ? item
-      : item.status !== INBOX_STATUS.OPEN || item.revision !== revision
-        ? undefined
-        : Option.getOrUndefined(
-            yield* hostedStoreOrUnavailable(
-              closeInboxItemAsMember(userId, itemId, revision, clientKey),
-            ),
-          );
+  // A close sent again is the one taken only while the item still stands as that close left it, never once its agent moved it on.
+  const retried =
+    answerKey === clientKey &&
+    item.status === INBOX_STATUS.CLOSED &&
+    item.closedReason === undefined &&
+    item.revision === revision;
+  const taken = retried
+    ? item
+    : item.status !== INBOX_STATUS.OPEN || item.revision !== revision
+      ? undefined
+      : Option.getOrUndefined(
+          yield* hostedStoreOrUnavailable(
+            closeInboxItemAsMember(userId, itemId, revision, clientKey),
+          ),
+        );
   if (taken === undefined) {
     // Not taken: the item moved on, or an answer or a close settled it; it is answered as it now stands.
     const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
+    return inboxAnswered(now.value.item, false);
   }
   if (!taken.needsReply) return inboxAnswered(taken, true);
   const handedOver = Effect.gen(function* () {

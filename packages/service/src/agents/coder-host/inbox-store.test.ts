@@ -521,7 +521,13 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.equal(reopened?.status, INBOX_STATUS.OPEN);
         assert.equal(reopened?.closedBy, undefined);
 
-        assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, randomUUID())));
+        const later = randomUUID();
+        assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, later)));
+        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
+        assert.ok(
+          Option.isNone(yield* withdrawInboxClose(teammate, id, later)),
+          "taking the member's close back never opens the agent's own close since",
+        );
         const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
         assert.ok(Result.isSuccess(again));
         assert.equal(again.success.status, INBOX_STATUS.OPEN);

@@ -885,7 +885,7 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
-test("an open item's Close settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Close", async () => {
+test("an open item's Close asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Close", async () => {
   onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
   const { page } = mount();
   await settle();
@@ -916,6 +916,15 @@ test("an open item's Close settles it without an answer at the revision drawn, t
     );
 
   await act(async () => (closeButton() ?? assert.fail("an open item offers Close")).click());
+  await settle();
+  assert.deepEqual(sent, [], "Close asks first");
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
+  assert.equal(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
+  const confirmClose = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Close",
+  );
+  await act(async () => (confirmClose ?? assert.fail("the question offers Close")).click());
   await settle();
 
   assert.deepEqual(

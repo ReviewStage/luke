@@ -30,8 +30,10 @@ import {
   Checkbox,
   ChoiceList,
   type ChoiceOption,
+  ConfirmDialog,
   type Crumb,
   DISCLOSURE_BODY,
+  type DialogQuestion,
   Disclosure,
   DisclosureBody,
   DisclosureSummary,
@@ -47,9 +49,10 @@ import {
   TEXT_TONE,
   Text,
   TextField,
+  useConfirmDialog,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
-import { isWireString } from "@luke/wire";
+import { ACTION_RESULT_STATUS, isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
@@ -1403,6 +1406,56 @@ const CloseHint: FoldingButtonHint = ({ children }) => (
   <Tooltip label={CLOSE_ITEM.HINT}>{children}</Tooltip>
 );
 
+/** What the Close asks first: which item, and whether its agent is told now or reads it later. */
+function closeQuestion(item: InboxItem): DialogQuestion {
+  return {
+    title: `Close “${cardTitle(item.title)}” without answering?`,
+    body: item.needsReply
+      ? "The agent is told you closed it. Only the agent can open it again."
+      : "The agent reads that you closed it the next time it reads its inbox. Only the agent can open it again.",
+    verb: CLOSE_ITEM.LABEL,
+    running: "Closing…",
+  };
+}
+
+/**
+ * An open item's Close in the pane's bar, which asks first, since only the
+ * agent can open an item again (`packages/panel/AGENTS.md`'s Confirms). It
+ * is keyed by its item, so a question asked on one item never closes the
+ * next, and the question goes with the pane once it is hidden. Note that
+ * the close is laid over the reads at once (`use-task-inbox.ts`), so the
+ * question is answered as it is sent, and a refusal is said on the card.
+ */
+function CloseItem({
+  item,
+  control,
+  shown,
+}: {
+  item: InboxItem;
+  control: TaskInboxControl;
+  shown: boolean;
+}): React.JSX.Element {
+  const confirm = useConfirmDialog(
+    { subject: item.status === INBOX_STATUS.OPEN, surfaceOpen: shown },
+    () => {
+      control.onClose(item);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  return (
+    <>
+      <FoldingButton
+        label={CLOSE_ITEM.LABEL}
+        icon={<CircleSlashIcon />}
+        disabled={control.sending.has(item.id)}
+        onClick={confirm.ask}
+        hint={CloseHint}
+      />
+      <ConfirmDialog confirm={confirm} question={closeQuestion(item)} />
+    </>
+  );
+}
+
 /** What stands in the box's place while the item's task is archived. */
 const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
 
@@ -1618,13 +1671,7 @@ export function InboxPane({
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
         {answerable ? (
-          <FoldingButton
-            label={CLOSE_ITEM.LABEL}
-            icon={<CircleSlashIcon />}
-            disabled={control.sending.has(item.id)}
-            onClick={() => control.onClose(item)}
-            hint={CloseHint}
-          />
+          <CloseItem key={item.id} item={item} control={control} shown={!hidden} />
         ) : null}
         {pager === undefined ||
         (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (

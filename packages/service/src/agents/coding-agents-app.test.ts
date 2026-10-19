@@ -210,7 +210,12 @@ import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
-import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
+import {
+  answerInboxItem,
+  closeInboxItem,
+  type InboxImage,
+  postInboxItem,
+} from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
@@ -5410,6 +5415,23 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         );
         assert.equal(pressed.taken, true);
         assert.equal(eve.sent.length, before + 1, "an item that asks nothing back messages nobody");
+
+        yield* closeInboxItem(
+          { userId: owner, agentId: asked.success.agentId },
+          QUESTION.key,
+          "Found it myself.",
+        );
+        const afterAgent = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* close(asked.success.id, body),
+        );
+        assert.equal(
+          afterAgent.taken,
+          false,
+          "a retry never takes the agent's later close for its own",
+        );
+        assert.equal(eve.sent.length, before + 1, "and tells the agent nothing");
         assert.deepEqual((yield* waiting()).items, [], "nothing waits on the developer");
       }),
   );

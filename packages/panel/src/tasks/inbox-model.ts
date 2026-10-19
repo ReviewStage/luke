@@ -519,9 +519,16 @@ export type Settlement =
   | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string }
   | { readonly by: typeof SETTLED_BY.CLOSER };
 
-/** Whether an item was closed by a member without an answer, whom it names, rather than taken back by its agent. */
+/**
+ * Whether an item was closed by a member without an answer rather than taken
+ * back by its agent. Note that the agent's close always says why, so a closed
+ * item with no reason is a member's, whose account may be gone since.
+ */
 function closedByMember(item: InboxItem): boolean {
-  return item.status === INBOX_STATUS.CLOSED && item.closedBy !== undefined;
+  return (
+    item.status === INBOX_STATUS.CLOSED &&
+    (item.closedBy !== undefined || item.closedReason === undefined)
+  );
 }
 
 /** A form's values as the developer filled them, one per line; nothing where they filled none. */

@@ -1653,6 +1653,8 @@ const withdrawClose = SqlSchema.findOneOption({
             itemReachableBy(userId),
             eq(inboxItem.answerKey, closeKey),
             eq(inboxItem.status, INBOX_STATUS.CLOSED),
+            // The agent's own close since, which always says why, is never opened by taking the member's back.
+            isNull(inboxItem.closedReason),
           ),
         )
         .returning(inboxColumns(userId)),
