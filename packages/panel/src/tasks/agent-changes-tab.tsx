@@ -365,20 +365,34 @@ function AboveThreads({
   );
 }
 
-/** What lights the lines a review thread is on while the pointer rests on it, and lets them go as it leaves. */
-type ThreadHover = (thread: ReviewThread, resting: boolean) => void;
+/**
+ * What lights the lines review threads are on while the pointer rests on
+ * them, and lets them go as it leaves: one thread, or the chip a line's
+ * threads are minimized to, the whole group, told apart by `group`, since
+ * the chip and a thread under it share their first thread's key.
+ */
+type ThreadHover = (
+  key: string,
+  group: boolean,
+  threads: readonly ReviewThread[],
+  resting: boolean,
+) => void;
 
 /**
- * A review thread on its line, which lights the lines it is on while the
- * pointer rests on it, as stage-cli's threads do; drawn as it is where
- * nothing lights them.
+ * Review threads on their line, one or a minimized chip's, which light the
+ * lines they are on while the pointer rests on them, as stage-cli's threads
+ * do; drawn as they are where nothing lights them.
  */
 function ThreadLines({
-  thread,
+  hoverKey,
+  group = false,
+  threads,
   hover,
   children,
 }: {
-  thread: ReviewThread;
+  hoverKey: string;
+  group?: boolean;
+  threads: readonly ReviewThread[];
   hover: ThreadHover | undefined;
   children: ReactNode;
 }): React.JSX.Element {
@@ -387,8 +401,8 @@ function ThreadLines({
     // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread only lights the lines it is on; nothing is pressed.
     <div
       className="diff-thread-lines"
-      onMouseEnter={() => hover(thread, true)}
-      onMouseLeave={() => hover(thread, false)}
+      onMouseEnter={() => hover(hoverKey, group, threads, true)}
+      onMouseLeave={() => hover(hoverKey, group, threads, false)}
     >
       {children}
     </div>
@@ -424,7 +438,7 @@ function minimizedNotes(
   return [...lines].flatMap(([side, onSide]) =>
     [...onSide].flatMap(([line, threads]) => {
       const drawn = threads.map((each) => (
-        <ThreadLines key={each.key} thread={each.thread} hover={hover}>
+        <ThreadLines key={each.key} hoverKey={each.key} threads={[each.thread]} hover={hover}>
           {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
         </ThreadLines>
       ));
@@ -441,7 +455,12 @@ function minimizedNotes(
               line,
               content: (
                 // The chip lights the lines its threads stand on, as each thread does once shown.
-                <ThreadLines thread={first.thread} hover={hover}>
+                <ThreadLines
+                  hoverKey={first.key}
+                  group
+                  threads={threads.map((each) => each.thread)}
+                  hover={hover}
+                >
                   <MinimizedThreads
                     threads={threads.map((each) => each.thread)}
                     shown={minimized.shown(side, line)}
@@ -498,7 +517,7 @@ function entryOf(
           side: each.side,
           line: each.line,
           content: (
-            <ThreadLines thread={each.thread} hover={hover}>
+            <ThreadLines hoverKey={each.key} threads={[each.thread]} hover={hover}>
               {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
             </ThreadLines>
           ),
@@ -727,18 +746,38 @@ const COMMENT_SIDE = {
   [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
 } as const;
 
-/** The lines a review thread is on now, as the list lights them; none for a thread on no line of the head. */
-function threadLines(thread: ReviewThread): DiffListSelection | undefined {
-  if (thread.line === null) return undefined;
-  return {
-    path: thread.path,
-    selection: {
-      start: thread.startLine ?? thread.line,
-      side: COMMENT_SIDE[thread.startSide ?? thread.side],
-      end: thread.line,
-      endSide: COMMENT_SIDE[thread.side],
-    },
-  };
+/** Each side's place in the order a diff draws a line's rows: the old side's first. */
+const SIDE_ORDER = {
+  [DIFF_SELECTION_SIDE.DELETIONS]: 0,
+  [DIFF_SELECTION_SIDE.ADDITIONS]: 1,
+} as const;
+
+/**
+ * The lines review threads ending on one line are on now, as the list
+ * lights them: the widest of their ranges, the one that starts earliest,
+ * which holds every other; none for threads on no line of the head.
+ */
+function threadLines(threads: readonly ReviewThread[]): DiffListSelection | undefined {
+  const ranges = threads.flatMap((thread) =>
+    thread.line === null
+      ? []
+      : [
+          {
+            path: thread.path,
+            selection: {
+              start: thread.startLine ?? thread.line,
+              side: COMMENT_SIDE[thread.startSide ?? thread.side],
+              end: thread.line,
+              endSide: COMMENT_SIDE[thread.side],
+            },
+          },
+        ],
+  );
+  return ranges.toSorted(
+    (a, b) =>
+      SIDE_ORDER[a.selection.side] - SIDE_ORDER[b.selection.side] ||
+      a.selection.start - b.selection.start,
+  )[0];
 }
 
 /**
@@ -852,15 +891,21 @@ interface RestingThread {
  * door that sets them; the door stays the same, so a file's entry is kept.
  */
 function useThreadHover(): RestingThread {
-  const [lines, setLines] = useState<{ thread: ReviewThread; lines: DiffListSelection }>();
-  const hover = useCallback<ThreadHover>((thread, resting) => {
-    const on = threadLines(thread);
-    setLines((was) => {
-      if (resting) return on === undefined ? was : { thread, lines: on };
-      return was?.thread === thread ? undefined : was;
+  // Note that what the pointer rests on stands as a stack, a thread on top of
+  // the chip it opened from, so leaving the thread for its chip lights the
+  // chip's lines again.
+  const [resting, setResting] = useState<
+    readonly { key: string; group: boolean; lines: DiffListSelection }[]
+  >([]);
+  const hover = useCallback<ThreadHover>((key, group, threads, on) => {
+    const lines = threadLines(threads);
+    setResting((was) => {
+      const others = was.filter((each) => each.key !== key || each.group !== group);
+      if (on && lines !== undefined) return [...others, { key, group, lines }];
+      return others.length === was.length ? was : others;
     });
   }, []);
-  return { lines: lines?.lines, hover };
+  return { lines: resting.at(-1)?.lines, hover };
 }
 
 /** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */

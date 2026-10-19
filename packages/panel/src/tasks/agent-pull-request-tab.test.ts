@@ -2941,7 +2941,7 @@ test("Files changed draws each review thread under its line, its comments throug
   );
 });
 
-test("the pointer resting on a review thread in Files changed lights the lines it is on, and leaving it lets them go", async () => {
+test("the pointer resting on a review thread in Files changed lights the lines it is on, and leaving it lets them go; a minimized chip lights the widest of its threads' lines, and again once the pointer comes back from a thread it shows", async () => {
   const review = {
     kind: CONVERSATION_ENTRY.REVIEW,
     by: CHARLES_ON_GITHUB,
@@ -2950,7 +2950,16 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     body: "",
     at: 2_500,
     url: `${PAGE}#pullrequestreview-9`,
-    threads: [thread()],
+    threads: [
+      thread(),
+      thread({
+        startLine: 10,
+        originalStartLine: 10,
+        comments: [
+          { ...(thread().comments[0] ?? assert.fail("a comment")), url: `${PAGE}#discussion_r2` },
+        ],
+      }),
+    ],
   } as const;
   handSettings();
   const tab = await draw(
@@ -3002,15 +3011,36 @@ test("the pointer resting on a review thread in Files changed lights the lines i
   act(() => minimize?.click());
   await settle();
   const chip =
-    note.querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("the thread is minimized");
+    note.querySelector<HTMLElement>(".diff-thread-chip") ??
+    assert.fail("the threads are minimized");
+  const litFrom = () => lists.at(-1)?.selected?.selection.start;
   act(() => {
     chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   });
-  assert.equal(
-    lists.at(-1)?.selected?.selection.end,
-    13,
-    "the minimized chip lights its thread's lines too",
-  );
+  assert.equal(litFrom(), 10, "the chip lights the widest of its threads' lines, 10–13");
+
+  act(() => chip.click());
+  await settle();
+  const shown =
+    [
+      ...note.querySelectorAll<HTMLElement>(
+        ".diff-thread-chip-threads .pull-request-thread-comment",
+      ),
+    ].find((each) => each.textContent?.includes("once")) ??
+    assert.fail("the chip shows the thread on lines 12–13");
+  act(() => {
+    shown.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  assert.equal(litFrom(), 12, "a thread shown under the chip lights its own lines");
+  act(() => {
+    shown.dispatchEvent(
+      new MouseEvent("mouseout", {
+        bubbles: true,
+        relatedTarget: note.querySelector(".diff-thread-chip"),
+      }),
+    );
+  });
+  assert.equal(litFrom(), 10, "back on the chip, the chip's lines light again");
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
