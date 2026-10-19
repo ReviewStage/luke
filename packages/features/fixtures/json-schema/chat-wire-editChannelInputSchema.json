@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "channel": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "purpose": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "archived": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "channel"
+  ],
+  "additionalProperties": false
+}
