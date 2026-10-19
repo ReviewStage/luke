@@ -803,7 +803,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.equal(filed.number, (plain.number ?? 0) + 1);
 
         const patch = (userId: string, body: WireBoundaryInput) =>
-          ask(request(ONE_TASK, userId, { id: plain.id, method: "PATCH", body }));
+          ask(request(ONE_TASK(plain.id), userId, { method: "PATCH", body }));
         const changed = readAnswer(
           taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
