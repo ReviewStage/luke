@@ -23,8 +23,10 @@ import {
 } from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
+  type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type PlatformActProcedures,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -284,17 +286,29 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   };
   // SAFETY: no account ask is called here, so the account asks' host is never reached.
   const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  const handler = createActPortHandler({
-    accountAsks,
-    issues: NO_ISSUES,
-    workspaces: {
-      host,
-      openExternal: (url) => {
-        browsed.push(url);
-        return Promise.resolve();
+  // SAFETY: no platform act is called here, so no platform procedure is reached.
+  const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
+  const handler = createActPortHandler(
+    {
+      ...elsewhere,
+      accountAsks,
+      issues: NO_ISSUES,
+      workspaces: {
+        host,
+        openExternal: (url) => {
+          browsed.push(url);
+          return Promise.resolve();
+        },
       },
     },
-  });
+    NO_PLATFORM,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

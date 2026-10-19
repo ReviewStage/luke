@@ -5,11 +5,13 @@ import {
   type ChatMemberRow,
   type ChatPost,
   channelNamed,
+  editTopicChannel,
   ensureGeneral,
   ensureMember,
   findOrMakeDm,
   memberNamed,
   messageAt,
+  openTopicChannel,
   readAllTo,
   readTo,
   resolveAsk,
@@ -51,7 +53,12 @@ import {
   postChat,
   tellMessage,
 } from "./coder-host/chat-notify.js";
-import { messageOnWire, readsOf, workspaceChatPast } from "./coder-host/chat-page.js";
+import {
+  channelOnWire,
+  messageOnWire,
+  readsOf,
+  workspaceChatPast,
+} from "./coder-host/chat-page.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
@@ -339,7 +346,44 @@ const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read;
 });
 
-/** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, or a read. */
+/**
+ * A topic channel opened by a person under a name of their own, with what
+ * it is for, or one already open under the name answered as it stands;
+ * refused where the name is another channel's or the workspace keeps as
+ * many topics as it may.
+ */
+const openAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Writer,
+  open: { readonly name: string; readonly purpose?: string },
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
+  const { userId, organizationId, self } = writer;
+  const opened = yield* hostedStoreOrUnavailable(
+    openTopicChannel(userId, organizationId, open.name, self.id, open.purpose ?? null),
+  );
+  if (Result.isFailure(opened)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[opened.failure]);
+  return { channel: channelOnWire(opened.success) };
+});
+
+/** A topic channel renamed, its purpose said or cleared, or archived or brought back by a person, as the store takes the edit. */
+const editAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  writer: Writer,
+  edit: {
+    readonly channelId: string;
+    readonly name?: string;
+    readonly purpose?: string | null;
+    readonly archived?: boolean;
+  },
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
+  const { userId, organizationId, self } = writer;
+  const { channelId, ...change } = edit;
+  const edited = yield* hostedStoreOrUnavailable(
+    editTopicChannel(userId, organizationId, self.id, channelId, change),
+  );
+  if (Result.isFailure(edited)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[edited.failure]);
+  return { channel: channelOnWire(edited.success) };
+});
+
+/** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, a read, or a topic channel opened or edited. */
 export const writeWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
   userId: string,
@@ -359,5 +403,7 @@ export const writeWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* resolveAsPerson(writer, write.resolve.seq, write.resolve.reason);
   }
   if ("answer" in write) return yield* answerAsPerson(telling, writer, write);
+  if ("open" in write) return yield* openAsPerson(writer, write.open);
+  if ("edit" in write) return yield* editAsPerson(writer, write.edit);
   return yield* postAsPerson(telling, writer, write);
 });

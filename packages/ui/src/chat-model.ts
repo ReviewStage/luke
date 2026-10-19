@@ -2,12 +2,16 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
+  type ChatEditRequest,
   type ChatMember,
   type ChatMessage,
+  type ChatOpenRequest,
   type ChatReply,
+  GENERAL_CHANNEL,
   MEMBER_KIND,
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
@@ -65,6 +69,9 @@ type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
 
 /** A post the window sends: the words, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `postChatInputSchema`). */
 export type ChatPost = typeof postChatInputSchema.Type;
+
+/** A topic channel opened, or one renamed, its purpose said or cleared, or archived or brought back, as the window writes it. */
+export type ChatChannelChange = ChatOpenRequest | ChatEditRequest;
 
 /** An answer the window sends to an ask: the message carrying it, the revision the developer read, and the answer. */
 export interface ChatAskAnswer {
@@ -128,9 +135,45 @@ export interface ChatRailRow {
 export interface ChatRail {
   /** How many messages wait on the reader in For you. */
   readonly forYou: number;
+  /** #general, then the topics standing. */
   readonly channels: readonly ChatRailRow[];
+  /** The tasks' own channels, grouped as the reader's sidebar groups the tasks. */
+  readonly tasks: readonly ChatRailGroup[];
+  /** The channels archived: a task's that was archived with it, and a topic archived. */
+  readonly archived: readonly ChatRailRow[];
   readonly direct: readonly ChatRailRow[];
 }
+
+/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
+interface ChatRailGroup {
+  /** The group's own key, which a list draws it under. */
+  readonly key: string;
+  /** What heads it; none for the tasks no pin or section holds where nothing else is grouped. */
+  readonly title: string | undefined;
+  readonly rows: readonly ChatRailRow[];
+}
+
+/** How the reader's sidebar groups tasks: the tasks pinned, in their order, and the sections they keep, each with its tasks in order. */
+export interface ChatTaskGrouping {
+  readonly pinned: readonly string[];
+  readonly sections: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly taskIds: readonly string[];
+  }[];
+}
+
+/** What a group of task channels is headed by, where the rail draws it. */
+const TASK_GROUP = {
+  PINNED: "Pinned",
+  OTHER: "Other tasks",
+} as const;
+
+/** The keys of the groups no section names. */
+const TASK_GROUP_KEY = {
+  PINNED: "pinned",
+  OTHER: "other",
+} as const;
 
 /** A root message and the replies of its thread, each in the order posted. */
 export interface ChatThread {
@@ -217,7 +260,57 @@ function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[]
 }
 
 /** The rail: For you's count, the channels in their order, and the direct messages, the latest spoken in first. */
-export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
+/**
+ * The task channels grouped as the sidebar groups their tasks: the pinned
+ * first, in the pins' order, then each section in its order, then the rest
+ * by name, under Other tasks where any group stands above them and headed
+ * by nothing where none does. A task stands in its first group only. Note
+ * that the order within a group is the sidebar's own, so a task is found
+ * where the reader keeps it.
+ */
+function taskGroups(
+  rows: readonly ChatRailRow[],
+  grouping: ChatTaskGrouping | undefined,
+): readonly ChatRailGroup[] {
+  const byTask = new Map(
+    rows.flatMap((row) =>
+      row.channel.planId === undefined ? [] : [[row.channel.planId, row] as const],
+    ),
+  );
+  const placed = new Set<string>();
+  const take = (taskIds: readonly string[]) =>
+    taskIds.flatMap((taskId) => {
+      const row = byTask.get(taskId);
+      if (row === undefined || placed.has(taskId)) return [];
+      placed.add(taskId);
+      return [row];
+    });
+  const groups: ChatRailGroup[] = [];
+  const pinned = take(grouping?.pinned ?? []);
+  if (pinned.length > 0)
+    groups.push({ key: TASK_GROUP_KEY.PINNED, title: TASK_GROUP.PINNED, rows: pinned });
+  for (const section of grouping?.sections ?? []) {
+    const held = take(section.taskIds);
+    if (held.length > 0) groups.push({ key: section.id, title: section.title, rows: held });
+  }
+  const rest = rows.filter(
+    (row) => row.channel.planId === undefined || !placed.has(row.channel.planId),
+  );
+  if (rest.length > 0) {
+    groups.push({
+      key: TASK_GROUP_KEY.OTHER,
+      title: groups.length === 0 ? undefined : TASK_GROUP.OTHER,
+      rows: rest,
+    });
+  }
+  return groups;
+}
+
+export function chatRail(
+  chat: ChatAnswer,
+  names: ChatNames,
+  grouping?: ChatTaskGrouping | undefined,
+): ChatRail {
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
@@ -231,17 +324,29 @@ export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
   const latest = (channel: ChatChannel) => messagesIn(chat, channel.id).at(-1)?.seq ?? 0;
+  const byName = (one: ChatChannel, other: ChatChannel) =>
+    CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
+    channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other));
   const channels = shown
-    .filter((channel) => channel.kind !== CHANNEL_KIND.DM)
-    .toSorted(
-      (one, other) =>
-        CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
-        channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other)),
-    );
+    .filter(
+      (channel) => channel.kind === CHANNEL_KIND.GENERAL || channel.kind === CHANNEL_KIND.TOPIC,
+    )
+    .toSorted(byName);
+  const tasks = shown.filter((channel) => channel.kind === CHANNEL_KIND.TASK).toSorted(byName);
+  // Note that an archived DM has no place to come back from, so the archive holds channels alone.
+  const archived = chat.channels
+    .filter((channel) => channel.archived && channel.kind !== CHANNEL_KIND.DM)
+    .toSorted(byName);
   const direct = shown
     .filter((channel) => channel.kind === CHANNEL_KIND.DM)
     .toSorted((one, other) => latest(other) - latest(one));
-  return { forYou: forYou(chat).length, channels: channels.map(row), direct: direct.map(row) };
+  return {
+    forYou: forYou(chat).length,
+    channels: channels.map(row),
+    tasks: taskGroups(tasks.map(row), grouping),
+    archived: archived.map(row),
+    direct: direct.map(row),
+  };
 }
 
 /**
@@ -382,4 +487,34 @@ export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly strin
     if (kept.size === DICTATION_BOUNDS.MAX_KEYWORDS) break;
   }
   return [...kept];
+}
+
+/** The characters a channel's name is spelled in, its first a letter or a digit (`chatChannelNameSchema`). */
+const CHANNEL_NAME = /^[a-z0-9][a-z0-9._-]*$/u;
+
+/** The most characters a channel's name may spell (`CHAT_BOUNDS.MAX_KEY_CHARS`). */
+const MAX_CHANNEL_NAME_CHARS = CHAT_BOUNDS.MAX_KEY_CHARS;
+
+/** What a channel's name as typed is written as: lower case, each run of spaces a hyphen, nothing around it. */
+export function topicName(words: string): string {
+  return words.trim().toLowerCase().replace(/\s+/gu, "-");
+}
+
+/** Why a name a person typed cannot be a topic channel's, the channel being renamed aside; nothing where it can. */
+export function topicNameProblem(
+  chat: ChatAnswer,
+  name: string,
+  renaming: string | undefined,
+): string | undefined {
+  if (name === "") return "Name the channel.";
+  if (name.length > MAX_CHANNEL_NAME_CHARS) {
+    return `A channel's name is at most ${MAX_CHANNEL_NAME_CHARS} characters.`;
+  }
+  if (!CHANNEL_NAME.test(name)) {
+    return "Use lowercase letters, numbers, dots, dashes, and underscores, starting with a letter or a number.";
+  }
+  const taken =
+    name === GENERAL_CHANNEL ||
+    chat.channels.some((channel) => channel.name === name && channel.id !== renaming);
+  return taken ? `#${name} is already a channel.` : undefined;
 }

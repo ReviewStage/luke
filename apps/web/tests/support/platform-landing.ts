@@ -17,7 +17,7 @@ import { type Rewrite, readApiRewritesTable } from "../../server/function-rewrit
 
 const WEB = join(import.meta.dirname, "..", "..");
 
-/** The client's request as it arrives at its function: rewritten by the table given, its own query and headers kept. */
+/** The client's request as it arrives at its function: rewritten by the table given, its own query, headers, and body kept. */
 function landed(request: Request, rewrites: readonly Rewrite[]): Request {
   const asked = new URL(request.url);
   for (const rewrite of rewrites) {
@@ -25,7 +25,15 @@ function landed(request: Request, rewrites: readonly Rewrite[]): Request {
     if (!pattern.test(asked.pathname)) continue;
     const url = new URL(asked.pathname.replace(pattern, rewrite.dest), asked.origin);
     for (const [name, value] of asked.searchParams) url.searchParams.append(name, value);
-    return new Request(url, { method: request.method, headers: request.headers });
+    if (request.body === null)
+      return new Request(url, { method: request.method, headers: request.headers });
+    const streaming: RequestInit & { readonly duplex: "half" } = {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      duplex: "half",
+    };
+    return new Request(url, streaming);
   }
   throw new Error(`no rewrite serves ${asked.pathname}`);
 }

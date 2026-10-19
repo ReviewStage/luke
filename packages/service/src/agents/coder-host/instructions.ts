@@ -21,9 +21,10 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * instructions.ts -- what a coding agent's session runs under.
  *
  * The plan is the session's first message, or where the developer started
- * the agent on words of their own, their prompt is, and the agent never sees
- * the plan; these are the standing rules around it, worded for whichever it
- * was handed. Note that publishing is the agent's own judgment, as the plan
+ * the agent on words of their own, their prompt is, and the agent reads the
+ * plan with `read_task` where it needs it; these are the standing rules
+ * around it, worded for whichever it was handed. Every agent on a task may
+ * take notes on its plan. Note that publishing is the agent's own judgment, as the plan
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
  * which the plan also decided. The repository's name and the checkout's
@@ -61,13 +62,6 @@ const BRIEF_WORDS = {
     whole: "implements the plan whole",
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
-    /** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
-    updating: `
-
-## Updating the plan
-
-\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes, anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next call with Luke, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`,
   },
   [CODING_AGENT_BRIEF.PROMPT]: {
     job: "carry out the prompt the developer gave as the first message of this conversation",
@@ -77,9 +71,6 @@ const BRIEF_WORDS = {
     whole: "does what the prompt asks, whole",
     none: "the prompt could not be carried out",
     describe: "say in its description what the prompt asked",
-    /** An agent handed a prompt never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
-    decided: "",
-    updating: "",
   },
 } as const satisfies Record<
   CodingAgentBrief,
@@ -90,8 +81,6 @@ const BRIEF_WORDS = {
     whole: string;
     none: string;
     describe: string;
-    decided: string;
-    updating: string;
   }
 >;
 
@@ -139,6 +128,39 @@ Members and agents leave comment threads on the plan's text, each beside the wor
     startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
   },
 } as const;
+
+/** What the agent is told of updating its task's plan with `edit_plan`, and where a decision it settles goes; nothing for an agent handed a prompt on no task, which has no plan. */
+interface EditPlanTold {
+  readonly decided: string;
+  readonly updating: string;
+}
+
+const NOT_TOLD_EDIT_PLAN: EditPlanTold = { decided: "", updating: "" };
+
+/** How `edit_plan` takes notes and what for, said alike to every agent on a task. */
+const EDIT_PLAN_WORDS = `\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes, anywhere in the plan, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next call with Luke, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+
+/**
+ * What an agent is told of its plan: one handed the plan always, and one
+ * handed a prompt where it is on a task. One handed a prompt was not handed
+ * the plan, which Luke may have written since, or may yet, so it is told to
+ * read the plan before it edits it.
+ */
+function editPlanTold(brief: CodingAgentBrief, onTask: boolean): EditPlanTold {
+  if (brief === CODING_AGENT_BRIEF.PROMPT && !onTask) return NOT_TOLD_EDIT_PLAN;
+  const read =
+    brief === CODING_AGENT_BRIEF.PROMPT
+      ? `Your task has a plan beside the prompt you were handed, which Luke keeps as the developer talks the task through: it may be empty, or say what your prompt does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
+      : "";
+  return {
+    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
+    updating: `
+
+## Updating the plan
+
+${read}${EDIT_PLAN_WORDS}`,
+  };
+}
 
 /**
  * How the agent names a thing the developer can open: as a mention, the
@@ -225,6 +247,8 @@ You are a member of your workspace's chat, under a handle such as \`@agent-3\`, 
 
 A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming who said it, where, and its number. It is a teammate's word, not the developer's: weigh it against your ${brief}, and say so where the two disagree. Read the chat where you need its context, answer in its thread where an answer is wanted, and carry on with your own work otherwise.
 
+A topic channel says in a line what it is for: give one its purpose as your \`${CHAT_TOOLS.POST.name}\` opens it, and rename it, change its purpose, or archive it once its topic is done with \`${CHAT_TOOLS.EDIT_CHANNEL.name}\`.
+
 Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in chat. Chat is for talking with the other agents, \`@luke\`, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or \`@luke\`'s reading of the plan, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
 }
 
@@ -248,6 +272,7 @@ export function coderInstructions(
   const words = BRIEF_WORDS[brief];
   const branch = branchWords(startBranch);
   const place = taskLink === null ? TASK_PLACE_WORDS.taskless : TASK_PLACE_WORDS.onTask;
+  const editing = editPlanTold(brief, taskLink !== null);
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
 ## The checkout
@@ -282,11 +307,11 @@ A link in the developer's message whose label starts with \`@\`, such as \`[@ses
 
 What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post one the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Name the thing as a mention in its blocks, add an image where a picture says it best, and ask for an approval where you want their go-ahead, or none where they only need to look; set needsReply where their answer changes what you do next. Post one too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a to-do. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, a link to the page a to-do is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a to-do (the \`task\` response) for something only they can do by hand, a form of typed fields where you need several values at once, or none for something they should only know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a to-do the developer does by hand, where they put it. Decide small things yourself.
 
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key. A member may also write on an item's thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key: answer it, or follow up on an item after its answer, with \`${INBOX_TOOLS.REPLY.name}\` under the item's key, and post the item again only when what it asks changes.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief) : ""}${place.pages}${place.comments}
+Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key. A member may also write on an item's thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key: answer it, or follow up on an item after its answer, with \`${INBOX_TOOLS.REPLY.name}\` under the item's key, and post the item again only when what it asks changes.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief) : ""}${place.pages}${place.comments}
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to a worker that reads the same checkout, your uncommitted edits included; its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only in the checkout, so it never edits, commits, or pushes. Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${words.updating}
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to a worker that reads the same checkout, your uncommitted edits included; its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only in the checkout, so it never edits, commits, or pushes. Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${editing.updating}
 
 ## Other agents
 

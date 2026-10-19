@@ -310,10 +310,6 @@ function answer(request: Asked): Promise<Answered> {
       );
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.AUTOMATIONS_LIST:
-      if (automations === undefined)
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.TASKS_REPOSITORIES:
       if (repositoriesHeld !== undefined) {
         const held = repositoriesHeld;
@@ -368,9 +364,14 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace kind as `answer` does. */
+/** The act port answering every workspace kind, and the run commands', as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
-  const procedures = Object.values(WORKSPACE_ACT_KIND).map((kind) => [kind, onPort(kind)]);
+  const kinds: readonly PortActKind[] = [
+    ...Object.values(WORKSPACE_ACT_KIND),
+    ACT_KIND.MAC_REPOSITORIES,
+    ACT_KIND.MAC_REPOSITORY_SET,
+  ];
+  const procedures = kinds.map((kind) => [kind, onPort(kind)]);
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
@@ -403,7 +404,13 @@ beforeEach(() => {
   repositoriesHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({ act: (request) => answer(request) as Promise<ActOutcome> });
-  fakeActPort(workspacePort());
+  fakeActPort({
+    ...workspacePort(),
+    [ACT_KIND.AUTOMATIONS_LIST]: () =>
+      automations === undefined
+        ? Promise.reject(new Error("Not in this test."))
+        : Promise.resolve({ automations: automations.map(automationOf) }),
+  });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 

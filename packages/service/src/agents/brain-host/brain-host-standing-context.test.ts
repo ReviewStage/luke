@@ -17,7 +17,8 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "./bounds.js";
+import { sessionAuthFor } from "./auth.js";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import { brainHost } from "./host.js";
 import type { BrainHostSeams } from "./production.js";
@@ -80,24 +81,31 @@ function sessionId(): string {
   return `wrun_01M${String(minted).padStart(22, "0")}`;
 }
 
-function seat(target: ConversationTarget): SessionAuth {
-  const own: SessionAuthContext = {
+/** The seat a request takes at the door: its conversation and turn, and the time zone its header names where it names one. */
+function seat(target: ConversationTarget, timeZone?: string): SessionAuth {
+  const caller: SessionAuthContext = {
     principalId: target.userId,
     principalType: "user",
     authenticator: "test",
-    attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
-    },
+    attributes: {},
   };
+  const request = new Request("https://luke.test/eve/v1/session", {
+    method: "POST",
+    headers: {
+      [BRAIN_HOST_HEADER.CONVERSATION]: target.conversationId,
+      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+      ...(timeZone === undefined ? undefined : { [BRAIN_HOST_HEADER.TIME_ZONE]: timeZone }),
+    },
+  });
+  const own = sessionAuthFor(caller, request);
   return { current: own, initiator: own };
 }
 
 /** The standing context the host hands a turn of the conversation, through the same admission the resolver runs. */
-async function standingContextOf(target: ConversationTarget): Promise<string> {
+async function standingContextOf(target: ConversationTarget, timeZone?: string): Promise<string> {
   const host = brainHost(seams);
   const id = sessionId();
-  const auth = seat(target);
+  const auth = seat(target, timeZone);
   const starting = await database.run(host.admitStarting(auth, id));
   assert.ok(Result.isSuccess(starting));
   if (!Result.isSuccess(starting)) throw new Error("not admitted");
@@ -143,6 +151,41 @@ test("a turn of a plan's conversation is handed the plan's name and the document
   const second = await standingContextOf(target);
   assert.ok(second.includes(handed(SECOND)));
   assert.equal(second.includes(handed(FIRST)), false);
+});
+
+test("a turn whose request named the developer's time zone is handed their day and time in it, and today as a date mention, where UTC's day is already the next", async () => {
+  const userId = await database.createUser();
+  const task = await database.run(startTask(userId, { name: TASK_NAME }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openTaskConversation(userId, task.id)),
+  ).conversationId;
+
+  // NOW is 08:00 UTC on Friday, January 15, 2027: 10 PM the evening before in Honolulu.
+  const standing = await standingContextOf({ userId, conversationId }, "Pacific/Honolulu");
+
+  assert.ok(
+    standing.includes(
+      "[the developer's time] Thursday, January 14, 2027, 10:00 PM Pacific/Honolulu (UTC 08:00), offset -10:00. Today is [@Jan 14, 2027](luke://date/2027-01-14).",
+    ),
+    standing,
+  );
+});
+
+test("a turn whose request named no time zone, or one that stands nowhere, reads the day in UTC and says the zone is unknown", async () => {
+  const userId = await database.createUser();
+  const task = await database.run(startTask(userId, { name: TASK_NAME }));
+  const target = {
+    userId,
+    conversationId: Option.getOrThrow(await database.run(openTaskConversation(userId, task.id)))
+      .conversationId,
+  };
+  const utc =
+    "[the developer's time] Friday, January 15, 2027, 8:00 AM UTC (UTC 08:00), offset +00:00. Today is [@Jan 15, 2027](luke://date/2027-01-15). Their time zone is unknown, so read it as UTC.";
+
+  for (const timeZone of [undefined, "Mars/Olympus_Mons"]) {
+    const standing = await standingContextOf(target, timeZone);
+    assert.ok(standing.includes(utc), `${timeZone}: ${standing}`);
+  }
 });
 
 test("a plan started from a Linear issue hands every turn the issue as it was read then, beside the plan's name", async () => {

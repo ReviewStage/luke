@@ -17,8 +17,6 @@ import {
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
-  MERGE_STATE,
-  type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
   type PullRequestDeployment,
@@ -41,7 +39,6 @@ import {
   Avatar,
   Badge,
   Button,
-  CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceItem,
@@ -123,8 +120,7 @@ import {
 } from "./conversation-filters.js";
 import { PierreDiff, useDiffLook } from "./file-diff.js";
 import type { TreeShown } from "./file-view.js";
-import type { PendingReview } from "./line-comment.js";
-import { blockedWords, MergeActions } from "./merge-box.js";
+import { MergeControl } from "./merge-box.js";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
 import {
   type PullRequestComment,
@@ -181,27 +177,30 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * mergeability, and people) and its conversation, whose reviews say where
  * each reviewer the header draws stands, both asked as the tab is shown;
  * and its checks, as the Checks tab is first shown. What Luke already holds of
- * the pull request, what the agent published, draws the bar, the title, and
- * the Files changed tab's lines at once; each part stands as a skeleton
+ * the pull request, what the agent published, draws the pill, the title,
+ * and the Files changed tab's lines at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
  * failed, the other parts and the tabs standing. Refresh reads again the
  * header's reads and the checks where their tab was shown, each part drawn
  * standing until its answer lands; an agent with no pull request yet says
  * that.
  *
- * The header stays put while the tab under it scrolls: a bar like a File
- * tab's, wearing the pull request's mark and the word for where it stands,
- * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its branches, with the
- * stack it stands in beside them (`pull-request-stack.tsx`); who opened it
- * and when, as the Changes tab names them (`pull-request-people.tsx`), with
- * its reviewers' first faces wearing where each stands, the reviewer and
- * label pickers, and its labels in their GitHub colours
- * (`pull-request-labels.tsx`) at the line's end, so a pull request with no
- * labels spends no line on them; and, while it is open,
- * whether it would merge as it stands, in
- * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
- * and a quiet count: Conversation, its description and its comments and
+ * The header stays put while the tab under it scrolls, and spends as few
+ * rows as it can. Its first row is the title's: the pill wearing the pull
+ * request's mark and the word for where it stands, its title and number
+ * (⌘-click opens it on GitHub), and at the row's end, while it is open or a
+ * draft, the merge control saying what can happen now, its panel holding
+ * GitHub's own sentence and the presses (`merge-box.tsx`), then the ⋯,
+ * which opens it on GitHub first. Under it one line, wrapping where it must:
+ * its branches, with the stack it stands in beside them
+ * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
+ * names them (`pull-request-people.tsx`), with its reviewers' first faces
+ * wearing where each stands, the reviewer and label pickers, and its labels
+ * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
+ * a pull request with no labels spends no line on them. Under it, a row of
+ * tabs ending in Review while it is open or a draft
+ * (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
+ * count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
  * through the transcript's own markdown drawing (`GitHubWords`), with an
  * image GitHub serves read through the service on the App's token and
@@ -320,41 +319,6 @@ function landed<A>(part: Part<A>): A | undefined {
   return part.kind === PART.LANDED ? part.value : undefined;
 }
 
-/** How a merge's standing reads: whether it is good news, a wait, or something to fix. */
-const MERGE_TONE = {
-  READY: "ready",
-  WAITING: "waiting",
-  BLOCKED: "blocked",
-} as const;
-
-type MergeTone = (typeof MERGE_TONE)[keyof typeof MERGE_TONE];
-
-/** What a merge's standing says, and in what tone. */
-interface MergeWords {
-  readonly line: string;
-  readonly tone: MergeTone;
-}
-
-/** What a merge's standing says, as GitHub's own box under a pull request says it, its base named where it matters. */
-function mergeWords(merge: MergeState, base: string): MergeWords {
-  switch (merge) {
-    case MERGE_STATE.CLEAN:
-      return { line: "Ready to merge", tone: MERGE_TONE.READY };
-    case MERGE_STATE.UNSTABLE:
-      return { line: "Can merge, though some checks are not passing", tone: MERGE_TONE.WAITING };
-    case MERGE_STATE.BLOCKED:
-      return { line: "Merging is blocked by a required review or check", tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.BEHIND:
-      return { line: `Behind ${base}; it must be brought up to date`, tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.CONFLICTS:
-      return { line: `Conflicts with ${base}`, tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.DRAFT:
-      return { line: "A draft; mark it ready for review to merge", tone: MERGE_TONE.WAITING };
-    case MERGE_STATE.UNKNOWN:
-      return { line: "GitHub is still checking whether it merges", tone: MERGE_TONE.WAITING };
-  }
-}
-
 /** The glyph a check wears for where it stands. */
 const CHECK_GLYPHS = {
   [CHECK_STATE.FAILED]: <XIcon />,
@@ -420,7 +384,7 @@ function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
   return Math.max(CHECKS_UNFOLDED, asking);
 }
 
-/** The bar's ⋯: the page read again, and the pull request's link copied. */
+/** The header's ⋯: the pull request opened on GitHub, the page read again, and its link copied. */
 function PullRequestMenu({
   url,
   reading,
@@ -435,6 +399,11 @@ function PullRequestMenu({
   const menu = useMenu(true);
   const copyWithToast = useCopyToast();
   const actions: MenuAction[] = [
+    {
+      label: "Open on GitHub",
+      icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+      onSelect: () => appPlatform().openGitHub(url),
+    },
     {
       label: "Refresh pull request",
       icon: <RotateCwIcon aria-hidden="true" />,
@@ -459,8 +428,8 @@ function PullRequestMenu({
   );
 }
 
-/** What the bar draws of the pull request: its mark's three, and its page. */
-type BarPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
+/** What the header draws of the pull request from the first frame: its mark's three, and its page. */
+type HeaderPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
 
 /** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
 function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
@@ -470,18 +439,18 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
 }
 
 /**
- * The pull request the bar draws: what the agent published, as last read
- * for the plan, from the first frame, each of its words replaced by the
- * overview's own as its read lands, since that is the newest and the page
- * under the bar says the same: where it stands by the pull request's read,
+ * The pull request the header's pill and ⋯ draw: what the agent published,
+ * as last read for the plan, from the first frame, each of its words
+ * replaced by the overview's own as its read lands, since that is the newest
+ * and the page under the header says the same: where it stands by the pull request's read,
  * and its checks by theirs, the published checks standing only for the
  * pull request they were read on. None while neither has been read.
  */
-function barPullRequestOf(
+function headerPullRequestOf(
   pullRequest: CodingAgentOverviewPullRequest | undefined,
   checks: CodingAgentOverviewChecks | undefined,
   published: CodingAgentPullRequest | undefined,
-): BarPullRequest | undefined {
+): HeaderPullRequest | undefined {
   const held = pullRequest ?? published;
   if (held === undefined) return undefined;
   const { number, state, url } = held;
@@ -516,57 +485,6 @@ function reviewersOf(
     ...named.filter((reviewer) => !reviewer.by.bot),
     ...named.filter((reviewer) => reviewer.by.bot),
   ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
-}
-
-/**
- * The bar across the top of the fixed header: the pill saying where the
- * pull request stands, in its colour, as last read of what the agent
- * published until the header's own read lands, which opens the changes
- * that may be made from there (`pull-request-writes.tsx`), and at its end,
- * while the pull request is open, the Review press
- * (`pull-request-review.tsx`), then GitHub's page and the ⋯.
- */
-function PullRequestBar({
-  published,
-  writes,
-  review,
-  pending,
-  reading,
-  onRefresh,
-}: {
-  published: BarPullRequest | undefined;
-  writes: PullRequestWrites;
-  /** The review's own change, apart from the pill's, so each says its own answer where it was pressed. */
-  review: PullRequestWrites;
-  /** The member's own pending review, which the Review panel publishes or discards. */
-  pending: PendingReview;
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="file-view-bar pull-request-bar">
-      {published === undefined ? null : (
-        <>
-          <PullRequestStateMenu pullRequest={published} writes={writes} />
-          <div className="file-view-actions">
-            {published.state === PULL_REQUEST_STATE.OPEN ||
-            published.state === PULL_REQUEST_STATE.DRAFT ? (
-              <PullRequestReview writes={review} pending={pending} />
-            ) : null}
-            <Tooltip label="Open on GitHub">
-              <IconButton
-                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-                label="Open on GitHub"
-                onClick={() => appPlatform().openGitHub(published.url)}
-              />
-            </Tooltip>
-            <PullRequestMenu url={published.url} reading={reading} onRefresh={onRefresh} />
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 /** A section of the page: its heading, what it counts beside it, and what it holds. */
@@ -771,29 +689,6 @@ function Checks({
         </>
       )}
     </Section>
-  );
-}
-
-/** Whether the pull request would merge as it stands, in its tone's colour; drawn only while it is open. */
-function MergeLine({
-  pullRequest,
-  actions,
-}: {
-  pullRequest: CodingAgentOverviewPullRequest;
-  /** The merge box's presses at the line's end (`merge-box.tsx`). */
-  actions: ReactNode;
-}): React.JSX.Element {
-  const { line, tone } = mergeWords(pullRequest.merge, pullRequest.base);
-  const blocked =
-    pullRequest.merge === MERGE_STATE.BLOCKED ? blockedWords(pullRequest.merging) : undefined;
-  return (
-    <div className="pull-request-merge" data-merge-tone={tone}>
-      {tone === MERGE_TONE.READY ? <CheckIcon aria-hidden="true" /> : null}
-      {tone === MERGE_TONE.BLOCKED ? <XIcon aria-hidden="true" /> : null}
-      {tone === MERGE_TONE.WAITING ? <CircleDotIcon aria-hidden="true" /> : null}
-      <span className="pull-request-merge-words">{blocked ?? line}</span>
-      {actions}
-    </div>
   );
 }
 
@@ -1187,21 +1082,15 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title, one line wrapping where it must: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({
   parts,
   now,
-  repository,
-  shown,
   writes,
   editing,
 }: {
   parts: OverviewParts;
   now: number;
-  /** The agent's repository, which the merge box keeps the method chosen by. */
-  repository: string | null;
-  /** Whether the panel is on screen, which a merge asked about goes with. */
-  shown: boolean;
   writes: PullRequestWrites;
   /** What the reviewer and label pickers read, and whether the pull request is being read again after a change. */
   editing: { readonly options: ReviewOptions; readonly refreshing: boolean };
@@ -1211,7 +1100,7 @@ function PullRequestHead({
     return (
       <PartSkeleton
         label={PULL_REQUEST_WORDS.READING}
-        widths={["40%", "65%"]}
+        widths={["65%"]}
         className="pull-request-head-skeleton"
       />
     );
@@ -1229,53 +1118,38 @@ function PullRequestHead({
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
-    <>
-      <div className="pull-request-branch-row">
+    <div className="changes-people pull-request-people">
+      <span className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-          <p className="pull-request-branches">
+          <span className="pull-request-branches">
             <bdi>{pullRequest.base}</bdi>
             {" ← "}
             <bdi>{pullRequest.head}</bdi>
-          </p>
+          </span>
         </Tooltip>
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
-      </div>
-      <div className="changes-people pull-request-people">
-        {author === undefined ? null : <OpenedBy person={author} />}
-        {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
-        <span className="pull-request-quiet">
-          {mergedAt === null ? null : "Merged "}
-          <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
-        </span>
-        <span className="pull-request-reviewers">
-          {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
-          {open ? (
-            <ReviewerPicker
-              author={author?.login}
-              requested={pullRequest.requested}
-              requestedTeams={pullRequest.requestedTeams ?? []}
-              writes={writes}
-              {...editing}
-            />
-          ) : null}
-          <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
-        </span>
-        <PullRequestLabels labels={pullRequest.labels ?? []} />
-      </div>
-      {open ? (
-        <MergeLine
-          pullRequest={pullRequest}
-          actions={
-            <MergeActions
-              pullRequest={pullRequest}
-              repository={repository}
-              shown={shown}
-              writes={writes}
-            />
-          }
-        />
-      ) : null}
-    </>
+      </span>
+      {author === undefined ? null : <OpenedBy person={author} />}
+      {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
+      <span className="pull-request-quiet">
+        {mergedAt === null ? null : "Merged "}
+        <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
+      </span>
+      <span className="pull-request-reviewers">
+        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+        {open ? (
+          <ReviewerPicker
+            author={author?.login}
+            requested={pullRequest.requested}
+            requestedTeams={pullRequest.requestedTeams ?? []}
+            writes={writes}
+            {...editing}
+          />
+        ) : null}
+        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
+      </span>
+      <PullRequestLabels labels={pullRequest.labels ?? []} />
+    </div>
   );
 }
 
@@ -1475,12 +1349,12 @@ function ConversationPart({
   );
 }
 
-/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them; a skeleton where neither has. */
+/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them, ⌘-click opening it on GitHub; a skeleton where neither has. */
 function HeaderTitle({
   title,
   writes,
 }: {
-  title: Pick<CodingAgentPullRequest, "title" | "number"> | undefined;
+  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
@@ -1493,7 +1367,12 @@ function HeaderTitle({
     );
   }
   return (
-    <PullRequestTitle title={title.title} number={pullRequestNumberLabel(title)} writes={writes} />
+    <PullRequestTitle
+      title={title.title}
+      number={pullRequestNumberLabel(title)}
+      writes={writes}
+      onOpen={() => appPlatform().openGitHub(title.url)}
+    />
   );
 }
 
@@ -1558,13 +1437,13 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
 /**
  * The three tabs under the header, each counting what Luke has read of it
  * so far: the conversation once read; the checks by how they went from the
- * first frame, as the bar's mark says it, and by how many once read; and
+ * first frame, as the pill's mark says it, and by how many once read; and
  * the files by the lines what was published adds and removes.
  */
 function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
-  bar: BarPullRequest | undefined,
+  held: HeaderPullRequest | undefined,
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
@@ -1581,11 +1460,11 @@ function tabsOf(
       icon: <CircleCheckIcon />,
       label: "Checks",
       count:
-        bar === undefined
+        held === undefined
           ? undefined
           : checksCount(
-              bar.checks,
-              checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+              held.checks,
+              checks === undefined ? undefined : summaryCountOf(checks.checks, held.checks),
             ),
     },
     {
@@ -1920,12 +1799,12 @@ function useConversationAnchors(input: {
 
 /**
  * One agent's Pull request tab, laid out as stage-cli's pull request page:
- * a fixed header that stays put while what is under it scrolls (the bar
- * with the pill saying where it stands and GitHub's page and the ⋯; its
- * title and number; its branches; who opened it and when, and its
- * reviewers; and, while it is open, whether it would merge), then a row of
- * tabs, Conversation, Checks, and Files changed (`AgentChangesTab`), each
- * with its count. Each tab stands once shown, the others hidden, so
+ * a fixed header that stays put while what is under it scrolls (the pill
+ * saying where it stands, its title and number, and, while it is open, the
+ * merge control and the ⋯, in one row; then its branches, who opened it and
+ * when, and its reviewers, in one line), then a row of tabs, Conversation,
+ * Checks, and Files changed (`AgentChangesTab`), each with its count, and
+ * Review at its end while it is open. Each tab stands once shown, the others hidden, so
  * switching draws what each last read rather than asking GitHub again. The
  * header's reads, the pull request and its conversation, whose reviews say
  * where each reviewer stands, are asked as the tab is shown; the checks and
@@ -2023,11 +1902,15 @@ function PullRequestTabBody({
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const bar = barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
+  const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
-  const title = landed(parts.pullRequest) ?? published;
+  const overview = landed(parts.pullRequest);
+  const title = overview ?? published;
+  // Review stands at the end of the tabs while the pull request is open or a draft, as the pill says it stands.
+  const reviewable =
+    held?.state === PULL_REQUEST_STATE.OPEN || held?.state === PULL_REQUEST_STATE.DRAFT;
   const now = useMinute();
   // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
   const written = refresh;
@@ -2075,14 +1958,6 @@ function PullRequestTabBody({
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
         <AnchorsContext.Provider value={anchors.open}>
           <div className="file-view pull-request-tab ph-no-capture">
-            <PullRequestBar
-              published={bar}
-              writes={writes}
-              review={review}
-              pending={pendingReview}
-              reading={reading}
-              onRefresh={refresh}
-            />
             <PullRequestWriteNote writes={writes} />
             {none ? (
               <EmptyState icon={<GitPullRequestIcon />}>
@@ -2091,12 +1966,28 @@ function PullRequestTabBody({
             ) : (
               <>
                 <header className="pull-request-header">
-                  <HeaderTitle title={title} writes={writes} />
+                  <div className="pull-request-title-row">
+                    {held === undefined ? null : (
+                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                    )}
+                    <HeaderTitle title={title} writes={writes} />
+                    <div className="pull-request-title-actions">
+                      {overview === undefined ? null : (
+                        <MergeControl
+                          pullRequest={overview}
+                          repository={repository}
+                          shown={shown}
+                          writes={writes}
+                        />
+                      )}
+                      {held === undefined ? null : (
+                        <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
+                      )}
+                    </div>
+                  </div>
                   <PullRequestHead
                     parts={parts}
                     now={now}
-                    repository={repository}
-                    shown={shown}
                     writes={writes}
                     editing={{ options, refreshing: pullRequestRead.out }}
                   />
@@ -2104,13 +1995,15 @@ function PullRequestTabBody({
                 <div className="pull-request-tabs">
                   <ChoiceBar<PullRequestView>
                     label="Pull request"
-                    items={tabsOf(parts, published, bar)}
+                    items={tabsOf(parts, published, held)}
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
                     panels={ids}
-                    inset={CHOICE_BAR_INSET.READING}
                   />
+                  {reviewable ? (
+                    <PullRequestReview writes={review} pending={pendingReview} />
+                  ) : null}
                 </div>
                 <div
                   className="pull-request-view"

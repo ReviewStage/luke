@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { OrganizationRefused } from "@luke/database/models/workspace-seams";
 import { account } from "@luke/database/schemas/auth";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
@@ -11,8 +11,7 @@ import { makeSignature } from "better-auth/crypto";
 import { bearer } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Cause, Clock, Duration, Effect, Layer, Option } from "effect";
-import { HttpRouter } from "effect/http";
+import { Cause, Context, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -25,7 +24,9 @@ import {
 } from "../auth/auth-policy.js";
 import type { WireValue } from "../core.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { githubConnectionApp } from "./github-connection-app.js";
+import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
+import { githubProcedures } from "./github-procedures.js";
 import { type GitHubUnlink, githubUnlink } from "./github-unlink.js";
 
 /**
@@ -202,17 +203,23 @@ const openService = Effect.gen(function* () {
       bearer?: string;
       browser?: Browser | undefined;
       body?: WireValue;
+      /** A body sent as written rather than as the JSON of a value, with the headers given. */
+      text?: string;
+      headers?: Readonly<Record<string, string>>;
       unlink?: GitHubUnlink;
     },
   ) =>
     Effect.gen(function* () {
-      const services = Layer.mergeAll(
-        Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-        Layer.succeed(Database, yield* Database),
-        Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      const services = yield* Effect.context<DatabaseServices>().pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+            Layer.succeed(Database, yield* Database),
+          ),
+        ),
       );
-      const { handler, dispose } = HttpRouter.toWebHandler(
-        githubConnectionApp({
+      const handle = hostedFetch({
+        github: githubProcedures({
           resolveUserId: (incoming) =>
             Effect.succeed(
               Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
@@ -223,24 +230,27 @@ const openService = Effect.gen(function* () {
               return Option.fromNullishOr(session?.user.id);
             }),
           unlinkGitHub: init.unlink ?? githubUnlink(auth.api),
-        }).pipe(HttpRouter.provideRequest(services)),
-        { disableLogger: true },
-      );
+        }),
+      });
       const headers = new Headers();
       if (init.bearer !== undefined) headers.set("authorization", `Bearer ${init.bearer}`);
       if (init.browser !== undefined) headers.set("cookie", init.browser.cookie);
+      if (init.body !== undefined) headers.set("content-type", "application/json");
+      for (const [name, value] of Object.entries(init.headers ?? {})) headers.set(name, value);
+      // SAFETY: the GitHub connection procedures yield the database alone, which is all a test provides of the web runtime's services.
+      const webServices = services as Context.Context<WebServices>;
       const response = yield* Effect.promise(() =>
-        handler(
+        handle(
           new Request(new URL(path, ORIGIN), {
             method: init.method,
             headers,
-            body: init.body === undefined ? null : JSON.stringify(init.body),
+            body: init.text ?? (init.body === undefined ? null : JSON.stringify(init.body)),
           }),
+          webServices,
         ),
       );
-      // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+      // SAFETY: the route answers JSON; the test compares it as the wire value it is.
       const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-      yield* Effect.promise(() => dispose());
       return { status: response.status, body } satisfies Answer;
     }).pipe(Effect.provide(database));
 
@@ -545,4 +555,123 @@ it.effect("GitHub as an account's only way to sign in is not disconnected", () =
     });
     assert.deepEqual((yield* service.connection(user.id)).body, { connected: true, login: null });
   }),
+);
+
+it.effect(
+  "a claim is read after its caller and its bound: unsigned is unauthenticated whatever it carries, past the bound too large, and a key it does not name refused",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* openService;
+      const ada = yield* service.signUp("Ada");
+      const intent = intentOf(
+        yield* service.ask("/api/github/connect", { method: "POST", bearer: ada.userId }),
+      );
+      const claim = (init: {
+        browser?: Browser;
+        body?: WireValue;
+        text?: string;
+        headers?: Record<string, string>;
+      }) => service.ask("/api/github/connect/claim", { method: "POST", ...init });
+
+      assert.deepEqual(yield* claim({ body: { intent: 7 } }), {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      });
+      const padded = JSON.stringify({ intent, padding: "x".repeat(1_100) });
+      assert.deepEqual(
+        yield* claim({
+          browser: ada.browser,
+          text: padded,
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(new TextEncoder().encode(padded).byteLength),
+          },
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+          body: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
+        },
+      );
+      assert.deepEqual(yield* claim({ browser: ada.browser, body: { intent, more: true } }), {
+        status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+        body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+      });
+      assert.deepEqual((yield* claim({ browser: ada.browser, body: { intent } })).body, {
+        claim: GITHUB_CONNECT_CLAIM.CLAIMED,
+      });
+    }),
+);
+
+it.effect(
+  "a claim whose body is not JSON is an invalid request, read before its caller is, which the old group read first",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* openService;
+
+      assert.deepEqual(
+        yield* service.ask("/api/github/connect/claim", {
+          method: "POST",
+          text: "not json",
+          headers: { "content-type": "application/json" },
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+          body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+        },
+      );
+    }),
+);
+
+it.effect("a path asked by another method is the hosted vocabulary's own 405", () =>
+  Effect.gen(function* () {
+    const service = yield* openService;
+
+    assert.deepEqual(yield* service.ask("/api/github/connect", { method: "GET" }), {
+      status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      body: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
+    });
+  }),
+);
+
+it.effect(
+  "a claim streamed with no stated length is refused as too large past the handler's ceiling",
+  () =>
+    Effect.gen(function* () {
+      const handle = hostedFetch({
+        github: githubProcedures({
+          resolveUserId: () => Effect.succeed(Option.none()),
+          resolveSessionUserId: () => Effect.succeed(Option.some("user-1")),
+          unlinkGitHub: () => Effect.void,
+        }),
+      });
+      const chunk = new Uint8Array(64 * 1024).fill(0x20);
+      let sent = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent > HOSTED_BODY_CEILING_BYTES) return controller.close();
+          sent += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      });
+      // Node's fetch takes a streamed body only with `duplex` said, which the DOM's `RequestInit` has no field for.
+      const streamed: RequestInit & { readonly duplex: "half" } = {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        duplex: "half",
+      };
+      // SAFETY: the body is refused before any procedure yields a service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const response = yield* Effect.promise(() =>
+        handle(new Request(new URL("/api/github/connect/claim", ORIGIN), streamed), services),
+      );
+
+      assert.deepEqual(
+        { status: response.status, body: yield* Effect.promise(() => response.json()) },
+        {
+          status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+          body: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
+        },
+      );
+    }),
 );

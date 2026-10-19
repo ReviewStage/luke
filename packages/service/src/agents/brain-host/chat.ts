@@ -8,6 +8,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import {
   type ChatAgent,
   type ChatReader,
+  editAsAgent,
   type MessageLine,
   peekAsAgent,
   postAsAgent,
@@ -144,6 +145,14 @@ export function runBrainRead(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.map(readAsAgent(call.luke, input), (answer) => ({ ...answer }));
+}
+
+/** Runs one edit of a topic channel as Luke. */
+export function runBrainEditChannel(
+  call: BrainChatCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, DatabaseServices> {
+  return Effect.map(editAsAgent(call.luke, input), (answer) => ({ ...answer }));
 }
 
 /** Runs one resolve of an ask of Luke's. */

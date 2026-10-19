@@ -190,13 +190,6 @@ beforeEach(() => {
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        automationReads.push(request.payload.workspaceId ?? "");
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: [SWEEP] },
-        });
-      }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
       }
@@ -209,6 +202,10 @@ beforeEach(() => {
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      automationReads.push(payload.workspaceId ?? "");
+      return Promise.resolve({ automations: [SWEEP] });
+    },
   });
 });
 

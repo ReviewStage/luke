@@ -49,6 +49,15 @@ const SKELETON_ASIDE_WIDTH = "224px";
 /** The legend bone stops short of the line, as a sentence does. */
 const SKELETON_LEGEND_WIDTH = "60%";
 
+/** A trend's move alone, in the ink of its direction: a rise complete, a fall attention. */
+export function TrendMove({ trend }: { trend: AdminTrend }): React.JSX.Element {
+  return (
+    <span className={`font-medium tabular-nums ${TREND_TONE[trendDirection(trend)]}`}>
+      {formatTrendMove(trend)}
+    </span>
+  );
+}
+
 /**
  * How a chart's trailing run moved against the run before it, set as the
  * heading's caption. The comparison sits with the bars rather than on a card
@@ -57,11 +66,8 @@ const SKELETON_LEGEND_WIDTH = "60%";
 export function ChartTrend({ trend }: { trend: AdminTrend }): React.JSX.Element {
   return (
     <>
-      <span className={`font-medium tabular-nums ${TREND_TONE[trendDirection(trend)]}`}>
-        {formatTrendMove(trend)}
-      </span>{" "}
-      {formatNumber(trend.recent)} in the last {trend.days} days, against{" "}
-      {formatNumber(trend.prior)} before
+      <TrendMove trend={trend} /> {formatNumber(trend.recent)} in the last {trend.days} days,
+      against {formatNumber(trend.prior)} before
     </>
   );
 }

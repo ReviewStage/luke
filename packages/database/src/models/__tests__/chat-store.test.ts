@@ -33,6 +33,7 @@ import {
   channelsOf,
   chatHead,
   chatPast,
+  editTopicChannel,
   ensureGeneral,
   ensureMember,
   ensureTaskChannel,
@@ -278,6 +279,61 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           assert.ok(Result.isSuccess(yield* open(`topic-${topic}`)));
         }
         assert.deepEqual(yield* open("one-too-many"), Result.fail(CHAT_REFUSAL.TOO_MANY_TOPICS));
+      }),
+  );
+
+  it.effect(
+    "a topic opened with a purpose keeps it; a topic is renamed, its purpose said or cleared, archived to free its place under the bound, and brought back only where there is room; no other kind is edited",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount();
+        const workspace = yield* openWorkspace(owner);
+        const ada = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
+        const open = (name: string, purpose: string | null = null) =>
+          Effect.map(openTopicChannel(owner, workspace, name, ada.id, purpose), Result.getOrThrow);
+        const edit = (channelId: string, change: Parameters<typeof editTopicChannel>[4]) =>
+          editTopicChannel(owner, workspace, ada.id, channelId, change);
+
+        const release = yield* open("release", "Friday's cut");
+        assert.equal(release.purpose, "Friday's cut");
+        yield* open("design");
+
+        const renamed = Result.getOrThrow(
+          yield* edit(release.id, { name: "release-train", purpose: "What ships Friday" }),
+        );
+        assert.deepEqual([renamed.name, renamed.purpose], ["release-train", "What ships Friday"]);
+        const cleared = Result.getOrThrow(yield* edit(release.id, { purpose: null }));
+        assert.deepEqual([cleared.name, cleared.purpose], ["release-train", null]);
+        assert.deepEqual(
+          yield* edit(release.id, { name: "design" }),
+          Result.fail(CHAT_REFUSAL.NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* edit(release.id, { name: "general" }),
+          Result.fail(CHAT_REFUSAL.NAME_TAKEN),
+        );
+        assert.deepEqual(
+          yield* edit(general.id, { purpose: "Everyone" }),
+          Result.fail(CHAT_REFUSAL.NOT_FOUND),
+        );
+
+        const archived = Result.getOrThrow(yield* edit(release.id, { archived: true }));
+        assert.notEqual(archived.archivedAt, null);
+        // The archive freed a place, so the workspace fills the bound again without it.
+        for (let topic = 2; topic <= CHAT_BOUNDS.MAX_TOPIC_CHANNELS; topic += 1) {
+          yield* open(`topic-${topic}`);
+        }
+        assert.deepEqual(
+          yield* edit(release.id, { archived: false }),
+          Result.fail(CHAT_REFUSAL.TOO_MANY_TOPICS),
+        );
+        const design = Option.getOrThrow(yield* channelNamed(owner, workspace, "design"));
+        yield* edit(design.id, { archived: true });
+        const back = Result.getOrThrow(yield* edit(release.id, { archived: false }));
+        assert.equal(back.archivedAt, null);
       }),
   );
 

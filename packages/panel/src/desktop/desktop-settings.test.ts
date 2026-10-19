@@ -11,7 +11,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -23,7 +23,12 @@ import { type CallCardInput, callControls } from "../call/call-card.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortAnswering,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -127,6 +132,7 @@ function settingsProps(
     },
     notifications: {
       status: NOTIFICATIONS_STATUS.UNKNOWN,
+      grantor: NOTIFICATIONS_GRANTOR.MACOS,
       packaged: true,
       onOpenSettings: ignore,
       onTest: ignore,
@@ -455,7 +461,7 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows, which View settings' foot lands on", () => {
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
   const group =
     [...page.querySelectorAll("section[aria-labelledby]")].find(
@@ -648,9 +654,13 @@ test("the plan template's version history keeps a call's card at the foot of its
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
-  fakeActPort({
-    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
-      Promise.resolve({ template: "# Context\n", custom: false }),
+  fakeActPortAnswering((request) => {
+    sent.push(request.kind);
+    return Promise.resolve(
+      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+        ? { template: "# Context\n", custom: false }
+        : undefined,
+    );
   });
   // The card's presses sent as `App` sends them, over the bridge.
   function CallSettings(): React.JSX.Element {

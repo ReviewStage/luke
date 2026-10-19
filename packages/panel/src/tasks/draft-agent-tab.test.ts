@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import type { IntegrationProviderParams } from "@luke/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -23,7 +24,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
@@ -64,6 +65,9 @@ const UNAVAILABLE = Object.fromEntries(
 /** Every act the tab sent, in order. */
 let sent: Act[] = [];
 
+/** Every integration a Connect was asked for on the act port, in order. */
+let connects: IntegrationProviderParams[] = [];
+
 const DRAFT: AgentDraft = {
   id: "draft-1",
   prompt: "Can you see Slack messages?",
@@ -82,42 +86,34 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   sent = [];
+  connects = [];
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
+      Promise.resolve({
+        integrations: {
+          ...UNAVAILABLE,
+          [INTEGRATION_PROVIDER.SLACK]: slack,
+          [INTEGRATION_PROVIDER.GITHUB]: github,
+        },
+      }),
+    // A Connect stands Slack pending at the service, and a Cancel disconnects it.
+    [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
+      connects.push(payload);
+      if (refuseConnect) return Promise.reject(new Error("Not now."));
+      if (payload.provider === INTEGRATION_PROVIDER.SLACK) slack = INTEGRATION_STATUS.PENDING;
+      return Promise.resolve({ opened: true });
+    },
+    [ACT_KIND.INTEGRATIONS_CANCEL]: () => {
+      slack = INTEGRATION_STATUS.DISCONNECTED;
+      return Promise.resolve({ status: INTEGRATION_STATUS.DISCONNECTED });
+    },
+  });
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
-      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: {
-            integrations: {
-              ...UNAVAILABLE,
-              [INTEGRATION_PROVIDER.SLACK]: slack,
-              [INTEGRATION_PROVIDER.GITHUB]: github,
-            },
-          },
-        });
-      }
-      // A Connect stands Slack pending at the service, and a Cancel disconnects it.
-      if (request.kind === ACT_KIND.INTEGRATIONS_CONNECT) {
-        if (request.payload.provider === INTEGRATION_PROVIDER.SLACK && !refuseConnect) {
-          slack = INTEGRATION_STATUS.PENDING;
-        }
-        return Promise.resolve(
-          refuseConnect
-            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } },
-        );
-      }
-      if (request.kind === ACT_KIND.INTEGRATIONS_CANCEL) {
-        slack = INTEGRATION_STATUS.DISCONNECTED;
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { status: INTEGRATION_STATUS.DISCONNECTED },
-        });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
@@ -366,10 +362,7 @@ test("a server the agent has on whose sign-in expired is offered to reconnect un
   assert.match(tab.note() ?? "", /^Slack's sign-in expired\./u);
 
   await tab.press("Reconnect Slack");
-  assert.deepEqual(
-    sent.filter((each) => each.kind === ACT_KIND.INTEGRATIONS_CONNECT),
-    [{ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: { provider: INTEGRATION_PROVIDER.SLACK } }],
-  );
+  assert.deepEqual(connects, [{ provider: INTEGRATION_PROVIDER.SLACK }]);
   assert.equal(tab.settings.integrationsOpened, false, "the composer reconnects in place");
 
   const off = mount([], { ...DRAFT, disabledServers: [INTEGRATION_PROVIDER.SLACK] });
