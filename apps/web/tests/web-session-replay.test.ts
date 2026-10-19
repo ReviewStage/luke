@@ -25,6 +25,7 @@ vi.hoisted(() => {
 
 /** Words the page draws, or the tab's address carries, none of which may leave in a recording. */
 const WORDS = [
+  "elsewhere.example",
   "Quarterly",
   "roadmap",
   "feature-branch",
@@ -83,13 +84,21 @@ function opened(value: WireValue): WireValue {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 test("a production build with the site's key records the tab under the desktop's masking, nothing of its words or its address leaves, and a stop leaves the site's own counting alone", async () => {
   vi.useFakeTimers();
-  vi.stubEnv("PROD", true);
+  // A build for the production deployment, which Vite writes in, with the site's key.
+  vi.stubGlobal("WEB_DEPLOYMENT", "production");
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "phc_test");
   drawPage();
+  // The tab's own title, and another site that sent the person here.
+  document.title = "Quarterly roadmap";
+  Object.defineProperty(document, "referrer", {
+    value: "https://elsewhere.example/thread?from=feature-branch",
+    configurable: true,
+  });
   // The recorder's chunk, already run, so the tab's own import of it lands at once.
   await import("../src/app/session-recorder");
   // The recording's chunk, already loaded, so the tab's own import of it lands at once.
@@ -111,6 +120,7 @@ test("a production build with the site's key records the tab under the desktop's
   assert.equal(posthog.config.mask_all_text, true);
   assert.equal(posthog.config.autocapture, false);
   assert.equal(posthog.config.enable_recording_console_log, false);
+  assert.equal(posthog.config.capture_performance, false);
   const link = document.createElement("link");
   assert.equal(recording.maskAttributeFn?.("title", "roadmap", link), "*******");
   assert.equal(recording.maskAttributeFn?.("href", "/assets/app.css", link), "/assets/app.css");

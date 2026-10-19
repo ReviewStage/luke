@@ -24,18 +24,20 @@ const PANEL_SIDE_BUNDLES = {
   sentry: "/apps/web/src/app/web-sentry-sdk.ts",
 };
 
-// Where the web app's tab reports to Sentry (`src/app/web-sentry.ts`): the
-// deployment's own DSN, environment, and commit, read from the build's
-// environment as the desktop's build reads its DSN. A build without
-// `SENTRY_DSN` writes an empty one, and the tab loads no SDK.
-const WEB_SENTRY_DEFINES = {
+// What the web app's tab reads of the deployment it was built for, from the
+// build's environment as the desktop's build reads its own: Vercel's name for
+// the deployment, which only `production` records session replay under
+// (`src/app/web-session-replay.ts`) and Sentry files reports under, and the
+// DSN and commit the tab reports to Sentry with (`src/app/web-sentry.ts`). A
+// build without `SENTRY_DSN` writes an empty one, and the tab loads no SDK.
+const WEB_DEPLOYMENT_DEFINES = {
+  WEB_DEPLOYMENT: JSON.stringify(process.env.VERCEL_ENV ?? ""),
   WEB_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
-  WEB_SENTRY_ENVIRONMENT: JSON.stringify(process.env.VERCEL_ENV ?? ""),
   WEB_SENTRY_RELEASE: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? ""),
 };
 
 export default defineConfig({
-  define: WEB_SENTRY_DEFINES,
+  define: WEB_DEPLOYMENT_DEFINES,
   plugins: [
     react(),
     tailwindcss(),

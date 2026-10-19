@@ -39,7 +39,7 @@ export interface WebSentry {
 const UNNAMED_DEPLOYMENT = "development";
 
 declare const WEB_SENTRY_DSN: string | undefined;
-declare const WEB_SENTRY_ENVIRONMENT: string | undefined;
+declare const WEB_DEPLOYMENT: string | undefined;
 declare const WEB_SENTRY_RELEASE: string | undefined;
 
 /**
@@ -51,7 +51,7 @@ export function webSentryBuild(): WebSentryBuild {
   try {
     return {
       dsn: WEB_SENTRY_DSN ?? "",
-      environment: WEB_SENTRY_ENVIRONMENT || UNNAMED_DEPLOYMENT,
+      environment: WEB_DEPLOYMENT || UNNAMED_DEPLOYMENT,
       release: WEB_SENTRY_RELEASE ?? "",
     };
   } catch {

@@ -36,4 +36,6 @@ test("a build with a DSN starts the SDK under the deployment's environment and r
   assert.equal(options?.environment, "preview");
   assert.equal(options?.release, "abc123");
   assert.equal(options?.tracesSampleRate, 0.1);
+  // Sentry's default data collection, as the desktop's: nothing it would only send when asked to.
+  assert.notEqual(options?.sendDefaultPii, true);
 });

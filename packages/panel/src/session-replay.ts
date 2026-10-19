@@ -142,7 +142,11 @@ export interface SessionReplayShell {
   readonly projectApiKey: () => string;
   /** The address the window says it has, in place of the one it has, which may name a person or carry their words. */
   readonly address: string;
-  /** Whether a value names the window's own address, in any form it takes; such a value leaves as `address`. */
+  /**
+   * Whether a value names an address the window must not report, its own in
+   * any form it takes, or one that names a person or their words beside it;
+   * such a value leaves as `address`.
+   */
   readonly namesOwnAddress: (value: string) => boolean;
   /** The recorder's bundle, imported where the shell's bundler put it; it registers itself as it runs. */
   readonly importRecorder: BundleImporter<unknown>;
@@ -293,7 +297,8 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   let identified: string | undefined;
 
   /**
-   * Files what is being recorded under the account, when there is one.
+   * Files what is being recorded under the account, when there is one, and
+   * under nobody's once there is none.
    *
    * The id is the same opaque one the counted events resolve to, so a recording
    * and the counts around it belong to one person — which is what makes
@@ -304,16 +309,24 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
    * later calls this, which is where the library joins that anonymous session
    * to the person. What never reaches a sign-in stays anonymous, and so cannot
    * be erased with an account — `PRIVACY.md` says so, because it is true.
+   * The person goes the moment the account does, signed out, deleted in
+   * another window, or replaced by someone else: the library is reset to a
+   * new anonymous id, and the build registered again, since `reset` clears
+   * it, so nothing recorded after is filed under the person who left, and the
+   * next sign-in is joined to a stretch of no one's but its own.
    * Note that an account already identified is not identified again, because
    * every account transition re-answers recording, most of them for nothing
-   * that moved. The build registered at the start stands: `identify` keeps the
-   * registered properties, and only the stop's `reset` clears them.
+   * that moved.
    */
-  const identifyAccount = (posthog: PostHog, bootstrap: SessionReplayBootstrap): void => {
+  const followAccount = (posthog: PostHog, bootstrap: SessionReplayBootstrap): void => {
     const accountId = bootstrap.accountId;
-    if (!accountId || accountId === identified) return;
+    if (accountId === identified) return;
+    if (identified !== undefined) {
+      posthog.reset();
+      registerBuild(posthog, bootstrap, shell.appName);
+    }
     identified = accountId;
-    posthog.identify(accountId);
+    if (accountId) posthog.identify(accountId);
   };
 
   /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
@@ -325,7 +338,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       // because the person may have changed since the last one.
       optIn(posthog);
       registerBuild(posthog, bootstrap, shell.appName);
-      identifyAccount(posthog, bootstrap);
+      followAccount(posthog, bootstrap);
       posthog.startSessionRecording();
       return;
     }
@@ -340,6 +353,11 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       capture_pageview: false,
       capture_pageleave: false,
       capture_exceptions: false,
+      // Neither the campaign a link carried nor the page that sent someone
+      // here is kept on the person: both are other addresses, which the
+      // shell's own address replacement does not reach.
+      save_campaign_params: false,
+      save_referrer: false,
       ...SESSION_REPLAY_MASKING,
       person_profiles: "always",
       persistence: "localStorage",
@@ -370,7 +388,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     // been stopped would come up recording nothing for the rest of the install.
     optIn(posthog);
     registerBuild(posthog, bootstrap, shell.appName);
-    identifyAccount(posthog, bootstrap);
+    followAccount(posthog, bootstrap);
   };
 
   /**
@@ -440,7 +458,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       else stop();
       return;
     }
-    // A client still loading starts under `latest`, which already names the account.
-    if (started && initialized && client !== undefined) identifyAccount(client, bootstrap);
+    // A client still loading starts under `latest`, which already names the account, or none.
+    if (started && initialized && client !== undefined) followAccount(client, bootstrap);
   };
 }

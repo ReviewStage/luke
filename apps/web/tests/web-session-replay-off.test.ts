@@ -7,8 +7,8 @@ import { afterEach, test, vi } from "vitest";
 import { webPlatform } from "../src/app/web-platform";
 
 /**
- * A tab the host does not let record, and a build that carries no project
- * key, such as a development server's, load nothing of session replay and
+ * A tab the host does not let record, a build for any deployment but
+ * production, such as a Preview's, and a build that carries no project key load nothing of session replay and
  * send nothing. A file of its own, because the tab that records loads the
  * recorder for the rest of its life.
  */
@@ -32,11 +32,12 @@ function bootstrap(permitted: boolean): SessionReplayBootstrap {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
-test("a tab the host does not let record, or a build without the site's key, loads no recorder and sends nothing", async () => {
+test("a tab the host does not let record, a Preview's build, or a build without the site's key, loads no recorder and sends nothing", async () => {
   vi.useFakeTimers();
-  vi.stubEnv("PROD", true);
+  vi.stubGlobal("WEB_DEPLOYMENT", "production");
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "phc_test");
   // The recording's chunk, already loaded, so the tab's own import of it lands at once.
   await import("../src/app/web-session-replay");
@@ -47,11 +48,11 @@ test("a tab the host does not let record, or a build without the site's key, loa
   await vi.advanceTimersByTimeAsync(10_000);
   assert.equal(sessionRecorderLoaded(), false);
 
-  // The host's word is yes, but this build is a development one, or carries no key.
-  vi.stubEnv("PROD", false);
+  // The host's word is yes, but this build is a Preview's, or carries no key.
+  vi.stubGlobal("WEB_DEPLOYMENT", "preview");
   platform.applySessionReplay(bootstrap(true));
   await vi.advanceTimersByTimeAsync(10_000);
-  vi.stubEnv("PROD", true);
+  vi.stubGlobal("WEB_DEPLOYMENT", "production");
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "");
   platform.applySessionReplay(bootstrap(true));
   await vi.advanceTimersByTimeAsync(10_000);
