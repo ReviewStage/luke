@@ -80,7 +80,7 @@ export interface AdminAccountAgentSource {
 }
 
 /** One of the account's workspace memberships: the workspace's name, its size, and its GitHub installations. */
-export interface AdminAccountWorkspaceSource {
+interface AdminAccountWorkspaceSource {
   id: string;
   name: string;
   role: string;
@@ -89,7 +89,7 @@ export interface AdminAccountWorkspaceSource {
   github: readonly GitHubInstallationStatus[];
 }
 
-export interface AdminAccountProviderKey {
+interface AdminAccountProviderKey {
   provider: ProviderKeyProvider;
   status: ProviderKeyStatus;
   /** When the status was last set, in epoch milliseconds. */
@@ -97,7 +97,7 @@ export interface AdminAccountProviderKey {
   fastAccess: FastAccess | null;
 }
 
-export interface AdminAccountConnection {
+interface AdminAccountConnection {
   provider: IntegrationProvider;
   /** `INTEGRATION_ROW_STATUS`: pending, connected, or expired. */
   status: string;
