@@ -18,11 +18,18 @@ import { Schema as EffectSchema } from "effect";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 
-/** A repository out of reach carries why, which the desktop reads for the failure's remedy. */
+/**
+ * What a repository out of reach carries beside its slug: why, which the
+ * desktop reads for the failure's remedy. The client reads a refusal's
+ * fields with this as it stands (`hosted-link.ts`); the map below declares
+ * it flipped.
+ */
+export const repositoryNotReachableDataSchema = EffectSchema.Struct({
+  unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
+});
+
 const repositoryNotReachableData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(
-    EffectSchema.Struct({ unreached: EffectSchema.optionalKey(repositoryUnreachedSchema) }),
-  ),
+  EffectSchema.flip(repositoryNotReachableDataSchema),
 );
 
 /** Every hosted refusal, the slug its code, and the extra fields of the one that carries some. */

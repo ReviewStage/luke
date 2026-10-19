@@ -158,6 +158,8 @@ export interface ChangesList {
   readonly collapsed: (path: string) => boolean;
   readonly allCollapsed: boolean;
   readonly toggle: (path: string) => void;
+  /** Opens a file, collapsed or folded as viewed, as a press on its header would, and clears a filter that leaves it out; what a review thread's link does. */
+  readonly expand: (path: string) => void;
   readonly toggleAll: () => void;
   /** The file the keys stand on, outlined; none until a key or a choice stands on one. */
   readonly standing: string | undefined;
@@ -240,6 +242,8 @@ export function useChangesList(
   }, []);
   const latestFolds = useRef(folds);
   latestFolds.current = folds;
+  const latestPaths = useRef(paths);
+  latestPaths.current = paths;
   // Note that the doors a file's header holds stay the same doors across
   // draws, reading the folds and the marks as they stand, so a header the
   // view keeps from its last draw still turns its file as it is now.
@@ -247,6 +251,15 @@ export function useChangesList(
     (path: string) => {
       choose([path]);
       setChosen((was) => new Map(was).set(path, latestFolds.current.get(path) !== true));
+    },
+    [choose],
+  );
+  const expand = useCallback(
+    (path: string) => {
+      if (!latestPaths.current.includes(path)) onQuery("");
+      if (latestFolds.current.get(path) !== true) return;
+      choose([path]);
+      setChosen((was) => new Map(was).set(path, false));
     },
     [choose],
   );
@@ -352,6 +365,7 @@ export function useChangesList(
     collapsed,
     allCollapsed,
     toggle,
+    expand,
     toggleAll,
     standing: keptStanding,
     current,

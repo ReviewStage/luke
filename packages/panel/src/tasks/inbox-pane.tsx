@@ -506,6 +506,9 @@ function Blocks({
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
 
+/** The badge an option the agent recommends wears, a choice's or a form's select's. */
+const RECOMMENDED = "Recommended";
+
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, the one the agent recommends wearing its badge. */
 export function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
@@ -514,7 +517,7 @@ export function choiceOptions(
     value: option.label,
     label: option.label,
     detail: option.detail,
-    badge: option.recommended ? "Recommended" : undefined,
+    badge: option.recommended ? RECOMMENDED : undefined,
   }));
 }
 
@@ -655,8 +658,9 @@ function fieldFrame(field: InboxField) {
  * One field of a form, its name over its control and left-aligned as every
  * field is, "Optional" after the name of one that may be left empty: a
  * text field the caller's own or `@luke/ui`'s, a number a short field, a
- * select its options as pills that wrap, an optional one's pick taken back
- * by pressing it again, and a yes or no a checkbox beside its name.
+ * select its options as pills that wrap, the one the agent recommends
+ * wearing its badge, an optional one's pick taken back by pressing it
+ * again, and a yes or no a checkbox beside its name.
  */
 function InboxFormField({
   field,
@@ -725,7 +729,11 @@ function InboxFormField({
           </span>
           <ChoiceList
             legend={field.label}
-            options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
+            options={(field.options ?? []).map((option) => ({
+              value: option,
+              label: option,
+              badge: field.recommended === option ? RECOMMENDED : undefined,
+            }))}
             value={(field.options ?? []).filter((option) => option === value)}
             look={CHOICE_LOOK.PILL}
             clearable={field.required !== true}

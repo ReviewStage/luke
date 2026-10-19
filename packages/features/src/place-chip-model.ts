@@ -44,6 +44,7 @@ const KIND_NAME = {
   [LINK_PLACE.AGENT]: "Agent",
   [LINK_PLACE.WORKER]: "Worker",
   [LINK_PLACE.CHANGES]: "Changes",
+  [LINK_PLACE.PULL_REQUEST_THREAD]: "Review comment",
   [LINK_PLACE.MESSAGE]: "Message",
   [LINK_PLACE.INBOX]: "Inbox",
   [LINK_PLACE.INBOX_ITEM]: "Inbox item",

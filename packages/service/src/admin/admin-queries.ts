@@ -22,13 +22,12 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
-import { Duration, Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
-  type AdminIntegration,
   type AdminMetricsSource,
   type AdminTopUser,
   countSignInMethods,
@@ -69,11 +68,11 @@ export const AggregateColumnSchema = Schema.Union([
 const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
 /** The `role` column as the auth plugin writes it: one of the roles this build knows, or none yet. */
-const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+export const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
 
 const CountRowSchema = Schema.Struct({ value: AggregateColumnSchema });
 
-const AdminMetricsScopeSchema = Schema.Literals([
+export const AdminMetricsScopeSchema = Schema.Literals([
   ADMIN_METRICS_SCOPE.NON_ADMINS,
   ADMIN_METRICS_SCOPE.ALL,
 ]);
@@ -85,7 +84,7 @@ const AdminMetricsScopeSchema = Schema.Literals([
  * builder's `and` drops. Every joined query below counts through a user row,
  * so this one condition is the whole filter.
  */
-function keptByScope(scope: AdminMetricsScope) {
+export function keptByScope(scope: AdminMetricsScope) {
   return scope === ADMIN_METRICS_SCOPE.ALL
     ? undefined
     : or(ne(user.role, USER_ROLE.ADMIN), isNull(user.role));
@@ -93,18 +92,6 @@ function keptByScope(scope: AdminMetricsScope) {
 
 /** A `count` row a query always answers with, or the zero an absent row means. */
 const countOf = Option.match({ onNone: () => 0, onSome: (row: { value: number }) => row.value });
-
-/**
- * Whether the database answers at all, and how long it took. A failure is the
- * answer rather than the read's, because the health card is what reports it.
- */
-const probeDatabase = Effect.map(
-  Effect.timed(Effect.result(Database.use((db) => db.execute(sql`select 1`)))),
-  ([elapsed, probed]) => ({
-    reachable: Result.isSuccess(probed),
-    latencyMs: Math.round(Duration.toMillis(elapsed)),
-  }),
-);
 
 const findUserTotal = SqlSchema.findOneOption({
   Request: AdminMetricsScopeSchema,
@@ -408,44 +395,13 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
   return { cohortSizes, activeByCohortWeek };
 });
 
-function emptySource(
-  integrations: readonly AdminIntegration[],
-  database: { reachable: boolean; latencyMs: number },
-  analyticsConsoleUrl: string | undefined,
-): AdminMetricsSource {
-  return {
-    users: {
-      total: 0,
-      signInMethods: { google: 0, github: 0, other: 0 },
-      signupsByDay: new Map(),
-    },
-    usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
-    retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
-    reliability: { analyticsConsoleUrl },
-    systemHealth: { database, integrations },
-  };
-}
-
-/**
- * Reads every aggregate the dashboard shows, from the service's own tables. A
- * database that does not answer the probe short-circuits to an empty source
- * whose health card reports the outage rather than a page of misleading zeros
- * with a green light — the integrations and the analytics console address,
- * read from the environment, still fill in.
- */
+/** Reads every aggregate the overview shows, from the service's own tables. */
 export function readAdminMetricsSource(input: {
   now: number;
-  integrations: readonly AdminIntegration[];
-  analyticsConsoleUrl?: string | undefined;
   scope: AdminMetricsScope;
   windowDays: AdminMetricsWindow;
 }): Effect.Effect<AdminMetricsSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const health = yield* probeDatabase;
-    if (!health.reachable) {
-      return emptySource(input.integrations, health, input.analyticsConsoleUrl);
-    }
-
     const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
     const fetchStartDay =
       lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
@@ -461,13 +417,7 @@ export function readAdminMetricsSource(input: {
       { concurrency: "unbounded" },
     );
 
-    return {
-      users,
-      usage,
-      retention,
-      reliability: { analyticsConsoleUrl: input.analyticsConsoleUrl },
-      systemHealth: { database: health, integrations: input.integrations },
-    };
+    return { users, usage, retention };
   });
 }
 
@@ -768,7 +718,7 @@ const deleteFavorite = SqlSchema.void({
  * Reads everything one account's page shows, or nothing when no user row
  * carries the id. No probe and no empty fallback here: the detail page has no
  * health card to report an outage on, so a database that does not answer is
- * left to throw and become the handler's 503, where the metrics read instead
+ * left to throw and become the handler's 503, where the Reliability read instead
  * degrades to a page that can say so.
  */
 export function readAdminUserSource(input: {
