@@ -1415,8 +1415,11 @@ export function PlanCommentLayer({
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
     // Note that hiding the tab the plan stands in changes no selection, so its `hidden` attribute is watched for itself.
+    // Note that the tab shown again offers the words still selected there, though only a selection, not a caret, is read again, since a caret read opens and closes threads.
     const hiding = new MutationObserver(() => {
-      if (element.closest("[hidden]") !== null) setBubble(undefined);
+      if (element.closest("[hidden]") !== null || window.getSelection()?.isCollapsed === false) {
+        selected();
+      }
     });
     hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     return () => {

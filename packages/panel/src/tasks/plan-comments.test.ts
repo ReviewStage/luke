@@ -1177,7 +1177,7 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
   );
 });
 
-test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them", async () => {
+test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them, and bring them back as it is shown again", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
   act(() => keys.render(createElement(Keymap)));
@@ -1228,4 +1228,18 @@ test("words selected in a plan whose tab is then hidden take the bubble and ⌥�
     null,
     "⌥⌘M starts no thread on the hidden plan",
   );
+
+  Range.prototype.getBoundingClientRect = () => new DOMRect(40, 100, 120, 20);
+  answerPointer(false);
+  try {
+    await act(async () => {
+      container.hidden = false;
+      await Promise.resolve();
+    });
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+  assert.ok(container.querySelector(".comment-bubble"), "the bubble stands again by the words");
 });
