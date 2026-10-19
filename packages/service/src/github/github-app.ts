@@ -394,6 +394,19 @@ export interface GitHubRepositoryToken {
   readonly token: Redacted.Redacted;
 }
 
+/** Whether a repository's issues can be read through the workspace's installation. */
+export const ISSUE_ACCESS = {
+  READABLE: "readable",
+  UNGRANTED: "ungranted",
+  UNREACHED: "unreached",
+} as const;
+
+/** A repository's issues readable on a token, ungranted with where the installation's owner grants them, or unreached. */
+type GitHubIssueAccess =
+  | ({ readonly kind: typeof ISSUE_ACCESS.READABLE } & GitHubRepositoryToken)
+  | { readonly kind: typeof ISSUE_ACCESS.UNGRANTED; readonly settingsUrl: string }
+  | { readonly kind: typeof ISSUE_ACCESS.UNREACHED };
+
 /** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
 interface GitHubAuthorizeRequest {
   /** The callback GitHub returns the browser to, one of the App's registered callback URLs. */
@@ -517,6 +530,23 @@ export interface GitHubAppService {
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * Whether the repository's issues can be read, and the token they are read
+   * on where they can: the same mint as `repositoryIssueToken`, ungranted
+   * with the installation's settings page on GitHub where the installation
+   * reaches the repository and has not granted the App issues, and
+   * unreached where it does not reach the repository. An ungranted reach is
+   * read afresh rather than kept, so issues granted on GitHub are read on
+   * the next ask.
+   */
+  readonly repositoryIssueAccess: (
+    organizationId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    GitHubIssueAccess,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -1499,6 +1529,37 @@ function githubAppService(
         repositoryToken(organizationId, fullName, (on) =>
           on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
         ),
+      repositoryIssueAccess: (organizationId, fullName) =>
+        Effect.gen(function* () {
+          const key = new ReachKey({ organizationId, fullName });
+          const kept = yield* standingReach(key);
+          // Note that an ungranted reach is read again, because the grant is the one thing a kept reach would hide.
+          const reached =
+            Result.isSuccess(kept) && !kept.success.installation.issuesReadable
+              ? yield* Effect.andThen(Cache.invalidate(reaches, key), standingReach(key))
+              : kept;
+          if (Result.isFailure(reached)) {
+            const unreached: GitHubIssueAccess = { kind: ISSUE_ACCESS.UNREACHED };
+            return unreached;
+          }
+          const on = reached.success.installation;
+          if (!on.issuesReadable) {
+            const ungranted: GitHubIssueAccess = {
+              kind: ISSUE_ACCESS.UNGRANTED,
+              settingsUrl: installationSettingsUrl(on),
+            };
+            return ungranted;
+          }
+          const minted = yield* repositoryToken(
+            organizationId,
+            fullName,
+            () => INSTALLATION_TOKEN_PERMISSIONS.ISSUES,
+          );
+          return Option.match(minted, {
+            onNone: (): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.UNREACHED }),
+            onSome: (token): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.READABLE, ...token }),
+          });
+        }),
       repositoryCiReadable: (organizationId, fullName) =>
         Effect.map(
           reachableRepository(organizationId, fullName),

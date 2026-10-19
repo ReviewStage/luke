@@ -381,6 +381,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       tasks: [],
       onShowMention: ignore,
       linearIssuesIn: () => undefined,
+      githubIssuesIn: () => undefined,
       issuesIn: () => undefined,
     },
     onLeaveTask: ignore,

@@ -7465,6 +7465,59 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-left: auto;
 }
 
+/* The GitHub and Linear issues the card links (`new-task-links.tsx`): each
+   one's chip as above, wrapping in the order picked, a GitHub issue's open
+   mark in GitHub's open ink, and its Closes / Part of switch before the ×. */
+.new-task-links {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-8) var(--luke-space-8) 0;
+}
+
+.new-task-links > .new-task-issue {
+  max-width: 100%;
+  margin: 0;
+}
+
+.new-task-issue > .new-task-issue-github,
+.issue-picker-github-open {
+  color: var(--luke-color-complete);
+}
+
+.new-task-issue-relation {
+  display: flex;
+  flex: none;
+}
+
+/* A GitHub row's detail in the Issue chip's menu: the outside badge where
+   its author is outside the repository, then its number, author, and age,
+   or the grant row's words and the mark that says they leave for GitHub. */
+.issue-picker-github-detail {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+.issue-picker-github-detail > :not(.issue-picker-github-said) {
+  flex: none;
+}
+
+.issue-picker-github-said {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-picker-github-detail > svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
    card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
    lines each, then what the move does in a well under them, and the answers

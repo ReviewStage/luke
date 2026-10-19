@@ -301,6 +301,7 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
   WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
   WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
+  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",

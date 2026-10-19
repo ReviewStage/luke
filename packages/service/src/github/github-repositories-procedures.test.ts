@@ -126,8 +126,30 @@ function issueRecord(number: number, title: string, state: string, reason: strin
     body: "Seen on the staging invitations page.",
     user: { login: "octo-dev" },
     comments: 3,
+    node_id: `I_kwDOrelay${number}`,
+    author_association: number === 9 ? "NONE" : "MEMBER",
+    updated_at: "2026-10-01T00:00:00Z",
   };
 }
+
+/** The picker's read of one issue of `acme/relay` as the answer carries it. */
+function relayPick(number: number, title: string, state: string, association: string) {
+  return {
+    nodeId: `I_kwDOrelay${number}`,
+    repository: "acme/relay",
+    number,
+    title,
+    url: `https://github.com/acme/relay/issues/${number}`,
+    state,
+    author: "octo-dev",
+    authorAssociation: association,
+    updatedAt: Date.parse("2026-10-01T00:00:00Z"),
+  };
+}
+
+/** `acme/relay`'s issues listing and the search of its issues. */
+const RELAY_ISSUES_PATH = "/repos/acme/relay/issues";
+const SEARCH_PATH = "/search/issues";
 
 /** The issues `acme/relay` answers on its issues path: one open, one done, one not planned, one a duplicate, and pull request 42, which GitHub answers there too. */
 const RELAY_ISSUES = new Map<number, object>([
@@ -787,6 +809,142 @@ it.layer(getTestDB())("the repositories route", (it) => {
         assert.deepEqual(notGranted, none);
         assert.deepEqual(off, none);
         assert.deepEqual(forTheIssue, []);
+      }),
+  );
+
+  it.effect(
+    "a member reads a repository's open issues newest changed first, those a search finds, and one by its number, each with who opened it and how they stand to the repository, never a pull request and never another repository's, on a token cut to issues read on the one repository",
+    () =>
+      Effect.gen(function* () {
+        const searched: URLSearchParams[] = [];
+        const listedWith: URLSearchParams[] = [];
+        const github = githubReaching(
+          [
+            {
+              id: 7821,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay" }],
+              permissions: GRANTING_ISSUES,
+            },
+          ],
+          undefined,
+          {},
+          (sent) => {
+            const url = new URL(sent.url);
+            if (url.pathname === RELAY_ISSUES_PATH) {
+              listedWith.push(url.searchParams);
+              return Response.json([RELAY_ISSUES.get(42), RELAY_ISSUES.get(7)]);
+            }
+            if (url.pathname === SEARCH_PATH) {
+              searched.push(url.searchParams);
+              return Response.json({
+                items: [
+                  RELAY_ISSUES.get(7),
+                  {
+                    ...issueRecord(3, "Invitations on the ledger", "open", null),
+                    html_url: "https://github.com/acme/ledger/issues/3",
+                  },
+                ],
+              });
+            }
+            const named = ISSUE_PATH.exec(url.pathname);
+            const record = named === null ? undefined : RELAY_ISSUES.get(Number(named[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7821,
+          accountId: 9821,
+          accountLogin: "acme",
+        });
+        const issues = (...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            ...more,
+          ]);
+
+        const open = yield* issues();
+        const found = yield* issues([GITHUB_REPOSITORIES_QUERY.QUERY, " invite "]);
+        const one = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "9"]);
+        const pull = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "42"]);
+
+        const seven = relayPick(7, "Invitations expire too soon", ISSUE_STATE.OPEN, "MEMBER");
+        assert.deepEqual(open, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(found, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(one, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            issues: [relayPick(9, "Invite by phone number", ISSUE_STATE.NOT_PLANNED, "NONE")],
+          },
+        });
+        assert.deepEqual(pull, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          listedWith.map((params) => [params.get("state"), params.get("sort")]),
+          [["open", "updated"]],
+        );
+        assert.deepEqual(
+          searched.map((params) => params.get("q")),
+          ["invite repo:acme/relay is:issue is:open"],
+        );
+        const mints = github.sent
+          .filter((sent) => sent.url.endsWith("/access_tokens"))
+          .map((sent) => JSON.parse(sent.body))
+          .filter((mint) => "repositories" in mint);
+        for (const mint of mints) {
+          assert.deepEqual(mint, { repositories: ["relay"], permissions: { issues: "read" } });
+        }
+      }),
+  );
+
+  it.effect(
+    "a repository whose installation has not granted the App issues answers ungranted with the installation's settings page, never an empty list, and asks GitHub for no issue; an unreached repository has none, and a read naming a number off the wire's shape is invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          {
+            id: 7822,
+            login: "acme",
+            accountType: "Organization",
+            repositories: [{ owner: "acme", name: "relay" }],
+          },
+        ]);
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7822,
+          accountId: 9822,
+          accountLogin: "acme",
+        });
+        const issues = (repository: string, ...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            ...more,
+          ]);
+
+        const ungranted = yield* issues("acme/relay");
+        const unreached = yield* issues("globex/ledger");
+        const unnumbered = yield* issues("acme/relay", [GITHUB_REPOSITORIES_QUERY.NUMBER, "0"]);
+
+        assert.deepEqual(ungranted, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            ungranted: {
+              settingsUrl: "https://github.com/organizations/acme/settings/installations/7822",
+            },
+          },
+        });
+        assert.deepEqual(unreached, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          unnumbered,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const askedIssues = github.sent.filter((sent) => {
+          const { pathname } = new URL(sent.url);
+          return pathname.includes("/issues") || pathname === SEARCH_PATH;
+        });
+        assert.deepEqual(askedIssues, []);
       }),
   );
 

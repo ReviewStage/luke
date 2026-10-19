@@ -120,7 +120,7 @@ test("a plan started from a Linear issue is named by its title, cut to a name's 
   assert.equal(taskNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
 });
 
-test("an agent New task starts is handed a mention of the issue picked, then a blank line and the words; the issue alone with no words, and the words alone with no issue", () => {
+test("an agent New task starts is handed a mention of each issue picked, one to a line, then a blank line and the words; the issues alone with no words, and the words alone with no issue", () => {
   const issue = {
     identifier: "ENG-1",
     title: " Fix [the] refresh ",
@@ -128,24 +128,38 @@ test("an agent New task starts is handed a mention of the issue picked, then a b
   };
 
   assert.equal(
-    agentPromptOf(issue, "  Reproduce it first.\n"),
+    agentPromptOf([issue], "  Reproduce it first.\n"),
     "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nReproduce it first.",
   );
   assert.equal(
-    agentPromptOf(issue, "   "),
+    agentPromptOf([issue], "   "),
     "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)",
   );
   assert.equal(
-    agentPromptOf(undefined, " Make the sidebar keep its folds. "),
+    agentPromptOf([], " Make the sidebar keep its folds. "),
     "Make the sidebar keep its folds.",
   );
   assert.equal(
     agentPromptOf(
-      { identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" },
+      [{ identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" }],
       "",
     ),
     "[@ACME-7 Invites expire](https://tryluke.dev/a%28b%29/issue/7)",
     "one of the workspace's own issues is mentioned by its Luke link, its target kept one target",
+  );
+  assert.equal(
+    agentPromptOf(
+      [
+        {
+          identifier: "acme/relay#7",
+          title: "Invites expire",
+          url: "https://github.com/acme/relay/issues/7",
+        },
+        issue,
+      ],
+      "Both.",
+    ),
+    "[@acme/relay#7 Invites expire](https://github.com/acme/relay/issues/7)\n[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nBoth.",
   );
 });
 

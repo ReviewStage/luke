@@ -52,6 +52,15 @@
  * answers none, as an unreached repository does, so a link to an issue
  * there draws its address.
  *
+ * And the issues New task's picker offers of such a repository,
+ * `GET /api/github/repositories/issues`, on the same token: its open issues
+ * newest changed first, those GitHub's search finds for the `query` named,
+ * or the one issue `number` names, which wins where both are named
+ * (`issues.ts`), to a member of the workspace. An installation that has not
+ * granted the App issues answers ungranted with its settings page on
+ * GitHub, never an empty list, so the picker can say why; a repository the
+ * installation does not reach has no issues.
+ *
  * Every caller is resolved, and the claim's body bound checked, on the
  * resource's implementer rather than the procedure's, so they run before
  * oRPC reads the input, as the old groups resolved the caller before they
@@ -67,6 +76,10 @@ import {
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import type { GitHubIssueSummary, GitHubPullRequestSummary } from "@luke/features";
 import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
+import type {
+  GitHubRepositoryIssuesAnswer,
+  RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubRepository } from "../core.js";
@@ -81,10 +94,10 @@ import {
 import { accountMiddleware, bodyLimit, hosted, sessionMiddleware } from "../orpc/base.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
-import { GitHubApp, type GitHubWorkspaceReadFailure } from "./github-app.js";
+import { GitHubApp, type GitHubWorkspaceReadFailure, ISSUE_ACCESS } from "./github-app.js";
 import { githubReadOrRefusal } from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
-import { issueByNumber } from "./issues.js";
+import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
 import { pullRequestByNumber } from "./pull-requests.js";
 
 /**
@@ -200,6 +213,35 @@ const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrNull(found);
 });
 
+/** The issues of a repository the workspace's installation reaches, as the picker asked, or ungranted where its installation grants the App no issues. */
+const issuesOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  place: RepositoryPlace,
+  ask: RepositoryIssuesAsk,
+): Effect.fn.Return<
+  GitHubRepositoryIssuesAnswer,
+  GitHubWorkspaceReadFailure,
+  GitHubRepositoriesServices
+> {
+  const app = yield* GitHubApp;
+  const access = yield* app.repositoryIssueAccess(place.workspaceId, place.repository);
+  if (access.kind === ISSUE_ACCESS.UNGRANTED) {
+    return { ungranted: { settingsUrl: access.settingsUrl } };
+  }
+  if (access.kind === ISSUE_ACCESS.UNREACHED) return { issues: [] };
+  const { token } = access;
+  const fullName = access.repository.fullName;
+  if (ask.number !== undefined) {
+    return { issues: Option.toArray(yield* issuePick(token, fullName, ask.number)) };
+  }
+  const words = ask.query?.trim() ?? "";
+  return {
+    issues:
+      words === ""
+        ? yield* openIssues(token, fullName)
+        : yield* searchIssues(token, fullName, words),
+  };
+});
+
 /**
  * The session's own GitHub link removed: a session Better Auth refuses, or
  * holds too old to unlink with, is unauthenticated, which the Mac answers
@@ -299,6 +341,10 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
     repositoryIssue: signedIn.repositoryIssue.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
       return { issue: yield* githubReadOrRefusal(issueOfPlace(place, input.number)) };
+    }),
+    repositoryIssues: signedIn.repositoryIssues.effect(function* ({ context, input }) {
+      const place = yield* memberPlace(context.userId, input);
+      return yield* githubReadOrRefusal(issuesOfPlace(place, input));
     }),
   };
 }

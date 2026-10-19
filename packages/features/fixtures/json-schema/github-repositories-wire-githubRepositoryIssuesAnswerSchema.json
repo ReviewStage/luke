@@ -1,0 +1,91 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "repository": {
+                "type": "string",
+                "maxLength": 140
+              },
+              "number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed",
+                  "not-planned"
+                ]
+              },
+              "author": {
+                "type": "string"
+              },
+              "authorAssociation": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "nodeId",
+              "repository",
+              "number",
+              "title",
+              "url",
+              "state",
+              "authorAssociation",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 50
+        }
+      },
+      "required": [
+        "issues"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ungranted": {
+          "type": "object",
+          "properties": {
+            "settingsUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "settingsUrl"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ungranted"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

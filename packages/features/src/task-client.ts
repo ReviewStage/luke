@@ -20,7 +20,9 @@ import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
+  GitHubRepositoryIssuesAnswer,
   GitHubRepositoryPullRequestAnswer,
+  RepositoryIssuesAsk,
 } from "./github-repositories-wire.js";
 import {
   askHosted,
@@ -548,6 +550,20 @@ export class HostedTaskClient {
   ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(
       askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
+    );
+  }
+
+  /** The issues of a repository the workspace's installation reaches, as New task's picker asks for them, or that the installation grants none; nothing where the service did not answer. */
+  readRepositoryIssues(
+    place: RepositoryPlace,
+    ask: RepositoryIssuesAsk,
+  ): Effect.Effect<GitHubRepositoryIssuesAnswer | undefined, never, HttpClient.HttpClient> {
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryIssues, {
+        ...place,
+        ...(ask.number === undefined ? undefined : { number: String(ask.number) }),
+        ...(ask.number !== undefined || ask.query === undefined ? undefined : { query: ask.query }),
+      }),
     );
   }
 

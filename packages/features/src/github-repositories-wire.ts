@@ -17,7 +17,11 @@ import { countedNumber } from "./service-wire.js";
  * where it stands, its author, its size, its age, its branches, its labels,
  * and its comment and commit counts; and so is one issue,
  * by its number, open, closed as
- * done, or closed as not planned.
+ * done, or closed as not planned. And the issues New task's picker offers of
+ * a repository: its open issues newest changed first, those a search finds,
+ * or the one a number names, each with who opened it and how GitHub says
+ * they stand to the repository, or why none can be read where the
+ * installation has not granted the App issues.
  */
 
 const GITHUB_REPOSITORY_BOUNDS = {
@@ -62,13 +66,16 @@ export type GitHubRepository = typeof githubRepositorySchema.Type;
  * The queries a repositories read names: the workspace a listing is for,
  * since a workspace of a GitHub App installation lists only that
  * installation's repositories; for a read of one repository's tree, skills,
- * or pull request, the repository, `owner/name`; and for the pull request's,
- * its number.
+ * or pull request, the repository, `owner/name`; for the pull request's,
+ * its number; and for its issues, the words searched for or the number of
+ * the one asked.
  */
 export const GITHUB_REPOSITORIES_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
   NUMBER: "number",
+  /** The words an issues read searches for. */
+  QUERY: "query",
 } as const;
 
 /** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
@@ -239,4 +246,135 @@ export function pullRequestAddressOf(href: string): NumberedAddress | undefined 
  */
 export function issueAddressOf(href: string): NumberedAddress | undefined {
   return numberedAddressOf(href, NUMBERED_STEP.ISSUES);
+}
+
+/** The bounds of a read of a repository's issues for New task's picker. */
+export const GITHUB_ISSUES_BOUNDS = {
+  /** The most characters a search may spell. */
+  MAX_QUERY_CHARS: 200,
+  /** The most issues one read answers. */
+  MAX_ISSUES: 50,
+  /** The most characters an issue's node id may spell; GitHub's are short and opaque. */
+  MAX_NODE_ID_CHARS: 100,
+} as const;
+
+/**
+ * How GitHub says who opened an issue stands to its repository
+ * (`author_association`): its owner, a member of the organization that owns
+ * it, or a collaborator on it, who are inside; and anyone else, who is not.
+ */
+export const GITHUB_AUTHOR_ASSOCIATION = {
+  OWNER: "OWNER",
+  MEMBER: "MEMBER",
+  COLLABORATOR: "COLLABORATOR",
+  CONTRIBUTOR: "CONTRIBUTOR",
+  FIRST_TIME_CONTRIBUTOR: "FIRST_TIME_CONTRIBUTOR",
+  FIRST_TIMER: "FIRST_TIMER",
+  MANNEQUIN: "MANNEQUIN",
+  NONE: "NONE",
+} as const;
+
+/** The associations of someone inside the repository, whose words an agent may read as a teammate's. */
+const INSIDE_ASSOCIATIONS: ReadonlySet<string> = new Set([
+  GITHUB_AUTHOR_ASSOCIATION.OWNER,
+  GITHUB_AUTHOR_ASSOCIATION.MEMBER,
+  GITHUB_AUTHOR_ASSOCIATION.COLLABORATOR,
+]);
+
+/**
+ * Whether an issue was opened by someone outside its repository: anyone
+ * GitHub names neither its owner, a member, nor a collaborator, a value
+ * GitHub adds later among them, since an agent that can push reads it.
+ */
+export function isOutsideAuthor(association: string): boolean {
+  return !INSIDE_ASSOCIATIONS.has(association);
+}
+
+/** A GitHub issue's node id, which survives a rename or a transfer of its repository. */
+export const githubIssueNodeIdSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** One issue as New task's picker lists it: what a person picks it by, and who opened it. */
+export const githubIssuePickSchema = EffectSchema.Struct({
+  nodeId: githubIssueNodeIdSchema,
+  /** `owner/name` as GitHub spells it. */
+  repository: githubRepositoryFullNameSchema,
+  number: githubPullRequestNumberSchema,
+  title: EffectSchema.String,
+  /** The issue's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
+  /** The login of who opened it; absent where their account is gone. */
+  author: EffectSchema.optionalKey(EffectSchema.String),
+  /** How GitHub says they stand to the repository, `GITHUB_AUTHOR_ASSOCIATION`'s, kept as GitHub spells it. */
+  authorAssociation: EffectSchema.String,
+  /** Epoch milliseconds GitHub last saw it change. */
+  updatedAt: countedNumber,
+});
+
+export type GitHubIssuePick = typeof githubIssuePickSchema.Type;
+
+/**
+ * A repository's issues as New task's picker reads them (GET), by the
+ * workspace whose installation reaches it: its open issues newest changed
+ * first, those GitHub's search finds for the words where `query` names
+ * some, or the one issue `number` names, none where it is a pull request's
+ * or holds none; a repository the installation does not reach has none.
+ * An installation that has not granted the App issues answers
+ * `ungranted` instead of an empty list, with where on GitHub its owner
+ * grants them, since nothing can be read until they do.
+ */
+export const githubRepositoryIssuesAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    issues: EffectSchema.Array(githubIssuePickSchema).check(
+      EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_ISSUES),
+    ),
+  }),
+  EffectSchema.Struct({
+    ungranted: EffectSchema.Struct({
+      /** The installation's own settings page on GitHub. */
+      settingsUrl: EffectSchema.String,
+    }),
+  }),
+]);
+
+export type GitHubRepositoryIssuesAnswer = typeof githubRepositoryIssuesAnswerSchema.Type;
+
+/** What a read of a repository's issues asks: the one issue numbered, else those the words find, else its open issues. */
+export interface RepositoryIssuesAsk {
+  readonly query?: string;
+  readonly number?: number;
+}
+
+/** An issue of a repository words name: its repository, `owner/name`, and its number. */
+export interface GitHubIssueRef {
+  readonly repository: string;
+  readonly number: number;
+}
+
+/** `owner/name#N`, or `#N` alone, typed whole. */
+const ISSUE_REF = /^(?:([^\s#]+\/[^\s#]+))?#([1-9]\d{0,8})$/u;
+
+/**
+ * The issue words typed or pasted name whole: a link to one of GitHub's
+ * issue pages, `owner/name#N`, or `#N` alone, which names an issue of the
+ * repository given and nothing where none is; nothing for any other words.
+ */
+export function githubIssueRefIn(
+  typed: string,
+  repository: string | null,
+): GitHubIssueRef | undefined {
+  const words = typed.trim();
+  const linked = issueAddressOf(words);
+  if (linked !== undefined) return linked;
+  const named = ISSUE_REF.exec(words);
+  if (named === null) return undefined;
+  const [, owner, number] = named;
+  const place = owner ?? repository ?? undefined;
+  if (place === undefined || !EffectSchema.is(githubRepositoryFullNameSchema)(place)) {
+    return undefined;
+  }
+  return { repository: place, number: Number(number) };
 }
