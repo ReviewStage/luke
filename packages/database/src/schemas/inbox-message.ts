@@ -1,6 +1,6 @@
-import type { InboxMessageAuthor } from "@luke/features/inbox-wire";
+import type { InboxAnswers, InboxMessageAuthor, InboxReadAsk } from "@luke/features/inbox-wire";
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
@@ -15,6 +15,9 @@ import { inboxItem } from "./inbox.js";
  * item's own and so needs no column; a message stays when its member's
  * account is gone, naming nobody. The words are Markdown kept as they were
  * sent, as an answer's note is, so a mention in them stands as its link.
+ * From version 5 an agent's message may end with an ask, kept with where
+ * it stands, and a member's may carry the answer to one; the item names
+ * the message whose ask waits (`inbox.ts`).
  * The files a message carried are rows of the item's attachments of the
  * message kind, naming the message (`inbox-attachment.ts`). The key a
  * member's client wrote it under is unique on the item, so a message sent
@@ -35,6 +38,19 @@ export const inboxMessage = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** The words in Markdown, as they were sent; empty where the files carry the message alone. */
     text: text("text").notNull(),
+    /**
+     * The ask an agent's message ends with, from version 5, as the wire's
+     * read carries it (`inboxReadAskSchema`): the ask with where it stands
+     * and, on a withdrawn one, why; null on a message that asks nothing and
+     * on every message from before version 5.
+     */
+    ask: jsonb("ask").$type<InboxReadAsk>(),
+    /**
+     * The answer a member's message carries to an earlier message's ask,
+     * from version 5, as the wire's own JSON (`inboxAnswersSchema`); null on
+     * a message that answers none and on every message from before version 5.
+     */
+    answers: jsonb("answers").$type<InboxAnswers>(),
     /** The key a member's client wrote it under; null for the agent's. */
     clientKey: text("client_key"),
     createdAt: timestamptz("created_at").notNull(),

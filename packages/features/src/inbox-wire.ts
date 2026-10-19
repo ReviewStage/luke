@@ -669,6 +669,8 @@ export const inboxReadAskSchema = EffectSchema.Union([
   }),
 ]);
 
+export type InboxReadAsk = typeof inboxReadAskSchema.Type;
+
 /**
  * The answer a member's message carries: the message whose ask it answers,
  * by id, how they answered, the options where they picked, the form's
@@ -685,7 +687,7 @@ export const inboxAnswersSchema = EffectSchema.Struct({
   ),
 });
 
-type InboxAnswers = typeof inboxAnswersSchema.Type;
+export type InboxAnswers = typeof inboxAnswersSchema.Type;
 
 /**
  * One file the developer's answer carried, as an item names it: the
