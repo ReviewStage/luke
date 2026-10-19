@@ -130,18 +130,64 @@ function chatOfLiveRows(
   ].toSorted((one, other) => other.updatedAt - one.updatedAt);
 }
 
+/** A short, stable digest of a text: cyrb53, which needs no platform hash, since the host also runs in a browser tab. */
+function digest(text: string): string {
+  let first = 0xdeadbeef;
+  let second = 0x41c6ce57;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    first = Math.imul(first ^ code, 2654435761);
+    second = Math.imul(second ^ code, 1597334677);
+  }
+  first =
+    Math.imul(first ^ (first >>> 16), 2246822507) ^ Math.imul(second ^ (second >>> 13), 3266489909);
+  second =
+    Math.imul(second ^ (second >>> 16), 2246822507) ^ Math.imul(first ^ (first >>> 13), 3266489909);
+  return (4294967296 * (2097151 & second) + (first >>> 0)).toString(16);
+}
+
+/**
+ * The cursor of a live answer: a digest of what the held read's cursor
+ * stamps, each item's id, revision, instant, and read state, each failed
+ * run, and each chat entry where it stands, so an answer whose cursor is
+ * the last one's moved nothing a reader announces or counts, as a held
+ * answer's does.
+ */
+function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): string {
+  const itemStamp = (item: {
+    readonly id: string;
+    readonly revision: number;
+    readonly updatedAt: number;
+    readonly unread?: boolean | undefined;
+  }) => [item.id, item.revision, item.updatedAt, item.unread ?? null];
+  return digest(
+    JSON.stringify([
+      answer.items.map(itemStamp),
+      (answer.planless ?? []).map(itemStamp),
+      (answer.failedRuns ?? []).map((run) => [run.id, run.failedAt]),
+      (answer.chat ?? []).map((entry) => [
+        entry.messageId,
+        entry.reason,
+        entry.touchedSeq,
+        entry.updatedAt,
+      ]),
+    ]),
+  );
+}
+
 /**
  * The account inbox's answer as the live rows stand at `now`: the parts
  * ordered as the held read orders them, an item with no workspace said as
  * none, and the failed runs kept to the last week, which the held read
- * bounds in its statement and a live statement cannot. The cursor is the
- * held read's alone, so a live answer carries none.
+ * bounds in its statement and a live statement cannot. Its cursor is a
+ * digest of what it holds (`liveCursorOf`), which moves wherever the held
+ * read's would, though the two are never compared.
  */
 export function accountInboxOfLiveRows(
   rows: AccountInboxLiveRows,
   now: number,
 ): AccountInboxAnswer {
-  return {
+  const answer = {
     items: rows.items.toSorted(latestFirst((item) => item.id)),
     plans: rows.plans.toSorted(latestFirst((plan) => plan.planId)),
     planless: rows.planless
@@ -154,7 +200,22 @@ export function accountInboxOfLiveRows(
       .filter((run) => run.failedAt >= now - FAILED_RUN_WINDOW_MILLIS)
       .toSorted((a, b) => b.failedAt - a.failedAt),
     chat: chatOfLiveRows(rows.chatAsks, rows.chatNotices),
-    cursor: "",
-    readAt: now,
   };
+  return { ...answer, cursor: liveCursorOf(answer), readAt: now };
+}
+
+/**
+ * When the earliest failed run the rows carry at `now` ages out of the last
+ * week, in epoch milliseconds; none where they carry none. Nothing a live
+ * statement delivers says so, since Realtime follows no clock, so the
+ * follower publishes again then.
+ */
+export function nextFailedRunExpiry(
+  failedRuns: readonly AccountFailedRun[],
+  now: number,
+): number | undefined {
+  const expiries = failedRuns
+    .map((run) => run.failedAt + FAILED_RUN_WINDOW_MILLIS)
+    .filter((expiry) => expiry > now);
+  return expiries.length === 0 ? undefined : Math.min(...expiries);
 }

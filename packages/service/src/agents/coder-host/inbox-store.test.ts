@@ -316,7 +316,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
           // Every desktop that follows live asks for the archived tasks too.
           const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
           const live = yield* liveAnswerOf(reader, held.readAt);
-          assert.deepEqual(live, { ...held, cursor: "" });
+          // Each read keeps a cursor of its own, which the other never reads.
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
         }
         const shelvedRead = yield* liveAnswerOf(onTask.agent.userId, 0);
         assert.ok(

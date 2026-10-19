@@ -192,6 +192,7 @@ const WIRE_NAME = {
     "packages/service/src/agents/coder-host/inbox-store.test.ts",
     // The same part followed over Neon Realtime: sealed, delivered, and decoded under its wire key.
     "packages/features/src/live-wire.ts",
+    "packages/features/src/live-wire.test.ts",
     "packages/host/src/account-inbox-follow.ts",
     "packages/host/src/compose-coding-agents.test.ts",
     "packages/service/src/inbox/inbox-store.ts",
