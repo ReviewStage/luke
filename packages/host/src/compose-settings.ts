@@ -1,4 +1,4 @@
-import type { CallCredential } from "@luke/features";
+import { type CallCredential, lateCredential } from "@luke/features";
 import {
   PRODUCT_EVENT,
   PRODUCT_SETTING_VALUE,
@@ -39,7 +39,7 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
+import { AccountSource, AppIdentity, type Environment } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
@@ -103,14 +103,14 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     never,
     | HostKernelTag
     | Environment
-    | SecretCipher
+    | AccountSource
     | AppIdentity
     | FileSystem.FileSystem
     | Path.Path
     | Scope.Scope
   > {
     const kernel = yield* HostKernelTag;
-    const cipher = yield* SecretCipher;
+    const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -132,7 +132,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       // A fixture or evidence run refuses the account it holds, so nothing is
       // reported as available that would not actually happen.
       credentialsUsable: runMode.observesProviders,
-      cipher,
+      // The account source's own: a source that keeps no tokens here hands none.
+      cipher: tokenCipher,
       overrides,
       fileSystem,
       path,
@@ -140,14 +141,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
 
     /**
      * The account's credential as the merge links it: the clients below are
-     * built before the account is, so each read awaits the link.
+     * built before the account is, so each call waits for the link and then
+     * goes out exactly as the linked credential would, a header or none.
      */
-    const credential: CallCredential = {
-      authorization: () =>
-        linked((links) => links.credential.authorization?.() ?? Effect.succeed(undefined)),
-      renew: () => linked((links) => links.credential.renew?.() ?? Effect.void),
-      holder: () => linked((links) => links.credential.holder?.() ?? Effect.succeed(undefined)),
-    };
+    const credential: CallCredential = lateCredential(
+      linked((links) => Effect.succeed(links.credential)),
+    );
 
     const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,

@@ -3,7 +3,6 @@ import { describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
-import type { SecretCipher } from "../settings-store.js";
 import { HostKernelTag, hostKernelLayer } from "./kernel.js";
 import {
   AppIdentity,
@@ -11,17 +10,10 @@ import {
   IdSource,
   RunMode,
   reporterLayer,
-  SecretCipher as SecretCipherTag,
   ServiceOrigin,
   ShutdownSignal,
   StateRoot,
 } from "./seams.js";
-
-const CIPHER: SecretCipher = {
-  isAvailable: () => false,
-  encrypt: (plainText) => new TextEncoder().encode(plainText),
-  decrypt: (cipherText) => new TextDecoder().decode(cipherText),
-};
 
 interface TestSeams {
   readonly stateRoot: string;
@@ -29,7 +21,6 @@ interface TestSeams {
   readonly appVersion: string;
   readonly packaged: boolean;
   readonly environment: Record<string, string>;
-  readonly cipher: SecretCipher;
   readonly createId: () => string;
   readonly report: (message: string) => void;
 }
@@ -40,7 +31,6 @@ const seams = (overrides: Partial<TestSeams> = {}): TestSeams => ({
   appVersion: "0.0.0-test",
   packaged: false,
   environment: {},
-  cipher: CIPHER,
   createId: () => "id",
   report: () => undefined,
   ...overrides,
@@ -55,7 +45,6 @@ const kernelLayerOver = (input: TestSeams) =>
       Layer.succeed(RunMode, input.runMode),
       Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
-      Layer.succeed(SecretCipherTag, input.cipher),
       Layer.succeed(IdSource, { create: input.createId }),
       reporterLayer(input.report),
       Layer.succeed(ShutdownSignal, { notify: undefined }),

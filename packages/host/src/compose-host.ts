@@ -45,12 +45,11 @@ import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
+  type AccountSource,
   type AppIdentity,
   type Environment,
   Reporter,
-  type SecretCipher,
   ShutdownSignal,
-  type SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -90,10 +89,9 @@ type HostAssemblyRequirements =
   | Reporter
   | VoiceSocket
   | Environment
-  | SecretCipher
   | AppIdentity
   | ShutdownSignal
-  | SignInConsent
+  | AccountSource
   | FileSystem.FileSystem
   | Path.Path
   | HttpClient.HttpClient;

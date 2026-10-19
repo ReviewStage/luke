@@ -86,7 +86,12 @@ export interface SecretCipher {
 
 export interface SettingsStoreOptions {
   directory: () => string;
-  cipher: SecretCipher;
+  /**
+   * What the account's tokens are sealed with. Without one the store holds no
+   * account: none is read back, and keeping one is refused as it is where the
+   * cipher is unavailable.
+   */
+  cipher: SecretCipher | undefined;
   /**
    * What the launch environment overrides, already read: the store reads no
    * environment of its own, so nothing it answers depends on a variable this
@@ -544,7 +549,7 @@ function parsePersistedSettingsEither(
  */
 export class SettingsStore {
   readonly #directory: () => string;
-  readonly #cipher: SecretCipher;
+  readonly #cipher: SecretCipher | undefined;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
   readonly #fileSystem: FileSystem.FileSystem;
@@ -813,12 +818,13 @@ export class SettingsStore {
   /** Stores both OAuth tokens, and the session when there is one, under one Keychain-backed ciphertext. */
   setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
     return Effect.gen({ self: this }, function* () {
-      if (!this.#secretStorageUsable()) {
+      const cipher = this.#cipher;
+      if (!cipher || !this.#secretStorageUsable()) {
         throw new Error("Encrypted credential storage is unavailable on this system.");
       }
       yield* this.#mutate((persisted) => {
         const tokenCipher = Base64.encode(
-          this.#cipher.encrypt(
+          cipher.encrypt(
             JSON.stringify({
               accessToken: account.accessToken,
               refreshToken: account.refreshToken,
@@ -953,7 +959,7 @@ export class SettingsStore {
     if (this.#secretStorageAvailable === undefined) {
       let available = false;
       try {
-        available = this.#cipher.isAvailable();
+        available = this.#cipher?.isAvailable() ?? false;
       } catch {
         available = false;
       }
@@ -969,8 +975,10 @@ export class SettingsStore {
    * says to connect again.
    */
   #decryptTokens(cipherText: string): AccountTokens | undefined {
+    const cipher = this.#cipher;
+    if (!cipher) return undefined;
     const plain = Result.flatMap(Base64.decode(cipherText), (bytes) =>
-      Result.try(() => this.#cipher.decrypt(bytes)),
+      Result.try(() => cipher.decrypt(bytes)),
     );
     if (Result.isFailure(plain)) return undefined;
     return Result.getOrUndefined(decodeAccountTokens(plain.success));

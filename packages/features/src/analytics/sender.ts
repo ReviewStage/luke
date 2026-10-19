@@ -10,6 +10,7 @@ import {
   type CallCredential,
   callAnswered,
   HOSTED_SERVICE_PATH,
+  resolvedCredential,
 } from "../index.js";
 import {
   PRODUCT_EVENT,
@@ -209,7 +210,11 @@ export class ProductEventSender {
     };
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
-    this.#readHolder = options.credential.holder ?? (() => Effect.succeed(UNNAMED_ACCOUNT));
+    const credential = resolvedCredential(options.credential);
+    this.#readHolder = () =>
+      Effect.flatMap(credential, (current) =>
+        current.holder === undefined ? Effect.succeed(UNNAMED_ACCOUNT) : current.holder(),
+      );
     this.#keptDays = options.recordedDays ?? UNKEPT_DAYS;
     this.#flushIntervalMs = positiveInteger(
       options.flushIntervalMs,

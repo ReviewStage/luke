@@ -1,21 +1,13 @@
-import {
-  AccountClient,
-  AccountSessionManager,
-  accountGateOpen,
-  type StoredAccount,
-} from "@luke/credentials";
+import { accountGateOpen } from "@luke/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   isAccountProvider,
 } from "@luke/credentials/snapshot";
 import {
-  AccountRefreshFailed,
   type AccountToken,
-  accountBearer,
   type CallCredential,
   hostedVoiceServiceOrigin,
-  sessionBearer,
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
@@ -30,14 +22,13 @@ import { type OpenSocket, VoiceCapabilityAssembler } from "@luke/voice";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import type { AccountSession } from "./account-source.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, Environment, ServiceOrigin, SignInConsent } from "./effect/seams.js";
-
-const ACCOUNT_CLIENT_ID = "luke-desktop";
+import { AccountSource, AppIdentity, Environment, ServiceOrigin } from "./effect/seams.js";
 
 /**
  * What the account reaches in the other concerns. The capability gate is the
@@ -51,7 +42,8 @@ interface AccountLinks {
 }
 
 export interface AccountComposer extends Composer {
-  readonly session: AccountSessionManager;
+  /** The account's session, as the shell's account source opened it. */
+  readonly session: AccountSession;
   readonly voiceCapabilities: VoiceCapabilityAssembler;
   readonly agentTrace: AgentTraceWriter | undefined;
   snapshot: () => AccountSnapshot;
@@ -98,7 +90,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   | HostKernelTag
   | Environment
   | AppIdentity
-  | SignInConsent
+  | AccountSource
   | FileSystem.FileSystem
   | Path.Path
   | Scope.Scope
@@ -107,38 +99,26 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const kernel = yield* HostKernelTag;
   const environment = yield* Environment;
   const identity = yield* AppIdentity;
-  const consent = yield* SignInConsent;
+  const source = yield* AccountSource;
   const { runMode, report } = kernel;
   const late = yield* lateService<AccountLinks>();
 
-  const client = new AccountClient({
-    baseUrl: kernel.accountBaseUrl,
-    clientId: ACCOUNT_CLIENT_ID,
-  });
-
-  const session = yield* AccountSessionManager.make({
-    client,
-    // The store's own effects, with an I/O failure read as the defect the
-    // rejected promise behind each of these already was. Each link below is
-    // awaited rather than read, because a link read at construction would be
-    // read before `link()` has run.
-    store: {
-      readAccount: () => Effect.orDie(settings.store.readAccount()),
-      setAccount: (stored) => Effect.orDie(settings.store.setAccount(stored)),
-      clearAccount: () => Effect.orDie(settings.store.clearAccount()),
-    },
+  // The capability pair is awaited rather than read, because a link read
+  // at construction would be read before `link()` has run.
+  const session = yield* source.open({
+    store: settings.store,
+    accountBaseUrl: kernel.accountBaseUrl,
     hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-    requiresAccount: runMode.requiresAccount,
-    openExternal: (url) => kernel.openExternalThroughNode(url),
-    openConsent: consent.open,
+    runMode,
     report,
+    openExternal: (url) => kernel.openExternalThroughNode(url),
     startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
     stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
   });
 
   /**
-   * The previous snapshot, read by the subscriber alone: `session.snapshot`
-   * is always the manager's own current answer, so every other reader in
+   * The previous snapshot, read by the subscriber alone: `session.snapshot()`
+   * is always the session's own current answer, so every other reader in
    * this file reads that directly rather than a mirror that would only
    * catch up once the subscription's fiber had run.
    */
@@ -147,7 +127,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   /**
    * What a session change means to the rest of the host, as the subscriber
    * a fiber in this composer's own lifetime pumps from `session.changes`
-   * rather than a callback `AccountSessionManager` held and ran: never
+   * rather than a callback the session held and ran: never
    * that a turn lands before the fiber that changed it moves on, which is
    * the same eventual guarantee the two forks this replaces already gave
    * `emitSessionReplay` and `settings.emitSettings()`.
@@ -190,50 +170,14 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const serviceOrigin = yield* Effect.serviceOption(ServiceOrigin);
 
   function capabilitiesActive(): boolean {
-    return accountGateOpen(runMode, session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN);
+    return accountGateOpen(runMode, session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN);
   }
-
-  /**
-   * One account read: a store that could not be read is an account this
-   * attempt cannot name, exactly as a rejected read already was here.
-   */
-  const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
-    settings.store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
-
-  // The holder is the account's own address, so a call's one retry after a
-  // 401 can tell a renewed token from a different person's: a sign-out and
-  // sign-in between the attempt and its retry reads as the caller's account
-  // gone, never as a fresh bearer to carry the old account's payload under.
-  const token: AccountToken = {
-    readAccessToken: () =>
-      runMode.sendsNetwork
-        ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
-        : Effect.succeed(undefined),
-    refreshAccount: session.renewOnce,
-    readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
-  };
-
-  // Note that a hand-off that did not land is no failure of the call that
-  // asked for it: the call retries on whatever session stands, and its
-  // second refusal is what gets reported.
-  const sessionCredential = sessionBearer({
-    ...token,
-    readSessionToken: () =>
-      runMode.sendsNetwork
-        ? Effect.map(readStoredAccount(), (account) => account?.sessionToken)
-        : Effect.succeed(undefined),
-    obtainSession: () =>
-      session.obtainSession().pipe(
-        Effect.asVoid,
-        Effect.mapError((failed) => new AccountRefreshFailed({ message: failed.message })),
-      ),
-  });
 
   const voiceCapabilities = new VoiceCapabilityAssembler({
     settings: settings.store,
     credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
     fixtureRun: () => !runMode.sendsNetwork,
-    accountSignedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
+    accountSignedIn: () => session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN,
     // The voice functions live on the account service's origin, so its
     // development override reaches them too; a voice override of its own stands
     // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
@@ -247,7 +191,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
           },
     ),
     openSocket,
-    refreshAccount: session.renewOnce,
+    refreshAccount: session.token.refreshAccount,
   });
 
   /**
@@ -259,7 +203,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 
   const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> = Effect.gen(
     function* () {
-      const signedIn = session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN;
+      const signedIn = session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN;
       const accountId = signedIn
         ? (yield* Effect.orDie(settings.store.readAccount()))?.id
         : undefined;
@@ -290,7 +234,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   );
 
   const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => Effect.succeed({ account: carried(session.snapshot) }),
+    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
+      Effect.succeed({ account: carried(session.snapshot()) }),
     [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
       Effect.gen(function* () {
         const provider = params.provider;
@@ -356,26 +301,22 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     session,
     voiceCapabilities,
     agentTrace,
-    snapshot: () => session.snapshot,
-    signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
+    snapshot: session.snapshot,
+    signedIn: () => session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN,
     capabilitiesActive,
-    token,
-    credential: accountBearer(token),
-    sessionCredential,
+    token: session.token,
+    credential: session.credential,
+    sessionCredential: session.sessionCredential,
     applyVoiceCredential,
     sessionReplayState,
     link: (next) => Effect.asVoid(late.set(next)),
-    // The session manager holds no timer this host started beyond its own
+    // The session holds no timer this host started beyond its own
     // subscription: what a sign-in began is stopped by the capabilities it
     // started, and the subscription is forked into this same scope, so
     // closing it is the whole of the stop and there is nothing else to give
     // back.
     lifetime: Effect.gen(function* () {
-      const initial = runMode.requiresAccount
-        ? yield* Effect.orDie(settings.store.accountSnapshot())
-        : { status: ACCOUNT_STATUS.SIGNED_OUT };
-      previousAccount = initial;
-      session.initialize(initial);
+      previousAccount = yield* session.initialize;
       const changes = yield* session.changes;
       yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
     }),
