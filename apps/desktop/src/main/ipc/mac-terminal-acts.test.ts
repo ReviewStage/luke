@@ -71,6 +71,7 @@ function fixture(
       setMacRepository: () =>
         Effect.succeed(repositories === undefined ? undefined : { repositories }),
     },
+    worktreesRoot: "/home/.luke",
     stateRoot: "/state",
     ports: {
       open: () => {
@@ -135,7 +136,7 @@ it.effect(
       assert.equal(answer.status, ACT_OUTCOME_STATUS.DONE);
       assert.equal(opened.length, 1);
       const script = started[0]?.script ?? "";
-      assert.match(script, /'\/state\/clones\/acme\/app'/u);
+      assert.match(script, /'\/home\/\.luke\/clones\/acme\/app'/u);
       assert.match(script, /'https:\/\/github\.com\/acme\/app\.git'/u);
       assert.doesNotMatch(script, /Running/u);
     }),
@@ -152,9 +153,14 @@ it.effect("an open runs the branch's script, its output out on the port and typi
     const [terminal] = started;
     const [port] = opened;
     assert.ok(terminal !== undefined && port !== undefined);
-    assert.match(terminal.script, /'\/state\/clones\/acme\/app'/u);
+    assert.match(terminal.script, /clone='\/home\/\.luke\/clones\/acme\/app'/u);
     assert.match(terminal.script, /'luke\/add-thing'/u);
-    assert.match(terminal.script, /'\/state\/worktrees\/acme\/app\/luke%2Fadd-thing'/u);
+    assert.match(
+      terminal.script,
+      /worktree='\/home\/\.luke\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
+    );
+    // Note that the clone and worktrees an earlier Luke kept under its application data are named, to be moved from there.
+    assert.match(terminal.script, /earlier_clone='\/state\/clones\/acme\/app'/u);
     assert.match(terminal.script, /pnpm dev/u);
 
     terminal.output("ready");

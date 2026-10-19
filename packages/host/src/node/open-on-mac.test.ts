@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
-import { cloneFolder, openOnMacScript, worktreeFolder } from "./open-on-mac.js";
+import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./open-on-mac.js";
 
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
@@ -475,6 +475,61 @@ test(
   },
   GIT_DEADLINE,
 );
+
+test(
+  "a clone an earlier Luke kept under its application data is moved, worktrees and what they hold with it",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    git(origin, ["branch", "luke/other"]);
+    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const root = path.join(state, ".luke");
+    const script = (stateRoot: string, branch: string, earlier?: string) =>
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(stateRoot, "acme/app"),
+        worktree: worktreeFolder(stateRoot, "acme/app", branch),
+        branch,
+        command: "touch ran",
+        remotes: { https: origin, ssh: origin },
+        earlier:
+          earlier === undefined
+            ? undefined
+            : {
+                clone: cloneFolder(earlier, "acme/app"),
+                worktrees: path.dirname(worktreeFolder(earlier, "acme/app", branch)),
+              },
+      });
+    run(scratch, shell, script(earlierRoot, "luke/fix-relay"));
+    run(scratch, shell, script(earlierRoot, "luke/other"));
+    const earlierClone = cloneFolder(earlierRoot, "acme/app");
+    writeFileSync(path.join(earlierClone, ".git", "info", "exclude"), "installed.txt\nran\n");
+    writeFileSync(
+      path.join(worktreeFolder(earlierRoot, "acme/app", "luke/other"), "installed.txt"),
+      "",
+    );
+
+    const printed = run(scratch, shell, script(root, "luke/fix-relay", earlierRoot));
+    const other = worktreeFolder(root, "acme/app", "luke/other");
+    run(scratch, shell, script(root, "luke/other", earlierRoot));
+
+    assert.match(printed, /Moving the clone and its worktrees/u);
+    assert.equal(existsSync(earlierClone), false);
+    assert.equal(existsSync(path.join(cloneFolder(root, "acme/app"), ".git")), true);
+    assert.equal(readFileSync(path.join(other, "installed.txt"), "utf8"), "");
+    assert.equal(git(other, ["symbolic-ref", "--short", "HEAD"]), "luke/other");
+    assert.equal(
+      existsSync(path.join(worktreeFolder(root, "acme/app", "luke/fix-relay"), "ran")),
+      true,
+    );
+    assert.equal(shellOpenedIn(scratch), other);
+  },
+  GIT_DEADLINE,
+);
+
+test("the shared root sits in the home folder, its path holding no space", () => {
+  assert.equal(worktreesRoot("/Users/someone"), "/Users/someone/.luke");
+});
 
 test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
   const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b", "luke+2Fa-b"].map((branch) =>

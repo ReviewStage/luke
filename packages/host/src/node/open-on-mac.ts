@@ -4,8 +4,9 @@ import path from "node:path";
  * open-on-mac.ts -- the script Open on this Mac runs in a terminal of this Mac drawn in Luke: a coding agent's pushed branch checked out in a worktree of Luke's own clone of the repository, and a shell opened there.
  *
  * Nothing is asked of the developer first. Luke keeps one clone of each
- * repository under its application data, made the first time a branch of
- * it is opened, and a worktree per branch beside it. The script runs in the
+ * repository under `~/.luke`, shared by every Luke install, made the first
+ * time a branch of it is opened, and a worktree per branch beside it; one an
+ * earlier Luke kept under its application data is moved there. The script runs in the
  * developer's login shell with their own Git login, so their credentials
  * and tools are the ones used: it clones over HTTPS, and over SSH where
  * that fails, without checking anything out; fetches the branch; makes the
@@ -28,7 +29,16 @@ import path from "node:path";
  * spliced in bare.
  */
 
-/** The folders under the state root Luke's clones and every agent branch's worktree live in. */
+/**
+ * Where every Luke install on this Mac keeps its clones and worktrees, shared
+ * between them: a folder of the home folder whose path holds no space, so a
+ * worktree reads to a repository's own scripts as any checkout of it would.
+ */
+export function worktreesRoot(home: string): string {
+  return path.join(home, ".luke");
+}
+
+/** The folders under the root Luke's clones and every agent branch's worktree live in. */
 const CLONES_FOLDER = "clones";
 const WORKTREES_FOLDER = "worktrees";
 
@@ -80,6 +90,8 @@ export function openOnMacScript(input: {
   readonly pullRequest?: number | null | undefined;
   /** The repository's run command on this Mac, run in the worktree before the shell opens; none where it has none. */
   readonly command?: string | null | undefined;
+  /** Where an earlier Luke kept this repository's clone and its worktrees' folder, under its application data; moved to `clone` and beside `worktree` the first time, where `clone` is not yet made. */
+  readonly earlier?: { readonly clone: string; readonly worktrees: string } | undefined;
   /** Where the script writes its terminal's device, which Luke resizes it through; none where nothing resizes it. */
   readonly ttyFile?: string | undefined;
   /** The terminal's size in cells as the tab first draws it. */
@@ -107,9 +119,21 @@ export function openOnMacScript(input: {
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
     `legacy=${shellQuoted(path.join(path.dirname(input.worktree), encodeURIComponent(input.branch)))}`,
+    `earlier_clone=${shellQuoted(input.earlier?.clone ?? "")}`,
+    `earlier_worktrees=${shellQuoted(input.earlier?.worktrees ?? "")}`,
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
     "opened() {",
+    // Note that a clone an earlier Luke made under its application data is moved here with its worktrees, rather than cloned and installed again, and each worktree's link to it repaired.
+    '  if [ -n "$earlier_clone" ] && [ ! -e "$clone" ] && [ -e "$earlier_clone/.git" ]; then',
+    '    echo "▸ Moving the clone and its worktrees from $earlier_clone to $clone"',
+    '    mkdir -p "$(dirname "$clone")" "$(dirname "$worktree")" || return 1',
+    '    mv "$earlier_clone" "$clone" || return 1',
+    '    for each in "$earlier_worktrees"/*; do',
+    '      [ -e "$each/.git" ] && [ ! -e "$(dirname "$worktree")/$(basename "$each")" ] || continue',
+    '      mv "$each" "$(dirname "$worktree")/" && git -C "$clone" worktree repair "$(dirname "$worktree")/$(basename "$each")"',
+    "    done",
+    "  fi",
     '  if [ ! -e "$clone/.git" ]; then',
     '    echo "▸ Cloning ${https%.git}"',
     '    mkdir -p "$(dirname "$clone")" || return 1',
