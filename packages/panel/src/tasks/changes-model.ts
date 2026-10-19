@@ -7,8 +7,16 @@ import {
   PATCH_OMITTED,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import {
+  DIFF_ROW,
+  type DiffHunk,
+  type DiffRow,
+  type DiffRowKind,
+  HUNK_COUNTS,
+  LOCKFILE_NAMES,
+  patchHunks,
+} from "@luke/features/diff-hunks";
 import { isSecretFile } from "@luke/features/task-wire";
-import { parsePatch } from "diff";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -56,46 +64,15 @@ import {
  * the preview is the end of that hunk, from a few rows above the first line
  * the thread is on down to its last, counted where the thread was made
  * rather than where it stands now, since a later push moves the one and not
- * the other. The hunk's lines are read by jsdiff (`parsePatch`), which
- * counts them by the header, so a removed line whose own text starts with
- * dashes is still one removed line; the rows kept are written again as a
- * patch of their own, its header counting them, with the thread's own lines
- * selected.
+ * the other. The hunk's lines are read as every patch here is
+ * (`patchHunks`, from `@luke/features/diff-hunks`), counted by the header,
+ * so a removed line whose own text starts with dashes is still one removed
+ * line; the rows kept are written again as a patch of their own, its header
+ * counting them, with the thread's own lines selected.
  *
  * A comment on lines of the head alone may suggest a change to them, which
  * starts from those lines as the file's patch holds them (`suggestedLines`).
  */
-
-/** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
-const DIFF_ROW = {
-  CONTEXT: "context",
-  ADDED: "added",
-  REMOVED: "removed",
-  NOTE: "note",
-} as const;
-
-type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
-
-/** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-interface DiffRow {
-  readonly kind: DiffRowKind;
-  readonly oldLine: number | undefined;
-  readonly newLine: number | undefined;
-  readonly text: string;
-}
-
-/** One hunk: its `@@` header as written, and its rows. */
-interface DiffHunk {
-  readonly header: string;
-  readonly rows: readonly DiffRow[];
-}
-
-/** The kind of row each mark starts in a patch; a line of context starts with a space. */
-const ROW_MARK = new Map<string, DiffRowKind>([
-  ["+", DIFF_ROW.ADDED],
-  ["-", DIFF_ROW.REMOVED],
-  ["\\", DIFF_ROW.NOTE],
-]);
 
 /** What the tab says where the changes cannot be drawn. */
 export const CHANGES_WORDS = {
@@ -162,65 +139,11 @@ const NO_SIDE = "/dev/null";
 /** The most lines a file may add and remove together before it starts collapsed. */
 const LARGE_FILE_LINES = 1000;
 
-/** The names of the lockfiles package managers write, which start collapsed wherever they stand. */
-const LOCKFILE_NAMES = new Set([
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "npm-shrinkwrap.json",
-  "yarn.lock",
-  "bun.lock",
-  "bun.lockb",
-  "Cargo.lock",
-  "Gemfile.lock",
-  "composer.lock",
-  "poetry.lock",
-  "uv.lock",
-  "Pipfile.lock",
-  "go.sum",
-  "Package.resolved",
-  "flake.lock",
-]);
-
 /** How many rows a review thread's preview shows above the first line it is on. */
 const THREAD_CONTEXT_ROWS = 3;
 
 /** A hunk's header: where it starts on each side, what it counts, and the scope git writes after. */
 const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/u;
-
-/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
-function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
-  let oldLine = oldStart;
-  let newLine = newStart;
-  return lines.map((line) => {
-    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
-    const text = line.slice(1);
-    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
-    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
-    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
-    return { kind, oldLine: oldLine++, newLine: newLine++, text };
-  });
-}
-
-/**
- * A patch's hunks, or none where it does not read as a unified diff. Note
- * that each hunk's header is taken from the patch as written, because
- * jsdiff keeps only its numbers and git writes the enclosing scope after
- * them; a hunk's own lines start with a mark or a space, so the lines that
- * start with `@@` are its headers, in order.
- */
-function patchHunks(patch: string): readonly DiffHunk[] | undefined {
-  let parsed: ReturnType<typeof parsePatch>;
-  try {
-    parsed = parsePatch(patch);
-  } catch {
-    return undefined;
-  }
-  const headers = patch.split("\n").filter((line) => line.startsWith("@@"));
-  return (parsed[0]?.hunks ?? []).map((hunk, index) => ({
-    header: headers[index] ?? "",
-    rows: rowsOf(hunk.lines, hunk.oldStart, hunk.newStart),
-  }));
-}
 
 /**
  * A hunk GitHub froze for a review thread, its header counting the lines it
@@ -720,9 +643,6 @@ interface RawHunk {
   readonly newLines: number;
   readonly lines: readonly string[];
 }
-
-/** A hunk's header with its counts: where it starts on each side, and how many lines, one where a count is left out. */
-const HUNK_COUNTS = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u;
 
 /**
  * A patch's hunks as written, each line split at its newline alone, so a
