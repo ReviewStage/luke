@@ -1,5 +1,7 @@
 import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import { CHAT_BOUNDS, CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
+import { dateChipText, dateLabel, dateOfWords } from "@luke/features/date-mention";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { insideCode } from "./skill-mention.js";
 
 /**
@@ -13,7 +15,15 @@ import { insideCode } from "./skill-mention.js";
  * inside a word (`dev@example.com`, `a#b`), or in code, opens nothing, and
  * neither does a word past the bound its grammar keeps a handle or a name
  * to. A chosen one is written as its own word and a space, so the word's
- * edge ends the mention as the service reads one. Nothing here draws.
+ * edge ends the mention as the service reads one.
+ *
+ * Words after an `@` that read as a date (`@tomorrow 3pm`, `@next fri`,
+ * `@oct 20 to 24`, `@luke/features/date-mention`) offer that date too,
+ * first, said as its chip says it, with the date in full beside it; a pick
+ * writes it as the same link every box of the app writes
+ * (`[@Oct 20, 2026](luke://date/2026-10-20)`). The editor reports a date's
+ * `@` words however many they are (`composer-editor.ts`); this module's own
+ * `@` word is one word, as a handle is. Nothing here draws.
  */
 
 type ChatSigil = (typeof CHAT_TARGET_SIGIL)[keyof typeof CHAT_TARGET_SIGIL];
@@ -32,6 +42,8 @@ export interface ChatTarget {
   readonly detail: string | undefined;
   /** The mention a box that draws chips writes the member as; none for a channel or Luke, written as their word. */
   readonly mention?: ChatMemberMention | undefined;
+  /** The link target of the date the words after an `@` name, written with its detail, the date in full; none for a member or a channel. */
+  readonly date?: string | undefined;
 }
 
 /** The characters a handle or a channel's name is spelled in, by its sigil (`chat-wire.ts`'s grammars). */
@@ -55,6 +67,9 @@ interface TextEdit {
 /** A character that ends a word. */
 const SPACE = /\s/u;
 
+/** Where a date's link is written; a date names no workspace or repository, so its target reads none. */
+const NO_PLACE = { workspace: "", repository: null } as const;
+
 function isSigil(character: string | undefined): character is ChatSigil {
   return character === CHAT_TARGET_SIGIL.MEMBER || character === CHAT_TARGET_SIGIL.CHANNEL;
 }
@@ -74,6 +89,35 @@ export function chatMentionAt(text: string, caret: number): ChatMention | undefi
   if (before !== undefined && !SPACE.test(before)) return undefined;
   if (insideCode(text, start)) return undefined;
   return { sigil, start, query };
+}
+
+/** The row that offers the date the words after an `@` name: said as its chip says it from `now` in `zone`, with the date in full beside it, which a pick writes; nothing where they name none. */
+function dateTarget(query: string, now: number, zone: string): ChatTarget | undefined {
+  const date = dateOfWords(query, now, zone);
+  return date === undefined
+    ? undefined
+    : {
+        sigil: CHAT_TARGET_SIGIL.MEMBER,
+        name: dateChipText(date, now, zone),
+        detail: dateLabel(date, zone),
+        date: encodeMention({ kind: MENTION_KIND.DATE, ...date }, NO_PLACE),
+      };
+}
+
+/**
+ * What an `@` word lists: the date its words name first, then the members
+ * or the channels it matches, each as `matchingTargets` finds them.
+ */
+export function chatRows(
+  targets: readonly ChatTarget[],
+  mention: ChatMention,
+  now: number,
+  zone: string,
+): readonly ChatTarget[] {
+  const date =
+    mention.sigil === CHAT_TARGET_SIGIL.MEMBER ? dateTarget(mention.query, now, zone) : undefined;
+  const matched = matchingTargets(targets, mention);
+  return date === undefined ? matched : [date, ...matched];
 }
 
 /**
@@ -97,13 +141,17 @@ export function matchingTargets(
   return [...starts, ...holds, ...describes];
 }
 
-/** The message with the word under the caret written as the target chosen, a space after it, and the caret after that. */
-export function chooseTarget(text: string, mention: ChatMention, name: string): TextEdit {
-  let end = mention.start + 1;
+/** The message with the word under the caret written as the target chosen, a date as its link, a space after it, and the caret after that. */
+export function chooseTarget(text: string, mention: ChatMention, target: ChatTarget): TextEdit {
+  // Note that a date's words may hold spaces, so the word is walked on from the end of what was typed.
+  let end = mention.start + 1 + mention.query.length;
   while (end < text.length && NAME_CHARACTER[mention.sigil].test(text[end] ?? "")) end += 1;
   const after = text.slice(end);
   const spaced = after.startsWith(" ") ? after : ` ${after}`;
-  const written = `${mention.sigil}${name}`;
+  const written =
+    target.date === undefined
+      ? `${target.sigil}${target.name}`
+      : `[@${target.detail}](${target.date})`;
   return {
     text: `${text.slice(0, mention.start)}${written}${spaced}`,
     caret: mention.start + written.length + 1,

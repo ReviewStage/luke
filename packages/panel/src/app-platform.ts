@@ -17,6 +17,7 @@ import type { ProductEventPropertiesFor, ProductSurfaceEventName } from "@luke/f
 import type { FramedPage } from "@luke/features/page-frame";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import type { AppCommand } from "@luke/settings/shortcuts";
+import type { NotificationsGrantor } from "@luke/voice/settings-controls";
 
 /** The capabilities a window's shell answers, each as the panel asks for it. */
 export interface AppPlatform {
@@ -59,6 +60,12 @@ export interface AppPlatform {
    * answers one, and the Mac app, which needs none, leaves this out.
    */
   macAppLink?(): string;
+  /**
+   * Who grants this window notifications where it is not macOS, such as a
+   * browser's permission for the site: a shell whose grant is macOS's, the
+   * Mac app, leaves this out.
+   */
+  notificationsGrantor?(): NotificationsGrantor;
 }
 
 let installed: AppPlatform | undefined;
