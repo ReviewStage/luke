@@ -7018,6 +7018,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: 0;
 }
 
+/* The words field stands at least five lines tall, so a task's prompt has
+   room before it is written; it still grows to the agent box's eight. */
+.new-task-composer .agent-composer-input {
+  min-height: calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+}
+
 /* Where the card is too narrow for one row, as in a narrow window zoomed
    in, the foot wraps: its chips and its presses each stand on a line of
    their own, the presses kept at the right. */
