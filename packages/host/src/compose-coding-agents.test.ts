@@ -466,6 +466,14 @@ function fakeService() {
           },
         };
       }),
+    closeInbox: (itemId, request) =>
+      Effect.sync(() => {
+        asked.push(`close:${itemId}:${request.revision}:${request.clientKey}`);
+        return {
+          item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
+          taken: true,
+        };
+      }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(
@@ -829,6 +837,17 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
+        itemId: ITEM.id,
+        revision: 2,
+        clientKey: "close-1",
+      }),
+      {
+        item: { ...ITEM, status: INBOX_STATUS.CLOSED, closedBy: { userId: "u1", name: "Dana" } },
+        taken: true,
+      },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
         itemId: ITEM.id,
         text: "Also page on-call.",
@@ -921,6 +940,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
+      `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,

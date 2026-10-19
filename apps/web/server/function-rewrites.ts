@@ -200,6 +200,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
+  { src: "/api/inbox/([^/]+)/close", route: "inbox/close", query: "id=$1" },
   { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1" },
   { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1" },
   // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.

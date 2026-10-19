@@ -59,6 +59,7 @@ import {
   accountWaitingItems,
   answerInboxItem,
   closeInboxItem,
+  closeInboxItemAsMember,
   INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
@@ -72,6 +73,7 @@ import {
   replyInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
+  withdrawInboxClose,
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
 import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
@@ -673,6 +675,51 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "a closed item takes no answer",
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, and the agent's post under the key opens it again",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(stranger, id, 1, randomUUID())));
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(teammate, id, 2, randomUUID())));
+        const key = randomUUID();
+        const closed = Option.getOrUndefined(yield* closeInboxItemAsMember(teammate, id, 1, key));
+        assert.equal(closed?.status, INBOX_STATUS.CLOSED);
+        assert.deepEqual(closed?.closedBy, { userId: teammate, name: "Test User" });
+        assert.equal(closed?.closedReason, undefined);
+        assert.equal(closed?.unread, false, "the member's own close leaves it read for them");
+        assert.ok(
+          Option.isNone(yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID())),
+          "a closed item takes no answer",
+        );
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(agent.userId, id, 1, randomUUID())));
+
+        assert.ok(Option.isNone(yield* withdrawInboxClose(teammate, id, randomUUID())));
+        const reopened = Option.getOrUndefined(yield* withdrawInboxClose(teammate, id, key));
+        assert.equal(reopened?.status, INBOX_STATUS.OPEN);
+        assert.equal(reopened?.closedBy, undefined);
+
+        const later = randomUUID();
+        assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, later)));
+        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
+        assert.ok(
+          Option.isNone(yield* withdrawInboxClose(teammate, id, later)),
+          "taking the member's close back never opens the agent's own close since",
+        );
+        const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
+        assert.ok(Result.isSuccess(again));
+        assert.equal(again.success.status, INBOX_STATUS.OPEN);
+        assert.equal(again.success.closedBy, undefined);
       }),
   );
 

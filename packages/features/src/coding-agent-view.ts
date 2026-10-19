@@ -27,6 +27,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllSchema,
@@ -472,6 +473,14 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** A close of one item without an answer, as the window asks it: the item, and the close request the service takes, its key the window's own. It is heard as an answer is (`codingAgentInboxAnsweredViewSchema`). */
+export const codingAgentInboxCloseParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxCloseRequestSchema.fields,
+});
+
+export type CodingAgentInboxCloseParams = typeof codingAgentInboxCloseParamsSchema.Type;
 
 /** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
 export const codingAgentInboxMessageParamsSchema = EffectSchema.Struct({

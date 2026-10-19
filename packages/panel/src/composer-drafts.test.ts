@@ -814,6 +814,7 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
         heldIds: [agentId],
         readInbox: () => new Promise(() => undefined),
         answerInbox: () => new Promise(() => undefined),
+        closeInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
         onRetryList: () => undefined,

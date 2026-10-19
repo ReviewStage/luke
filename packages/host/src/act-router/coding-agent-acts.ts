@@ -18,6 +18,7 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
@@ -127,6 +128,9 @@ export interface CodingAgentActsDependencies {
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
+    codingAgentInboxClose(
+      params: CodingAgentInboxCloseParams,
+    ): Effect.Effect<CodingAgentInboxAnsweredView>;
     codingAgentInboxMessage(
       params: CodingAgentInboxMessageParams,
     ): Effect.Effect<CodingAgentInboxMessagedView>;
@@ -195,6 +199,7 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_CLOSE
   | typeof ACT_KIND.CODING_AGENTS_INBOX_MESSAGE
   | typeof ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
   | typeof ACT_KIND.CODING_AGENTS_INBOX_READ_ALL
@@ -366,6 +371,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);
       return host.codingAgentInboxAnswer(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, sender);
+      return host.codingAgentInboxClose(params);
     },
     [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, sender);

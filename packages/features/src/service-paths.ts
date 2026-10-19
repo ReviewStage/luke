@@ -435,6 +435,11 @@ export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
 }
 
+/** One item closed by a member without an answer (POST) against the revision they saw; `inbox-wire.ts` declares the request, and it answers as an answer does. */
+export function inboxClosePath(itemId: string): string {
+  return `${inboxItemPath(itemId)}/close`;
+}
+
 /** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */
 export function inboxMessagesPath(itemId: string): string {
   return `${inboxItemPath(itemId)}/messages`;

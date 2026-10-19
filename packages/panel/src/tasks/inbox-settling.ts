@@ -19,7 +19,9 @@ import { appStateNow } from "../use-app-state.js";
  * that one instead, and left again once it caught up. So an answer is laid
  * here the moment it is sent, as the item would stand answered, and every
  * read draws it so while it holds the item open at that revision or older;
- * a read holding it settled draws it as it holds it. A message on an
+ * a read holding it settled draws it as it holds it. A close without an
+ * answer is laid the same way, as the item would stand closed by the
+ * reader. A message on an
  * item's thread, once the service took it, is laid the same way over a read
  * that does not hold it yet.
  *
@@ -48,6 +50,7 @@ import { appStateNow } from "../use-app-state.js";
 /** What the window sent on an item. */
 const SETTLING = {
   ANSWER: "answer",
+  CLOSE: "close",
   MESSAGE: "message",
 } as const;
 
@@ -350,7 +353,7 @@ function holdsMessage(read: InboxItem, entry: Settling): boolean {
 /** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where it holds the send, and passed where it holds a later change. */
 function overlaid(read: InboxItem, entry: Settling): InboxItem | "passed" | undefined {
   if (passedBy(read, entry)) return "passed";
-  if (entry.kind === SETTLING.ANSWER) {
+  if (entry.kind !== SETTLING.MESSAGE) {
     return read.status === INBOX_STATUS.OPEN ? entry.item : undefined;
   }
   return holdsMessage(read, entry) ? undefined : entry.item;
@@ -542,10 +545,25 @@ function answeredNow(item: InboxItem, answer: InboxReply, now: number): InboxIte
   };
 }
 
+/** The item as the window closed it without an answer, before the service says how it stands: closed by the reader, now, and read. */
+function closedNow(item: InboxItem, now: number): InboxItem {
+  const reader = readerNow();
+  return {
+    ...item,
+    status: INBOX_STATUS.CLOSED,
+    ...(reader === undefined ? undefined : { closedBy: reader }),
+    settledAt: now,
+    updatedAt: Math.max(item.updatedAt, now),
+    unread: false,
+  };
+}
+
 /** How a send is laid, and what the service's word makes of it. */
 export interface InboxSettler {
   /** Lays an answer on its item at once, as answered by the reader now; the send it stands for. */
   readonly answer: (item: InboxItem, answer: InboxReply) => symbol;
+  /** Lays a close without an answer on its item at once, as closed by the reader now; the send it stands for. */
+  readonly close: (item: InboxItem) => symbol;
   /** Lays a message's item as the service answered it, over every read that does not hold it yet. */
   readonly message: (item: InboxItem) => void;
   /** The service took the send: the item as it answered, laid over every read behind it. */
@@ -570,6 +588,14 @@ export function useInboxSettler(): InboxSettler {
         const laid = answeredNow(item, answer, Date.now());
         change({
           lay: { kind: SETTLING.ANSWER, item: laid, revision: item.revision, sent, taken: false },
+        });
+        return sent;
+      },
+      close: (item) => {
+        const sent = Symbol("inbox close");
+        const laid = closedNow(item, Date.now());
+        change({
+          lay: { kind: SETTLING.CLOSE, item: laid, revision: item.revision, sent, taken: false },
         });
         return sent;
       },
