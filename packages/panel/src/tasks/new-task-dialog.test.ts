@@ -33,10 +33,10 @@ import type { RepositoryChooser } from "./repository-chip.js";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
- * New task as the developer meets it: a card over the window holding the
- * workspace it starts in and the composer, whose words start a coding agent
- * in Agent mode, or the plan and a call with Luke in Plan mode, with the
- * repository and Linear chips and the Plan toggle at its foot. Each test
+ * New task as the developer meets it: a card over the window whose head row
+ * holds its title, the repository chip, and the Linear chip at the right,
+ * over the composer, whose words start a coding agent in Agent mode, or the
+ * plan and a call with Luke in Plan mode, with the Plan toggle at its foot. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window.
  */
@@ -260,18 +260,24 @@ function modeToggle(): HTMLButtonElement {
   );
 }
 
-test("the card holds the composer with its words focused, the repository chip after the +, and the Plan toggle, the model chip on the account's default, and Start at its foot", async () => {
+test("the card holds the composer with its words focused, the repository chip in the head row after the title, and the Plan toggle, the model chip on the account's default, and Start at its foot", async () => {
   const card = await mount();
   const controls = card.controls();
+  const head = card.dialog()?.querySelector(".new-task-head");
+  const foot = card.dialog()?.querySelector(".prompt-input-footer");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the change for a coding agent…");
   for (const each of ["Attach files", "acme/web", "Plan with Luke first", "Start agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
-  assert.ok(
-    controls.indexOf("acme/web") < controls.indexOf("Plan with Luke first"),
-    "the repository chip leads the foot",
+  assert.equal(head?.querySelector("h2")?.textContent, "New task");
+  assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
+  assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
+  assert.equal(
+    document.querySelector('[aria-label^="Workspace"]'),
+    null,
+    "the card offers no workspace picker",
   );
   assert.equal(
     document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
@@ -860,9 +866,14 @@ test("with Linear connected, typing in the box lists no issues and searches no L
   }
 });
 
-test("the Linear chip stands after the repository chip only where the workspace has Linear connected", async () => {
+test("the Linear chip stands at the right end of the head row, after the repository chip, only where the workspace has Linear connected", async () => {
   const connected = await mount(undefined, undefined, {}, ISSUES);
   const withLinear = connected.controls();
+  const head = connected.dialog()?.querySelector(".new-task-head");
+  const placed = {
+    last: head?.lastElementChild?.querySelector(LINEAR_CHIP) !== null,
+    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${LINEAR_CHIP}`) !== null,
+  };
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   const plain = await mount();
@@ -872,6 +883,7 @@ test("the Linear chip stands after the repository chip only where the workspace 
     withLinear.indexOf("acme/web") + 1,
     "the Linear chip follows the repository chip",
   );
+  assert.deepEqual(placed, { last: true, inFoot: false });
   assert.equal(plain.controls().includes("Choose from Linear"), false);
 });
 

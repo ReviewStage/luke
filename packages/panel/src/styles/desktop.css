@@ -2567,10 +2567,11 @@ ul.actor-stack {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
-/* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
-   repository chip in the card's foot and hangs its menu from its leading
-   edge, placed as a Settings picker's is, wide enough for an issue's title
-   with its key and state after it. */
+/* New task's Linear chip (`linear-issue-chip.tsx`) stands at the right end
+   of the dialog's head row, its menu hung from its trailing edge, or after
+   the repository chip in Home's card foot, hung from its leading edge;
+   placed as a Settings picker's is, wide enough for an issue's title with
+   its key and state after it. */
 .linear-issue-chip {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
   position: relative;
@@ -2580,6 +2581,11 @@ ul.actor-stack {
 .linear-issue-chip .searchable-menu {
   width: 420px;
   max-width: var(--settings-picker-width-max, 420px);
+}
+
+.linear-issue-chip[data-align="end"] .searchable-menu {
+  right: 0;
+  left: auto;
 }
 
 .linear-issue-chip[data-side="above"] .searchable-menu {
@@ -6966,16 +6972,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-12);
 }
 
-/* New task's head: the title and its workspace chip. */
+/* New task's head row (`new-task-composer.tsx`, over the card): the title
+   with the repository chip, and the Linear chip at its right end. */
 .new-task-head {
   display: flex;
   min-width: 0;
   align-items: center;
+  justify-content: space-between;
   gap: var(--luke-space-12);
 }
 
-/* The title says where the task starts, "New task in", then the workspace's
-   chip in the title's own line, as Linear's team chip stands in its title. */
+/* The title says what starts, "New task", then the repository's chip in
+   the title's own line, as Linear's team chip stands in its title. */
 .new-task-title {
   display: flex;
   min-width: 0;
