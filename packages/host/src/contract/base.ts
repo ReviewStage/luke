@@ -22,13 +22,14 @@ export function actProcedure(sentence: string) {
 }
 
 /**
- * An act's input schema, refusing a key it does not name as `app:act`
- * refused one, rather than stripping it as oRPC's Effect extension would.
- * The schema is copied first, since the conversion marks the schema it is
- * handed.
+ * A payload's schema as an act reads it: whole, a key the schema does not
+ * name refused rather than dropped, as `app:act` read every payload. The
+ * extension above reads an Effect Schema with Effect's default parse
+ * options, which drop such a key; a schema that already carries its
+ * Standard Schema validation keeps it, so this one is converted first, on a
+ * copy of its own, leaving the wire schema it was handed as it was.
  */
 export function exactInput<Type, Encoded>(schema: EffectSchema.Codec<Type, Encoded>) {
-  return EffectSchema.toStandardSchemaV1(schema.annotate({}), {
-    parseOptions: { onExcessProperty: "error" },
-  });
+  const copy = EffectSchema.make<EffectSchema.Codec<Type, Encoded>>(schema.ast);
+  return EffectSchema.toStandardSchemaV1(copy, { parseOptions: { onExcessProperty: "error" } });
 }

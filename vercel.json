@@ -243,15 +243,15 @@
         },
         {
           "src": "/api/automations/([^/]+)/runs",
-          "dest": "/api/default.js?route=automations/runs&id=$1"
+          "dest": "/api/default.js?route=automations/runs&route-path=automations/$1/runs&id=$1"
         },
         {
           "src": "/api/automations/([^/]+)/run",
-          "dest": "/api/default.js?route=automations/run&id=$1"
+          "dest": "/api/default.js?route=automations/run&route-path=automations/$1/run&id=$1"
         },
         {
           "src": "/api/automations/([^/]+)",
-          "dest": "/api/default.js?route=automations/automation&id=$1"
+          "dest": "/api/default.js?route=automations/automation&route-path=automations/$1&id=$1"
         },
         {
           "src": "/api/issues/([^/]+)",

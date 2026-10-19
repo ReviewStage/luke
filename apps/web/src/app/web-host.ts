@@ -303,6 +303,7 @@ const servedActPort = (operator: OperatorClient, services: Context.Context<never
     Effect.sync(() => {
       const channel = new MessageChannel();
       createActPortHandler({
+        accountAsks: { host: operator.host },
         automations: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },

@@ -35,6 +35,7 @@ function unreachedHost<Host extends object>(): Host {
  * own domain's over it, and an ask of any other domain's host throws.
  */
 export const UNREACHED_DEPENDENCIES: ActPortDependencies = {
+  accountAsks: { host: unreachedHost() },
   automations: { host: unreachedHost() },
   factory: { host: unreachedHost() },
   integrations: { host: unreachedHost() },

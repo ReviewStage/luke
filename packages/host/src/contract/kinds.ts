@@ -7,6 +7,40 @@
  * `actContract`, so the panel's act door calls a kind by its own name.
  */
 
+/**
+ * The account's own asks from Settings and a dictating box: its provider keys,
+ * its plan template and that template's history, and a dictated clip's words.
+ */
+export const ACCOUNT_ASK_ACT_KIND = {
+  /**
+   * Settings › API keys: the account's own provider keys read as hints and
+   * statuses, one saved, one removed. The save's payload is the one place a
+   * key crosses from the renderer, once, on its way to the service; no
+   * answer carries one back, and nothing on the way keeps it.
+   */
+  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_SAVE: "providerKeys.save",
+  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /**
+   * Settings › Plan template: the Markdown the account's new tasks start
+   * from, read as the page opens, and kept as the developer pauses or reset
+   * to the default with null. Each answers the template as the service then
+   * keeps it. Its version history reads a page of revisions and one
+   * revision at a time, and a restore answers the template as a write does.
+   */
+  PLAN_TEMPLATE_READ: "planTemplate.read",
+  PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
+  /**
+   * A clip dictated into a message box, carried once from the panel that
+   * recorded it to the service and answered with its words. Nothing on the
+   * way keeps it.
+   */
+  DICTATION_TRANSCRIBE: "dictation.transcribe",
+} as const;
+
 /** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
 export const AUTOMATION_ACT_KIND = {
   AUTOMATIONS_LIST: "automations.list",
@@ -51,6 +85,7 @@ export const ISSUE_ACT_KIND = {
 
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
+  ...ACCOUNT_ASK_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,

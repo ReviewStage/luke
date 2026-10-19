@@ -4,6 +4,7 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
+import { accountAskActsContract } from "./account-asks.js";
 import { automationActsContract } from "./automations.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
@@ -22,6 +23,7 @@ import type { PortActKind } from "./kinds.js";
 
 export { ACT_ERROR } from "./base.js";
 export {
+  ACCOUNT_ASK_ACT_KIND,
   AUTOMATION_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
@@ -31,6 +33,7 @@ export {
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
+  ...accountAskActsContract,
   ...automationActsContract,
   ...factoryActsContract,
   ...integrationActsContract,

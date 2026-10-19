@@ -23,7 +23,6 @@ import {
   AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
-  AUTOMATION_LIST_QUERY,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -33,15 +32,13 @@ import {
   type AutomationSummary,
   type AutomationTarget,
   type AutomationTrigger,
-  automationChangeRequestSchema,
-  automationCreateRequestSchema,
-  automationRunRequestSchema,
+  type automationChangeRequestSchema,
+  type automationCreateRequestSchema,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
@@ -57,21 +54,18 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
   hostedStoreOrUnavailable,
-  readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
-import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { executeAutomationRun } from "./automation-runs.js";
 
 /**
- * automations-app.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.
+ * automations-procedures.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.
  *
- * Every request resolves the bearer before it touches a row, and the store
+ * Every procedure resolves the caller (`accountMiddleware`, on the resource
+ * so it runs before an input is read) before it touches a row, and the store
  * gates every row on the account owning the automation and still reaching
  * its task (`automation-store.ts`), so an automation of another account, or
  * on a task of a workspace the account left, answers as not found. What is
@@ -91,21 +85,6 @@ import { executeAutomationRun } from "./automation-runs.js";
  * run's agent is summarized with its status as the agent's tab reads it.
  */
 
-const PATH = {
-  /** GET lists the account's automations, one task's where `planId` names it; POST makes one. */
-  AUTOMATIONS: "/api/automations",
-  /** GET reads one, PATCH changes it, DELETE deletes it; the rewrite moves the path's id into the `id` query. */
-  AUTOMATION: "/api/automations/automation",
-  /** POST runs it now; the rewrite moves the path's id into the `id` query. */
-  RUN: "/api/automations/run",
-  /** GET reads its runs; the rewrite moves the path's id into the `id` query. */
-  RUNS: "/api/automations/runs",
-} as const;
-
-const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH", DELETE: "DELETE" } as const;
-
-const QUERY = { ID: "id" } as const;
-
 /**
  * A body past this is no automation: the prompt's bound at six bytes a
  * character, which is the most JSON spends on one (`\u0000`), and the rest of
@@ -113,44 +92,23 @@ const QUERY = { ID: "id" } as const;
  */
 const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
 
+/** A "Run now" body past this carries more than its key. */
+const MAXIMUM_RUN_BODY_BYTES = AUTOMATION_BOUNDS.MAX_KEY_CHARS * 4 + 64;
+
 /** How many runs a history read answers. */
 const RUNS_READ = 50;
 
 /** The bytes of randomness in a webhook trigger's secret. */
 const WEBHOOK_SECRET_BYTES = 32;
 
-export interface AutomationsAppSeams extends EveReach {
+export interface AutomationsProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
 }
 
-/** What the routes may require of the function that stands them. */
-export type AutomationsAppServices =
-  | DatabaseServices
-  | GitHubApp
-  | HttpClient.HttpClient
-  | ModelCatalog;
-
-type RouteServices = AutomationsAppServices | HttpServerRequest.HttpServerRequest;
-
-/** The bearer's account, or the invalid-token refusal. */
-const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: AutomationsAppSeams,
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
-});
-
-/** The one id the path put under `id`; two is refused, and one that is no UUID names no row. */
+/** The path's id; one that is no UUID names no row. */
 const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
+  id: string,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(QUERY.ID);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
   const read = readEither(wireUuidSchema)(unparsedWire(id));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
@@ -332,30 +290,6 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   return scope;
 });
 
-/** GET: the account's automations, or one task's, or one workspace's. */
-const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  request: Request,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const query = new URL(request.url).searchParams;
-  const tasks = query.getAll(AUTOMATION_LIST_QUERY.TASK_ID);
-  const workspaces = query.getAll(AUTOMATION_LIST_QUERY.WORKSPACE_ID);
-  if (tasks.length > 1 || workspaces.length > 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const [named] = tasks;
-  const [organizationId] = workspaces;
-  const task = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
-  if ((task !== undefined && Result.isFailure(task)) || organizationId === "") {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const automations = yield* hostedStoreOrUnavailable(
-    listAutomations(userId, { taskId: task?.success, organizationId }),
-  );
-  const summaries = yield* Effect.forEach(automations, (each) => summaryOf(userId, each));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
-});
-
 /**
  * The repositories an automation's runs work in, each as GitHub spells it,
  * where the workspace's installation reaches every one; refused as the
@@ -391,7 +325,7 @@ interface Standing {
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
-): Effect.fn.Return<Standing, HostedRefusal, RouteServices> {
+): Effect.fn.Return<Standing, HostedRefusal, DatabaseServices | GitHubApp | HttpClient.HttpClient> {
   if (made.planId !== undefined) {
     if (made.workspaceId !== undefined || made.repositories !== undefined) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -414,69 +348,6 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repositories = yield* reachedRepositories(made.workspaceId, made.repositories);
   return { taskId: null, organizationId: made.workspaceId, repositories };
-});
-
-/** POST: an automation made on one of the account's tasks with a repository, or on a workspace of the account's with the repositories its runs work in. */
-const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const asked = readEither(automationCreateRequestSchema)(
-    yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES),
-  );
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const made = asked.success;
-  const now = yield* Clock.currentTimeMillis;
-  const nextRunAt = yield* firstDue(made.trigger, now);
-  const action = yield* checkedAction(userId, made.action);
-  const standing = yield* standingOf(userId, made);
-  const scope = yield* checkedScope(
-    userId,
-    standing.organizationId,
-    made.scope ?? AUTOMATION_SCOPE.PERSONAL,
-  );
-  const target = yield* checkedTarget(userId, made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT });
-  const webhook =
-    made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
-  const created = yield* hostedStoreOrUnavailable(
-    createAutomation(userId, {
-      taskId: standing.taskId,
-      organizationId: standing.organizationId,
-      repositories: standing.repositories,
-      name: made.name,
-      trigger: made.trigger,
-      action,
-      guards: made.guards ?? AUTOMATION_DEFAULT_GUARDS,
-      nextRunAt,
-      webhookSecretHash: webhook?.hash ?? null,
-      scope,
-      ...target,
-      archiveSuccessful: made.archiveSuccessful ?? false,
-    }),
-  );
-  if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
-    trigger_kind: made.trigger.kind,
-  });
-  const automation = yield* summaryOf(userId, created.value);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
-    automation,
-    ...(webhook === undefined ? undefined : { webhookSecret: webhook.secret }),
-  });
-});
-
-/** The automations list path: GET lists, POST makes. */
-const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")(function* (
-  seams: AutomationsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const userId = yield* resolvedUserId(seams, request);
-  return incoming.method === HTTP_METHOD.GET
-    ? yield* listEndpoint(userId, request)
-    : yield* createEndpoint(userId);
 });
 
 /**
@@ -564,121 +435,162 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { changes, webhookSecret: webhook?.secret };
 });
 
-/** The one automation path: GET reads it, PATCH changes it, DELETE deletes it. */
-const automationEndpoint = /* @__PURE__ */ Effect.fn("web/automationEndpoint")(function* (
-  seams: AutomationsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (
-    incoming.method !== HTTP_METHOD.GET &&
-    incoming.method !== HTTP_METHOD.PATCH &&
-    incoming.method !== HTTP_METHOD.DELETE
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const userId = yield* resolvedUserId(seams, request);
-  const id = yield* idOf(request);
-  const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
-  if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (incoming.method === HTTP_METHOD.DELETE) {
-    const deleted = yield* hostedStoreOrUnavailable(deleteAutomation(userId, id));
-    // One the account reads but may not delete is refused as not permitted, not as gone.
-    if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
-  }
-  if (incoming.method === HTTP_METHOD.GET) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      automation: yield* summaryOf(userId, standing.value),
-    });
-  }
-  const asked = readEither(automationChangeRequestSchema)(
-    yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES),
-  );
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { changes, webhookSecret } = yield* changesOf(userId, standing.value, asked.success);
-  // Turning it on or off alone is the toggle, which more of the workspace may do than change it.
-  const access = Object.keys(asked.success).every((field) => field === "enabled")
-    ? AUTOMATION_ACCESS.TOGGLE
-    : AUTOMATION_ACCESS.CHANGE;
-  const written = yield* hostedStoreOrUnavailable(updateAutomation(userId, id, changes, access));
-  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    automation: yield* summaryOf(userId, written.value),
-    ...(webhookSecret === undefined ? undefined : { webhookSecret }),
-  });
-});
-
-/** POST: run the automation now, under the client's key, and answer the run as it came out. */
-const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(function* (
-  seams: AutomationsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const userId = yield* resolvedUserId(seams, request);
-  const id = yield* idOf(request);
-  const asked = readEither(automationRunRequestSchema)(
-    yield* readJsonBodyEffect(AUTOMATION_BOUNDS.MAX_KEY_CHARS * 4 + 64),
-  );
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const key = asked.success.idempotencyKey;
-  const automation = yield* hostedStoreOrUnavailable(
-    readAutomation(userId, id, AUTOMATION_ACCESS.RUN),
-  );
-  if (Option.isNone(automation)) {
-    const readable = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
-    return yield* Effect.fail(
-      Option.isSome(readable) ? HOSTED_REFUSAL.NOT_PERMITTED : HOSTED_REFUSAL.NOT_FOUND,
-    );
-  }
-  const firedAt = new Date(yield* Clock.currentTimeMillis);
-  const recorded = yield* hostedStoreOrUnavailable(
-    recordAutomationRun(automation.value, {
-      dedupeKey: key,
-      firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
-      firedAt,
+/**
+ * The automations resource: every procedure to a signed-in caller. The
+ * caller is resolved, and a body's length bounded, on the resource rather
+ * than on each procedure, so both run before an input is read, in the old
+ * group's order: an unsigned request is refused as unauthenticated and an
+ * oversized one as too large, whatever it sent. A "Run now" carries its key
+ * alone, bounded tighter once its key reads.
+ */
+export function automationsProcedures(seams: AutomationsProcedureSeams) {
+  const automations = hosted.automations
+    .use(accountMiddleware(seams.resolveUserId))
+    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  return {
+    /** The account's automations, or one task's, or one workspace's. */
+    list: automations.list.effect(function* ({ input, context }) {
+      const listed = yield* hostedStoreOrUnavailable(
+        listAutomations(context.userId, {
+          taskId: input.planId,
+          organizationId: input.workspaceId,
+        }),
+      );
+      const summaries = yield* Effect.forEach(listed, (each) => summaryOf(context.userId, each));
+      return { automations: summaries };
     }),
-  );
-  if (Option.isSome(recorded)) {
-    // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
-    yield* executeAutomationRun(() => eveFor(seams, request, userId), recorded.value);
-  }
-  const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
-  if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const [summary] = yield* runSummaries(userId, [run.value]);
-  return hostedJsonResponse(
-    Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
-    { run: summary },
-  );
-});
 
-/** GET: the automation's runs, newest first. */
-const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(function* (
-  seams: AutomationsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const userId = yield* resolvedUserId(seams, request);
-  const id = yield* idOf(request);
-  const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
-  if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(userId, runs) });
-});
+    /** An automation made on one of the account's tasks with a repository, or on a workspace of the account's with the repositories its runs work in. */
+    create: automations.create.effect(function* ({ input: made, context: { userId } }) {
+      const now = yield* Clock.currentTimeMillis;
+      const nextRunAt = yield* firstDue(made.trigger, now);
+      const action = yield* checkedAction(userId, made.action);
+      const standing = yield* standingOf(userId, made);
+      const scope = yield* checkedScope(
+        userId,
+        standing.organizationId,
+        made.scope ?? AUTOMATION_SCOPE.PERSONAL,
+      );
+      const target = yield* checkedTarget(
+        userId,
+        made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT },
+      );
+      const webhook =
+        made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
+      const created = yield* hostedStoreOrUnavailable(
+        createAutomation(userId, {
+          taskId: standing.taskId,
+          organizationId: standing.organizationId,
+          repositories: standing.repositories,
+          name: made.name,
+          trigger: made.trigger,
+          action,
+          guards: made.guards ?? AUTOMATION_DEFAULT_GUARDS,
+          nextRunAt,
+          webhookSecretHash: webhook?.hash ?? null,
+          scope,
+          ...target,
+          archiveSuccessful: made.archiveSuccessful ?? false,
+        }),
+      );
+      if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
+        trigger_kind: made.trigger.kind,
+      });
+      const automation = yield* summaryOf(userId, created.value);
+      return {
+        automation,
+        ...(webhook === undefined ? undefined : { webhookSecret: webhook.secret }),
+      };
+    }),
 
-/** The group: the four automation paths, and the hosted vocabulary's own refusal for any other. */
-export function automationsApp(seams: AutomationsAppSeams): WebRoutes<AutomationsAppServices> {
-  return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, PATH.AUTOMATIONS, hostedRefusing(automationsEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PATH.AUTOMATION, hostedRefusing(automationEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PATH.RUN, hostedRefusing(runEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PATH.RUNS, hostedRefusing(runsEndpoint(seams))),
-    hostedNotFoundRoute,
-  );
+    /** One automation as the account reads it. */
+    read: automations.read.effect(function* ({ input, context: { userId } }) {
+      const id = yield* idOf(input.id);
+      const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+      if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { automation: yield* summaryOf(userId, standing.value) };
+    }),
+
+    /** One automation changed, answered as it then stands, with a webhook secret the change minted. */
+    change: automations.change.effect(function* ({
+      input: { params, body: asked },
+      context: { userId },
+    }) {
+      const id = yield* idOf(params.id);
+      const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+      if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { changes, webhookSecret } = yield* changesOf(userId, standing.value, asked);
+      // Turning it on or off alone is the toggle, which more of the workspace may do than change it.
+      const access = Object.keys(asked).every((field) => field === "enabled")
+        ? AUTOMATION_ACCESS.TOGGLE
+        : AUTOMATION_ACCESS.CHANGE;
+      const written = yield* hostedStoreOrUnavailable(
+        updateAutomation(userId, id, changes, access),
+      );
+      if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      return {
+        automation: yield* summaryOf(userId, written.value),
+        ...(webhookSecret === undefined ? undefined : { webhookSecret }),
+      };
+    }),
+
+    /** One automation deleted with its history; one the account reads but may not delete is refused as not permitted, not as gone. */
+    remove: automations.remove.effect(function* ({ input, context: { userId } }) {
+      const id = yield* idOf(input.id);
+      const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+      if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const deleted = yield* hostedStoreOrUnavailable(deleteAutomation(userId, id));
+      if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      return {};
+    }),
+
+    /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */
+    run: automations.run.use(bodyLimit(MAXIMUM_RUN_BODY_BYTES)).effect(function* ({
+      input,
+      context,
+    }) {
+      const { userId } = context;
+      const id = yield* idOf(input.params.id);
+      const key = input.body.idempotencyKey;
+      const automation = yield* hostedStoreOrUnavailable(
+        readAutomation(userId, id, AUTOMATION_ACCESS.RUN),
+      );
+      if (Option.isNone(automation)) {
+        const readable = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+        return yield* Effect.fail(
+          Option.isSome(readable) ? HOSTED_REFUSAL.NOT_PERMITTED : HOSTED_REFUSAL.NOT_FOUND,
+        );
+      }
+      const firedAt = new Date(yield* Clock.currentTimeMillis);
+      const recorded = yield* hostedStoreOrUnavailable(
+        recordAutomationRun(automation.value, {
+          dedupeKey: key,
+          firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
+          firedAt,
+        }),
+      );
+      if (Option.isSome(recorded)) {
+        // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
+        yield* executeAutomationRun(() => eveFor(seams, context.request, userId), recorded.value);
+      }
+      const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
+      if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const [summary] = yield* runSummaries(userId, [run.value]);
+      if (summary === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return {
+        status: Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
+        body: { run: summary },
+      };
+    }),
+
+    /** The automation's runs, newest first. */
+    runs: automations.runs.effect(function* ({ input, context: { userId } }) {
+      const id = yield* idOf(input.id);
+      const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+      if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
+      return { runs: yield* runSummaries(userId, runs) };
+    }),
+  };
 }

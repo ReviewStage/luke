@@ -80,22 +80,6 @@ import {
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   codingAgentWorkspaceListParamsSchema,
-  type DictationTranscribeAnswerView,
-  dictationTranscribeAnswerViewSchema,
-  dictationTranscribeParamsSchema,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionsAnswerView,
-  type ProviderKeysAnswerView,
-  planTemplateAnswerViewSchema,
-  planTemplateRevisionAnswerViewSchema,
-  planTemplateRevisionParamsSchema,
-  planTemplateRevisionsAnswerViewSchema,
-  planTemplateRevisionsParamsSchema,
-  planTemplateWriteParamsSchema,
-  providerKeyRemoveParamsSchema,
-  providerKeySaveParamsSchema,
-  providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
@@ -454,33 +438,6 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
   CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
-  /**
-   * Settings › API keys: the account's own provider keys read as hints and
-   * statuses, one saved, one removed. The save's payload is the one place a
-   * key crosses from the renderer, once, on its way to the service; no
-   * answer carries one back, and nothing on the way keeps it.
-   */
-  PROVIDER_KEYS_READ: "providerKeys.read",
-  PROVIDER_KEYS_SAVE: "providerKeys.save",
-  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
-  /**
-   * A clip dictated into a message box, carried once from the panel that
-   * recorded it to the service and answered with its words. Nothing on the
-   * way keeps it.
-   */
-  DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
    * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
@@ -1327,57 +1284,6 @@ export const ACT = {
       isReadable(codingAgentPullRequestViewedAnswerViewSchema),
     ),
     refusal: "Could not read which files you viewed on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_READ]: {
-    payload: noPayload,
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not read your API keys on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
-    payload: actSchema(providerKeySaveParamsSchema),
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not save your API key on this system.",
-  },
-  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
-    payload: actSchema(providerKeyRemoveParamsSchema),
-    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
-    refusal: "Could not remove your API key on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_READ]: {
-    payload: noPayload,
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not read your plan template on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_WRITE]: {
-    payload: actSchema(planTemplateWriteParamsSchema),
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not save your plan template on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: {
-    payload: actSchema(planTemplateRevisionsParamsSchema),
-    result: wireResult<PlanTemplateRevisionsAnswerView>(
-      isReadable(planTemplateRevisionsAnswerViewSchema),
-    ),
-    refusal: "Could not read your plan template's history on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
-    payload: actSchema(planTemplateRevisionParamsSchema),
-    result: wireResult<PlanTemplateRevisionAnswerView>(
-      isReadable(planTemplateRevisionAnswerViewSchema),
-    ),
-    refusal: "Could not read that version on this system.",
-  },
-  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
-    payload: actSchema(planTemplateRevisionParamsSchema),
-    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
-    refusal: "Could not restore that version on this system.",
-  },
-  [ACT_KIND.DICTATION_TRANSCRIBE]: {
-    payload: actSchema(dictationTranscribeParamsSchema),
-    result: wireResult<DictationTranscribeAnswerView>(
-      isReadable(dictationTranscribeAnswerViewSchema),
-    ),
-    refusal: "Could not transcribe the recording on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),
