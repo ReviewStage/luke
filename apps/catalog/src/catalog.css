@@ -772,3 +772,23 @@ body {
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
+
+/* The width field and its Apply sit with the toolbar's links. */
+.catalog-width {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  text-transform: none;
+}
+
+.catalog-width .luke-text-field {
+  inline-size: 10ch; /* four digits and the spinner, at either profile's size */
+}
+
+/* An example framed at a chosen width: no padding or border, so the example
+   gets the whole width, and its edge drawn as an outline just outside, so
+   what overflows the width shows past the line rather than being clipped. */
+.catalog-width-frame {
+  outline: 1px dashed var(--luke-color-border);
+  outline-offset: var(--luke-space-4);
+}

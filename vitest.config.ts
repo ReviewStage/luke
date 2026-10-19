@@ -23,6 +23,7 @@ export default defineConfig({
       "packages/host",
       "packages/ui",
       "packages/panel",
+      "apps/catalog",
     ],
   },
 });
