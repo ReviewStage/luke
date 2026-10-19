@@ -140,7 +140,7 @@ export const CHAT_TOOLS = {
       "six options, each a short label and an optional detail; name the label you recommend; multiple lets them pick " +
       "several), approval (a yes or no on one step you propose), text (an open answer in their words), task (something " +
       "only a person can do by hand, such as changing a GitHub setting or adding a secret: say exactly what to do), form " +
-      "(one to eight typed fields, text, number, select with its options, or boolean, each named by its label and " +
+      "(one to eight typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and " +
       "required where it must be filled; never ask for a credential or a secret in a form, since the answer reaches your " +
       "transcript: that is a task done by hand), or none (something the room should know; it is acknowledged). " +
       "ask.title is a one-line heading where your words are not one. ask.needsReply is whether you need to hear the " +
