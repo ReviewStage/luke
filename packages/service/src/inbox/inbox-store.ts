@@ -1052,8 +1052,8 @@ export interface AccountInboxLiveStatements extends ChatWaitingLiveStatements {
 /**
  * What waits on the developer across the account, written for Neon Realtime:
  * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
- * `accountTasklessItems`, `accountInboxTasks`, and `accountInboxAutomations`,
- * each item unread or not for the account as they say it, and what waits in
+ * `accountTasklessItems`, `accountInboxTasks` with the archived tasks, and
+ * `accountInboxAutomations`, each item unread or not for the account as they say it, and what waits in
  * chat as `chat-waiting.ts` reads it (`chatWaitingLiveStatements`), each
  * column under the key `account-inbox-wire.ts` reads it by and each instant
  * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
@@ -1118,7 +1118,8 @@ export function accountInboxLiveStatements(
     })
     .from(inboxItem)
     .innerJoin(task, eq(task.id, inboxItem.taskId))
-    .where(and(taskReachableBy(userId), isNull(task.archivedAt)))
+    // The archived tasks too, as the held read lists them to a desktop that asks with `archived=include`, which every desktop following live does.
+    .where(taskReachableBy(userId))
     .groupBy(inboxItem.taskId);
   const automations = queryBuilder
     .select({

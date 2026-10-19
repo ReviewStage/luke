@@ -228,6 +228,31 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
         // Read by the agent's starter and not by the teammate, so the two read it apart.
         assert.equal(yield* markInboxItemRead(onTask.agent.userId, first.success.id), true);
+        // A second task of the starter's holding an item, archived, which the Inbox's Archived tab lists.
+        const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
+        const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
+          taskId: shelved.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Billing export\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(shelvedAgent));
+        assert.ok(
+          Result.isSuccess(
+            yield* postInboxItem(
+              {
+                userId: onTask.agent.userId,
+                taskId: shelved.id,
+                agentId: shelvedAgent.value.agent.id,
+              },
+              SETTINGS,
+            ),
+          ),
+        );
+        yield* updateTask(onTask.agent.userId, shelved.id, { archived: true });
 
         // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
         // posts in its channel, a direct message to the teammate they were told of, and the
@@ -288,10 +313,20 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
 
         for (const reader of [owner, taskless.userId, teammate, outsider]) {
-          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
+          // Every desktop that follows live asks for the archived tasks too.
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START, { archived: true });
           const live = yield* liveAnswerOf(reader, held.readAt);
           assert.deepEqual(live, { ...held, cursor: "" });
         }
+        const shelvedRead = yield* liveAnswerOf(onTask.agent.userId, 0);
+        assert.ok(
+          shelvedRead.plans.some((plan) => plan.planId === shelved.id),
+          "the archived task is listed",
+        );
+        assert.ok(
+          shelvedRead.items.every((item) => item.planId !== shelved.id),
+          "its item waits nowhere",
+        );
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 3);
         const unreadOf = (answer: typeof read) =>
