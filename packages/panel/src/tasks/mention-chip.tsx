@@ -120,7 +120,10 @@ import { useOpenLink } from "./use-open-link.js";
  * the workspace or on none (`mentioned-agent-card.tsx`). A person wears
  * their picture and hangs their card, their email and role, or grayed as
  * having left, as the workspace's members around the chip say
- * (`../member-directory.tsx`), and opens their page in the workspace. A link to any other place in Luke, an Inbox item, an
+ * (`../member-directory.tsx`), and opens their page in the workspace. An
+ * issue of the workspace wears the Issues page's glyph, is called by the
+ * identifier and title it was picked with, and opens on the Issues page
+ * through the window's opener for its Luke link. A link to any other place in Luke, an Inbox item, an
  * automation, an agent's message (`@luke/features/luke-link`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
@@ -251,6 +254,7 @@ function pressOf(
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
+    case MENTION_KIND.ISSUE:
       return () => openLink(target);
     // Luke has no tab of his own on a task, so his chip opens the task he thinks about.
     case MENTION_KIND.LUKE:
@@ -361,6 +365,8 @@ function MentionGlyph({
       return <PersonGlyph userId={mention.userId} name={name} />;
     case MENTION_KIND.LUKE:
       return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
+    case MENTION_KIND.ISSUE:
+      return <ListTodoIcon aria-hidden="true" />;
   }
 }
 

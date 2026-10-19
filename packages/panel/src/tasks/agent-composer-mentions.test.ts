@@ -19,6 +19,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import {
   encodeMention,
@@ -31,6 +32,7 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -40,7 +42,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { stateWith } from "../testing/app-state.js";
+import { handState, stateWith } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -60,6 +62,7 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
+  useMentionIssuesReader,
 } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
@@ -1444,4 +1447,134 @@ test("a person's page pasted into the box becomes their chip called by their nam
     ["Dana Reyes"],
   );
   assert.deepEqual(sent, [`Ask [@Dana Reyes](${here}) not ${elsewhere}`]);
+});
+
+/** One of the workspace's issues, as its Issues list answers it. */
+function workspaceIssue(number: number, title: string): Issue {
+  return {
+    id: `3f0e6f5c-7d1a-4f6e-9a55-${String(number).padStart(12, "0")}`,
+    workspaceId: "workspace-1",
+    number,
+    title,
+    description: "",
+    status: ISSUE_STATUS.TODO,
+    priority: ISSUE_PRIORITY.NONE,
+    creator: null,
+    archivedAt: null,
+    createdAt: number,
+    updatedAt: number,
+  };
+}
+
+/** The workspace's issues, which its prefix, read off its name, Acme, numbers as ACME-7 and ACME-12. */
+const REFRESH_ISSUE = workspaceIssue(7, "Token refresh fails");
+const LINK_ISSUE = workspaceIssue(12, "Invite by link");
+
+/** The plan's page in the workspace Acme, its issues read through the window's own reader, the box drawn on it. */
+function IssuesPage({ children }: { children: ReactNode }): ReactNode {
+  const readIssues = useMentionIssuesReader({ id: "workspace-1", name: "Acme" });
+  return createElement(TaskMentions, { value: { ...taskPage(), readIssues }, children });
+}
+
+/** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
+async function issuesBox(on: boolean) {
+  const calls = fakeAppBridgeCalls();
+  fakeAppBridge({
+    ...calls,
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.ISSUES_LIST) return calls.act?.(request) ?? Promise.reject();
+      told.push(request);
+      const value = { issues: [REFRESH_ISSUE, LINK_ISSUE] };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    },
+  });
+  handState({ [EXPERIMENT.ISSUES]: on });
+  const sent: string[] = [];
+  const sender: MessageSender = (_agentId, text) => {
+    sent.push(text);
+    return new Promise<CodingAgentAgentAnswer>(ignore);
+  };
+  const { container } = drawing(
+    createElement(IssuesPage, null, createElement(Box, { sender, skills: noSkills })),
+    undefined,
+  );
+  await settle();
+  return { container, sent };
+}
+
+/** The Issues group's rows, by name. */
+function issuesListed(container: HTMLElement): string[] {
+  return groupsListed(container).find(([label]) => label === "Issues")?.[1] ?? [];
+}
+
+test("with Issues on an @ offers the workspace's issues, found by their identifier or their title, and one picked is drawn as its chip and sent as its issue's link", async () => {
+  const { container, sent } = await issuesBox(true);
+
+  typeInComposer(container, "See @acme-12");
+  await settle();
+  const byIdentifier = issuesListed(container);
+  pressInComposer(container, "Escape");
+  typeInComposer(container, " and fix @issues:refresh");
+  await settle();
+  const byTitle = listed(container);
+  pressInComposer(container, "Enter");
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(byIdentifier, ["ACME-12 Invite by link"]);
+  assert.deepEqual(byTitle, ["ACME-7 Token refresh fails"]);
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["ACME-7 Token refresh fails"],
+  );
+  assert.deepEqual(sent, [
+    `See @acme-12 and fix [@ACME-7 Token refresh fails](https://tryluke.dev/acme/issue/${REFRESH_ISSUE.id})`,
+  ]);
+});
+
+test("with Issues off an @ offers no issue and reads none", async () => {
+  const { container } = await issuesBox(false);
+
+  typeInComposer(container, "See @refresh");
+  await settle();
+
+  assert.deepEqual(issuesListed(container), []);
+  assert.equal(
+    told.some((each) => each.kind === ACT_KIND.ISSUES_LIST),
+    false,
+  );
+});
+
+test("a sent message's mention of an issue is drawn as the chip that opens the issue, its target on no attribute", async () => {
+  const opened: ReadLink[] = [];
+  const issue = mentionMarkdown(
+    { kind: MENTION_KIND.ISSUE, issueId: REFRESH_ISSUE.id },
+    "ACME-7 Token refresh fails",
+    PLACE,
+  );
+  const container = drawn(
+    createElement(
+      OpenLinkProvider,
+      { value: (link: ReadLink) => opened.push(link) },
+      createElement(TranscriptWords, { text: `Fix ${issue} first.` }),
+    ),
+    taskPage(),
+  );
+  await settle();
+
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
+  assert.ok(chip);
+  act(() => chip.click());
+
+  assert.equal(
+    chip.querySelector(".luke-inline-ref-label")?.textContent,
+    "ACME-7 Token refresh fails",
+  );
+  assert.equal(chip.dataset.kind, MENTION_KIND.ISSUE);
+  assert.deepEqual(opened, [
+    { workspace: "acme", place: { kind: LINK_PLACE.ISSUE, issueId: REFRESH_ISSUE.id } },
+  ]);
+  assert.equal(carryingTarget(container), undefined);
 });

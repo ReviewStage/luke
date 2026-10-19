@@ -151,7 +151,8 @@ Members and agents leave comment threads on the plan's text, each beside the wor
  * its own address, and the task's own things under the task's link, which
  * an agent on no task has none of. Another agent, a page, and a task are
  * named by the mention the tool that made or listed it answered, so no
- * address is spelled by hand. An MCP server and a skill are named in words,
+ * address is spelled by hand; an issue of the workspace by its link under
+ * the workspace. An MCP server and a skill are named in words,
  * since a server's mention would hand it to whichever agent read it.
  */
 function namingWords(repository: string, taskLink: string | null): string {
@@ -167,6 +168,7 @@ function namingWords(repository: string, taskLink: string | null): string {
 - A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
+- An issue of your workspace's Issues, by its link under the workspace: \`[@ACME-42 Token refresh fails](https://tryluke.dev/acme/issue/<issue-id>)\`.
 
 Name an MCP server or a skill in words, never as a mention.`;
 }
