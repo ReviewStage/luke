@@ -156,7 +156,12 @@ const findLatest = SqlSchema.findOneOption({
             eq(pullRequestChapters.pullRequestNumber, pullRequestNumber),
           ),
         )
-        .orderBy(desc(pullRequestChapters.startedAt), desc(pullRequestChapters.createdAt))
+        // Note that two heads claimed in one millisecond tie on every instant; the id settles which reads, so a read never flickers between them.
+        .orderBy(
+          desc(pullRequestChapters.startedAt),
+          desc(pullRequestChapters.createdAt),
+          desc(pullRequestChapters.id),
+        )
         .limit(1),
     ),
 });

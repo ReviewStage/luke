@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   PULL_REQUEST_CHAPTERS_STATUS,
 } from "../../pull-request-chapters-vocabulary.js";
-import { user } from "../../schemas/auth.js";
+import { organization, user } from "../../schemas/auth.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
 import {
   CHAPTER_CLAIM_OUTCOME,
@@ -290,6 +291,26 @@ it.layer(getTestDB())("the pull request chapters store", (it) => {
         [kept.status, kept.chapters],
         [PULL_REQUEST_CHAPTERS_STATUS.READY, CHAPTERS],
       );
+    }),
+  );
+
+  it.effect("chapters outlive the member who asked for them, and go with their workspace", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const { organizationId, requestedBy, generate } = yield* openPullRequest;
+      const claim = claimedOf(yield* claimChapterGeneration(generate(at(0))));
+      yield* finishChapterGeneration(claim, { model: MODEL, chapters: CHAPTERS, now: at(1) });
+
+      yield* db.delete(user).where(eq(user.id, requestedBy));
+      const orphaned = yield* latestOf(organizationId);
+      yield* db.delete(organization).where(eq(organization.id, organizationId));
+      const gone = yield* latestPullRequestChapters(organizationId, REPOSITORY, NUMBER);
+
+      assert.deepEqual(
+        [orphaned.requestedBy, orphaned.status, orphaned.chapters],
+        [null, PULL_REQUEST_CHAPTERS_STATUS.READY, CHAPTERS],
+      );
+      assert.ok(Option.isNone(gone), "a deleted workspace's chapters go with it");
     }),
   );
 });
