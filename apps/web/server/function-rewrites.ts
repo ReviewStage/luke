@@ -28,11 +28,23 @@ export interface Rewrite {
  * `?id=` as it was written to, and the few exact paths that must stand ahead
  * of a segment rewrite whose pattern would otherwise take them, which carry
  * no query of their own.
+ *
+ * A row marked `orpc` is a route the hosted oRPC router answers
+ * (`orpc-route.ts`), which matches the public path itself (`/api/x/{id}`)
+ * rather than the flattened route key: its rewrite also carries that whole
+ * path in `route-path`, which the dispatcher restores, as the auth
+ * catch-all's does. Its query parameters are still written, and the router
+ * reads a path parameter over a query parameter of the same name. Note that
+ * the path travels as a query value, so a segment the client escaped (`%2F`,
+ * `+`) reaches the router as the platform's query decoding leaves it, which
+ * is why an oRPC row's segments are ids and slugs, until one oRPC route
+ * matches the public paths itself and the rows go.
  */
-interface SegmentRewrite {
+export interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
   readonly query?: string;
+  readonly orpc?: true;
 }
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
@@ -193,13 +205,33 @@ const LITERAL_ROUTE_KEY = /^[a-z0-9/-]+$/;
 
 const API_ROUTE_PREFIX = "/api/";
 
+/** A path segment a rewrite's pattern captures. */
+const CAPTURED_SEGMENT = "([^/]+)";
+
+/** The public path an oRPC row's pattern matches, each captured segment written back as the rewrite's own `$n`. */
+function capturedPath(src: string): string {
+  if (!src.startsWith(API_ROUTE_PREFIX)) throw new Error(`the rewrite ${src} is not under /api/`);
+  const segments = src.slice(API_ROUTE_PREFIX.length).split(CAPTURED_SEGMENT);
+  return segments.reduce((path, literal, index) => `${path}$${index}${literal}`);
+}
+
+/** A segment row's query: an oRPC row's whole public path first, then its own parameters. */
+function segmentQuery(segment: SegmentRewrite): string | undefined {
+  if (segment.orpc !== true) return segment.query;
+  const path = `${DISPATCH_QUERY.PATH}=${capturedPath(segment.src)}`;
+  return segment.query === undefined ? path : `${path}&${segment.query}`;
+}
+
 function dest(definition: FunctionDefinition, route: string, query?: string): string {
   const parameters = `${DISPATCH_QUERY.ROUTE}=${route}${query === undefined ? "" : `&${query}`}`;
   return `/${functionPublicPath(definition)}?${parameters}`;
 }
 
 /** The `/api/` rewrites, in the order they must stand: segment rewrites first, then one exact rule per remaining dispatched route. */
-export function apiRewrites(definitions: readonly FunctionDefinition[]): readonly Rewrite[] {
+export function apiRewrites(
+  definitions: readonly FunctionDefinition[],
+  segments: readonly SegmentRewrite[] = SEGMENT_REWRITES,
+): readonly Rewrite[] {
   const functionOf = new Map(
     definitions.flatMap((definition) =>
       definition.routes.map((route): [string, FunctionDefinition] => [route, definition]),
@@ -207,10 +239,13 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
   );
   const rewrites: Rewrite[] = [];
   const rewritten = new Set<string>();
-  for (const segment of SEGMENT_REWRITES) {
+  for (const segment of segments) {
     const definition = functionOf.get(segment.route);
     if (definition === undefined) throw new Error(`no route behind the rewrite ${segment.src}`);
-    rewrites.push({ src: segment.src, dest: dest(definition, segment.route, segment.query) });
+    rewrites.push({
+      src: segment.src,
+      dest: dest(definition, segment.route, segmentQuery(segment)),
+    });
     rewritten.add(segment.route);
   }
   for (const definition of definitions) {
