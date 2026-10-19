@@ -4950,6 +4950,15 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
+/* Where no box is offered (an archived channel, or a direct message
+   between two others), its foot says why, where the box would stand. */
+.chat-closed-foot {
+  width: calc(100% - 2 * var(--column-inset));
+  max-width: var(--luke-page-measure);
+  margin: var(--luke-space-12) auto var(--luke-space-16);
+  text-align: center;
+}
+
 .chat-thread .chat-composer {
   width: 100%;
   margin: var(--luke-space-6) 0 0;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
+import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
@@ -456,4 +456,43 @@ test("a post still out names the composer's send Sending and busy, and the box e
   await settle();
   assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
   assert.equal(box.value, "");
+});
+
+test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
+  const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+  const page = mount((chat) => {
+    const handle = (name: string) => chat.answer.members.find((each) => each.handle === name)?.id;
+    const [one, two] = [handle("agent-1"), handle("agent-2")];
+    const first = chat.answer.messages[0];
+    if (one === undefined || two === undefined || first === undefined) return undefined;
+    const { parentId: _root, ask: _ask, ...sample } = first;
+    const top = Math.max(...chat.answer.messages.map((each) => each.seq)) + 1;
+    return {
+      ...chat,
+      answer: {
+        ...chat.answer,
+        channels: [
+          ...chat.answer.channels,
+          { id: BETWEEN, kind: CHANNEL_KIND.DM, members: [one, two], archived: false },
+        ],
+        messages: [
+          ...chat.answer.messages,
+          {
+            ...sample,
+            id: BETWEEN,
+            seq: top,
+            touchedSeq: top,
+            channelId: BETWEEN,
+            authorId: one,
+            mentions: [],
+          },
+        ],
+      },
+    };
+  });
+  act(() => railRow(page, "agent-1 ↔ agent-2").click());
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "@agent-1 ↔ @agent-2");
+  assert.equal(page.querySelector("textarea"), null);
+  assert.match(page.textContent ?? "", /Only @agent-1 and @agent-2 post in this conversation\./u);
+  assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
 });

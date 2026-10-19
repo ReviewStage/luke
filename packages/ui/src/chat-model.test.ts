@@ -13,11 +13,13 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
   type ChatNames,
+  channelLabel,
   channelThreads,
   chatRail,
   chatWho,
   FOR_YOU_REASON,
   forYou,
+  postsIn,
 } from "./chat-model.js";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
@@ -257,5 +259,23 @@ test("a line names an agent by its title, a task's Luke as Luke, the reader by t
       ["Dean Stratakos", "dean", undefined],
       ["maria", "maria", undefined],
     ],
+  );
+});
+
+test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {
+  const between: ChatChannel = {
+    id: "dm-others",
+    kind: CHANNEL_KIND.DM,
+    members: [AGENT, MARIA],
+    archived: false,
+  };
+  const chat = { ...chatOf(0, []), channels: [GENERAL, OLD, WITH_MARIA, between] };
+  assert.deepEqual(
+    [GENERAL, OLD, WITH_MARIA, between].map((channel) => postsIn(chat, channel)),
+    [true, false, true, false],
+  );
+  assert.deepEqual(
+    [WITH_MARIA, between].map((channel) => channelLabel(chat, NAMES, channel)),
+    ["maria", "agent-2 ↔ maria"],
   );
 });
