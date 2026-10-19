@@ -32,7 +32,10 @@ function rendered(statement: { toSQL(): { readonly sql: string } }, alias: strin
 
 test("an instant a live read selects is immutable, as Realtime requires", async (t) => {
   const client = await opened(t);
-  const expression = rendered(queryBuilder.select(liveSelection({}, { at: probe.at })).from(probe), "at");
+  const expression = rendered(
+    queryBuilder.select(liveSelection({}, { at: probe.at })).from(probe),
+    "at",
+  );
   await client.exec(`create index probe_at_millis on probe ((${expression}))`);
   await client.exec("insert into probe values ('2026-10-19T23:44:23.347Z')");
   const { rows } = await client.query<{ at: number }>(`select ${expression} as at from probe`);
