@@ -10,8 +10,8 @@
  * preview sounds as the voice does in a call rather than as a text-to-speech
  * model's reading of it. The model is asked to say one fixed line; a take
  * whose transcript is not that line is recorded again, and a voice that never
- * says it fails the run. The audio is trimmed of the quiet around it and
- * written as AAC in an MPEG-4 file (`afconvert`, which every Mac has) under
+ * says it fails the run. The audio is trimmed of the quiet around it, brought
+ * to one level, and written as AAC in an MPEG-4 file (`afconvert`, which every Mac has) under
  * `packages/panel/voices/`, the folder the panel serves (`build-table.mjs`).
  *
  * Note that this runs by hand, never in a check: it spends the key's money and
@@ -49,6 +49,13 @@ const TAKES_PER_VOICE = 5;
 /** The level under which a sample counts as quiet when the take is trimmed, and the quiet kept either side. */
 const QUIET_LEVEL = 400;
 const TRIM_PAD_MS = 150;
+/**
+ * The level every clip is brought to, as the root mean square of its samples,
+ * so one voice never sounds better than another by being louder; and the
+ * peak that gain may not push a sample past.
+ */
+const TARGET_RMS = 0.1 * 32_767;
+const PEAK_CEILING = 0.95 * 32_767;
 const AAC_BIT_RATE = 48_000;
 
 /** Lowercase words alone, so a take is compared on what was said and not on its punctuation. */
@@ -80,6 +87,28 @@ function trimmed(pcm) {
   const start = Math.max(0, first - pad);
   const end = Math.min(samples, last + 1 + pad);
   return pcm.subarray(start * BYTES_PER_SAMPLE, end * BYTES_PER_SAMPLE);
+}
+
+/** The PCM brought to the target level, with less gain where that would clip its loudest sample. */
+function leveled(pcm) {
+  const samples = pcm.length / BYTES_PER_SAMPLE;
+  let squares = 0;
+  let peak = 1;
+  for (let index = 0; index < samples; index += 1) {
+    const sample = pcm.readInt16LE(index * BYTES_PER_SAMPLE);
+    squares += sample * sample;
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  const rms = Math.sqrt(squares / Math.max(1, samples)) || 1;
+  const gain = Math.min(TARGET_RMS / rms, PEAK_CEILING / peak);
+  const out = Buffer.alloc(pcm.length);
+  for (let index = 0; index < samples; index += 1) {
+    out.writeInt16LE(
+      Math.round(pcm.readInt16LE(index * BYTES_PER_SAMPLE) * gain),
+      index * BYTES_PER_SAMPLE,
+    );
+  }
+  return out;
 }
 
 /** Mono 16-bit PCM wrapped in a WAV header, which `afconvert` reads. */
@@ -204,7 +233,7 @@ async function recordVoice(voice, apiKey, scratch) {
       continue;
     }
     const source = path.join(scratch, `${voice}.wav`);
-    writeFileSync(source, wav(trimmed(pcm)));
+    writeFileSync(source, wav(leveled(trimmed(pcm))));
     const clip = path.join(VOICES_DIRECTORY, `${voice}.m4a`);
     execFileSync("afconvert", [
       ...["-f", "m4af", "-d", "aac", "-b", String(AAC_BIT_RATE)],
