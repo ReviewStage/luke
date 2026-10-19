@@ -738,6 +738,16 @@ export function expandable(file: CodingAgentChangedFile): boolean {
   return changedInPlace && fileNotice(file) === undefined && !isSecretFile(file.path);
 }
 
+/** Whether a file only moved, its contents as they were: a rename whose patch holds no hunk. */
+function movedOnly(file: CodingAgentChangedFile): boolean {
+  return file.status === CHANGED_FILE_STATUS.RENAMED && file.patch?.trim() === "";
+}
+
+/** Whether a file can be drawn whole: one whose gaps open (`expandable`), or one that only moved, all of whose lines stand unchanged; never a secret one. */
+export function wholeable(file: CodingAgentChangedFile): boolean {
+  return expandable(file) || (movedOnly(file) && !isSecretFile(file.path));
+}
+
 /**
  * A changed file's whole text before and after, from its text after alone
  * and its patch: every line no hunk holds is the same on both sides, so the
@@ -749,6 +759,8 @@ export function expandable(file: CodingAgentChangedFile): boolean {
  * whose lines between hunks are not drawn (`expandable`).
  */
 export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+  // A file that only moved stood before as it stands now.
+  if (movedOnly(file) && wholeable(file)) return { before: after, after };
   const patch = file.patch;
   if (!expandable(file) || patch === null) return undefined;
   const hunks = rawHunks(patch);

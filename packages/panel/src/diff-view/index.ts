@@ -11,6 +11,7 @@ import {
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
+  parseDiffFromFile,
   parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
@@ -18,6 +19,7 @@ import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
+  type DiffFileTexts,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -429,6 +431,26 @@ interface DrawnFile {
  */
 const UNEXPANDED_KIND = "rename-pure";
 
+/**
+ * A file drawn whole: its texts before and after diffed with every line
+ * kept as context, so its changes stand among all of its unchanged lines
+ * in one hunk, as a file opened in full; named as its patch names it.
+ */
+function wholeOf(read: FileDiffMetadata, whole: DiffFileTexts): FileDiffMetadata {
+  const kept = WHOLE_DIFFS.get(whole);
+  if (kept !== undefined) return kept;
+  const drawn = parseDiffFromFile(
+    { name: read.prevName ?? read.name, contents: whole.before },
+    { name: read.name, contents: whole.after },
+    { context: Number.MAX_SAFE_INTEGER },
+  );
+  WHOLE_DIFFS.set(whole, drawn);
+  return drawn;
+}
+
+/** Each whole file's diff, made once for its texts, so a file drawn again for its notes keeps the diff Pierre drew. */
+const WHOLE_DIFFS = new WeakMap<DiffFileTexts, FileDiffMetadata>();
+
 /** A read patch as the item draws it: as read where its gaps may be opened, and otherwise told it only moved, so none is offered. */
 function drawnAs(read: FileDiffMetadata, expandable: boolean): FileDiffMetadata {
   const offered = read.type === "change" || read.type === "rename-changed";
@@ -563,16 +585,22 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         held.file.lead === file.lead &&
         held.file.collapsed === file.collapsed &&
         held.file.expandable === file.expandable &&
+        held.file.whole === file.whole &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
         return held.item;
       }
       const read =
-        held?.file.patch === file.patch && held.file.lead === file.lead ? held.read : patchOf(file);
+        held?.file.patch === file.patch &&
+        held.file.lead === file.lead &&
+        held.file.whole === undefined
+          ? held.read
+          : patchOf(file);
       const item: CodeViewDiffItem<string> = {
         id: file.path,
         type: "diff",
-        fileDiff: drawnAs(read, file.expandable),
+        fileDiff:
+          file.whole === undefined ? drawnAs(read, file.expandable) : wholeOf(read, file.whole),
         collapsed: file.collapsed,
         annotations: annotationsOf(file.annotations),
         version: (held?.item.version ?? 0) + 1,

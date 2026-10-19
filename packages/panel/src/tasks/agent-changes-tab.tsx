@@ -16,6 +16,7 @@ import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wir
 import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  BUTTON_SIZE,
   Button,
   Checkbox,
   CopyIcon,
@@ -36,9 +37,11 @@ import {
   CodeIcon,
   Columns2Icon,
   FileDiffIcon,
+  FoldVerticalIcon,
   HighlighterIcon,
   ImageIcon,
   RotateCwIcon,
+  UnfoldVerticalIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -82,6 +85,7 @@ import {
   STATUS_WORDS,
   textsOf,
   threadsOn,
+  wholeable,
 } from "./changes-model.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list.js";
@@ -418,6 +422,8 @@ function entryOf(
   gaps: { readonly open: boolean; readonly refused: ExpansionRefusal | undefined },
   /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
   minimized: FileMinimized | undefined,
+  /** The file drawn whole, where it is, whether it may be, and the door that draws it so or back to its changes. */
+  whole: FileWhole,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -452,7 +458,8 @@ function entryOf(
     );
   };
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
-  const notice = fileNotice(file);
+  // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
+  const notice = whole.texts === undefined ? fileNotice(file) : undefined;
   const lead =
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
@@ -498,6 +505,7 @@ function entryOf(
     collapsed,
     lead: lead !== undefined,
     expandable: lead === undefined && gaps.open,
+    whole: lead === undefined ? whole.texts : undefined,
     header: (
       <FileHead
         file={file}
@@ -505,6 +513,9 @@ function entryOf(
           <>
             {image === undefined || fileNotice(file) !== undefined ? null : (
               <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+            )}
+            {!whole.offered || pictured !== undefined ? null : (
+              <WholeToggle whole={whole.texts !== undefined} onToggle={whole.toggle} />
             )}
             {list.viewed === undefined || list.markViewed === undefined ? null : (
               <ViewedBox viewed={list.viewed(path)} onToggle={() => list.markViewed?.(path)} />
@@ -570,6 +581,7 @@ function useEntries(
   commenting: ListCommenting | undefined,
   texts: FileTexts,
   minimizedOf: (path: string) => FileMinimized | undefined,
+  wholeOf: (file: CodingAgentChangedFile) => FileWhole,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
@@ -578,22 +590,81 @@ function useEntries(
     const comment = commenting?.note?.path === file.path ? commenting.note.content : undefined;
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
+    const whole = wholeOf(file);
     const inputs = [
       ...entryInputs(file, list, own, threads?.draw, images, comment),
       gaps.open,
       gaps.refused,
       minimized,
+      whole.texts,
+      whole.offered,
+      whole.toggle,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comment, gaps, minimized);
+        : entryOf(file, list, own, threads?.draw, images, comment, gaps, minimized, whole);
     next.set(file.path, { inputs, entry });
     return entry;
   });
   kept.current = next;
   return entries;
+}
+
+/** A file drawn whole: its texts where it is, whether it may be, and the door that draws it whole or back to its changes. */
+interface FileWhole {
+  readonly texts: DiffFileTexts | undefined;
+  readonly offered: boolean;
+  readonly toggle: () => void;
+}
+
+/** No file drawn whole. */
+const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
+
+/**
+ * Which files are drawn whole, as stage-cli's Expand full file draws one:
+ * a file's texts read as its gaps read them (`FileTexts`'s door, once and
+ * kept), every unchanged line then drawn among its changes, until Collapse
+ * to changes; every file back to its changes with a new answer. A file whose
+ * gaps never open is never offered, and one whose read is refused stays as
+ * it is, its refusal said as a gap's is.
+ */
+function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => FileWhole {
+  const { read, refused } = texts;
+  const [held, setHeld] = useState<{
+    readonly of: unknown;
+    readonly files: ReadonlyMap<string, DiffFileTexts>;
+  }>({ of: read, files: NONE_WHOLE });
+  const files = held.of === read ? held.files : NONE_WHOLE;
+  const latest = useRef({ read, files });
+  latest.current = { read, files };
+  const toggle = useCallback((path: string) => {
+    const { read, files } = latest.current;
+    const held = (next: ReadonlyMap<string, DiffFileTexts>) => setHeld({ of: read, files: next });
+    if (files.has(path)) {
+      const next = new Map(files);
+      next.delete(path);
+      held(next);
+      return;
+    }
+    read?.(path).then(
+      (whole) => {
+        if (whole !== undefined) held(new Map(latest.current.files).set(path, whole));
+      },
+      () => undefined,
+    );
+  }, []);
+  const doors = useRef(new Map<string, () => void>());
+  return (file) => {
+    const door = doors.current.get(file.path) ?? (() => toggle(file.path));
+    doors.current.set(file.path, door);
+    return {
+      texts: files.get(file.path),
+      offered: read !== undefined && wholeable(file) && !refused.has(file.path),
+      toggle: door,
+    };
+  };
 }
 
 /** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
@@ -742,6 +813,28 @@ function ViewedBox({
   );
 }
 
+/** A file's turn between its changes alone and the whole file, at the end of its header, as stage-cli's is. */
+function WholeToggle({
+  whole,
+  onToggle,
+}: {
+  whole: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const label = whole ? LIST_WORDS.COLLAPSE_TO_CHANGES : LIST_WORDS.EXPAND_WHOLE;
+  return (
+    <Tooltip label={label}>
+      <IconButton
+        icon={whole ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
+        label={label}
+        size={BUTTON_SIZE.COMPACT}
+        pressed={whole}
+        onClick={onToggle}
+      />
+    </Tooltip>
+  );
+}
+
 /** An SVG's turn between its picture and its source's lines, at the end of its header. */
 function SourceToggle({
   source,
@@ -849,7 +942,7 @@ function useFileTexts(
       }));
     return (path: string) => {
       const file = files.find((each) => each.path === path);
-      if (file === undefined || !expandable(file)) return Promise.resolve(undefined);
+      if (file === undefined || !wholeable(file)) return Promise.resolve(undefined);
       const held = kept.get(path);
       if (held !== undefined) return held;
       const reading = act(ACT_KIND.TASKS_FILE, {
@@ -955,7 +1048,8 @@ function FilesList({
   const look = useDiffLook(roomy);
   const { settings } = useFileViewSettings();
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
-  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf);
+  const wholeOf = useWholeFiles(texts);
+  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf, wholeOf);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">

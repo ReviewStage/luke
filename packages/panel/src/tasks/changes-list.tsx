@@ -83,6 +83,8 @@ export const LIST_WORDS = {
   EXPAND_ALL: "Expand all files",
   SHOW_SOURCE: "Show source",
   SHOW_IMAGE: "Show image",
+  EXPAND_WHOLE: "Expand full file",
+  COLLAPSE_TO_CHANGES: "Collapse to changes",
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark as viewed",
   UNMARK_VIEWED: "Mark as not viewed",

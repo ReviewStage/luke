@@ -130,6 +130,8 @@ export interface DiffListFile {
   readonly lead: boolean;
   /** Whether the lines between the file's hunks may be opened, its text read whole the first time one is (`DiffListProps.readTexts`). */
   readonly expandable: boolean;
+  /** The file's whole text before and after, where it is drawn whole, every unchanged line among its changes; none draws its hunks. */
+  readonly whole?: DiffFileTexts | undefined;
 }
 
 /** Lines lit in one file of a list: the file, by its path, and the lines. */

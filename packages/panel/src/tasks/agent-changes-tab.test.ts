@@ -1711,3 +1711,50 @@ test("a file read whole that is not the contents GitHub listed its patch against
   assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
   assert.equal(await readTexts("src/moved.ts"), undefined);
 });
+
+test("a file's header draws the whole file on Expand full file, read once, and back to its changes; a file that only moved shows its lines rather than saying so", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old.ts",
+      patch: "",
+    }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  const asked = answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  await drawTab();
+  const toggle = (path: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      ["Expand full file", "Collapse to changes"].includes(button.getAttribute("aria-label") ?? ""),
+    );
+  assert.equal(toggle("src/new.ts"), undefined, "an added file has nothing to expand");
+  const drawnAs = (path: string) => lastDrawn().files.find((file) => file.path === path);
+  assert.equal(drawnAs("src/moved.ts")?.lead, true, "a file that only moved says so");
+
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.deepEqual(drawnAs("src/seats.ts")?.whole, { before: BASE_TEXT, after: HEAD_TEXT });
+  act(() => toggle("src/moved.ts")?.click());
+  await flush();
+  assert.deepEqual(drawnAs("src/moved.ts")?.whole, { before: HEAD_TEXT, after: HEAD_TEXT });
+  assert.equal(drawnAs("src/moved.ts")?.lead, false, "and once whole, shows its lines");
+
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.equal(
+    drawnAs("src/seats.ts")?.whole,
+    undefined,
+    "Collapse to changes draws its hunks again",
+  );
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.equal(
+    asked.filter((request) => request.kind === ACT_KIND.TASKS_FILE).length,
+    2,
+    "each file is read once",
+  );
+});
