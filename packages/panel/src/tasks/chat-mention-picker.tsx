@@ -52,18 +52,8 @@ export interface ChatMentionPicker {
 
 /** A row as the list draws it: a member or a channel by its sigil and name, a date as its chip says it. */
 export function chatOption(target: ChatTarget): ComboboxOption {
-  if (target.date !== undefined) {
-    return {
-      id: `date:${target.detail ?? target.name}`,
-      label: target.name,
-      detail: target.detail,
-    };
-  }
-  return {
-    id: `${target.sigil}${target.name}`,
-    label: `${target.sigil}${target.name}`,
-    detail: target.detail,
-  };
+  const label = target.date === undefined ? `${target.sigil}${target.name}` : target.name;
+  return { id: label, label, detail: target.detail };
 }
 
 export function useChatMentionPicker({

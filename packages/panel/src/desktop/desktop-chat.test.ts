@@ -788,18 +788,18 @@ test("an @ word that reads as a date lists it before the members it matches, and
   }
 });
 
-test("where the editor's bundle could not be loaded, a date's words after an @ still offer it, and its pick is written and sent as its link", async () => {
+test("where the editor's bundle could not be loaded, a date one word names after an @ still offers it, and its pick is written and sent as its link", async () => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   try {
     const { container, field, sent } = await plainChat();
-    writeInto(field, "ship it @next fri");
+    writeInto(field, "ship it @tomorrow");
     const listed = [...container.querySelectorAll('[role="option"]')].map((row) => row.textContent);
     pressInField(field, { key: "Enter" });
     pressInField(field, { key: "Enter" });
     await settle();
 
-    assert.deepEqual(listed, ["Oct 30Oct 30, 2026"]);
-    assert.deepEqual(sent, ["ship it [@Oct 30, 2026](luke://date/2026-10-30)"]);
+    assert.deepEqual(listed, ["TomorrowOct 20, 2026"]);
+    assert.deepEqual(sent, ["ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
   } finally {
     vi.useRealTimers();
   }
