@@ -6118,27 +6118,30 @@ button.picture-frame {
   flex-direction: column;
 }
 
+/* The tab's head, as the sidebar's section heads are: the list's name in
+   the quiet ink, how many it holds after it, and its toggle at the end. */
 .comments-head {
   display: flex;
+  height: var(--luke-control-height);
   flex: none;
   align-items: center;
   justify-content: space-between;
-  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) var(--luke-space-24);
+  margin: var(--luke-space-6) var(--luke-space-8) var(--luke-space-2) var(--luke-space-16);
 }
 
 .comments-head-title {
   display: inline-flex;
   align-items: baseline;
   gap: var(--luke-space-6);
-  color: var(--luke-color-text);
-  font-size: 13px;
-  font-weight: 600;
+  padding-left: var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .comments-head-count {
   color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
 }
 
 .comments-list {
@@ -6157,4 +6160,29 @@ button.picture-frame {
 
 .comments-row + .comments-row {
   margin-top: var(--luke-space-8);
+}
+
+/* In the tab every thread stands whole, on the panel's ground with a
+   hairline round it rather than floating over the page. */
+.comments-list .comment-card[data-open="true"] {
+  border-color: var(--luke-color-border);
+  background: none;
+  box-shadow: none;
+}
+
+/* A quote that shows its words in the plan: the quote's look, pressed. */
+.comment-quote-link {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.comment-quote-link:hover {
+  color: var(--luke-color-text);
 }
