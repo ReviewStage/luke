@@ -23,6 +23,7 @@ import {
 } from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
+  type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
   type PlatformActProcedures,
@@ -287,8 +288,15 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const accountAsks = { host: {} } as AccountAskProceduresDependencies;
   // SAFETY: no platform act is called here, so no platform procedure is reached.
   const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
     {
+      ...elsewhere,
       accountAsks,
       issues: NO_ISSUES,
       workspaces: {

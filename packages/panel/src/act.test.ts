@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import {
+  type ActPortDependencies,
   createActPortHandler,
   type PlatformActProcedures,
   type WorkspaceProceduresDependencies,
@@ -37,8 +38,15 @@ function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const noKeys = () => Effect.succeed({ keys: [] });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
     {
+      ...elsewhere,
       accountAsks: {
         host: {
           providerKeysRead: noKeys,

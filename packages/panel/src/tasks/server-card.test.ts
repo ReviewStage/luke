@@ -21,7 +21,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { SERVER_MENTION_NOTE } from "@luke/ui/agent-servers-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -29,7 +29,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -101,8 +101,14 @@ beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
+  // The main process answers the panel where the integrations stand and Linear's tools; nothing else here.
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: integrationStatuses() }),
+    [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: TOOLS }),
   });
 });
 
@@ -113,22 +119,15 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-/** What the main process answers the panel: where the integrations stand and Linear's tools; nothing else here. */
-function answer(request: Act): ActOutcome {
-  if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-    // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
-    const integrations = Object.fromEntries(
-      INTEGRATION_PROVIDER_LIST.map((provider) => [
-        provider,
-        provider === LINEAR ? linear : INTEGRATION_STATUS.UNAVAILABLE,
-      ]),
-    ) as Record<IntegrationProvider, IntegrationStatus>;
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { integrations } };
-  }
-  if (request.kind === ACT_KIND.INTEGRATIONS_TOOLS) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { tools: TOOLS } };
-  }
-  return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." };
+/** Where the integrations stand, as the act port answers the panel: Linear as the test stands it, the rest unavailable. */
+function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
+  // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
+  return Object.fromEntries(
+    INTEGRATION_PROVIDER_LIST.map((provider) => [
+      provider,
+      provider === LINEAR ? linear : INTEGRATION_STATUS.UNAVAILABLE,
+    ]),
+  ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
 async function settle(): Promise<void> {

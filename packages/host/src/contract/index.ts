@@ -5,7 +5,10 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { accountAskActsContract } from "./account-asks.js";
+import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
+import { factoryActsContract } from "./factory.js";
+import { integrationActsContract } from "./integrations.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
@@ -26,7 +29,10 @@ import { workspaceActsContract } from "./workspaces.js";
 export { ACT_ERROR } from "./base.js";
 export {
   ACCOUNT_ASK_ACT_KIND,
+  AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
   ISSUE_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
@@ -41,7 +47,10 @@ export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...accountAskActsContract,
+  ...automationActsContract,
   ...avatarActsContract,
+  ...factoryActsContract,
+  ...integrationActsContract,
   ...issueActsContract,
   ...macTerminalActsContract,
   ...terminalActsContract,
