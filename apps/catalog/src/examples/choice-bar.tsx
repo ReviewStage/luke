@@ -3,7 +3,8 @@
  * fill and its segmented look at both sizes: tabs over panels with glyphs
  * and toned counts, a diff's lines among them; a value set by a radio
  * group; a clearable one with none chosen; an option and a whole bar that
- * cannot be chosen; and a row too narrow for its options.
+ * cannot be chosen; and a row too narrow for its options, which names
+ * every option while none is chosen.
  */
 
 import {
@@ -153,6 +154,21 @@ function HeldEffort({
   );
 }
 
+/** A clearable radio group over glyphed options the example holds, none chosen at first. */
+function HeldClearableViews(): React.JSX.Element {
+  const [view, setView] = useState<View | undefined>(undefined);
+  return (
+    <ChoiceBar<View>
+      label="Show only"
+      items={VIEWS}
+      value={view}
+      onChange={setView}
+      look={CHOICE_BAR_LOOK.FILL}
+      clearable
+    />
+  );
+}
+
 function ChoiceBarExample(): React.JSX.Element {
   return (
     <>
@@ -222,6 +238,7 @@ function ChoiceBarExample(): React.JSX.Element {
             start={VIEW.CHECKS}
             look={CHOICE_BAR_LOOK.FILL}
           />
+          <HeldClearableViews />
           <HeldEffort start={EFFORT.HIGH} />
         </div>
       </CatalogSection>

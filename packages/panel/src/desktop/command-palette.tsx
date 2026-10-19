@@ -93,7 +93,7 @@ import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
 import {
   appCommandOffered,
@@ -1013,10 +1013,28 @@ function PaletteItem({
 }
 
 /**
+ * Scrolls the bar in `band` along its own row until its checked option
+ * stands whole in view, and nothing else. Note that the bar's own scroller
+ * is moved rather than the option scrolled into view, which would scroll
+ * every box around it, the dialog's and the window's among them.
+ */
+function revealChecked(band: HTMLElement): void {
+  const bar = band.querySelector<HTMLElement>('[role="radiogroup"]');
+  const checked = bar?.querySelector<HTMLElement>('[aria-checked="true"]');
+  if (bar === null || bar === undefined || checked === null || checked === undefined) return;
+  const start = checked.offsetLeft;
+  const end = start + checked.offsetWidth;
+  if (start < bar.scrollLeft) bar.scrollLeft = start;
+  else if (end > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = end - bar.clientWidth;
+}
+
+/**
  * The filters under the field, a radio group the palette drives from the
  * field. Note that it takes no focus, because the caret belongs in the field
  * and Return there opens the row chosen, not a filter; a press chooses one
- * and leaves the caret where it was.
+ * and leaves the caret where it was. A row too wide for a narrow window
+ * scrolls sideways, and keeps the filter chosen in view, since no focus
+ * moving there would bring it.
  */
 function PaletteFilters({
   filters,
@@ -1027,8 +1045,12 @@ function PaletteFilters({
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
+  const band = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (band.current !== null) revealChecked(band.current);
+  }, [filter]);
   return (
-    <div className="command-palette-filters">
+    <div ref={band} className="command-palette-filters">
       <ChoiceBar
         label="Filter"
         items={filters.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}

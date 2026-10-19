@@ -430,6 +430,32 @@ test("a press on a filter chooses it and leaves the caret in the field, no filte
   assert.equal(field().value, "invite");
 });
 
+test("in a row too narrow for every filter, the filter a key chooses is scrolled into view along the row alone", () => {
+  openPalette();
+  const bar = document.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Filter"]');
+  assert.ok(bar);
+  // Note that the test lays the row out itself, a hundred pixels wide with each filter fifty, because jsdom lays nothing out.
+  Object.defineProperty(bar, "clientWidth", { configurable: true, value: 100 });
+  filterOptions().forEach((option, at) => {
+    Object.defineProperty(option, "offsetLeft", { configurable: true, value: at * 50 });
+    Object.defineProperty(option, "offsetWidth", { configurable: true, value: 50 });
+  });
+  key(FORWARD);
+  assert.equal(bar.scrollLeft, 0, "Tasks already stands in view");
+  key(FORWARD);
+  assert.equal(chosenFilter(), "Agents");
+  assert.equal(bar.scrollLeft, 50);
+  key(BACK);
+  key(BACK);
+  key(BACK);
+  assert.equal(chosenFilter(), "Settings");
+  assert.equal(bar.scrollLeft, 250);
+  key(FORWARD);
+  assert.equal(chosenFilter(), "All");
+  assert.equal(bar.scrollLeft, 0);
+  assert.equal(document.activeElement, field(), "the caret stays in the field");
+});
+
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
   openPalette();
   assert.deepEqual(footer(), ["↑↓Select", "⏎Open", "←→Filter"]);
