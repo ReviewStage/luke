@@ -336,6 +336,7 @@ export function AgentComposer({
   sendsEmpty = false,
   closedRemedy,
   wording,
+  maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   above,
   tools,
   actions,
@@ -380,6 +381,8 @@ export function AgentComposer({
   closedRemedy?: ReactNode;
   /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
   wording?: ComposerWords | undefined;
+  /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
+  maxLength?: number;
   /** What stands over the words inside the card, before the files attached: New task's Linear issue. */
   above?: ReactNode;
   /** What stands after the "+" at the foot's left: New task's repository and Linear chips. */
@@ -680,7 +683,7 @@ export function AgentComposer({
                 ? COMPOSER_INPUT.READ_ONLY
                 : COMPOSER_INPUT.EDITABLE
           }
-          maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
+          maxLength={maxLength}
           takesFocus={!(focusedByOwner && mountedFirst)}
           {...pickers.field}
           onKey={(event) =>
