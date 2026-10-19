@@ -189,9 +189,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         colourCode: highlightSnippet,
       },
       codingAgents: { host: operator.host, notices },
-      integrations: { host: operator.host },
-      automations: { host: operator.host },
-      factory: { host: operator.host },
     },
     platformRows,
   );
@@ -247,6 +244,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
           resumeSessionReplay: operator.resumeSessionReplay,
         },
         accountAsks: { host: operator.host },
+        automations: { host: operator.host },
+        factory: { host: operator.host },
+        integrations: { host: operator.host },
         issues: { host: operator.host },
         settings: {
           host: operator.host,

@@ -264,9 +264,6 @@ function hostRowDependencies(
       colourCode: highlightSnippet,
     },
     codingAgents: { host, notices },
-    integrations: { host },
-    automations: { host },
-    factory: { host },
   };
 }
 
@@ -285,6 +282,9 @@ function portDependencies(operator: OperatorClient, reporter: string): ActPortDe
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    automations: { host },
+    factory: { host },
+    integrations: { host },
     issues: { host },
     settings: {
       host,

@@ -104,8 +104,14 @@ function windowPort(
   } as HostAsk;
   // SAFETY: these tests call the issue kinds alone, so no platform procedure is reached.
   const platform = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
-    { ...UNREACHED, issues: { host }, workspaces: NO_WORKSPACES },
+    { ...UNREACHED, ...elsewhere, issues: { host }, workspaces: NO_WORKSPACES },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

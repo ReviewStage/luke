@@ -10,7 +10,16 @@ import {
   accountAskProcedures,
 } from "./account-ask-procedures.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
+import {
+  type AutomationProceduresDependencies,
+  automationProcedures,
+} from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
+import { type FactoryProceduresDependencies, factoryProcedures } from "./factory-procedures.js";
+import {
+  type IntegrationProceduresDependencies,
+  integrationProcedures,
+} from "./integration-procedures.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import {
@@ -28,7 +37,9 @@ import {
 
 export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
+export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, actPortFor } from "./base.js";
+export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
 export type {
   ClientSettingSideEffects,
@@ -74,6 +85,9 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
+  readonly automations: AutomationProceduresDependencies;
+  readonly factory: FactoryProceduresDependencies;
+  readonly integrations: IntegrationProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
   readonly settings: SettingsProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
@@ -98,6 +112,9 @@ export function createActPortHandler<Sender>(
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
+    ...automationProcedures(dependencies.automations),
+    ...factoryProcedures(dependencies.factory),
+    ...integrationProcedures(dependencies.integrations),
     ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
     ...workspaceProcedures(dependencies.workspaces),

@@ -6,7 +6,13 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { ACCOUNT_ACT_KIND, SETTINGS_ACT_KIND } from "@luke/host/contract";
+import {
+  ACCOUNT_ACT_KIND,
+  AUTOMATION_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
+  SETTINGS_ACT_KIND,
+} from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -784,6 +790,15 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
 /** Every act the window sent over the bridge, by kind, in order. */
 let sentActs: string[] = [];
 
+/** The port kinds this window's fake refuses rather than answers with nothing. */
+const REFUSED_ON_PORT: readonly string[] = Object.values({
+  ...ACCOUNT_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
+});
+
 /**
  * The bridge as the window meets it, every act written down, with Factory
  * on, and Settings' chunk already loaded, as it is
@@ -803,17 +818,11 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // The account and settings acts answer a view, so each is refused as `app:act` refused it.
-    if (REFUSED_PORT_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    // A read of the account's automations, integrations, or a Factory world, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
+    if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
 }
-
-/** The port kinds this suite's window is refused, as `app:act` refused every kind. */
-const REFUSED_PORT_KINDS: ReadonlySet<string> = new Set([
-  ...Object.values(ACCOUNT_ACT_KIND),
-  ...Object.values(SETTINGS_ACT_KIND),
-]);
 
 /** Where the window draws the call card: on which surface, and whether at the foot of the column at the window's left. */
 function cardStanding(page: HTMLElement, place: Place) {

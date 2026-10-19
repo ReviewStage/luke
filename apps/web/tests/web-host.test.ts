@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { integrationStatusesViewSchema } from "@luke/features/integration-view";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { THEME } from "@luke/settings";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
 import { fakeService, WORKSPACE_MEMBER } from "./support/fake-service";
@@ -64,18 +63,16 @@ it.effect(
 );
 
 it.effect(
-  "an act goes through the bridge to the service and back, settling a cookie's pending sign-in",
+  "an act goes through the tab's act port to the service and back, settling a cookie's pending sign-in",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        installAppBridge(bridge);
+        installActPort(actPort);
 
-        const outcome = yield* Effect.promise(() =>
-          bridge.act({ kind: ACT_KIND.INTEGRATIONS_STATUS }),
-        );
+        const statuses = yield* Effect.promise(() => askAct(ACT_KIND.INTEGRATIONS_STATUS));
 
-        assert.ok(outcome.status === ACT_OUTCOME_STATUS.DONE);
-        const statuses = Schema.decodeUnknownSync(integrationStatusesViewSchema)(outcome.value);
         assert.ok(!("failure" in statuses));
         assert.equal(
           statuses.integrations[INTEGRATION_PROVIDER.SLACK],

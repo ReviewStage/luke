@@ -277,6 +277,7 @@ test("a deleted file, a lockfile, and a file of more than a thousand changed lin
     true,
   );
   assert.equal(startsCollapsed(changed("apps/web/package-lock.json")), true);
+  assert.equal(startsCollapsed(changed("ios/Podfile.lock")), true);
   assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 101 })), true);
   assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 100 })), false);
   assert.equal(

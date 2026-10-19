@@ -6,7 +6,10 @@ import type {
 } from "@orpc/contract";
 import { accountActsContract } from "./account.js";
 import { accountAskActsContract } from "./account-asks.js";
+import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
+import { factoryActsContract } from "./factory.js";
+import { integrationActsContract } from "./integrations.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
@@ -29,7 +32,10 @@ export { ACT_ERROR } from "./base.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
+  AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
   ISSUE_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
@@ -47,7 +53,10 @@ export type { SettingUpdatePayload } from "./settings.js";
 export const actContract = {
   ...accountActsContract,
   ...accountAskActsContract,
+  ...automationActsContract,
   ...avatarActsContract,
+  ...factoryActsContract,
+  ...integrationActsContract,
   ...issueActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,

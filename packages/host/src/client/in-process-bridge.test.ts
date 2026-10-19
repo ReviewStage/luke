@@ -40,9 +40,6 @@ const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 const UNREACHED = {
   tasks: {},
   codingAgents: {},
-  integrations: {},
-  automations: {},
-  factory: {},
 } as unknown as HostActDependencies;
 
 /**

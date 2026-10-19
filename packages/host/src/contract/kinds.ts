@@ -50,6 +50,18 @@ export const ACCOUNT_ASK_ACT_KIND = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
 } as const;
 
+/** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
+export const AUTOMATION_ACT_KIND = {
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
+  /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+} as const;
+
 /**
  * Luke's avatar as the windows reach it: the panel's word on it, starting,
  * live on its first frame, or ended and why, taken from the panel alone; and
@@ -60,6 +72,28 @@ export const ACCOUNT_ASK_ACT_KIND = {
 export const AVATAR_ACT_KIND = {
   AVATAR_REPORT: "avatar.report",
   VOICE_SET_VIDEO: "voice.setVideo",
+} as const;
+
+/** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
+export const FACTORY_ACT_KIND = {
+  FACTORY_WORLD: "factory.world",
+} as const;
+
+/**
+ * Settings' integration rows: where every one of the account's integrations
+ * stands, a browser sign-in to one begun and opened by the host, and one
+ * connection ended. The window hears whether the browser was sent, never the
+ * address it was sent to.
+ */
+export const INTEGRATION_ACT_KIND = {
+  INTEGRATIONS_STATUS: "integrations.status",
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_CANCEL: "integrations.cancel",
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
+  /** One account at a provider named as the developer calls it. */
+  INTEGRATIONS_RENAME: "integrations.rename",
 } as const;
 
 /** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
@@ -173,7 +207,10 @@ export const WORKSPACE_ACT_KIND = {
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
   ...ACCOUNT_ASK_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
   ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,

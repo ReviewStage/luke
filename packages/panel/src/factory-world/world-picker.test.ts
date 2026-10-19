@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { factoryWorldOf } from "@luke/ui/testing";
@@ -11,7 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DesktopFactory } from "../desktop/desktop-factory.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -56,10 +56,13 @@ beforeEach(() => {
   });
   fakeAppBridge({
     act: (request: Act) => {
-      if (request.kind !== ACT_KIND.FACTORY_WORLD) throw new Error(`unexpected ${request.kind}`);
-      asked.push(request.payload.workspaceId);
-      const value = { world: factoryWorldOf() };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      throw new Error(`unexpected ${request.kind}`);
+    },
+  });
+  fakeActPort({
+    [ACT_KIND.FACTORY_WORLD]: (payload) => {
+      asked.push(payload.workspaceId);
+      return Promise.resolve({ world: factoryWorldOf() });
     },
   });
 });

@@ -137,8 +137,14 @@ function windowPort(
     ActPortDependencies,
     "account" | "settings"
   >;
+  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
-    { ...unreached, accountAsks: { host }, issues, workspaces },
+    { ...unreached, ...elsewhere, accountAsks: { host }, issues, workspaces },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

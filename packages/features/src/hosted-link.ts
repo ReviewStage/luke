@@ -40,6 +40,7 @@ import {
   type CallCredential,
   type CallRequest,
   callAnswered,
+  sendInSession,
 } from "./account-call.js";
 import { repositoryNotReachableDataSchema } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
@@ -136,6 +137,8 @@ export interface HostedClientOptions {
   credential: CallCredential;
   /** The usual deadline, where a client keeps one of its own. */
   requestTimeoutMs?: number | undefined;
+  /** Whether the credential is the Mac's Better Auth session, asked for once where none is held yet (`sendInSession`). */
+  inSession?: boolean | undefined;
 }
 
 const isJsonText = Schema.is(Schema.String);
@@ -215,8 +218,9 @@ async function sent(
         ? options.requestTimeoutMs
         : LONG_DEADLINE_MS[context.deadline],
   });
+  const send = options.inSession === true ? sendInSession(call, options.credential) : call.send;
   const exit = await Effect.runPromiseExitWith(context.services)(
-    call.send(callRequest(url, init)),
+    send(callRequest(url, init)),
     init.signal ? { signal: init.signal } : undefined,
   );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
