@@ -2701,6 +2701,10 @@ test("list_issues, read_issue, create_issue, and update_issue keep the caller's 
   const { caller, otherWorkspaces } = agents;
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
+  const issuesCounted = () =>
+    ANALYTICS.recorded.filter(
+      (event) => event.userId === caller.userId && event.name === SERVER_EVENT.ISSUE_CREATE,
+    ).length;
   const issueOf = (answer: WireRecord) =>
     isRecord(answer.issue) ? answer.issue : assert.fail(JSON.stringify(answer));
   const listedIds = async (input: WireBoundaryInput) => {
@@ -2724,6 +2728,7 @@ test("list_issues, read_issue, create_issue, and update_issue keep the caller's 
   );
   const stored = Option.getOrThrow(await database.run(readIssue(caller.userId, issue.id)));
   assert.deepEqual([stored.workspaceId, stored.creator?.userId], [workspaceId, caller.userId]);
+  assert.equal(issuesCounted(), 1, "an agent's filing is counted as the window's is");
   assert.deepEqual(await call(CODER_TOOL.CREATE_ISSUE, { title: "  " }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: ISSUE_TOOL_REFUSAL.UNREADABLE_CREATE,

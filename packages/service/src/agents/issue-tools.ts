@@ -19,6 +19,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   agentToolRejected,
@@ -358,6 +359,8 @@ export function runCreateIssue(
       });
       // Note that the member was just read in the workspace, so a filing refused is their leaving it since.
       if (Option.isNone(filed)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      // Counted as the window's own filing is (`issues-app.ts`), so an agent's filing is no less an issue made.
+      yield* recordServerEvent(SERVER_EVENT.ISSUE_CREATE, userId, {});
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         issue: fullIssueReading(filed.value, workspace.value),
