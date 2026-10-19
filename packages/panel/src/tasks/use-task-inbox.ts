@@ -10,6 +10,7 @@ import {
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -74,7 +75,8 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * why.
  *
  * An image block names an attachment the service keeps, and so does each
- * file an answer carried, and their bytes are read apart from the inbox, once per attachment while the task is open,
+ * file an answer carried and each picture of the item's own its Markdown
+ * draws, and their bytes are read apart from the inbox, once per attachment while the task is open,
  * as a card first draws the block: the host fetches them under the account
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
@@ -196,16 +198,29 @@ function fresh(taskId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Every attachment the items name: their blocks' pictures, and the files their answers and their threads' messages carried. */
+/**
+ * Every attachment the items name: their blocks' pictures, the files their
+ * answers and their threads' messages carried, and the item's own pictures
+ * their Markdown draws, in its blocks, its thread's messages, and its
+ * answer's note (`inbox-attachment-link`).
+ */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
   for (const item of items) {
+    const drawn = (text: string | undefined) => {
+      if (text === undefined) return;
+      for (const attachmentId of inboxAttachmentIdsIn(text, item.id)) named.add(attachmentId);
+    };
     for (const block of item.blocks) {
-      if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+      if (!knownBlock(block)) continue;
+      if (block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+      if (block.type === INBOX_BLOCK.MARKDOWN) drawn(block.text);
     }
     for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
+    drawn(item.answer?.note);
     for (const message of item.messages ?? []) {
       for (const file of message.files ?? []) named.add(file.attachmentId);
+      drawn(message.text);
     }
   }
   return named;

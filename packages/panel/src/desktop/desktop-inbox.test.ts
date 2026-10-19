@@ -18,6 +18,7 @@ import {
   type CodingAgentListAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -1544,6 +1545,43 @@ test("an image that lands before its item's own read does is drawn all the same"
     page.querySelector<HTMLImageElement>("[data-inbox-image] img")?.alt,
     "The sandbox's window",
   );
+});
+
+test("an item's Markdown draws its own pictures, read once its item's own read lands, a pair side by side, and a pull request's link alone on its line as its card", async () => {
+  const before = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72";
+  const after = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73";
+  const picture = (attachmentId: string) =>
+    inboxAttachmentAddress(
+      { kind: LINK_PLACE.INBOX_ITEM, planId: BILLING.id, itemId: THRESHOLD.id },
+      attachmentId,
+      "acme",
+    );
+  const words = {
+    type: INBOX_BLOCK.MARKDOWN,
+    text: [
+      `![The form before](${picture(before)} "Before") ![The form after](${picture(after)} "After")`,
+      "https://github.com/acme/relay/pull/42",
+    ].join("\n\n"),
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [words] }, RETRY]);
+  const { page } = mount();
+  await settle();
+  // The pictures land once their item's own read does, which keeps them as the item's.
+  for (const land of imageReads.splice(0)) land();
+  await settle();
+  const pair = page.querySelectorAll("[data-inbox-markdown] .transcript-pictures");
+  assert.equal(pair.length, 1, "the two pictures stand side by side in one row");
+  assert.deepEqual(
+    [...(pair[0]?.querySelectorAll("img") ?? [])].map((image) => image.alt),
+    ["The form before", "The form after"],
+  );
+  assert.equal(
+    page.querySelector('[data-inbox-markdown] [data-lone-link="pull-request"] .luke-list-row-title')
+      ?.textContent,
+    "#42",
+  );
+  // What the item's words draw stands inside the pane's masked region.
+  assert.ok(page.querySelector(".ph-no-capture [data-lone-link]"));
 });
 
 /** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
