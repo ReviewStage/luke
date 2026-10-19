@@ -21,13 +21,14 @@ const BROWSER: ConnectBrowser = {
 /** The app's tab, having handed `connects` connects off to tabs of their own; its close stops it listening. */
 export async function appTab(connects: number): Promise<{ readonly close: () => void }> {
   const tabs = connectTabs(BROWSER);
-  // SAFETY: the connect wraps the procedures it names and hands every other one through untouched, so only the account's GitHub connect is answered.
-  const host = {
+  // Only the account's GitHub connect is answered here.
+  const host: Partial<ActPortClient> = {
     [ACT_KIND.GITHUB_CONNECT]: async () => {
       tabs.open("https://provider.example/oauth/authorize");
     },
-  } as unknown as ActPortClient;
-  const port = tabs.portClient(host);
+  };
+  // SAFETY: the connect wraps the procedures it names and hands every other one through untouched, so only the one called need be answered.
+  const port = tabs.portClient(host as ActPortClient);
   for (let connect = 0; connect < connects; connect += 1) {
     await port[ACT_KIND.GITHUB_CONNECT]();
   }

@@ -68,17 +68,18 @@ function fakeBrowser(options: { readonly refusesTabs: boolean }) {
  * it opens one.
  */
 function hostPort(open: (url: string) => void, opens: boolean): ActPortClient {
-  // SAFETY: the connect wraps the procedures it names and hands every other one through untouched, so a test answers only those it calls.
-  return {
+  const host: Partial<ActPortClient> = {
     [ACT_KIND.GITHUB_CONNECT]: async () => {
       await Promise.resolve();
       if (opens) open(PROVIDER_ADDRESS);
     },
-    [ACT_KIND.WEB_OPEN]: async ({ url }: { url: string }) => {
+    [ACT_KIND.WEB_OPEN]: async ({ url }) => {
       await Promise.resolve();
       open(url);
     },
-  } as unknown as ActPortClient;
+  };
+  // SAFETY: the connect wraps the procedures it names and hands every other one through untouched, so a test answers only those it calls.
+  return host as ActPortClient;
 }
 
 afterEach(() => {
@@ -138,17 +139,15 @@ test("connects answered out of order each open in a tab, and the one that opened
   const connect = connectTabs(browser);
   // The first press's act is still out when the second's answers with its address; then the first opens nothing.
   let refuseFirst: (error: Error) => void = () => undefined;
-  // SAFETY: the connect wraps the procedures it names, and this test calls the account's GitHub connect alone.
-  const first = {
+  const first: Partial<ActPortClient> = {
     [ACT_KIND.GITHUB_CONNECT]: () =>
       new Promise<void>((_resolve, reject) => {
         refuseFirst = reject;
       }),
-  } as unknown as ActPortClient;
-  const firstPress = connect
-    .portClient(first)
-    [ACT_KIND.GITHUB_CONNECT]()
-    .catch(() => undefined);
+  };
+  // SAFETY: the connect wraps the procedures it names, and this test calls the account's GitHub connect alone.
+  const firstPort = connect.portClient(first as ActPortClient);
+  const firstPress = firstPort[ACT_KIND.GITHUB_CONNECT]().catch(() => undefined);
   await connect.portClient(hostPort(connect.open, true))[ACT_KIND.GITHUB_CONNECT]();
   refuseFirst(new Error("GitHub could not be reached."));
   await firstPress;
