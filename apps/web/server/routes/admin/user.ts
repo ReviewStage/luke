@@ -1,12 +1,10 @@
-import { adminApp } from "@luke/service/admin/admin-app";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * One account's own page behind the overview's table. It lives behind the
- * group in `@luke/service/admin/admin-app`; this file only hands it the deployment's
- * real seams. The id arrives from the page's own roster of accounts and lands
- * in one equality against the user table's key — it is never rendered back
- * and never reaches a write.
+ * One account's own page behind the overview's table (GET). The id arrives
+ * from the page's own roster of accounts and lands in one equality against the
+ * user table's key; it is never rendered back and never reaches a write.
+ * Answered by the hosted oRPC router behind the admin gate
+ * (`packages/service/src/admin/admin-procedures.ts`).
  */
-export default routeFromHttpRouter(adminApp(hostedAdminSeams()));
+export default orpcRoute;

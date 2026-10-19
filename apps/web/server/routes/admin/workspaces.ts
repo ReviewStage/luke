@@ -1,12 +1,9 @@
-import { adminApp } from "@luke/service/admin/admin-app";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * The Workspaces tab's read: shared workspaces' headline counts and the
+ * The Workspaces tab's read (GET): shared workspaces' headline counts and the
  * table of workspaces, behind the same gate, scope, and search vocabulary as
- * the roster's read. It lives behind the group in
- * `@luke/service/admin/admin-app`; this file only hands it the deployment's
- * real seams.
+ * the roster's read. Answered by the hosted oRPC router behind the admin gate
+ * (`packages/service/src/admin/admin-procedures.ts`).
  */
-export default routeFromHttpRouter(adminApp(hostedAdminSeams()));
+export default orpcRoute;

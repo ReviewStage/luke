@@ -269,44 +269,47 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
-## The admin group
+## The admin resource
 
-`src/admin/admin-app.ts` is the dashboard's route group: its four reads and the
-Users tab's one star write, each its own function, with the group declaring
-all five addresses from `ADMIN_ROUTE_PATH` in `src/admin/http.ts` — the
-same constants the page composes its calls from, so an address cannot drift
-between the two ends. A path the group declares no route for is the admin
-vocabulary's own `not-found`; nothing routes one there, since each address is
-its own exact-path function, so that refusal is what the group says about
-itself.
+`src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
+oRPC router (`admin` in `src/orpc/router.ts`): its reads and the Users tab's
+one star write, PUT to set it and DELETE to take it back, each a procedure
+of `@luke/features/contract`'s `admin` contract, whose addresses are
+`ADMIN_ROUTE_PATH` in `@luke/features/admin-wire` — the same constants the
+page's browser client asks through, so an address cannot drift between the
+two ends. A method an address does not answer is the handler's 405 before
+anything else runs.
 
-What the group owns is the gate, and only the gate: `src/admin/gate.ts`
-keeps the order the pages depend on — a method the address does not answer is
-a 405 before a session is even looked for, an auth seam that throws is a 503
-rather than a crash, an anonymous request is a 401 the page answers with a
-sign-in, and a signed-in non-admin is a 403 it answers with a plain refusal —
-and takes the resolver rather than reaching for it, because the real one is
-Better Auth and a gate this much depends on has to be exercisable without a
-database. The resolver answers an effect, so the one promise behind it is
+What the resource owns is the gate, and only the gate: `src/admin/gate.ts`
+is the middleware on the resource's implementer, so it runs before oRPC
+reads a procedure's input — an auth seam that throws is a 503 rather than a
+crash, an anonymous request is a 401 the page answers with a sign-in, and a
+signed-in non-admin is a 403 it answers with a plain refusal — and takes the
+resolver rather than reaching for it, because the real one is Better Auth
+and a gate this much depends on has to be exercisable without a database.
+The resolver answers an effect, so the one promise behind it is
 `getSession`'s own, wrapped with `Effect.tryPromise` where
 `src/admin/admin-route.ts` builds the seam and nowhere in the gate; a
-resolution that failed, however it failed, is the same 503. Each read still answers for its own parameters and its own body,
-and the group carries that answer as it came, status, headers, and bytes, the
-way the auth group carries Better Auth's. `src/admin/admin-route.ts` is
-the one place that hands the group this deployment's real session resolver,
+resolution that failed, however it failed, is the same 503. Each read still
+answers for its own parameters with its own refusals (`invalid-window`,
+`missing-user-id`, …, in `src/admin/http-effect.ts`), which the hosted
+handler answers as `{ error: slug }` under their own statuses, and its
+answer is written as the read built it. `src/admin/admin-route.ts` is the
+one place that hands the resource this deployment's real session resolver,
 database, and integration presence booleans. Every query behind it is an
-effect over the ambient `SqlClient`, and so is every seam the group is handed
-(`AdminSeamEffect` in `src/admin/seam.ts`): each read composes its query
-into the answer it is already building, and the edge serving the request is
-the one place the client behind it is provided, so the file names no database
-and runs nothing at all: the roster's scope and
-search conditions are builder predicates and Drizzle `sql` fragments rather
-than concatenated text, and the search term stays a bound parameter with its
-own wildcards escaped.
+effect over the ambient `SqlClient`, and so is every seam the resource is
+handed (`AdminSeamEffect` in `src/admin/seam.ts`): each read composes its
+query into the answer it is already building, and the edge serving the
+request is the one place the client behind it is provided, so the file names
+no database and runs nothing at all: the roster's scope and search
+conditions are builder predicates and Drizzle `sql` fragments rather than
+concatenated text, and the search term stays a bound parameter with its own
+wildcards escaped.
 
-Every admin answer is viewer-gated account data, refusals included, so each
-one carries `no-store`, the five refusals the group answers itself included,
-in the bytes the promise-shaped vocabulary in `src/admin/http.ts` gives.
+Every admin answer is viewer-gated account data, refusals included, so the
+gate marks each one `no-store` through the context's response headers before
+anything else; only the handler's own 405, answered before the gate, carries
+none.
 
 ## The bearer's resolution
 

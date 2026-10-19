@@ -1,11 +1,9 @@
-import { adminApp } from "@luke/service/admin/admin-app";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * The admin Reliability screen's read. The gate and the read live behind the
- * group in `@luke/service/admin/admin-app`; this file only hands it the
- * deployment's real seams. Failures are answered as counts and fixed words,
- * and providers by whether their keys are present, never their values.
+ * The admin Reliability screen's read (GET). Failures are answered as counts
+ * and fixed words, and providers by whether their keys are present, never
+ * their values. Answered by the hosted oRPC router behind the admin gate
+ * (`packages/service/src/admin/admin-procedures.ts`).
  */
-export default routeFromHttpRouter(adminApp(hostedAdminSeams()));
+export default orpcRoute;

@@ -2,6 +2,7 @@
 
 import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
 import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
+import { hostedAdminSeams } from "@luke/service/admin/admin-route";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { auth } from "@luke/service/auth/auth";
@@ -58,6 +59,7 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
 /** The deployment's resolvers, and what the resources ask of the deployment beside them. */
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   ...accountProcedureSeams(),
+  ...hostedAdminSeams(),
   ...integrationsAppSeams(),
   ...workspaceLinearProcedureSeams(),
   resolveUserId: resolveHostedUserId,

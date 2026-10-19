@@ -580,8 +580,7 @@ requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The auth group, the
 events and maintenance groups below, the account group's
 `server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
-the tasks group's four, and the dashboard's five behind the admin group are
-converted this way; the voice route alone exports something else, the
+and the tasks group's four are converted this way; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion

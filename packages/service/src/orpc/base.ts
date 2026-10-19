@@ -27,6 +27,7 @@ import "@orpc/experimental-effect/extensions/effect";
 import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
+import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -36,8 +37,14 @@ import {
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
 
-/** What every hosted procedure is called with: the request, and the web runtime's services. */
-export interface HostedContext extends WithEffectContext<WebServices> {
+/**
+ * What every hosted procedure is called with: the request, the web runtime's
+ * services, and the headers the answer will carry beside its own, which
+ * `ResponseHeadersHandlerPlugin` (`handler.ts`) provides.
+ */
+export interface HostedContext
+  extends WithEffectContext<WebServices>,
+    ResponseHeadersHandlerPluginContext {
   readonly request: Request;
 }
 

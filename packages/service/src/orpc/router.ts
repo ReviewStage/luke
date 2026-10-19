@@ -19,6 +19,7 @@ import {
   type WorkspacesProcedureSeams,
   workspacesProcedures,
 } from "../accounts/workspaces-procedures.js";
+import { type AdminProcedureSeams, adminProcedures } from "../admin/admin-procedures.js";
 import {
   type AgentPullRequestProcedureSeams,
   agentPullRequestProcedures,
@@ -74,6 +75,7 @@ import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
 export type HostedRouterSeams = AccountProcedureSeams &
+  AdminProcedureSeams &
   AgentPullRequestProcedureSeams &
   AgentsProcedureSeams &
   AutomationsProcedureSeams &
@@ -102,6 +104,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
   const published = { ...seams, published: instancePublishedCache() };
   return hosted.router({
     account: accountProcedures(seams),
+    admin: adminProcedures(seams),
     agentPullRequests: agentPullRequestProcedures(published),
     agents: agentsProcedures(published),
     automations: automationsProcedures(seams),

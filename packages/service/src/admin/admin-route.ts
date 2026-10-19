@@ -17,13 +17,13 @@ import { HOSTED_OPENAI_ENVIRONMENT } from "../providers/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
-import type { AdminSeams } from "./admin-app.js";
 import { readAdminCost } from "./admin-cost-queries.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations } from "./admin-health.js";
 import { buildAdminMetrics } from "./admin-metrics.js";
 import { buildAdminOverview } from "./admin-overview.js";
 import { readAdminDashboardSources } from "./admin-overview-queries.js";
+import type { AdminProcedureSeams } from "./admin-procedures.js";
 import {
   readAdminDaySource,
   readAdminUserSource,
@@ -91,7 +91,7 @@ function resolveSessionViewer(
   });
 }
 
-export function hostedAdminSeams(): AdminSeams {
+export function hostedAdminSeams(): AdminProcedureSeams {
   // The sign-in clients are read as the auth service reads them, so the
   // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);

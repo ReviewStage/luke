@@ -1,8 +1,10 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminUserList, AdminUserListRow } from "@luke/service/admin/admin-users";
 import {
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   type AdminMetricsWindow,
+  type AdminUsersQuery,
 } from "@luke/service/admin/http";
 import {
   COLLECTION_STATE,
@@ -25,17 +27,16 @@ import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls
 import { RosterNote } from "../chrome/notes";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
 import {
-  FAVORITE_PATH,
   SEARCH_DEBOUNCE_MS,
   searchFromLocation,
   searchHref,
   searchTerm,
-  USERS_PATH,
-  windowedReadPath,
+  usersReadQuery,
 } from "../routing";
 import {
   type AdminReader,
   type AdminWriter,
+  adminQuestion,
   adminReadFailure,
   useAdminRead,
   useAdminWrite,
@@ -46,21 +47,21 @@ const USERS_ERROR = "The users endpoint did not answer.";
 /** What the roster says when no account answers the search. */
 const USERS_EMPTY = "No account matches.";
 
-// SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
-const readUserList: AdminReader<AdminUserList> = async (response) =>
-  (await response.json()) as AdminUserList;
+/** The roster, as the admin users procedure answers it. */
+const readUserList =
+  (query: AdminUsersQuery): AdminReader<AdminUserList> =>
+  async (signal) =>
+    // SAFETY: the admin users procedure answers an AdminUserList (`@luke/service/admin/admin-users`), which the contract cannot name.
+    (await browserClient.admin.users(query, { signal })) as AdminUserList;
 
-/** One favorite intent as the endpoint's PUT or DELETE; a response that is not ok did not land. */
+/** One favorite intent as the star's PUT or DELETE; a refusal did not land. */
 const writeFavorite: AdminWriter = async (id, favorite, signal) => {
-  const response = await fetch(
-    `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
-    {
-      method: favorite ? "PUT" : "DELETE",
-      headers: { accept: "application/json" },
-      signal,
-    },
+  const input = { query: { [ADMIN_USER_ID_PARAM]: id } };
+  const write = favorite ? browserClient.admin.favorite : browserClient.admin.unfavorite;
+  return write(input, { signal }).then(
+    () => true,
+    () => false,
   );
-  return response.ok;
 };
 
 /**
@@ -123,9 +124,10 @@ export function UsersScreen({
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  const asked = usersReadQuery(hideAdmins, windowDays, searchTerm(query));
   const { state, refreshing, reload, withdraw, revise } = useAdminRead(
-    windowedReadPath(USERS_PATH, hideAdmins, windowDays, searchTerm(query)),
-    readUserList,
+    adminQuestion("users", asked),
+    readUserList(asked),
     USERS_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },
   );

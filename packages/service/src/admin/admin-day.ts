@@ -1,14 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect } from "effect";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
+  type AdminDayQuery,
   type AdminMetricsScope,
   adminDayKey,
   adminMetricsScope,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -81,7 +79,7 @@ export function buildAdminDayDetail(
 }
 
 export interface AdminDayOptions {
-  request: Request;
+  query: AdminDayQuery;
   readDay: (day: string, now: number, scope: AdminMetricsScope) => AdminSeamEffect<AdminDayDetail>;
 }
 
@@ -94,18 +92,15 @@ export interface AdminDayOptions {
  */
 export function handleAdminDay(
   options: AdminDayOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminDayDetail, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const day = adminDayKey(request.url);
-  if (day === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_DAY));
-  }
+  const day = adminDayKey(query.date);
+  if (day === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_DAY);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readDay(day, now, adminMetricsScope(request.url)).pipe(
-      Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
-      Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause)),
-    ),
+    options
+      .readDay(day, now, adminMetricsScope(query.scope))
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause))),
   );
 }

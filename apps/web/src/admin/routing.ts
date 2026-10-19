@@ -6,31 +6,19 @@ import {
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
   ADMIN_RELIABILITY_WINDOWS,
-  ADMIN_ROUTE_PATH,
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_USERS_SEARCH_PARAM,
   ADMIN_WORKSPACES_KIND,
   ADMIN_WORKSPACES_KIND_PARAM,
+  type AdminDayQuery,
   type AdminMetricsWindow,
+  type AdminUserQuery,
+  type AdminUsersQuery,
+  type AdminWindowedQuery,
+  type AdminWorkspacesQuery,
   isUtcDayKey,
 } from "@luke/service/admin/http";
-
-export const METRICS_PATH = ADMIN_ROUTE_PATH.METRICS;
-
-export const COST_PATH = ADMIN_ROUTE_PATH.COST;
-
-const USER_DETAIL_PATH = ADMIN_ROUTE_PATH.USER;
-
-export const USERS_PATH = ADMIN_ROUTE_PATH.USERS;
-
-export const FAVORITE_PATH = ADMIN_ROUTE_PATH.FAVORITE;
-
-const WORKSPACES_PATH = ADMIN_ROUTE_PATH.WORKSPACES;
-
-const DAY_DETAIL_PATH = ADMIN_ROUTE_PATH.DAY;
-
-export const RELIABILITY_PATH = ADMIN_ROUTE_PATH.RELIABILITY;
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted
@@ -202,55 +190,62 @@ export function plainLeftClick(event: React.MouseEvent): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** A windowed read's address: the default scope, window, and no search ride as no params. */
-export function windowedReadPath(
-  base: string,
+/** A windowed read's query: the default scope and window ride as no params. */
+export function windowedReadQuery(
   hideAdmins: boolean,
   windowDays: AdminMetricsWindow,
-  search?: string,
-): string {
-  const params = new URLSearchParams();
-  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
-  if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
-    params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
-  }
-  if (search !== undefined) params.set(ADMIN_USERS_SEARCH_PARAM, search);
-  const query = params.toString();
-  return query ? `${base}?${query}` : base;
+): AdminWindowedQuery {
+  return {
+    ...(hideAdmins ? undefined : { [ADMIN_METRICS_SCOPE_PARAM]: ADMIN_METRICS_SCOPE.ALL }),
+    ...(windowDays === ADMIN_METRICS_WINDOW_DEFAULT
+      ? undefined
+      : { [ADMIN_METRICS_WINDOW_PARAM]: String(windowDays) }),
+  };
 }
 
-/** One account's read address, with the default window riding as no param. */
-export function accountReadPath(id: string, windowDays: AdminMetricsWindow): string {
-  const params = new URLSearchParams();
-  params.set(ADMIN_USER_ID_PARAM, id);
-  if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
-    params.set(ADMIN_METRICS_WINDOW_PARAM, String(windowDays));
-  }
-  return `${USER_DETAIL_PATH}?${params.toString()}`;
+/** The roster read's query: a windowed read's, and the search where one rides. */
+export function usersReadQuery(
+  hideAdmins: boolean,
+  windowDays: AdminMetricsWindow,
+  search: string | undefined,
+): AdminUsersQuery {
+  return {
+    ...windowedReadQuery(hideAdmins, windowDays),
+    ...(search === undefined ? undefined : { [ADMIN_USERS_SEARCH_PARAM]: search }),
+  };
 }
 
-/** The day read's address: one day, with the default scope riding as no param. */
-export function dayReadPath(day: string, hideAdmins: boolean): string {
-  const params = new URLSearchParams();
-  params.set(ADMIN_DAY_PARAM, day);
-  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
-  return `${DAY_DETAIL_PATH}?${params.toString()}`;
+/** One account's read query, with the default window riding as no param. */
+export function accountReadQuery(id: string, windowDays: AdminMetricsWindow): AdminUserQuery {
+  return {
+    [ADMIN_USER_ID_PARAM]: id,
+    ...(windowDays === ADMIN_METRICS_WINDOW_DEFAULT
+      ? undefined
+      : { [ADMIN_METRICS_WINDOW_PARAM]: String(windowDays) }),
+  };
+}
+
+/** The day read's query: one day, with the default scope riding as no param. */
+export function dayReadQuery(day: string, hideAdmins: boolean): AdminDayQuery {
+  return {
+    [ADMIN_DAY_PARAM]: day,
+    ...(hideAdmins ? undefined : { [ADMIN_METRICS_SCOPE_PARAM]: ADMIN_METRICS_SCOPE.ALL }),
+  };
 }
 
 /**
- * The Workspaces read's address: the default scope, the shared-only list,
- * and no search ride as no params. It reads no window, because its activity
+ * The Workspaces read's query: the default scope, the shared-only list, and
+ * no search ride as no params. It reads no window, because its activity
  * counts are always the trailing week.
  */
-export function workspacesReadPath(
+export function workspacesReadQuery(
   hideAdmins: boolean,
   sharedOnly: boolean,
   search: string | undefined,
-): string {
-  const params = new URLSearchParams();
-  if (!hideAdmins) params.set(ADMIN_METRICS_SCOPE_PARAM, ADMIN_METRICS_SCOPE.ALL);
-  if (!sharedOnly) params.set(ADMIN_WORKSPACES_KIND_PARAM, ADMIN_WORKSPACES_KIND.ALL);
-  if (search !== undefined) params.set(ADMIN_USERS_SEARCH_PARAM, search);
-  const query = params.toString();
-  return query ? `${WORKSPACES_PATH}?${query}` : WORKSPACES_PATH;
+): AdminWorkspacesQuery {
+  return {
+    ...(hideAdmins ? undefined : { [ADMIN_METRICS_SCOPE_PARAM]: ADMIN_METRICS_SCOPE.ALL }),
+    ...(sharedOnly ? undefined : { [ADMIN_WORKSPACES_KIND_PARAM]: ADMIN_WORKSPACES_KIND.ALL }),
+    ...(search === undefined ? undefined : { [ADMIN_USERS_SEARCH_PARAM]: search }),
+  };
 }

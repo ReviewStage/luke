@@ -6,6 +6,7 @@
  */
 
 import { accountContract } from "./account.js";
+import { adminContract } from "./admin.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
@@ -36,6 +37,7 @@ export { TASK_START_STATUS } from "./tasks.js";
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   account: accountContract,
+  admin: adminContract,
   agentPullRequests: agentPullRequestsContract,
   agents: agentsContract,
   automations: automationsContract,

@@ -1,4 +1,5 @@
-import { ADMIN_HTTP_STATUS } from "@luke/service/admin/http";
+import { BrowserRedirected, browserRefusal } from "@luke/features/contract/browser-client";
+import { ADMIN_HTTP_STATUS, type AdminQuery } from "@luke/service/admin/http";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SIGN_IN_CHOSEN } from "./prefs";
 
@@ -16,15 +17,28 @@ export type AdminRead<T> =
   | { status: "error"; detail: string }
   | { status: "ready"; value: T; question: string; refreshFailure: string | undefined };
 
-/** Reads a 200's body. Every other status is the hook's, so this never branches. */
-export type AdminReader<T> = (response: Response) => Promise<T>;
+/**
+ * Asks the read's procedure on the browser client, under the signal the hook
+ * aborts it with. A refusal is the hook's, so this never branches.
+ */
+export type AdminReader<T> = (signal: AbortSignal) => Promise<T>;
+
+/**
+ * The question a read asks, the procedure and its query: what the hook reads
+ * again when it changes, and what tells a refresh of the shown answer from a
+ * read of another one.
+ */
+export function adminQuestion(procedure: string, query: AdminQuery): string {
+  const search = new URLSearchParams(Object.entries(query)).toString();
+  return search ? `${procedure}?${search}` : procedure;
+}
 
 interface AdminReadOptions<T> {
   /** False parks the read: no fetch, no abort, the state stands. Default true. */
   enabled?: boolean;
   /**
-   * Delays a path changed after the first read by this many milliseconds. The
-   * first read and every `reload()` are immediate; a path that changes again
+   * Delays a question changed after the first read by this many milliseconds. The
+   * first read and every `reload()` are immediate; a question that changes again
    * inside the window replaces the pending one.
    */
   debounceMs?: number;
@@ -63,32 +77,39 @@ const ADMIN_READ_ERROR = {
 } as const;
 
 /**
- * One settled response as a state, the hook's whole non-React half, so the
- * state machine is testable without a DOM.
+ * Why a read failed, as a state: the gate's refusals by their status, and
+ * anything that reached no status, a dropped network or an answer that did
+ * not read, as the endpoint's own failure.
  */
-async function adminReadFromResponse<T>(
-  response: Response,
+function adminReadRefused(cause: unknown, errorDetail: string): AdminRead<never> {
+  // A followed redirect means something sat in front of the API — a
+  // preview's deployment protection is the usual culprit — so the body is a
+  // login page, not JSON.
+  if (cause instanceof BrowserRedirected) {
+    return { status: "error", detail: ADMIN_READ_ERROR.PROTECTED };
+  }
+  const refusal = browserRefusal(cause);
+  if (refusal?.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
+  if (refusal?.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
+  if (refusal?.status === ADMIN_HTTP_STATUS.NOT_FOUND) return { status: "missing" };
+  if (refusal?.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
+    return { status: "error", detail: ADMIN_READ_ERROR.UNAVAILABLE };
+  }
+  return { status: "error", detail: errorDetail };
+}
+
+/** One read settled as a state, the hook's whole non-React half. */
+async function adminReadSettled<T>(
   reader: AdminReader<T>,
+  signal: AbortSignal,
   question: string,
   errorDetail: string,
 ): Promise<AdminRead<T>> {
-  // A followed cross-origin redirect means something sat in front of the API —
-  // a preview's deployment protection is the usual culprit — so the body is a
-  // login page, not JSON.
-  if (response.redirected) return { status: "error", detail: ADMIN_READ_ERROR.PROTECTED };
-  if (response.status === ADMIN_HTTP_STATUS.UNAUTHORIZED) return { status: "signed-out" };
-  if (response.status === ADMIN_HTTP_STATUS.FORBIDDEN) return { status: "forbidden" };
-  if (response.status === ADMIN_HTTP_STATUS.NOT_FOUND) return { status: "missing" };
-  if (response.status === ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE) {
-    return { status: "error", detail: ADMIN_READ_ERROR.UNAVAILABLE };
+  try {
+    return { status: "ready", value: await reader(signal), question, refreshFailure: undefined };
+  } catch (cause) {
+    return adminReadRefused(cause, errorDetail);
   }
-  if (!response.ok) return { status: "error", detail: errorDetail };
-  return {
-    status: "ready",
-    value: await reader(response),
-    question,
-    refreshFailure: undefined,
-  };
 }
 
 /**
@@ -150,13 +171,13 @@ function isFailedRead<State extends { status: string }>(state: State): state is 
 /**
  * The one read every admin screen makes: one request at a time, the gate's
  * refusals kept distinct, and the last answer held up while the next is in
- * flight. A screen names its address, how to read a 200, and what to say when
+ * flight. A screen names its question, how to ask it, and what to say when
  * the endpoint refuses for no reason of the gate's; everything else — the
  * local sign-in consent, the abort discipline, the refreshing flag, the
  * sign-out withdrawal — is the same on every screen and lives here.
  */
 export function useAdminRead<T>(
-  path: string,
+  question: string,
   reader: AdminReader<T>,
   errorDetail: string,
   options: AdminReadOptions<T> = {},
@@ -172,7 +193,7 @@ export function useAdminRead<T>(
 
   // The reader, the detail, and the identity check are read at the moment a
   // read starts rather than closed over, so a screen may write them inline
-  // without every render restarting its own fetch: the address alone decides
+  // without every render restarting its own fetch: the question alone decides
   // when to read.
   const latest = useRef({ reader, errorDetail, keeps });
   useEffect(() => {
@@ -206,22 +227,13 @@ export function useAdminRead<T>(
     setRefreshing(true);
     void (async () => {
       try {
-        const next = await adminReadFromResponse(
-          await fetch(path, { headers: { accept: "application/json" }, signal: controller.signal }),
-          read,
-          path,
-          detail,
-        );
-        if (!controller.signal.aborted) setState((current) => settleRead(current, next, path));
-      } catch {
-        if (!controller.signal.aborted) {
-          setState((current) => settleRead(current, { status: "error", detail }, path));
-        }
+        const next = await adminReadSettled(read, controller.signal, question, detail);
+        if (!controller.signal.aborted) setState((current) => settleRead(current, next, question));
       } finally {
         if (!controller.signal.aborted) setRefreshing(false);
       }
     })();
-  }, [path]);
+  }, [question]);
 
   // The first read is immediate whatever the debounce says: the window exists
   // so a typed word coalesces into one read, not so the page opens late.

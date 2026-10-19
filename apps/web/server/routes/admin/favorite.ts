@@ -1,10 +1,8 @@
-import { adminApp } from "@luke/service/admin/admin-app";
-import { hostedAdminSeams } from "@luke/service/admin/admin-route";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
 /**
- * The Users tab's star write: PUT favorites the named account for the
- * signed-in admin, DELETE takes the star back. It lives behind the group in
- * `@luke/service/admin/admin-app`; this file only hands it the deployment's real seams.
+ * The Users tab's star write: PUT favorites the named account for the signed-
+ * in admin, DELETE takes the star back. Answered by the hosted oRPC router
+ * behind the admin gate (`packages/service/src/admin/admin-procedures.ts`).
  */
-export default routeFromHttpRouter(adminApp(hostedAdminSeams()));
+export default orpcRoute;

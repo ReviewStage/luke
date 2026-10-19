@@ -1,5 +1,6 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
-import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import type { AdminMetricsWindow, AdminUserQuery } from "@luke/service/admin/http";
 import {
   AVATAR_SIZE,
   BADGE_TONE,
@@ -22,16 +23,19 @@ import { Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AccountActivityNote } from "../chrome/notes";
 import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { accountReadPath } from "../routing";
+import { accountReadQuery } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, useAdminRead } from "../use-admin-read";
+import { type AdminReader, adminQuestion, useAdminRead } from "../use-admin-read";
 import { AccountSupportSections, formatInstant } from "./account-support";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";
 
-// SAFETY: a 200 from the admin user endpoint is an AdminUserDetail body by its contract.
-const readUserDetail: AdminReader<AdminUserDetail> = async (response) =>
-  (await response.json()) as AdminUserDetail;
+/** One account's detail, as the admin user procedure answers it. */
+const readUserDetail =
+  (query: AdminUserQuery): AdminReader<AdminUserDetail> =>
+  async (signal) =>
+    // SAFETY: the admin user procedure answers an AdminUserDetail (`@luke/service/admin/admin-user`), which the contract cannot name.
+    (await browserClient.admin.user(query, { signal })) as AdminUserDetail;
 
 /** One account's own sections. */
 const ACCOUNT_SHAPES: readonly SkeletonShape[] = [
@@ -72,9 +76,10 @@ export function AccountScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
+  const query = accountReadQuery(id, windowDays);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    accountReadPath(id, windowDays),
-    readUserDetail,
+    adminQuestion("user", query),
+    readUserDetail(query),
     ACCOUNT_ERROR,
     { keeps: (shown) => shown.account.id === id },
   );
