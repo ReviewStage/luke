@@ -16,6 +16,8 @@ import {
   useInboxTaskFolds,
   useInboxViewChoices,
 } from "@luke/panel/desktop/folded-groups";
+import { type TabViews, useTabViews } from "@luke/panel/desktop/strip-tabs";
+import { taskCardOf } from "@luke/panel/desktop/task-card";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
@@ -42,7 +44,14 @@ import {
   tasklessGroups,
 } from "@luke/panel/tasks/inbox-model";
 import { inboxNext, useInboxPager } from "@luke/panel/tasks/inbox-pager";
+import { InboxPane, type InboxPaneDoors } from "@luke/panel/tasks/inbox-pane";
 import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
+import { SkillFiles } from "@luke/panel/tasks/skill-chip";
+import {
+  type TasklessPlace,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "@luke/panel/tasks/task-mentions";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "@luke/panel/tasks/use-coding-agents";
@@ -52,6 +61,11 @@ import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { useTaskInbox } from "@luke/panel/tasks/use-task-inbox";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
+import {
+  AUTOMATIONS_PAGE,
+  type InboxChoice,
+  type TasksControl,
+} from "@luke/panel/tasks/use-tasks-tab";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
@@ -62,14 +76,6 @@ import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
-import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
-import { SkillFiles } from "../tasks/skill-chip";
-import {
-  type TasklessPlace,
-  tasklessMentions,
-  useMentionAgentsReader,
-} from "../tasks/task-mentions";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -80,8 +86,6 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel";
-import { type TabViews, useTabViews } from "./strip-tabs";
-import { taskCardOf } from "./task-card";
 
 /**
  * desktop-inbox.tsx -- the window's Inbox: every item of every task of the listed workspace holding one in a list of its own, and the chosen item read beside it.

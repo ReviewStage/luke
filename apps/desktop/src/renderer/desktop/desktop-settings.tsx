@@ -10,13 +10,21 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-it
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import type { NavigationHistory } from "@luke/panel/navigation-history";
 import { AttentionMark } from "@luke/panel/settings/marks";
 import {
   settingsGroupHeadingOf,
   settingsPageOf,
   shownSettingsPageGroups,
 } from "@luke/panel/settings/pages";
+import { PlanTemplatePage } from "@luke/panel/settings/plan-template-page";
 import { pageResetControl } from "@luke/panel/settings/reset";
+import {
+  SettingsPanel,
+  type SettingsPanelProps,
+  settingsRowsInput,
+  voicePageAttention,
+} from "@luke/panel/settings/settings-panel";
 import { shownWorkspace } from "@luke/panel/settings/workspace-page";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
 import {
@@ -49,15 +57,7 @@ import {
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import type { NavigationHistory } from "../navigation-history";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
-import { PlanTemplatePage } from "../settings/plan-template-page";
-import {
-  SettingsPanel,
-  type SettingsPanelProps,
-  settingsRowsInput,
-  voicePageAttention,
-} from "../settings/settings-panel";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 
 /** What a page's row's right-click menu is called. */

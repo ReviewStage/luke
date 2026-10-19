@@ -10,6 +10,8 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
+import { CodeCardHeader } from "@luke/panel/tasks/code-pane";
 import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
@@ -38,8 +40,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { taskCards } from "../desktop/side-panel";
-import { NOTHING_HELD } from "./agent-ref";
-import { CodeCardHeader } from "./code-pane";
 import { TaskCall } from "./task-call";
 
 /** The Call tab as a test draws it: what it is given over a task with no brain turn, which reads no older page and opens nothing. */

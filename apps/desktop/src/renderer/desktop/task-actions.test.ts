@@ -4,10 +4,13 @@ import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { SidebarTask } from "@luke/panel/desktop/task-actions";
+import { taskCardOf } from "@luke/panel/desktop/task-card";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { OpenPersonProvider } from "@luke/panel/person-door";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -20,10 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopTasks } from "./desktop-tasks";
-import { SidebarTask } from "./task-actions";
-import { taskCardOf } from "./task-card";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",

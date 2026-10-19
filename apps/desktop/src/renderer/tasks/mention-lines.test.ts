@@ -5,6 +5,9 @@ import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
+import { FileTab } from "@luke/panel/tasks/file-tab";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
 import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
@@ -20,9 +23,6 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { AgentComposer } from "./agent-composer";
-import { FileTab } from "./file-tab";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * A File tab's lines mentioned in the agent's message box on the same task's

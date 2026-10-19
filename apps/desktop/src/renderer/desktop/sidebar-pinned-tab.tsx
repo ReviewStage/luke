@@ -1,11 +1,14 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { type TranscriptCopier, useTranscriptCopier } from "@luke/panel/desktop/strip-tabs";
+import { PullRequestLine, RepositoryDetail } from "@luke/panel/desktop/task-card";
 import { TAB_KIND, type TabSubject, tabLook } from "@luke/panel/tasks/tab-look";
 import { TRANSCRIPT_COPY } from "@luke/panel/tasks/transcript-copy";
 import type { PullRequestReader } from "@luke/panel/tasks/use-agent-pull-request";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import type { PinnedTab } from "@luke/panel/tasks/use-side-panel";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_SIZE,
@@ -31,10 +34,7 @@ import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TasksControl } from "../tasks/use-tasks-tab";
 import { agentTranscriptRead } from "./main-tabs";
-import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
-import { PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.

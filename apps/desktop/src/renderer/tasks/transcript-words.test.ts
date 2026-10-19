@@ -5,13 +5,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * transcript-words.test.ts -- a transcript's markdown is drawn to the byte

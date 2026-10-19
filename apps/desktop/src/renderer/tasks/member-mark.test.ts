@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import { MEMBER_KIND, type MemberKind } from "@luke/features/chat-wire";
+import { MemberMark } from "@luke/panel/tasks/chat-pane";
 import type { ChatWho } from "@luke/ui/chat-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { MemberMark } from "./chat-pane";
 
 /**
  * member-mark.test.ts -- the mark a member's lines lead with: a person by

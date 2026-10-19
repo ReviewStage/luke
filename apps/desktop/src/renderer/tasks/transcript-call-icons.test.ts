@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { TOOL_BLOCK, TOOL_STATE } from "@luke/panel/ai-elements/tool";
+import { TranscriptOpeningCall, TranscriptTool } from "@luke/panel/tasks/transcript-blocks";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { TranscriptOpeningCall, TranscriptTool } from "./transcript-blocks";
 
 /**
  * transcript-call-icons.test.ts -- a read of a coding agent wears the

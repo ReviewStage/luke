@@ -46,6 +46,7 @@ import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-s
 import { appBridge } from "@luke/panel/app-bridge";
 import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
 import { DRAFT_WORD } from "@luke/panel/draft-mark";
+import { AUTOMATIONS_PAGE, type InboxChoice } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import {
@@ -74,7 +75,6 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

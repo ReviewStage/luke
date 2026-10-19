@@ -1,14 +1,20 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { agentPlace, useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { ArchivedAgents, useAgentArchive } from "@luke/panel/desktop/agent-archive";
+import type { AddEntry, HeldTranscripts } from "@luke/panel/desktop/strip-tabs";
+import { ChangesCard, peopleOf } from "@luke/panel/tasks/agent-changes-tab";
+import { agentCardReading, agentSubject } from "@luke/panel/tasks/agent-ref";
 import { AgentTabCard } from "@luke/panel/tasks/agent-tab-card";
 import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
 import { FileCard, newestFileNote } from "@luke/panel/tasks/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "@luke/panel/tasks/inbox-model";
+import { PageCard } from "@luke/panel/tasks/page-card";
 import { TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import {
@@ -30,11 +36,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
-import { agentCardReading, agentSubject } from "../tasks/agent-ref";
-import { PageCard } from "../tasks/page-card";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
   ADD_SECTION,
@@ -44,7 +45,6 @@ import {
   taskWorkers,
   workerCardReading,
 } from "./side-panel";
-import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 
 /**
  * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.

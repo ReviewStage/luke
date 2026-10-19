@@ -19,7 +19,14 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { openPullRequest } from "@luke/panel/desktop/desktop-factory";
 import { readKept, writeKept } from "@luke/panel/desktop/folded-groups";
+import {
+  IssueCrumbs,
+  IssueDetail,
+  IssueDetailSkeleton,
+  IssueDocumentPage,
+} from "@luke/panel/desktop/issue-detail";
 import { type IssueFilterControl, useIssueFilter } from "@luke/panel/desktop/issue-filter-view";
 import { PRIORITY_ORDER, PriorityGlyph } from "@luke/panel/desktop/issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "@luke/panel/desktop/issue-work";
@@ -31,6 +38,7 @@ import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { ISSUES_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
@@ -64,10 +72,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { openPullRequest } from "./desktop-factory";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
-import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
 import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits } from "./issue-peek";
 

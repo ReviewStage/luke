@@ -3,12 +3,12 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
-import { TranscriptWords } from "./tasks/transcript-blocks";
 
 /**
  * markdown-html-parser.test.ts -- a reply drawn before the HTML parser has

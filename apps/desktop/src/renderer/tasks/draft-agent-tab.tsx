@@ -1,17 +1,17 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { ConversationEmptyState } from "@luke/panel/ai-elements/conversation";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
+import type { TranscriptCards } from "@luke/panel/tasks/agent-tab";
 import { ArchivedComposerNote } from "@luke/panel/tasks/archived-task";
 import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { ForkChip } from "@luke/panel/tasks/fork-action";
 import { forkChoice, startingWords } from "@luke/panel/tasks/fork-model";
 import type { AgentComposerControl } from "@luke/panel/tasks/use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { useWorkingNow, WorkingLine } from "@luke/panel/tasks/working-time";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
-import { AgentComposer } from "./agent-composer";
-import type { TranscriptCards } from "./agent-tab";
-import { ForkChip } from "./fork-action";
 
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.

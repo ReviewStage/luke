@@ -5,12 +5,12 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { PagePane, type ReadPageSource } from "@luke/panel/tasks/page-pane";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { PagePane, type ReadPageSource } from "./page-pane";
 
 /**
  * A page's tab as the developer meets it: the page drawn in a frame that

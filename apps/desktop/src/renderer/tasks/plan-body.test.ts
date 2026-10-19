@@ -14,6 +14,8 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import type { EditAgents } from "@luke/panel/tasks/edit-ref";
+import { PlanBody } from "@luke/panel/tasks/plan-body";
 import type { TaskLooks } from "@luke/panel/tasks/use-task-looks";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -26,8 +28,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { EditAgents } from "./edit-ref";
-import { PlanBody } from "./plan-body";
 
 /**
  * plan-body.test.ts -- the open task's document says who created it and who last wrote it,

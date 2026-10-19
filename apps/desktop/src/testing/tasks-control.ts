@@ -10,6 +10,12 @@ import {
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
 } from "@luke/panel/tasks/use-side-panel";
+import {
+  AUTOMATIONS_PAGE,
+  ISSUES_PAGE,
+  type TasksControl,
+  type VersionHistoryControl,
+} from "@luke/panel/tasks/use-tasks-tab";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
@@ -17,12 +23,6 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/task-summary";
-import {
-  AUTOMATIONS_PAGE,
-  ISSUES_PAGE,
-  type TasksControl,
-  type VersionHistoryControl,
-} from "../renderer/tasks/use-tasks-tab";
 
 const ignore = () => undefined;
 

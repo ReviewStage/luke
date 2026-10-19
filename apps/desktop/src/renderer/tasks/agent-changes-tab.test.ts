@@ -26,6 +26,7 @@ import { useAppCommand, useAppKeymap } from "@luke/panel/app-commands";
 import type { SideBundles } from "@luke/panel/bundle-loader";
 import type { DiffListProps, DiffViewModule } from "@luke/panel/diff-view/contract";
 import type { FileTreeModule } from "@luke/panel/file-tree/contract";
+import type { ChangesThreads } from "@luke/panel/tasks/agent-changes-tab";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { handSettings } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -39,7 +40,6 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { ChangesThreads } from "./agent-changes-tab";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -233,7 +233,7 @@ let registry = AtomRegistry.make();
 async function redraw(
   options: { threads?: ChangesThreads; treeOpen?: boolean; beside?: ReactElement } = {},
 ): Promise<DiffListProps> {
-  const { AgentChangesTab } = await import("./agent-changes-tab");
+  const { AgentChangesTab } = await import("@luke/panel/tasks/agent-changes-tab");
   const tab = createElement(AgentChangesTab, {
     agentId: AGENT.id,
     control,

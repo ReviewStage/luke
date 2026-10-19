@@ -6,6 +6,7 @@ import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
 import { useSidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import type { SettingsPanelProps } from "@luke/panel/settings/settings-panel";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -21,7 +22,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
 
 const ignore = () => undefined;

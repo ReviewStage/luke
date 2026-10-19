@@ -15,11 +15,11 @@ import type {
   PlanEditorHandle,
 } from "@luke/panel/plan-editor/contract";
 import { mountPlanEditor } from "@luke/panel/plan-editor/plan-editor";
+import { retargetedMention } from "@luke/panel/tasks/mention-chip";
 import { installEditorLayout } from "@luke/panel/testing/composer";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
-import { retargetedMention } from "../tasks/mention-chip";
 
 /**
  * The plan editor's mentions over the real editor: a mention in the text

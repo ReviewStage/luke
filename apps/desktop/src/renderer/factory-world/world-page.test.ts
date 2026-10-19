@@ -18,7 +18,9 @@ import type {
 } from "@luke/panel/factory-world/contract";
 import type { WorldEntry } from "@luke/panel/factory-world/registry";
 import { PICK_KIND, type WorldModule, type WorldState } from "@luke/panel/factory-world/world";
+import { FactoryWorldPage } from "@luke/panel/factory-world/world-page";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { bundleLanded, landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
@@ -45,8 +47,6 @@ import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { FactoryWorldPage } from "./world-page";
 
 /**
  * world-page.test.ts -- a Factory world as the page draws it over a stand-in scene: the snapshot read for the listed workspace and read again while it stands, its loading, empty, and failed states, and the chrome every world shares, the pipeline bar's layers, the hover label, the card and its doors, and Esc stepping back to the overview before it leaves.

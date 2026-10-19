@@ -6,15 +6,15 @@ import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import type { CallCardInput } from "@luke/panel/call/call-card";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { MOUSE_BUTTON, type NavigationHistory } from "@luke/panel/navigation-history";
+import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "@luke/panel/settings/plan-template-page";
 import { revisionSummary } from "@luke/panel/tasks/plan-history-model";
 import { type PlanHistorySource, usePlanHistory } from "@luke/panel/tasks/use-plan-history";
+import { sayRestored } from "@luke/panel/tasks/version-view";
 import { useToast } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useEffect, useMemo, useRef } from "react";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
-import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
-import { sayRestored } from "../tasks/version-view";
-import { TEMPLATE_DOCUMENT_ID, TEMPLATE_TITLE } from "./plan-template-page";
 
 /**
  * plan-template-history.tsx -- the plan template's version history: the plan's own view over the account's template revisions.

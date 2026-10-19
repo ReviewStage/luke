@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { SidebarTask } from "@luke/panel/desktop/task-actions";
+import { PlanBody } from "@luke/panel/tasks/plan-body";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -11,8 +13,6 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { SidebarTask } from "../desktop/task-actions";
-import { PlanBody } from "./plan-body";
 
 /**
  * relative-time.test.ts -- a save's age reads the same on the task's own

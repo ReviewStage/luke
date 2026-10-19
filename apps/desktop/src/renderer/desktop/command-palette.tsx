@@ -54,7 +54,9 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "@luke/panel/app-commands";
+import { taskOf } from "@luke/panel/desktop/task-actions";
 import { WorkspaceRef } from "@luke/panel/desktop/workspace-ref";
+import { type CopyLink, inSidePanel, type LinkAtHand } from "@luke/panel/links-at-hand";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { Highlighted } from "@luke/panel/search-field";
 import { settingsPageOf, settingsPageShown } from "@luke/panel/settings/pages";
@@ -65,6 +67,7 @@ import {
   settingsSearchEntries,
 } from "@luke/panel/settings-search";
 import { Shortcut } from "@luke/panel/shortcut";
+import { AgentCard, agentSubject, NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "@luke/panel/tasks/file-ref";
@@ -73,6 +76,7 @@ import { agentEndMark, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "@luke/panel/tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
@@ -117,12 +121,8 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
-import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
-import type { TasksControl } from "../tasks/use-tasks-tab";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
-import { taskOf } from "./task-actions";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {

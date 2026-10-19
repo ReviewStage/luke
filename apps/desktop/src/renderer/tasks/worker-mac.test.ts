@@ -6,13 +6,13 @@ import {
   type CodingAgentMessagesAnswerView,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AgentSubagentTab } from "@luke/panel/tasks/agent-tab";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { AgentSubagentTab } from "./agent-tab";
 
 /**
  * worker-mac.test.ts -- a worker runs as its agent does, so a command a

@@ -19,6 +19,19 @@ import { appPlatform } from "@luke/panel/app-platform";
 import { CallTabVideo } from "@luke/panel/call/panel-avatar";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import {
+  type AddEntry,
+  AddTabButton,
+  DoorsTab,
+  type HeldTranscripts,
+  type TabDoors,
+  type TabLook,
+  type TabPin,
+  type TabViews,
+  type TranscriptCopier,
+  useTranscriptCopier,
+  type WorkerStandings,
+} from "@luke/panel/desktop/strip-tabs";
 import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import {
   EDGE_SIDE,
@@ -27,6 +40,7 @@ import {
 } from "@luke/panel/desktop/use-resizable-edge";
 import { FindScope } from "@luke/panel/find-in-tab";
 import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { panelTabPlace } from "@luke/panel/links-at-hand";
 import { type MenuRow, MenuRowList } from "@luke/panel/searchable-menu";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import {
@@ -35,6 +49,14 @@ import {
   glyphStateWords,
   stateEndMark,
 } from "@luke/panel/state-glyph";
+import { ChangesCard, peopleOf } from "@luke/panel/tasks/agent-changes-tab";
+import { AgentPullRequestTab } from "@luke/panel/tasks/agent-pull-request-tab";
+import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
+import {
+  AgentSubagentTab,
+  type BriefTask,
+  type TranscriptCards,
+} from "@luke/panel/tasks/agent-tab";
 import {
   AgentTabCard,
   type CardReading,
@@ -44,6 +66,7 @@ import {
   lastFinished,
 } from "@luke/panel/tasks/agent-tab-card";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "@luke/panel/tasks/browser-pane";
+import { CodePane, centreWithin } from "@luke/panel/tasks/code-pane";
 import {
   agentGlyphState,
   agentStateWords,
@@ -51,9 +74,16 @@ import {
 } from "@luke/panel/tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "@luke/panel/tasks/file-ref";
 import { snippetOf } from "@luke/panel/tasks/file-tab-model";
+import { FileView } from "@luke/panel/tasks/file-view";
 import { MacTerminalTab } from "@luke/panel/tasks/mac-terminal-tab";
+import { PageCard } from "@luke/panel/tasks/page-card";
+import { PagePane } from "@luke/panel/tasks/page-pane";
+import { PlanCommentsTab } from "@luke/panel/tasks/plan-comments";
 import { type KindLook, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import { TaskBoard } from "@luke/panel/tasks/task-board";
+import { useOpenTerminal } from "@luke/panel/tasks/terminal-commands";
+import { TerminalCardFoot, TerminalStanding } from "@luke/panel/tasks/terminal-shells";
+import { TerminalTab } from "@luke/panel/tasks/terminal-tab";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import {
   agentTranscript,
@@ -140,33 +170,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { panelTabPlace } from "../links-at-hand";
-import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
-import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
-import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
-import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab";
-import { CodePane, centreWithin } from "../tasks/code-pane";
-import { FileView } from "../tasks/file-view";
-import { PageCard } from "../tasks/page-card";
-import { PagePane } from "../tasks/page-pane";
-import { PlanCommentsTab } from "../tasks/plan-comments";
 import { TaskCall } from "../tasks/task-call";
-import { useOpenTerminal } from "../tasks/terminal-commands";
-import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells";
-import { TerminalTab } from "../tasks/terminal-tab";
-import {
-  type AddEntry,
-  AddTabButton,
-  DoorsTab,
-  type HeldTranscripts,
-  type TabDoors,
-  type TabLook,
-  type TabPin,
-  type TabViews,
-  type TranscriptCopier,
-  useTranscriptCopier,
-  type WorkerStandings,
-} from "./strip-tabs";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.

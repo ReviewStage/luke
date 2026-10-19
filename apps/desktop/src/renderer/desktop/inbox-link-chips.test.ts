@@ -15,6 +15,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { InboxChoice } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { signedInAs } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -25,7 +26,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import type { InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
 /**

@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
 import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
+import { TranscriptTodos } from "@luke/panel/tasks/transcript-blocks";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { TranscriptTodos } from "./transcript-blocks";
 
 /**
  * transcript-todos.test.ts -- an agent's to-do list, as a call's row opens

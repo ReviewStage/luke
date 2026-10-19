@@ -2,7 +2,20 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import {
+  installWindowHistory,
+  useWindowHistory,
+  type WindowHistory,
+} from "@luke/panel/navigation-history";
 import { PANEL_TAB } from "@luke/panel/panel-tabs";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  ISSUES_PAGE,
+  type IssuesPlace,
+  type LeaveAsk,
+  type TasksControl,
+} from "@luke/panel/tasks/use-tasks-tab";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
@@ -15,15 +28,6 @@ import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { installWindowHistory, useWindowHistory, type WindowHistory } from "./navigation-history";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  ISSUES_PAGE,
-  type IssuesPlace,
-  type LeaveAsk,
-  type TasksControl,
-} from "./tasks/use-tasks-tab";
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";

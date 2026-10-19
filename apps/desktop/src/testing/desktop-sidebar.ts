@@ -1,10 +1,10 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB } from "@luke/panel/panel-tabs";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import type { ComponentProps } from "react";
 import type { DesktopSidebar } from "../renderer/desktop/desktop-sidebar";
-import type { TasksControl } from "../renderer/tasks/use-tasks-tab";
 
 /**
  * desktop-sidebar.ts -- the sidebar's props on the Plans tab, open and pinned, signed in, listing what `plans` lists, every other press ignored.

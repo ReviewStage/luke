@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { sideBundles } from "@luke/panel/bundle-loader";
 import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
 import { planEditor } from "@luke/panel/plan-editor/index";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
 import { useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import {
   composerEditor,
@@ -16,7 +17,6 @@ import { onSideBundles } from "@luke/panel/testing/side-bundles";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { AgentComposer } from "./agent-composer";
 
 /**
  * A box drawn before the editor bundle has landed: its field stands inert at

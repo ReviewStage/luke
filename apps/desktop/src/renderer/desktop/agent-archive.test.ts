@@ -6,13 +6,13 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentArchivedBy,
 } from "@luke/features/coding-agent-wire";
+import { ArchivedAgents } from "@luke/panel/desktop/agent-archive";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { ArchivedAgents } from "./agent-archive";
 
 /**
  * agent-archive.test.ts -- an archived agent's row under the summary's

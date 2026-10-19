@@ -22,6 +22,9 @@ import {
 } from "@luke/features/integration-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { AgentTab } from "@luke/panel/tasks/agent-tab";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   editorBundleLanded,
@@ -40,9 +43,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { AgentTab } from "./agent-tab";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * server-card.test.ts -- a mention of an MCP server or of one of its tools

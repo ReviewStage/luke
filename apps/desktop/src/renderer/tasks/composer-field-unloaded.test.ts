@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { sideBundles } from "@luke/panel/bundle-loader";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
 import { useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { QUIET_COMPOSER } from "@luke/panel/testing/composer";
 import { onSideBundles } from "@luke/panel/testing/side-bundles";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { AgentComposer } from "./agent-composer";
 
 /**
  * A box whose editor bundle could not be loaded says so under the card and
