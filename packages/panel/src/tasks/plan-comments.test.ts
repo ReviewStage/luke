@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -430,6 +431,35 @@ test("words a block thread and a word thread both cover are marked once, naming 
   assert.deepEqual(shared?.dataset.threads?.split(" ").sort(), [ID.GONE, ID.OPEN].sort());
   assert.ok(blockOnly, "the rest of the block is marked as the block thread's");
   assert.equal(container.querySelectorAll(".comment-block-edge").length, 0, "and draws no bar");
+});
+
+test("where one thread's mark stands inside another's, the open thread's is drawn as its own mark, inner or outer, under the panel's own stylesheet", () => {
+  const sheet = document.createElement("style");
+  sheet.textContent = readFileSync(`${__dirname}/../styles/tasks.css`, "utf8");
+  document.head.append(sheet);
+  // Note that the editor nests a mark per thread over words two threads cover.
+  const nested = (open: "inner" | "outer") => {
+    const outer = document.body.appendChild(document.createElement("mark"));
+    const inner = outer.appendChild(document.createElement("mark"));
+    outer.className = "plan-comment-mark";
+    inner.className = "plan-comment-mark";
+    (open === "inner" ? inner : outer).dataset.active = "true";
+    return { outer, inner };
+  };
+  const innerOpen = nested("inner");
+  const outerOpen = nested("outer");
+  // Note that jsdom resolves no custom property, so a mark's wash reads the same whichever rule set it; the room under its edge, a length, says which rule drew it.
+  const edgeRoom = (mark: HTMLElement): string => getComputedStyle(mark).paddingBottom;
+  const drawn = {
+    innerOpen: edgeRoom(innerOpen.inner),
+    outerOpen: edgeRoom(outerOpen.outer),
+    underOuterOpen: edgeRoom(outerOpen.inner),
+  };
+  sheet.remove();
+  innerOpen.outer.remove();
+  outerOpen.outer.remove();
+
+  assert.deepEqual(drawn, { innerOpen: "1px", outerOpen: "1px", underOuterOpen: "0px" });
 });
 
 test("a press away from the open thread closes it, and a press inside it keeps it open", () => {

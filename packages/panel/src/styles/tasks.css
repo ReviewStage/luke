@@ -5609,8 +5609,10 @@ button.picture-frame {
 
 /* Words under two threads in the editor stand in a mark inside another,
    which the read view draws as one mark; the inner one adds nothing, so they
-   read the same in both. */
-.plan-comment-mark .plan-comment-mark {
+   read the same in both. An open thread's mark keeps its wash and edge
+   inside another's, so the open thread reads open whether its mark is the
+   inner or the outer one. */
+.plan-comment-mark .plan-comment-mark:not([data-active="true"]) {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;
