@@ -8,13 +8,10 @@
  * With no voice named it records every voice `@luke/live` offers. Each is
  * spoken by the model and voice a call uses, over the Live WebSocket, so a
  * preview sounds as the voice does in a call rather than as a text-to-speech
- * model's reading of it. The model is asked to say its language's line
- * (`SCRIPTS`): an English voice the one line every English voice says, so
- * they are compared on the same words, and a voice of another language a
- * greeting in English and then a sentence in its own, since Luke's calls are
- * in English and the voice is made for its language. A take whose transcript
- * is not close to that line is recorded again, and a voice that never says it
- * fails the run. The audio is trimmed of the quiet around it, brought
+ * model's reading of it. The model is asked to say the voice's own line
+ * (`SCRIPTS`), in English, a voice made for another language ending on a
+ * short sign-off in it. A take whose transcript is not close to that line is
+ * recorded again, and a voice that never says it fails the run. The audio is trimmed of the quiet around it, brought
  * to one level, and written as AAC in an MPEG-4 file (`afconvert`, which every Mac has) under
  * `packages/panel/voices/`, the folder the panel serves (its `build-table.mjs`).
  *
@@ -39,64 +36,207 @@ import {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const VOICES_DIRECTORY = path.join(repositoryRoot, "packages/panel/voices");
 
-/** How every voice opens, in English, whatever its language. */
-const GREETING = "Hi, I'm Luke.";
+/** The name of each language the model is told a voice's sign-off is in. */
+const LANGUAGE_NAME = new Map([
+  [LIVE_VOICE_LANGUAGE.PORTUGUESE, "Brazilian Portuguese"],
+  [LIVE_VOICE_LANGUAGE.FRENCH, "French"],
+  [LIVE_VOICE_LANGUAGE.GERMAN, "German"],
+  [LIVE_VOICE_LANGUAGE.HINDI, "Hindi"],
+  [LIVE_VOICE_LANGUAGE.JAPANESE, "Japanese"],
+  [LIVE_VOICE_LANGUAGE.KOREAN, "Korean"],
+]);
 
 /**
- * What a voice of each language says, and the language's name the model is
- * told. Each line after the greeting says the same thing, what Luke does, in
- * the language as it is spoken day to day; the Hindi is worded in the
- * passive, because Hindi verbs agree with the speaker's gender and a voice
- * of either may say it.
+ * What each voice says: a line of its own, so the list is a set of
+ * introductions rather than one sentence read thirty-one times, each about
+ * as long as the others so no voice is judged on more words. Every line is
+ * English, since Luke's calls are, and a voice made for another language
+ * ends on a short sign-off in it (`signOff`), a nod to what it is made for
+ * that leaves no doubt Luke speaks English. A voice with no line here fails
+ * the run rather than saying another's.
  */
 const SCRIPTS = new Map([
   [
-    LIVE_VOICE_LANGUAGE.ENGLISH,
+    "alloy",
     {
-      name: "English",
-      line: `${GREETING} Tell me what you're working on, and I'll write the plan down as we talk.`,
+      line: "Hey, I'm Luke. Walk me through what you're building, and I'll keep the plan tidy as we go.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.PORTUGUESE,
+    "ash",
     {
-      name: "Brazilian Portuguese",
-      line: `${GREETING} Me conta no que você está trabalhando, e eu escrevo o plano enquanto a gente conversa.`,
+      line: "Hi there. Tell me the problem in your own words, and we'll turn it into a plan together.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.FRENCH,
+    "ballad",
     {
-      name: "French",
-      line: `${GREETING} Dites-moi sur quoi vous travaillez, et j'écris le plan pendant qu'on parle.`,
+      line: "Good to meet you. Talk it through out loud, and I'll write down every decision we make.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.GERMAN,
+    "cedar",
+    { line: "Hey. What are we working on today? Think out loud, and I'll take the notes." },
+  ],
+  [
+    "coral",
+    { line: "Hi! Got a bug, a feature, or just a hunch? Tell me, and I'll sketch out the plan." },
+  ],
+  [
+    "echo",
     {
-      name: "German",
-      line: `${GREETING} Erzähl mir, woran du arbeitest, und ich schreibe den Plan mit, während wir reden.`,
+      line: "Hey there. Start anywhere you like, and I'll shape what you say into clear next steps.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.HINDI,
+    "marin",
     {
-      name: "Hindi",
-      line: `${GREETING} मुझे बताइए कि आप किस पर काम कर रहे हैं, और बातचीत के साथ-साथ योजना लिखी जाएगी।`,
+      line: "Hi, I'm Luke. Tell me what you're working on, and I'll write the plan down as we talk.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.JAPANESE,
+    "sage",
     {
-      name: "Japanese",
-      line: `${GREETING} 取り組んでいることを教えてください。話しながらプランを書いていきます。`,
+      line: "Hello. Let's take a breath and think it through. I'll capture the plan while you talk.",
     },
   ],
   [
-    LIVE_VOICE_LANGUAGE.KOREAN,
+    "shimmer",
     {
-      name: "Korean",
-      line: `${GREETING} 어떤 작업을 하고 계신지 말씀해 주세요. 이야기하면서 계획을 적어 드릴게요.`,
+      line: "Hi, I'm Luke. Describe what's on your mind, and I'll turn it into a plan you can ship.",
+    },
+  ],
+  [
+    "verse",
+    {
+      line: "Hey, ready when you are. Talk me through the task, and I'll keep track of the details.",
+    },
+  ],
+  [
+    "gleam",
+    {
+      line: "Hi! Let's figure this out together. Tell me what you need, and I'll write it all up.",
+    },
+  ],
+  [
+    "meridian",
+    {
+      line: "Hey, I'm Luke. Give me the big picture first, and we'll work our way down to the details.",
+    },
+  ],
+  [
+    "cinder",
+    {
+      line: "Well, hey there. Tell me what you're fixing, and I'll keep the plan straight for you.",
+    },
+  ],
+  [
+    "delta",
+    { line: "Hey there, I'm Luke. Take your time, tell me the task, and I'll write up the plan." },
+  ],
+  [
+    "vesper",
+    {
+      line: "Hello, I'm Luke. Tell me what you're after, and I'll keep a careful note of the plan.",
+    },
+  ],
+  [
+    "stone",
+    {
+      line: "Hi, I'm Luke. Tell me where you're stuck, and we'll work out the next step together.",
+    },
+  ],
+  [
+    "willow",
+    { line: "Hello there. Talk me through your idea, and I'll shape it into a proper plan." },
+  ],
+  [
+    "quartz",
+    { line: "Hi, I'm Luke. Tell me what's on the list today, and I'll sort it into a plan." },
+  ],
+  [
+    "ripple",
+    { line: "G'day, I'm Luke. Run me through the job, and I'll jot the plan down as we go." },
+  ],
+  [
+    "beacon",
+    { line: "Hello, I'm Luke. Share what you're working on, and I'll map out the steps with you." },
+  ],
+  [
+    "bossa",
+    {
+      line: "Hi, I'm Luke. Tell me your idea, and I'll turn it into a plan.",
+      signOff: "Vamos lá!",
+    },
+  ],
+  [
+    "tempo",
+    {
+      line: "Hey, I'm Luke. Tell me the task, and I'll have the plan drafted in no time.",
+      signOff: "Bora!",
+    },
+  ],
+  [
+    "brise",
+    {
+      line: "Hi, I'm Luke. Tell me what you're making, and I'll write the plan as we talk.",
+      signOff: "À vous !",
+    },
+  ],
+  [
+    "sillage",
+    {
+      line: "Hello, I'm Luke. Walk me through it, and I'll follow along with the plan.",
+      signOff: "Allons-y !",
+    },
+  ],
+  [
+    "nuri",
+    {
+      line: "Hi, I'm Luke. Tell me where to start, and I'll keep the plan in order.",
+      signOff: "Los geht's!",
+    },
+  ],
+  [
+    "juni",
+    {
+      line: "Hey, I'm Luke. Share your idea, and I'll write the plan down for you.",
+      signOff: "Ich höre zu!",
+    },
+  ],
+  [
+    "flitz",
+    {
+      line: "Hi, I'm Luke. Give me the task, and we'll have a plan before you know it.",
+      signOff: "Auf geht's!",
+    },
+  ],
+  [
+    "nira",
+    {
+      line: "Hi, I'm Luke. Tell me what you're working on, and I'll note the plan.",
+      signOff: "चलिए, शुरू करते हैं!",
+    },
+  ],
+  [
+    "harema",
+    {
+      line: "Hi, I'm Luke. Tell me about your project, and I'll write up the plan.",
+      signOff: "よろしくね！",
+    },
+  ],
+  [
+    "shida",
+    {
+      line: "Hello, I'm Luke. Tell me the task, and I'll lay out the plan for you.",
+      signOff: "始めましょう！",
+    },
+  ],
+  [
+    "noeul",
+    {
+      line: "Hi, I'm Luke. Tell me what you need, and I'll write the plan with you.",
+      signOff: "같이 해 봐요!",
     },
   ],
 ]);
@@ -159,17 +299,22 @@ function likeness(said, line) {
   return 1 - previous[b.length] / Math.max(a.length, b.length, 1);
 }
 
-/** What the voice says, and the words the model is asked to say it in. */
+/** What the voice says, its sign-off included, and the words the model is asked to say it in. */
 function scriptOf(voice) {
-  const script = SCRIPTS.get(LIVE_VOICE_PROFILE[voice].language);
-  if (script === undefined) throw new Error(`${voice}: no script for its language`);
-  const languages =
-    script.name === "English"
-      ? "in English"
-      : `the first sentence in English and the rest in ${script.name}`;
+  const script = SCRIPTS.get(voice);
+  if (script === undefined) throw new Error(`${voice}: no line to say`);
   // Worded as the guide words a greeting, the one way it documents to have the model speak first.
-  const instruction = `Greet the caller now by saying exactly this, ${languages}, and nothing more: ${script.line} Then pause and listen.`;
-  return { line: script.line, instruction };
+  if (script.signOff === undefined) {
+    return {
+      line: script.line,
+      instruction: `Greet the caller now in English by saying exactly this, and nothing more: ${script.line} Then pause and listen.`,
+    };
+  }
+  const language = LANGUAGE_NAME.get(LIVE_VOICE_PROFILE[voice].language);
+  return {
+    line: `${script.line} ${script.signOff}`,
+    instruction: `Greet the caller now by saying exactly this in English: ${script.line} Then end with this short sign-off in ${language}, and nothing more: ${script.signOff} Then pause and listen.`,
+  };
 }
 
 /** Whether any sample of the PCM is louder than quiet. */
