@@ -161,7 +161,8 @@ function mount(
   const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
   const record = (kind: ActKind | PortActKind) => {
-    (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
+    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    else if (!isPortActKind(kind)) agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -218,14 +219,11 @@ function mount(
           isPortActKind(kind)
             ? portAnswer(kind, ...args)
             : appAnswer(kind, ...args)) as ActHandle["act"],
-        // A told port kind is answered as an asked one is, and its answer or refusal read by no one, as `tell` reads none.
-        // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
-        tell: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) => {
-          if (isPortActKind(kind)) {
-            void portAnswer(kind, ...args).catch(() => undefined);
-            return;
-          }
-          record(kind);
+        // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
+        // SAFETY: a told kind is recorded alike whichever side carries it, the dispatch on the kind the one erasure.
+        tell: ((kind: ActKind | PortActKind, ...args: unknown[]) => {
+          if (isPortActKind(kind)) void portAnswer(kind, ...args).catch(() => undefined);
+          else record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {

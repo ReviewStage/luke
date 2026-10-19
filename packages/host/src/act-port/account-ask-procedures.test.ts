@@ -18,6 +18,7 @@ import {
   type AccountAskProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type PlatformActProcedures,
   type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
@@ -129,9 +130,14 @@ function windowPort(
   const issues = { host: {} } as IssueProceduresDependencies;
   // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
   const workspaces = { host: {} } as WorkspaceProceduresDependencies;
+  // SAFETY: no platform act is called here, so no platform procedure is reached.
+  const platform = {} as PlatformActProcedures<unknown>;
   // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
   const tasks = { host: {} } as TasksProceduresDependencies;
-  const handler = createActPortHandler({ accountAsks: { host }, issues, tasks, workspaces });
+  const handler = createActPortHandler(
+    { accountAsks: { host }, issues, tasks, workspaces },
+    platform,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

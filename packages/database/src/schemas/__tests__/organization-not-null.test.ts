@@ -104,7 +104,11 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.
         const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
-        for (const statement of yield* statements) yield* sql.unsafe(statement);
+        // Note that `inbox_attachment` is a view over `attachment` since its rows moved there, and a view's column takes no constraint, so the statement that set one on the table is left out.
+        for (const statement of yield* statements) {
+          if (statement.startsWith(`ALTER TABLE "inbox_attachment" ALTER COLUMN`)) continue;
+          yield* sql.unsafe(statement);
+        }
         for (const statement of renames) yield* sql.unsafe(statement);
 
         const [automationRow] = yield* sql<{ readonly organization_id: string | null }>`

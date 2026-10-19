@@ -20,9 +20,8 @@ import {
   type TasksGitHubPageAnswer,
   type TasksStartAnswer,
 } from "@luke/features/tasks-view";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import {
@@ -33,13 +32,8 @@ import {
   type PortActResult,
   TASKS_ACT_KIND,
 } from "../contract/index.js";
-import {
-  type AccountAskProceduresDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type TasksProceduresDependencies,
-  type WorkspaceProceduresDependencies,
-} from "./index.js";
+import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
@@ -133,14 +127,14 @@ interface Script {
   startExtra: boolean;
 }
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /**
- * A window's act port, opened as the bridge opens one, over a fake host:
+ * A window's act port serving the task procedures alone, opened as the bridge opens one, over a fake host:
  * the window standing as `actor`, trusted or not.
  */
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
@@ -213,16 +207,8 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             : { connection: { connected: false, login: null } },
       ),
   };
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  // SAFETY: no issue act is called here, so the issues' host is never reached.
-  const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
-  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
-  const handler = createActPortHandler({
-    accountAsks,
-    issues,
-    tasks: {
+  const port = testActPort(
+    tasksProcedures({
       host,
       openExternal: (url) => {
         browsed.push(url);
@@ -235,21 +221,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       },
       voiceReady: () => script.voiceReady,
       callStanding: () => script.callStanding,
-    },
-    workspaces,
-  });
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  );
+  ports.push(port);
+  const client = port.as(actor, options);
   return { client, asked, browsed, talked, script };
 }
 

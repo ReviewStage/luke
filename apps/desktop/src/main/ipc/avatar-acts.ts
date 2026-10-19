@@ -15,11 +15,12 @@
  * window.
  */
 
-import { ActRefused, type ActRows } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
 import type { AppStateStore } from "@luke/host/client";
+import { AVATAR_ACT_KIND } from "@luke/host/contract";
 import { AVATAR_STATUS, avatarStanding } from "@luke/voice/avatar";
 import { AVATAR_VIEW_SIGNAL } from "@luke/voice/avatar-view";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
 import type { AvatarLink } from "../services/avatar-link";
@@ -37,21 +38,32 @@ export interface AvatarActsDependencies {
   voiceOwns: (sender: WebContents) => boolean;
 }
 
-export function avatarActRows({
+type AvatarActKind = (typeof AVATAR_ACT_KIND)[keyof typeof AVATAR_ACT_KIND];
+
+const avatarPort = actPortFor<WebContents>();
+
+export function avatarProcedures({
   avatar,
 }: Pick<AvatarActsDependencies, "avatar">): Pick<
-  ActRows,
-  typeof ACT_KIND.AVATAR_REPORT | typeof ACT_KIND.VOICE_SET_VIDEO
+  PlatformActProcedures<WebContents>,
+  AvatarActKind
 > {
   return {
-    [ACT_KIND.AVATAR_REPORT]: (report, { panel }) => {
-      if (!panel) throw new ActRefused({ message: ACT[ACT_KIND.AVATAR_REPORT].refusal });
-      avatar.report(report);
-    },
-    [ACT_KIND.VOICE_SET_VIDEO]: ({ on }, { panel, call }) => {
-      if (!panel && !call) throw new ActRefused({ message: ACT[ACT_KIND.VOICE_SET_VIDEO].refusal });
-      return avatar.setVideo(on);
-    },
+    [AVATAR_ACT_KIND.AVATAR_REPORT]: avatarPort[AVATAR_ACT_KIND.AVATAR_REPORT].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+      avatar.report(input);
+    }),
+    [AVATAR_ACT_KIND.VOICE_SET_VIDEO]: avatarPort[AVATAR_ACT_KIND.VOICE_SET_VIDEO].effect(
+      function* ({ input, context, errors }) {
+        const { panel, call } = context.actor;
+        if (!panel && !call) return yield* Effect.fail(errors.REFUSED());
+        return yield* avatar.setVideo(input.on);
+      },
+    ),
   };
 }
 

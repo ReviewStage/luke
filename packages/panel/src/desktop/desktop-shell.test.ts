@@ -6,6 +6,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import { TASKS_ACT_KIND } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,7 +31,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -42,6 +43,8 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
+/** The task kinds on the act port, which this window's fake refuses. */
+const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -799,6 +802,13 @@ async function handBridge(): Promise<void> {
       sentActs.push(request.kind);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sentActs.push(request.kind);
+    // The task kinds are refused here as `app:act` refused them, since a task read answered nothing is no view.
+    return TASK_KINDS.has(request.kind)
+      ? Promise.reject(refusedOnPort("Not here."))
+      : Promise.resolve(undefined);
   });
 }
 

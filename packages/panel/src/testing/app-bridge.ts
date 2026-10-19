@@ -6,11 +6,13 @@ import type { AppBridge } from "@luke/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
+  actContract,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
   TASKS_ACT_KIND,
 } from "@luke/host/contract";
+import type { WireBoundaryInput } from "@luke/wire";
 import { ORPCError } from "@orpc/client";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
 
@@ -71,3 +73,25 @@ export function openingLinks(
 type FakeActPort = {
   readonly [Kind in PortActKind]: (payload: PortActPayload<Kind>) => Promise<PortActResult<Kind>>;
 };
+
+/** One act as a window sent it on its act port: its kind, and its payload where it carries one. */
+export type SentPortAct = { readonly kind: PortActKind; readonly payload?: WireBoundaryInput };
+
+/**
+ * Installs an act port answering every kind through `answer`, as a test
+ * that writes down what its window sent, whichever kind it was, does.
+ */
+export function fakeActPortAnswering(
+  answer: (request: SentPortAct) => Promise<WireBoundaryInput>,
+): void {
+  const procedures: Partial<FakeActPort> = {};
+  // SAFETY: the contract's keys are exactly its kinds.
+  for (const kind of Object.keys(actContract) as PortActKind[]) {
+    // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
+    Object.assign(procedures, {
+      [kind]: (payload: WireBoundaryInput) =>
+        answer(payload === undefined ? { kind } : { kind, payload }),
+    });
+  }
+  fakeActPort(procedures);
+}

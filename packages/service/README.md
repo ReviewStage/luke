@@ -599,7 +599,9 @@ lets it go, so its name is free again.
 Deleting the Luke account reads every row's subject before the cascade and
 revokes each.
 
-**The routes** (`src/integrations/integrations-app.ts`). Every route about
+**The routes** (the hosted procedures in
+`src/integrations/integrations-procedures.ts`, and Connect's return to the
+browser in `src/integrations/integrations-app.ts`). Every route about
 one account reads it from a `connection` query beside the provider, and
 without one means the provider's first account, so a desktop that predates
 more than one sees exactly what it saw before:

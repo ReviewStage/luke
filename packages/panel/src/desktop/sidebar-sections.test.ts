@@ -19,6 +19,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -169,26 +170,35 @@ function dialogField(label: string): HTMLInputElement {
   return found ?? assert.fail(`no ${label} field`);
 }
 
-/** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`. */
-function sidebarOver(sections: TaskSections, writes: TaskSectionWrite[]) {
+/** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`, and anything else `rest` says of the tasks. */
+function sidebarOver(
+  sections: TaskSections,
+  writes: TaskSectionWrite[],
+  rest: Partial<TasksControl> = {},
+) {
   const tasks = tasksControl({
     tasks: [INVITES, RETRIES],
     workspaces: [WORKSPACE],
     workspace: WORKSPACE,
     taskSections: sections,
     onWriteSections: (asked) => writes.push(...asked),
+    ...rest,
   });
   return createElement(DesktopSidebar, sidebarProps(tasks));
 }
 
 /** The sidebar over `sections`, Launch unless said, and a way to draw it again over other sections, as a refresh does. */
-async function mountSidebarRedrawn(writes: TaskSectionWrite[], sections = SECTIONS) {
+async function mountSidebarRedrawn(
+  writes: TaskSectionWrite[],
+  sections = SECTIONS,
+  rest: Partial<TasksControl> = {},
+) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
   const draw = async (sections: TaskSections) => {
-    act(() => root.render(onRegistry(registry, sidebarOver(sections, writes))));
+    act(() => root.render(onRegistry(registry, sidebarOver(sections, writes, rest))));
     await settle();
   };
   await draw(sections);
@@ -196,8 +206,12 @@ async function mountSidebarRedrawn(writes: TaskSectionWrite[], sections = SECTIO
 }
 
 /** The sidebar over `sections`, Launch unless said, each write it asks heard by `writes`. */
-async function mountSidebar(writes: TaskSectionWrite[], sections = SECTIONS): Promise<HTMLElement> {
-  return (await mountSidebarRedrawn(writes, sections)).container;
+async function mountSidebar(
+  writes: TaskSectionWrite[],
+  sections = SECTIONS,
+  rest: Partial<TasksControl> = {},
+): Promise<HTMLElement> {
+  return (await mountSidebarRedrawn(writes, sections, rest)).container;
 }
 
 /** The header of the section titled `title`, failing where none is drawn. */
@@ -309,6 +323,190 @@ test("a section's Delete section asks first, then deletes the section and none o
 
   assert.equal(asked, 0);
   assert.deepEqual(writes, [{ kind: TASK_SECTION_WRITE.DELETE, id: LAUNCH }]);
+});
+
+/** Launch holding both tasks, Invite expiry on top, and Someday holding none. */
+const BOTH_IN_LAUNCH: TaskSections = {
+  sections: ICONLESS.sections,
+  entries: [
+    { taskId: INVITES.id, sectionId: LAUNCH, addedAt: 3 },
+    { taskId: RETRIES.id, sectionId: LAUNCH, addedAt: 2 },
+  ],
+};
+
+/** Opens the section titled `title`'s menu from its ⋯. */
+function openSectionMenu(sidebar: HTMLElement, title: string): void {
+  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${title}"]`);
+  assert.ok(actions);
+  act(() => actions.click());
+}
+
+/** The words of every item the open menus draw, in order. */
+function menuLabels(): string[] {
+  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+    (each) => each.textContent ?? "",
+  );
+}
+
+/** Opens the menu of the task row named `name` with a right-click. */
+function openRowMenu(sidebar: HTMLElement, name: string): void {
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes(name),
+  );
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+}
+
+test("a section holding tasks offers what acts on all of them between Edit and Delete", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], ICONLESS);
+
+  openSectionMenu(sidebar, "Launch");
+
+  assert.deepEqual(menuLabels(), [
+    "Edit section",
+    "Move tasks to",
+    "Remove tasks from section",
+    "Archive tasks",
+    "Delete section",
+  ]);
+});
+
+test("a section holding no task offers only Edit and Delete", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], {
+    sections: ICONLESS.sections,
+    entries: ICONLESS.entries.filter((entry) => entry.sectionId !== SOMEDAY),
+  });
+
+  openSectionMenu(sidebar, "Someday");
+
+  assert.deepEqual(menuLabels(), ["Edit section", "Delete section"]);
+});
+
+test("a section's Move tasks to puts every task in it on top of the section chosen, in its order", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, BOTH_IN_LAUNCH);
+
+  openSectionMenu(sidebar, "Launch");
+  act(() => item("Move tasks to").click());
+  const offered = menuLabels().slice(menuLabels().indexOf("Delete section") + 1);
+  act(() => item("Someday").click());
+  const moved = writes.reduce((held, write) => applySectionWrite(held, write, 10), BOTH_IN_LAUNCH);
+
+  assert.deepEqual(offered, ["Someday", "New section…"]);
+  assert.deepEqual(
+    sectionOrder(moved, SOMEDAY).map((entry) => entry.taskId),
+    [INVITES.id, RETRIES.id],
+  );
+  assert.deepEqual(sectionOrder(moved, LAUNCH), []);
+});
+
+test("a section's Remove tasks from section takes every task in it out of every section", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, BOTH_IN_LAUNCH);
+
+  openSectionMenu(sidebar, "Launch");
+  act(() => item("Remove tasks from section").click());
+
+  assert.deepEqual(writes, [
+    { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES.id, sectionId: null },
+    { kind: TASK_SECTION_WRITE.PLACE, taskId: RETRIES.id, sectionId: null },
+  ]);
+});
+
+test("a section's Archive tasks archives every task in it at once where none has agents", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const archived: string[][] = [];
+  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
+    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
+  });
+
+  openSectionMenu(sidebar, "Launch");
+  act(() => item("Archive tasks").click());
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(archived, [[INVITES.id, RETRIES.id]]);
+});
+
+test("a section's Archive tasks asks first where a task in it has agents, then archives them all", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const archived: string[][] = [];
+  const working: TaskSummary = {
+    ...RETRIES,
+    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  };
+  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
+    tasks: [INVITES, working],
+    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
+  });
+
+  openSectionMenu(sidebar, "Launch");
+  act(() => item("Archive tasks").click());
+  const asked = archived.length;
+  const question = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  await act(async () => dialogButton("Archive").click());
+
+  assert.equal(asked, 0);
+  assert.match(question, /Archive 2 tasks\?/);
+  assert.deepEqual(archived, [[INVITES.id, RETRIES.id]]);
+});
+
+test("a section's Archive question goes when a task it asked about leaves the section, and archives nothing", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const archived: string[][] = [];
+  const working: TaskSummary = {
+    ...RETRIES,
+    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  };
+  const { container, draw } = await mountSidebarRedrawn([], BOTH_IN_LAUNCH, {
+    tasks: [INVITES, working],
+    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
+  });
+  openSectionMenu(container, "Launch");
+  act(() => item("Archive tasks").click());
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
+
+  await draw({
+    sections: BOTH_IN_LAUNCH.sections,
+    entries: [
+      { taskId: INVITES.id, sectionId: LAUNCH, addedAt: 3 },
+      { taskId: RETRIES.id, sectionId: SOMEDAY, addedAt: 4 },
+    ],
+  });
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(archived, []);
+});
+
+test("a section's Mark all as read stands while a task in it is unread, and marks every one read", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH);
+
+  for (const name of ["Invite expiry", "Retry audit"]) {
+    openRowMenu(sidebar, name);
+    act(() => item("Mark as unread").click());
+  }
+  openSectionMenu(sidebar, "Launch");
+  act(() => item("Mark all as read").click());
+  const marks = ["Invite expiry", "Retry audit"].map((name) => {
+    openRowMenu(sidebar, name);
+    const offered = menuLabels().filter((label) => label.startsWith("Mark as"));
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    return offered;
+  });
+  openSectionMenu(sidebar, "Launch");
+
+  assert.deepEqual(marks, [["Mark as unread"], ["Mark as unread"]]);
+  assert.ok(!menuLabels().includes("Mark all as read"));
 });
 
 test("a section's Delete question goes when the section does, deleted on another Mac", async () => {

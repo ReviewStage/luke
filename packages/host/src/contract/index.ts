@@ -5,9 +5,13 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { accountAskActsContract } from "./account-asks.js";
+import { avatarActsContract } from "./avatar.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
+import { macTerminalActsContract } from "./mac-terminals.js";
 import { tasksActsContract } from "./tasks.js";
+import { terminalActsContract } from "./terminals.js";
+import { voiceRuntimeActsContract } from "./voice-runtime.js";
 import { workspaceActsContract } from "./workspaces.js";
 
 /**
@@ -23,17 +27,28 @@ import { workspaceActsContract } from "./workspaces.js";
 export { ACT_ERROR } from "./base.js";
 export {
   ACCOUNT_ASK_ACT_KIND,
+  AVATAR_ACT_KIND,
   ISSUE_ACT_KIND,
+  MAC_TERMINAL_ACT_KIND,
+  PLATFORM_PORT_ACT_KIND,
+  type PlatformPortActKind,
   type PortActKind,
   TASKS_ACT_KIND,
+  TERMINAL_ACT_KIND,
+  VOICE_RUNTIME_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
+export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...accountAskActsContract,
+  ...avatarActsContract,
   ...issueActsContract,
+  ...macTerminalActsContract,
   ...tasksActsContract,
+  ...terminalActsContract,
+  ...voiceRuntimeActsContract,
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 

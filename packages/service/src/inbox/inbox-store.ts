@@ -8,11 +8,11 @@ import {
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
+import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
-import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
 import { task } from "@luke/database/schemas/task";
@@ -83,7 +83,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * is posted by a path and kept by an attachment: the caller reads the
  * file's bytes from the agent's sandbox and hands them in beside the post,
  * and the post writes each as a row of the item's
- * (`@luke/database/schemas/inbox-attachment`) under an id minted here, which the
+ * (`@luke/database/schemas/attachment`) under an id minted here, which the
  * block kept on the item names in the path's place; the item's attachments
  * its new blocks no longer name go with the same write, so a picture the
  * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound
@@ -185,7 +185,7 @@ const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMEN
 const ITEM_ID = sql`${sql.identifier(getTableName(inboxItem))}.${sql.identifier(inboxItem.id.name)}`;
 
 /** The files the item's answer carried, in the order they were attached, each named by its attachment, its name, and its type. */
-const ANSWER_FILES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${inboxAttachment.id}, 'name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.itemId} = ${ITEM_ID} and ${inboxAttachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER})`;
+const ANSWER_FILES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${attachment.id}, 'name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxItemId} = ${ITEM_ID} and ${attachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER})`;
 
 /** A column named by its table, for a subquery nested inside another whose own columns would otherwise take the bare name. */
 function qualified(table: AnyPgTable, column: AnyPgColumn): SQL {
@@ -201,7 +201,7 @@ const MESSAGE = {
 };
 
 /** The files one message of the thread carried, in the order they were attached, each named as an answer's file is. */
-const MESSAGE_FILES = sql`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${inboxAttachment.id}, 'name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.messageId} = ${MESSAGE.id})`;
+const MESSAGE_FILES = sql`(select coalesce(jsonb_agg(jsonb_build_object('attachmentId', ${attachment.id}, 'name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxMessageId} = ${MESSAGE.id})`;
 
 /** The item's latest messages, as many as a read carries, under the table's own name so the columns above name them. */
 const LATEST_MESSAGES = sql`(select * from ${inboxMessage} where ${inboxMessage.itemId} = ${ITEM_ID} order by ${inboxMessage.createdAt} desc, ${inboxMessage.id} desc limit ${sql.raw(String(INBOX_BOUNDS.MAX_MESSAGES_READ))}) as ${sql.identifier(getTableName(inboxMessage))}`;
@@ -459,11 +459,14 @@ const AttachmentWriteSchema = Schema.Struct({
 /** One picture written as a row of the item's, under the id the block names. */
 const insertAttachment = SqlSchema.void({
   Request: AttachmentWriteSchema,
-  execute: ({ now, ...attachment }) =>
+  execute: ({ now, itemId, ...picture }) =>
     Database.use((db) =>
-      db
-        .insert(inboxAttachment)
-        .values({ ...attachment, kind: INBOX_ATTACHMENT_KIND.IMAGE, createdAt: now }),
+      db.insert(attachment).values({
+        ...picture,
+        inboxItemId: itemId,
+        kind: INBOX_ATTACHMENT_KIND.IMAGE,
+        createdAt: now,
+      }),
     ),
 });
 
@@ -482,10 +485,11 @@ const AnswerFileWriteSchema = Schema.Struct({
 /** One file of the answer's written as a row of the item's, at its place among the answer's files. */
 const insertAnswerFile = SqlSchema.void({
   Request: AnswerFileWriteSchema,
-  execute: ({ now, ...file }) =>
+  execute: ({ now, itemId, ...file }) =>
     Database.use((db) =>
-      db.insert(inboxAttachment).values({
+      db.insert(attachment).values({
         ...file,
+        inboxItemId: itemId,
         kind: INBOX_ATTACHMENT_KIND.ANSWER,
         byteCount: file.bytes.byteLength,
         createdAt: now,
@@ -499,11 +503,11 @@ const deleteAnswerFiles = SqlSchema.void({
   execute: ({ itemId }) =>
     Database.use((db) =>
       db
-        .delete(inboxAttachment)
+        .delete(attachment)
         .where(
           and(
-            eq(inboxAttachment.itemId, itemId),
-            eq(inboxAttachment.kind, INBOX_ATTACHMENT_KIND.ANSWER),
+            eq(attachment.inboxItemId, itemId),
+            eq(attachment.kind, INBOX_ATTACHMENT_KIND.ANSWER),
           ),
         ),
     ),
@@ -519,12 +523,12 @@ const deleteOtherAttachments = SqlSchema.void({
   execute: ({ itemId, kept }) =>
     Database.use((db) =>
       db
-        .delete(inboxAttachment)
+        .delete(attachment)
         .where(
           and(
-            eq(inboxAttachment.itemId, itemId),
-            ne(inboxAttachment.kind, INBOX_ATTACHMENT_KIND.MESSAGE),
-            kept.length === 0 ? undefined : notInArray(inboxAttachment.id, [...kept]),
+            eq(attachment.inboxItemId, itemId),
+            ne(attachment.kind, INBOX_ATTACHMENT_KIND.MESSAGE),
+            kept.length === 0 ? undefined : notInArray(attachment.id, [...kept]),
           ),
         ),
     ),
@@ -561,10 +565,12 @@ const MessageFileWriteSchema = Schema.Struct({
 /** One file of a message's written as a row of the item's, naming the message, at its place among the message's files. */
 const insertMessageFile = SqlSchema.void({
   Request: MessageFileWriteSchema,
-  execute: ({ now, ...file }) =>
+  execute: ({ now, itemId, messageId, ...file }) =>
     Database.use((db) =>
-      db.insert(inboxAttachment).values({
+      db.insert(attachment).values({
         ...file,
+        inboxItemId: itemId,
+        inboxMessageId: messageId,
         kind: INBOX_ATTACHMENT_KIND.MESSAGE,
         byteCount: file.bytes.byteLength,
         createdAt: now,
@@ -614,13 +620,13 @@ const findAttachment = SqlSchema.findOneOption({
   execute: ({ userId, itemId, attachmentId }) =>
     Database.use((db) =>
       db
-        .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
-        .from(inboxAttachment)
-        .innerJoin(inboxItem, eq(inboxItem.id, inboxAttachment.itemId))
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(inboxItem, eq(inboxItem.id, attachment.inboxItemId))
         .where(
           and(
-            eq(inboxAttachment.itemId, itemId),
-            eq(inboxAttachment.id, attachmentId),
+            eq(attachment.inboxItemId, itemId),
+            eq(attachment.id, attachmentId),
             itemReachableBy(userId),
           ),
         ),
@@ -1302,16 +1308,16 @@ export function postInboxItem(
           needsReply: post.needsReply ?? true,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
-        yield* Effect.forEach(attachments, (attachment) =>
+        yield* Effect.forEach(attachments, (picture) =>
           insertAttachment({
-            id: attachment.id,
+            id: picture.id,
             userId: agent.userId,
             taskId: agent.taskId,
             organizationId: locked.value.organizationId,
             itemId: row.id,
-            contentType: attachment.contentType,
-            byteCount: attachment.bytes.byteLength,
-            bytes: attachment.bytes,
+            contentType: picture.contentType,
+            byteCount: picture.bytes.byteLength,
+            bytes: picture.bytes,
             now,
           }),
         );
@@ -1636,7 +1642,7 @@ const findKeyedMessage = SqlSchema.findOneOption({
         .select({
           userId: inboxMessage.userId,
           text: inboxMessage.text,
-          files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${inboxAttachment.name}, 'mediaType', ${inboxAttachment.contentType}) order by ${inboxAttachment.position}), '[]'::jsonb) from ${inboxAttachment} where ${inboxAttachment.messageId} = ${MESSAGE.id})`,
+          files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxMessageId} = ${MESSAGE.id})`,
         })
         .from(inboxMessage)
         .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
