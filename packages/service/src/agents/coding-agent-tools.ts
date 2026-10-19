@@ -1773,11 +1773,7 @@ const archiveChange = (
 export function taskStandingOf(
   task: Pick<TaskSummary, "number" | "status" | "priority">,
   workspaceName: string,
-): {
-  readonly key: string | null;
-  readonly status: string | null;
-  readonly priority: string | null;
-} {
+) {
   return {
     key: task.number === undefined ? null : taskKey(workspaceName, task.number),
     status: task.status ?? null,

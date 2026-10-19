@@ -2431,6 +2431,16 @@ ul.actor-stack {
   margin-top: 1.5em;
 }
 
+/* A task's key stands tight over its title, and its status and priority
+   chips close under it, as one head rather than three blocks. */
+.desktop-document .plan-body > .plan-task-key + * {
+  margin-top: var(--luke-space-2);
+}
+
+.desktop-document .plan-body > .plan-task-standing {
+  margin-top: var(--luke-space-12);
+}
+
 .desktop-document .markdown-heading {
   color: var(--luke-color-text);
 }
