@@ -1,6 +1,15 @@
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import {
+  type AutomationProceduresDependencies,
+  automationProcedures,
+} from "./automation-procedures.js";
 import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
+import { type FactoryProceduresDependencies, factoryProcedures } from "./factory-procedures.js";
+import {
+  type IntegrationProceduresDependencies,
+  integrationProcedures,
+} from "./integration-procedures.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 
 /**
@@ -11,6 +20,8 @@ import { type IssueProceduresDependencies, issueProcedures } from "./issue-proce
  * context `ActPortContext` names.
  */
 
+export type { AutomationProceduresDependencies } from "./automation-procedures.js";
+export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
@@ -18,6 +29,9 @@ export type ActPortHandler = RPCHandler<ActPortContext>;
 
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
+  readonly automations: AutomationProceduresDependencies;
+  readonly factory: FactoryProceduresDependencies;
+  readonly integrations: IntegrationProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
 }
 
@@ -30,7 +44,12 @@ export interface ActPortDependencies {
  * does not draw. That failure is logged here, in main, before it is replaced.
  */
 export function createActPortHandler(dependencies: ActPortDependencies): ActPortHandler {
-  const router = { ...issueProcedures(dependencies.issues) };
+  const router = {
+    ...automationProcedures(dependencies.automations),
+    ...factoryProcedures(dependencies.factory),
+    ...integrationProcedures(dependencies.integrations),
+    ...issueProcedures(dependencies.issues),
+  };
   return new RPCHandler<ActPortContext>(router, {
     interceptors: [
       async ({ next, procedure }) => {

@@ -1,22 +1,5 @@
 import { ACCOUNT_PROVIDER, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
-  type AutomationDeletedView,
-  type AutomationListView,
-  type AutomationRunsView,
-  type AutomationRunView,
-  type AutomationView,
-  automationChangeParamsSchema,
-  automationCreateParamsSchema,
-  automationDeletedViewSchema,
-  automationIdParamsSchema,
-  automationListParamsSchema,
-  automationListViewSchema,
-  automationRunParamsSchema,
-  automationRunsViewSchema,
-  automationRunViewSchema,
-  automationViewSchema,
-} from "@luke/features/automation-view";
-import {
   type BrowserPage,
   browserAddressParamsSchema,
   browserPageSchema,
@@ -115,30 +98,11 @@ import {
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
-  type FactoryWorldView,
-  factoryWorldParamsSchema,
-  factoryWorldViewSchema,
-} from "@luke/features/factory-world-view";
-import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
 } from "@luke/features/feedback";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
-import {
-  type IntegrationAccountView,
-  type IntegrationConnectView,
-  type IntegrationStatusesView,
-  type IntegrationStatusView,
-  type IntegrationToolsView,
-  integrationAccountViewSchema,
-  integrationConnectViewSchema,
-  integrationProviderParamsSchema,
-  integrationRenameParamsSchema,
-  integrationStatusesViewSchema,
-  integrationStatusViewSchema,
-  integrationToolsViewSchema,
-} from "@luke/features/integration-view";
 import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
   type MacRepositoriesAnswer,
@@ -316,20 +280,6 @@ export const ACT_KIND = {
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
-  /**
-   * The account's integrations: where every one stands, a browser sign-in
-   * to one begun and opened by the host, and one connection ended. The
-   * window hears whether the browser was sent, never the address it was
-   * sent to.
-   */
-  INTEGRATIONS_STATUS: "integrations.status",
-  INTEGRATIONS_CONNECT: "integrations.connect",
-  INTEGRATIONS_CANCEL: "integrations.cancel",
-  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
-  INTEGRATIONS_TOOLS: "integrations.tools",
-  /** One account at a provider named as the developer calls it. */
-  INTEGRATIONS_RENAME: "integrations.rename",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   /** One experiment turned on or off for the signed-in account, answering the settings as they then stand. */
@@ -504,17 +454,6 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
   CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
-  /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
-  AUTOMATIONS_LIST: "automations.list",
-  AUTOMATIONS_CREATE: "automations.create",
-  AUTOMATIONS_CHANGE: "automations.change",
-  AUTOMATIONS_DELETE: "automations.delete",
-  AUTOMATIONS_RUN: "automations.run",
-  AUTOMATIONS_RUNS: "automations.runs",
-  /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
-  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
-  FACTORY_WORLD: "factory.world",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -1241,36 +1180,6 @@ export const ACT = {
     ),
     refusal: "Could not read that task's conversation on this system.",
   },
-  [ACT_KIND.INTEGRATIONS_STATUS]: {
-    payload: noPayload,
-    result: wireResult<IntegrationStatusesView>(isReadable(integrationStatusesViewSchema)),
-    refusal: "Could not read your integrations on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_CONNECT]: {
-    payload: actSchema(integrationProviderParamsSchema),
-    result: wireResult<IntegrationConnectView>(isReadable(integrationConnectViewSchema)),
-    refusal: "Could not connect that integration on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_TOOLS]: {
-    payload: actSchema(integrationProviderParamsSchema),
-    result: wireResult<IntegrationToolsView>(isReadable(integrationToolsViewSchema)),
-    refusal: "Could not read that integration's tools on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_CANCEL]: {
-    payload: actSchema(integrationProviderParamsSchema),
-    result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
-    refusal: "Could not cancel connecting that integration on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
-    payload: actSchema(integrationProviderParamsSchema),
-    result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
-    refusal: "Could not disconnect that integration on this system.",
-  },
-  [ACT_KIND.INTEGRATIONS_RENAME]: {
-    payload: actSchema(integrationRenameParamsSchema),
-    result: wireResult<IntegrationAccountView>(isReadable(integrationAccountViewSchema)),
-    refusal: "Could not rename that account on this system.",
-  },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,
     result: wireResult<CodingAgentModelsAnswer>(isReadable(codingAgentModelsAnswerSchema)),
@@ -1418,46 +1327,6 @@ export const ACT = {
       isReadable(codingAgentPullRequestViewedAnswerViewSchema),
     ),
     refusal: "Could not read which files you viewed on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_LIST]: {
-    payload: actSchema(automationListParamsSchema),
-    result: wireResult<AutomationListView>(isReadable(automationListViewSchema)),
-    refusal: "Could not read the automations on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_CREATE]: {
-    payload: actSchema(automationCreateParamsSchema),
-    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
-    refusal: "Could not make the automation on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_CHANGE]: {
-    payload: actSchema(automationChangeParamsSchema),
-    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
-    refusal: "Could not change the automation on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_DELETE]: {
-    payload: actSchema(automationIdParamsSchema),
-    result: wireResult<AutomationDeletedView>(isReadable(automationDeletedViewSchema)),
-    refusal: "Could not delete the automation on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_RUN]: {
-    payload: actSchema(automationRunParamsSchema),
-    result: wireResult<AutomationRunView>(isReadable(automationRunViewSchema)),
-    refusal: "Could not run the automation on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_RUNS]: {
-    payload: actSchema(automationIdParamsSchema),
-    result: wireResult<AutomationRunsView>(isReadable(automationRunsViewSchema)),
-    refusal: "Could not read the automation's runs on this system.",
-  },
-  [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: {
-    payload: actSchema(automationIdParamsSchema),
-    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
-    refusal: "Could not make a new webhook secret on this system.",
-  },
-  [ACT_KIND.FACTORY_WORLD]: {
-    payload: actSchema(factoryWorldParamsSchema),
-    result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
-    refusal: "Could not read the workspace's world on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,

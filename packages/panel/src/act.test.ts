@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createActPortHandler } from "@luke/host/act-port";
+import { type ActPortDependencies, createActPortHandler } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -28,6 +28,8 @@ afterEach(() => {
 function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const handler = createActPortHandler({
+    // SAFETY: this suite calls only the issue procedures, so no other domain's dependencies are reached.
+    ...({ automations: {}, factory: {}, integrations: {} } as unknown as ActPortDependencies),
     issues: {
       host: {
         issueList: unanswered,

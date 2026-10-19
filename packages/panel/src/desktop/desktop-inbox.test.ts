@@ -57,7 +57,7 @@ import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -273,6 +273,7 @@ beforeEach(() => {
   readMarks = [];
   readMarkRefused = false;
   members = [];
+  fakeActPort({ [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations }) });
   fakeAppBridge({
     act: (request: Act) => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
@@ -329,9 +330,6 @@ beforeEach(() => {
           status: ACT_OUTCOME_STATUS.DONE,
           value: { pages: taskPages.get(request.payload.taskId) ?? [] },
         });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;

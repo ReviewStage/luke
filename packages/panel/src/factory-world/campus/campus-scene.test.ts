@@ -5,7 +5,7 @@ import { CHECK_SUMMARY, CODING_AGENT_STATUS } from "@luke/features/coding-agent-
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, type Act } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { factoryWorldViewOf } from "@luke/ui/factory-world";
 import {
@@ -26,7 +26,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand, useAppCommand } from "../../app-commands.js";
 import type { TasksControl } from "../../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../../testing/app-bridge.js";
 import { onRegistry } from "../../testing/copy-feedback.js";
 import { tasksControl } from "../../testing/tasks-control.js";
 import { PICK_KIND, WORLD_LAYER, type WorldState } from "../world.js";
@@ -106,10 +106,10 @@ beforeEach(() => {
   });
   fakeAppBridge({
     act: (request: Act) => {
-      if (request.kind !== ACT_KIND.FACTORY_WORLD) throw new Error(`unexpected ${request.kind}`);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { world: WORLD } });
+      throw new Error(`unexpected ${request.kind}`);
     },
   });
+  fakeActPort({ [ACT_KIND.FACTORY_WORLD]: () => Promise.resolve({ world: WORLD }) });
 });
 
 afterEach(() => {

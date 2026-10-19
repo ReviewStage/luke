@@ -37,7 +37,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -291,10 +291,6 @@ function answer(request: Act): Promise<ActOutcome> {
       );
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.AUTOMATIONS_LIST:
-      if (automations === undefined)
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.TASKS_REPOSITORIES:
       if (repositoriesHeld !== undefined) {
         const held = repositoriesHeld;
@@ -364,6 +360,12 @@ beforeEach(() => {
   githubRepositories = [];
   repositoriesHeld = undefined;
   fakeAppBridge({ act: answer });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () =>
+      automations === undefined
+        ? Promise.reject(new Error("Not in this test."))
+        : Promise.resolve({ automations: automations.map(automationOf) }),
+  });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 

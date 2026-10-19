@@ -198,9 +198,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         colourCode: highlightSnippet,
       },
       codingAgents: { host: operator.host, notices },
-      integrations: { host: operator.host },
-      automations: { host: operator.host },
-      factory: { host: operator.host },
     },
     platformRows,
   );
@@ -248,7 +245,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     router,
     run,
-    actPort: createActPortHandler({ issues: { host: operator.host } }),
+    actPort: createActPortHandler({
+      automations: { host: operator.host },
+      factory: { host: operator.host },
+      integrations: { host: operator.host },
+      issues: { host: operator.host },
+    }),
     services: effectServices,
     reports,
     /**

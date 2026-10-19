@@ -40,7 +40,7 @@ import { runAppCommand } from "../app-commands.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -178,6 +178,9 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   workspace = [];
   gitHub = new Map();
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations: [SWEEP] }),
+  });
   fakeAppBridge({
     act: (request: Act) => {
       told.push(request);
@@ -224,12 +227,6 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: [SWEEP] },
-        });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);

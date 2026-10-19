@@ -27,7 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -155,6 +155,9 @@ const STATE: AppStateSnapshot = (() => {
 /** Every act the panel told the main process, in order. */
 const told: Act[] = [];
 
+/** Every workspace whose automations the act port was asked for, in order. */
+const automationReads: (string | undefined)[] = [];
+
 let root: Root | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -164,16 +167,13 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   told.length = 0;
+  automationReads.length = 0;
 });
 
 function answer(request: Act): ActOutcome {
   if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
     const beta = request.payload.workspaceId === BETA.id;
     return { status: ACT_OUTCOME_STATUS.DONE, value: beta ? BETA_MEMBERS : MEMBERS };
-  }
-  if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-    const beta = request.payload.workspaceId === BETA.id;
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { automations: beta ? [AUDIT] : [SWEEP] } };
   }
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." };
 }
@@ -218,6 +218,13 @@ async function drawn(text: string): Promise<HTMLElement> {
     act: (request: Act): Promise<ActOutcome> => {
       told.push(request);
       return Promise.resolve(answer(request));
+    },
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      automationReads.push(payload.workspaceId);
+      const beta = payload.workspaceId === BETA.id;
+      return Promise.resolve({ automations: beta ? [AUDIT] : [SWEEP] });
     },
   });
   fakeAppPlatform({ pageFrameUrl });
@@ -418,7 +425,7 @@ test("a member's chip hangs their card, and an Inbox item's its question and tha
 
 test("an automation's chip hangs its card, the workspace's automations read only once the card is hung", async () => {
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
-  const reads = () => told.filter((request) => request.kind === ACT_KIND.AUTOMATIONS_LIST).length;
+  const reads = () => automationReads.length;
   const before = reads();
 
   const card = await cardOf(chipsOf(container)[0]);

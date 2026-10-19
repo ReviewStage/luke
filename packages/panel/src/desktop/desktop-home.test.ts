@@ -28,7 +28,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
@@ -181,6 +181,12 @@ beforeEach(() => {
   automationReads = [];
   installScrollIntoView();
   installEditorLayout();
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      automationReads.push(payload.workspaceId ?? "");
+      return Promise.resolve({ automations: [SWEEP] });
+    },
+  });
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
@@ -189,13 +195,6 @@ beforeEach(() => {
           cursor: "1",
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        automationReads.push(request.payload.workspaceId ?? "");
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: [SWEEP] },
-        });
       }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });

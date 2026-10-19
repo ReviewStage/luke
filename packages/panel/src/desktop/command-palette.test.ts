@@ -612,13 +612,13 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   } as const;
   const listed: (string | undefined)[] = [];
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      listed.push(request.payload.workspaceId);
-      const value = { automations: [automation] };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      listed.push(payload.workspaceId);
+      return Promise.resolve({ automations: [automation] });
     },
   });
   const tasks = tasksControl({
