@@ -4,9 +4,12 @@
  * The host's notices decide between the toast and the notification by
  * whether the panel is in front (`agent-notices.ts`), which for a tab is
  * whether it is shown (`onTabShownChanged`): a tab on screen hears the
- * window's own toast, and only a hidden one is posted a notification, which
- * the doors check again as they post, since the browser would otherwise
- * show it over the tab the developer is looking at. A click brings the tab
+ * window's own toast, and only a hidden one is posted a notification. Note
+ * that the doors post whatever they are handed and check no visibility of
+ * their own, because the one post a shown tab is handed is an agent's end
+ * that waited on a read while the tab came forward, which the notices post
+ * rather than toast, and a door that dropped it would leave that end said
+ * nowhere. A click brings the tab
  * forward and opens the place, through the same presenter the toast's View
  * goes through. What a notification says is the notices' own text, the
  * same words the Mac's say and no more.
@@ -157,12 +160,10 @@ export function webNoticeDoors(dependencies: {
   return {
     ...toasts,
     post: (notice) => {
-      if (!notificationsOffered() || document.visibilityState !== "hidden") return;
-      if (Notification.permission !== "granted") {
-        onAnswered(notificationsStatusNow());
-        return;
-      }
-      show(notice);
+      if (!notificationsOffered()) return;
+      // A permission changed in the browser's own settings is heard here as well as on the test.
+      onAnswered(notificationsStatusNow());
+      if (Notification.permission === "granted") show(notice);
     },
     postTest: async () => {
       if (!notificationsOffered()) {

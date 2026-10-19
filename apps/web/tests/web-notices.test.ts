@@ -106,15 +106,6 @@ test("a notice while the tab is hidden shows the browser's notification, in the 
   );
 });
 
-test("a notice while the tab is shown shows no notification, since the panel's toast says it", () => {
-  browser = fakeNotifications({ permission: "granted" });
-  const { doors } = doorsAnswering();
-
-  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
-
-  assert.deepEqual(browser.shown, []);
-});
-
 test("a click on the notification opens the place it names", () => {
   vi.spyOn(window, "focus").mockImplementation(() => undefined);
   browser = fakeNotifications({ permission: "granted" });
@@ -227,4 +218,15 @@ test("the count stands before the tab's title as the panel renames it, and leave
   doors.badge(0);
   assert.equal(document.title, "Inbox — Acme");
   doors.close();
+});
+
+test("a notice posted after the permission was granted in the browser's own settings says notifications are on", () => {
+  browser = fakeNotifications({ permission: "granted" });
+  const { doors, answered } = doorsAnswering();
+  visibility = "hidden";
+
+  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
+
+  assert.deepEqual(answered, [NOTIFICATIONS_STATUS.ON]);
+  assert.equal(browser.shown.length, 1);
 });
