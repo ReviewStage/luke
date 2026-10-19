@@ -48,17 +48,6 @@ import {
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   type CodingAgentWorkspaceListParams,
-  type DictationTranscribeAnswerView,
-  type DictationTranscribeParams,
-  type PlanTemplateAnswerView,
-  type PlanTemplateRevisionAnswerView,
-  type PlanTemplateRevisionParams,
-  type PlanTemplateRevisionsAnswerView,
-  type PlanTemplateRevisionsParams,
-  type PlanTemplateWriteParams,
-  type ProviderKeyRemoveParams,
-  type ProviderKeySaveParams,
-  type ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -79,14 +68,6 @@ import { ActRefused, type ActRows, type ActSender } from "./router.js";
  * the panel shows, so an item it is looking at is not. The task's inbox is
  * answered to the panel alone: the notices watch what waits across the
  * account on a read of their own. Nothing else is held here.
- *
- * The account's own provider keys, which an agent runs on, are asked here
- * too, from Settings in the same panel: a save's key passes through to the
- * host once and is noted nowhere. The account's plan template is asked here
- * too, from Settings › Plan template, and is noted nowhere either.
- *
- * So does a clip dictated into an agent's or a new task's box: only a panel
- * records one, and it passes through to the host once and is noted nowhere.
  */
 export interface CodingAgentActsDependencies {
   host: {
@@ -138,21 +119,6 @@ export interface CodingAgentActsDependencies {
     codingAgentPullRequestViewed(
       params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
-    providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
-    providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
-    providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
-    planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
-    planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
-    planTemplateRevisions(
-      params: PlanTemplateRevisionsParams,
-    ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
-    planTemplateRevision(
-      params: PlanTemplateRevisionParams,
-    ): Effect.Effect<PlanTemplateRevisionAnswerView>;
-    planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
-    dictationTranscribe(
-      params: DictationTranscribeParams,
-    ): Effect.Effect<DictationTranscribeAnswerView>;
     codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
     codingAgentAgentInbox(
       params: CodingAgentAgentInboxParams,
@@ -222,15 +188,6 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED
-  | typeof ACT_KIND.PROVIDER_KEYS_READ
-  | typeof ACT_KIND.PROVIDER_KEYS_SAVE
-  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
-  | typeof ACT_KIND.PLAN_TEMPLATE_READ
-  | typeof ACT_KIND.PLAN_TEMPLATE_WRITE
-  | typeof ACT_KIND.PLAN_TEMPLATE_REVISIONS
-  | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
-  | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
-  | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
@@ -392,42 +349,6 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, sender);
       return host.codingAgentPullRequestViewed(params);
-    },
-    [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);
-      return host.providerKeysRead();
-    },
-    [ACT_KIND.PROVIDER_KEYS_SAVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_SAVE, sender);
-      return host.providerKeySave(params);
-    },
-    [ACT_KIND.PROVIDER_KEYS_REMOVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_REMOVE, sender);
-      return host.providerKeyRemove(params);
-    },
-    [ACT_KIND.PLAN_TEMPLATE_READ]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_READ, sender);
-      return host.planTemplateRead();
-    },
-    [ACT_KIND.PLAN_TEMPLATE_WRITE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_WRITE, sender);
-      return host.planTemplateWrite(params);
-    },
-    [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISIONS, sender);
-      return host.planTemplateRevisions(params);
-    },
-    [ACT_KIND.PLAN_TEMPLATE_REVISION]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISION, sender);
-      return host.planTemplateRevision(params);
-    },
-    [ACT_KIND.PLAN_TEMPLATE_RESTORE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_RESTORE, sender);
-      return host.planTemplateRestore(params);
-    },
-    [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);
-      return host.dictationTranscribe(params);
     },
     [ACT_KIND.CODING_AGENTS_INBOX]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX, sender);

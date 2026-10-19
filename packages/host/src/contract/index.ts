@@ -4,6 +4,7 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
+import { accountAskActsContract } from "./account-asks.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 
@@ -18,10 +19,11 @@ import type { PortActKind } from "./kinds.js";
  */
 
 export { ACT_ERROR } from "./base.js";
-export { ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
+export { ACCOUNT_ASK_ACT_KIND, ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
+  ...accountAskActsContract,
   ...issueActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 

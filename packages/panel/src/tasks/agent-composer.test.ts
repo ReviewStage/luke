@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -381,16 +381,13 @@ function stubMicrophone(): void {
   );
 }
 
-/** What main answers a dictation's acts with: the microphone granted, no route to prefer, and the words heard. */
+/** What main answers a dictation's `app:act` acts with: the microphone granted, and no route to prefer. */
 function microphoneAnswer(request: Act): ActOutcome {
   if (request.kind === ACT_KIND.MICROPHONE_REQUEST) {
     return { status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.GRANTED };
   }
   if (request.kind === ACT_KIND.MICROPHONE_ROUTE) {
     return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
-  }
-  if (request.kind === ACT_KIND.DICTATION_TRANSCRIBE) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { text: "the bug in" } };
   }
   return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
 }
@@ -406,6 +403,7 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
   });
+  fakeActPort({ [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the bug in" }) });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");
   const editor = composerEditor(box.container).editor;
