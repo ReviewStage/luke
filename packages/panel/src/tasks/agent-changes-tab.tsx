@@ -28,6 +28,8 @@ import {
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  TEXT_BUTTON_TONE,
+  TextButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -460,11 +462,28 @@ function entryOf(
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
   // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
   const notice = whole.texts === undefined ? fileNotice(file) : undefined;
+  // A file that only moved offers its lines from what it says, its read waiting for the press.
+  const shown =
+    notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered ? (
+      <>
+        {" · "}
+        <TextButton
+          tone={TEXT_BUTTON_TONE.LINK}
+          aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`}
+          onClick={whole.toggle}
+        >
+          {LIST_WORDS.SHOW_FILE}
+        </TextButton>
+      </>
+    ) : null;
   const lead =
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
-      <p className="diff-list-notice">{notice}</p>
+      <p className="diff-list-notice">
+        {notice}
+        {shown}
+      </p>
     );
   if (lead !== undefined) {
     notes.unshift({

@@ -1712,7 +1712,7 @@ test("a file read whole that is not the contents GitHub listed its patch against
   assert.equal(await readTexts("src/moved.ts"), undefined);
 });
 
-test("a file's header draws the whole file on Expand full file, read once, and back to its changes; a file that only moved shows its lines rather than saying so", async () => {
+test("a file's header draws the whole file on Expand full file, read once, and back to its changes; a file that only moved shows its lines, from Show file, rather than saying so", async () => {
   commits = { headSha: "a".repeat(40) };
   files = [
     changed("src/seats.ts", { patch: HEAD_PATCH }),
@@ -1738,7 +1738,14 @@ test("a file's header draws the whole file on Expand full file, read once, and b
   act(() => toggle("src/seats.ts")?.click());
   await flush();
   assert.deepEqual(drawnAs("src/seats.ts")?.whole, { before: BASE_TEXT, after: HEAD_TEXT });
-  act(() => toggle("src/moved.ts")?.click());
+  const lead = lastDrawn().renderAnnotation("src/moved.ts", "lead");
+  document.body.append(lead);
+  await flush();
+  const showFile = lead.querySelector<HTMLButtonElement>(
+    'button[aria-label="Show file: src/moved.ts"]',
+  );
+  assert.ok(showFile, "what a file that only moved says offers its lines");
+  act(() => showFile.click());
   await flush();
   assert.deepEqual(drawnAs("src/moved.ts")?.whole, { before: HEAD_TEXT, after: HEAD_TEXT });
   assert.equal(drawnAs("src/moved.ts")?.lead, false, "and once whole, shows its lines");

@@ -85,6 +85,8 @@ export const LIST_WORDS = {
   SHOW_IMAGE: "Show image",
   EXPAND_WHOLE: "Expand full file",
   COLLAPSE_TO_CHANGES: "Collapse to changes",
+  /** A file that only moved, drawn as its lines. */
+  SHOW_FILE: "Show file",
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark as viewed",
   UNMARK_VIEWED: "Mark as not viewed",
