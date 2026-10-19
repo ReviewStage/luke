@@ -14,7 +14,7 @@ import { offeredPlanTools, runShowPageTool } from "../host.js";
  * its path is read from the session's sandbox through the same door eve
  * hands every file tool, opened on first use, so a page sent inline opens
  * none. It is offered at each turn's start only to an agent on a plan
- * (`planToolsOf`), since one on no plan has no side panel to show a page in.
+ * (`taskToolsOf`), since one on no plan has no side panel to show a page in.
  */
 export default defineDynamic({
   events: {

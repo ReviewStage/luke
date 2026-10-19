@@ -861,8 +861,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
-        // An agent handed a prompt never saw the plan, so it has none to take notes on.
-        if (found.success.prompt !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
         const { id: agentId, taskId } = found.success;
         if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
         // The plan is written as the member whose turn this is, whoever started the agent.
