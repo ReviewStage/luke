@@ -19,7 +19,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * Plan mode the plan template and a call with Luke. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
- * card away with nothing started, its words with it; a start under way
+ * card away with nothing started, its words and files kept as New task's
+ * draft for the next opening (`../composer-drafts.ts`); a start under way
  * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
@@ -46,9 +47,9 @@ const FIELD_SELECTOR = '[role="textbox"]';
 const CARD_SELECTOR = '[aria-modal="true"]';
 
 /**
- * The card with its own state, mounted afresh on each opening so cancelled
- * words are never offered again, and whether a start is under way, which
- * holds the card.
+ * The card with its own state, mounted afresh on each opening so its picks
+ * start over, and whether a start is under way, which holds the card. Its
+ * words are the draft's, which the opening brings back.
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.

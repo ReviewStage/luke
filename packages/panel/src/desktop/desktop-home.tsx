@@ -62,9 +62,10 @@ import { useRowKeys } from "./use-row-keys.js";
  * for ⌘N and every other New task press; only Home holds the card inline.
  * Its words take the caret as the page shows, unless the developer is
  * typing in a field elsewhere, as an agent's box decides; a key pressed in
- * the card is the card's, and Escape there with nothing in it to close lets
- * go of the words. Note that its words, files, and issue are the card's own
- * state, kept in no draft store, so leaving Home lets them go.
+ * the card is the card's, and Escape there with nothing in it to close
+ * takes the caret out of the words. Its words and files are New task's draft in the
+ * workspace, which the dialog shares, so leaving Home keeps them; its issue
+ * is the card's own state, which leaving Home lets go.
  *
  * ↑ and ↓ move through its rows, a launcher's way, from the window itself
  * as well as from a row, and Return opens the row reached, so a launch is a
