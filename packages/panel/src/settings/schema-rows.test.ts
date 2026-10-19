@@ -244,3 +244,39 @@ test("Cancel keeps the voice as it stood and stops the clip, and Done on the voi
   assert.deepEqual(written, []);
   assert.equal(heard.played.at(-1), `${ASSET_BASE}voices/cedar.m4a`);
 });
+
+test("the arrows walk every voice across the headings, playing each, and the picked voice is scrolled into view as the dialog opens", async () => {
+  fakeAppPlatform({ assetBase: () => ASSET_BASE });
+  const heard = listenToClips();
+  const scrolled: string[] = [];
+  // Note that jsdom draws no layout and so has no `scrollIntoView` of its own to spy on.
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value(this: Element) {
+      scrolled.push(this.textContent ?? "");
+    },
+  });
+  const page = mount(SETTINGS_PAGE.VOICE);
+
+  act(() => control(page, "Voice: Cedar").click());
+  assert.deepEqual(scrolled, ["Cedar"]);
+
+  const arrow = (row: HTMLButtonElement, key: string) =>
+    act(() => {
+      row.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    });
+  arrow(voiceRow("Verse"), "ArrowDown");
+  assert.equal(voiceRow("Gleam").getAttribute("aria-checked"), "true");
+  assert.equal(document.activeElement, voiceRow("Gleam"));
+  arrow(voiceRow("Alloy"), "ArrowUp");
+  assert.equal(voiceRow("Noeul").getAttribute("aria-checked"), "true");
+  await settle();
+  assert.deepEqual(heard.played, [
+    `${ASSET_BASE}voices/gleam.m4a`,
+    `${ASSET_BASE}voices/noeul.m4a`,
+  ]);
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: undefined,
+  });
+});

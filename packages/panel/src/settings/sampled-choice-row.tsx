@@ -6,7 +6,8 @@
  * of them all instead: grouped under their headings, each a marked row of
  * `@luke/ui`'s `ChoiceList` with its line of detail, and a pick plays the value's
  * clip at once, a press on the picked row plays it again, and the arrow keys
- * pick and play as they walk. Nothing is written while the dialog stands:
+ * pick and play as they walk the whole list, across its headings. The picked
+ * row is scrolled into view as the dialog opens. Nothing is written while the dialog stands:
  * Done keeps the value picked, which is the one write (choosing a voice ends
  * the conversation in progress, so browsing must not), and Cancel, Escape,
  * or a press beside the card keep the value as it stood. The clip stops as
@@ -39,7 +40,7 @@ import {
 } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Tooltip } from "../tooltip.js";
 import { ChangedMark } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
@@ -69,6 +70,14 @@ function grouped(options: readonly SampledChoiceOption[]): OptionGroup[] {
   }
   return groups;
 }
+
+/** Which way an arrow key walks the list: down a row, up a row, or not at all. */
+const ARROW_STEP = new Map([
+  ["ArrowDown", 1],
+  ["ArrowRight", 1],
+  ["ArrowUp", -1],
+  ["ArrowLeft", -1],
+]);
 
 /**
  * The press at the dialog's foot, which plays the picked value's clip, or
@@ -125,6 +134,26 @@ function SampledChoiceDialog({
     setPicked(token);
     hear(token);
   };
+  const groups = grouped(options);
+  const walk = groups.flatMap((group) => group.options);
+  // Note that the picked row is brought into the list's view as the dialog opens, because the focus it takes does not scroll.
+  useLayoutEffect(() => {
+    pickedRow.current?.scrollIntoView?.({ block: "center" });
+  }, []);
+  // Note that the arrows walk every row, across the headings, and wrap at the list's ends, because each
+  // heading's run is a radio group of its own whose arrows would otherwise stop at its last row.
+  const onKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = ARROW_STEP.get(event.key);
+    if (step === undefined || !(event.target instanceof HTMLButtonElement)) return;
+    const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const at = rows.indexOf(event.target);
+    if (at < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = (at + step + rows.length) % rows.length;
+    pick(walk[next]?.value);
+    rows[next]?.focus();
+  };
   return (
     <Dialog
       title={title}
@@ -149,8 +178,8 @@ function SampledChoiceDialog({
       }
     >
       <ScrollArea size={SCROLL_SIZE.CONTENT}>
-        <div className="sampled-choice">
-          {grouped(options).map((group) => {
+        <div className="sampled-choice" onKeyDownCapture={onKeyDownCapture}>
+          {groups.map((group) => {
             const holdsPick = group.options.some((option) => option.value === picked);
             return (
               <section key={group.heading ?? ""} className="sampled-choice-group">
