@@ -6685,7 +6685,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           options: ["Email", "Slack"],
           recommended: "Slack",
         };
-        const form = (key: string, fields: readonly object[]) => ({
+        const form = (key: string, fields: readonly WireBoundaryInput[]) => ({
           text: "How are invitations sent?",
           key,
           ask: { response: { type: CHAT_ASK.FORM, fields } },
