@@ -36,6 +36,7 @@ import {
   useLeaveGuard,
 } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "@luke/panel/testing/app-platform";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { playMotions } from "@luke/panel/testing/pane-motion";
@@ -50,7 +51,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { layContainersAt } from "#testing/container-width";
 
 /**

@@ -117,8 +117,8 @@ const SCOPED_AFTER = {
   // The plan's tools, offered to an agent handed its plan.
   tools: ["apps/dev/host.ts", "apps/dev/tools/edit_plan.ts", "apps/dev/tools/show_page.ts"],
   // The plan editor's own `@`, and the words it shows in an empty plan.
-  mentions: ["packages/panel/src/plan-editor/", "apps/desktop/src/renderer/plan-editor/"],
-  placeholder: ["packages/panel/src/plan-editor/", "apps/desktop/src/renderer/plan-editor/"],
+  mentions: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
+  placeholder: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
   // The document the brain eval saves, and the words it looks for in it.
   saved: ["apps/luke/evals/brain-host.eval.ts"],
   words: ["apps/luke/evals/brain-host.eval.ts"],
@@ -166,14 +166,14 @@ const WIRE_NAME = {
     "packages/service/src/automations/automations-app.ts",
     "packages/service/src/automations/automations-app.test.ts",
     "apps/desktop/src/renderer/desktop/automations-page.test.ts",
-    "apps/desktop/src/renderer/desktop/command-palette.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-agent-page.test.ts",
+    "packages/panel/src/desktop/command-palette.test.ts",
+    "packages/panel/src/desktop/desktop-agent-page.test.ts",
     "packages/panel/src/desktop/desktop-home.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-inbox.test.ts",
-    "apps/desktop/src/renderer/desktop/person-page.test.ts",
-    "apps/desktop/src/renderer/settings/workspace-page.test.ts",
+    "packages/panel/src/desktop/desktop-inbox.test.ts",
+    "packages/panel/src/desktop/person-page.test.ts",
+    "packages/panel/src/settings/workspace-page.test.ts",
     "packages/panel/src/tasks/agent-automation.test.ts",
-    "apps/desktop/src/renderer/tasks/chip-cards.test.ts",
+    "packages/panel/src/tasks/chip-cards.test.ts",
   ],
   // The inbox's agents with no task (`account-inbox-wire.ts`).
   planless: [
