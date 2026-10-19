@@ -38,6 +38,8 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
 });
@@ -612,4 +614,51 @@ test("a switch in the row that keeps its menu opens nothing, held or right-click
   down(row, "touch");
   wait(HELD_MS);
   expect(openMenu()).not.toBeNull();
+});
+
+/** A menu drawn `width` by `height`, as a browser lays it out, though jsdom lays out nothing. */
+function menusMeasure(width: number, height: number): void {
+  const measured = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "menu"
+      ? new DOMRect(0, 0, width, height)
+      : measured.call(this);
+  });
+}
+
+/** A phone's keyboard up: the window as tall as before, only its top `height` seen. */
+function keyboardUp(height: number): void {
+  const seen = { offsetTop: 0, offsetLeft: 0, width: window.innerWidth, height };
+  vi.stubGlobal("visualViewport", Object.assign(new EventTarget(), seen));
+}
+
+/** The menu opened by a right-click at `y`, as far down the window as that. */
+function rightClickAt(y: number): HTMLElement {
+  mount(createElement(Harness, { groups: taskGroups([]) }));
+  const row = document.querySelector("p") ?? expect.fail("the row is drawn");
+  act(() => {
+    row.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: y }),
+    );
+  });
+  return openMenu() ?? expect.fail("the menu is open");
+}
+
+test("with a phone's keyboard up, a menu opened near the foot of what is seen stands wholly above the keyboard", () => {
+  vi.stubGlobal("innerHeight", 800);
+  menusMeasure(160, 120);
+  keyboardUp(400);
+  const menu = rightClickAt(380);
+  const top = Number.parseFloat(menu.style.top);
+  expect(top + 120).toBeLessThanOrEqual(400);
+});
+
+test("with no visual viewport, a menu opened near the window's foot stands where the window's height lets it", () => {
+  vi.stubGlobal("innerHeight", 800);
+  vi.stubGlobal("visualViewport", undefined);
+  menusMeasure(160, 120);
+  const menu = rightClickAt(380);
+  expect(menu.style.top).toBe("380px");
 });

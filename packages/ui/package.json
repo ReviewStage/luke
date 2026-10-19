@@ -45,6 +45,7 @@
     "./plan-comments": "./src/plan-comments.js",
     "./use-disclosure": "./src/use-disclosure.js",
     "./use-clipped": "./src/use-clipped.js",
+    "./visible-viewport": "./src/visible-viewport.js",
     "./tasks-model": "./src/tasks-model.js",
     "./call-card-model": "./src/call-card-model.js",
     "./avatar-session-contract": "./src/avatar-session-contract.js",

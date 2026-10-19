@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { visibleViewport } from "../../visible-viewport.js";
 
 /**
  * tooltip.tsx -- a hover hint as it is drawn: a small dark pill naming a control and its shortcut, or a light card saying more, hung beside the control it names.
@@ -83,8 +84,9 @@ interface TooltipPlace {
   side: TooltipSide;
 }
 
-function clampTo(value: number, size: number, room: number): number {
-  return Math.max(TOOLTIP_MARGIN, Math.min(value, room - size - TOOLTIP_MARGIN));
+/** `value` held a margin inside the edges `low` and `high`, for a hint `size` long. */
+function clampTo(value: number, size: number, low: number, high: number): number {
+  return Math.max(low + TOOLTIP_MARGIN, Math.min(value, high - size - TOOLTIP_MARGIN));
 }
 
 /**
@@ -100,20 +102,21 @@ function placeHint(anchor: HTMLElement, hint: HTMLElement, hang: TooltipHang): T
   // is still scaled short by the fade it waits to play.
   const width = hint.offsetWidth;
   const height = hint.offsetHeight;
+  const seen = visibleViewport();
   if (hang === TOOLTIP_HANG.CARD_BESIDE) {
-    const top = clampTo(at.top, height, window.innerHeight);
+    const top = clampTo(at.top, height, seen.top, seen.bottom);
     const past = at.right + TOOLTIP_GAP;
     const before = at.left - TOOLTIP_GAP - width;
-    if (past + width > window.innerWidth - TOOLTIP_MARGIN && before >= TOOLTIP_MARGIN) {
+    if (past + width > seen.right - TOOLTIP_MARGIN && before >= seen.left + TOOLTIP_MARGIN) {
       return { left: before, top, side: TOOLTIP_SIDE.START };
     }
-    return { left: clampTo(past, width, window.innerWidth), top, side: TOOLTIP_SIDE.END };
+    return { left: clampTo(past, width, seen.left, seen.right), top, side: TOOLTIP_SIDE.END };
   }
   const below = at.bottom + TOOLTIP_GAP;
-  const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
+  const fits = below + height <= seen.bottom - TOOLTIP_MARGIN;
   const left = hang === TOOLTIP_HANG.PILL ? at.left + at.width / 2 - width / 2 : at.left;
   return {
-    left: clampTo(left, width, window.innerWidth),
+    left: clampTo(left, width, seen.left, seen.right),
     top: fits ? below : at.top - TOOLTIP_GAP - height,
     side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
   };

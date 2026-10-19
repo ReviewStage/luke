@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { useDisclosure } from "../../use-disclosure.js";
+import { type ViewportBox, visibleViewport } from "../../visible-viewport.js";
 import { SwitchMark } from "../switch/switch.js";
 
 /**
@@ -463,6 +464,18 @@ function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(value, high));
 }
 
+/** A layer of this size at `left` and `top`, held a margin inside what can be seen of the window. */
+function clampInside(
+  seen: ViewportBox,
+  at: { left: number; top: number },
+  size: { width: number; height: number },
+) {
+  return {
+    left: clamp(at.left, seen.left + MENU_MARGIN, seen.right - size.width - MENU_MARGIN),
+    top: clamp(at.top, seen.top + MENU_MARGIN, seen.bottom - size.height - MENU_MARGIN),
+  };
+}
+
 /** The item a navigation key moves to from the focused one, or nothing for any other key. */
 function itemAfter(key: string, at: number, count: number): number | undefined {
   switch (key) {
@@ -758,16 +771,13 @@ function Submenu({
     const { width, height } = drawn.getBoundingClientRect();
     const beside = menu.getBoundingClientRect();
     const opener = anchor.getBoundingClientRect();
+    const seen = visibleViewport();
     const right = beside.right + MENU_DROP;
-    const left =
-      right + width > window.innerWidth - MENU_MARGIN ? beside.left - MENU_DROP - width : right;
+    const left = right + width > seen.right - MENU_MARGIN ? beside.left - MENU_DROP - width : right;
     const down = opener.top - MENU_INSET;
     const top =
-      down + height > window.innerHeight - MENU_MARGIN ? opener.bottom + MENU_INSET - height : down;
-    setAt({
-      left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
-      top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
-    });
+      down + height > seen.bottom - MENU_MARGIN ? opener.bottom + MENU_INSET - height : down;
+    setAt(clampInside(seen, { left, top }, { width, height }));
   }, [anchor, surface, rows]);
 
   const placed = at !== undefined;
@@ -857,10 +867,7 @@ export function Menu({
     const { width, height } = drawn.getBoundingClientRect();
     const left = placement.align === MENU_ALIGN.END ? placement.x - width : placement.x;
     const top = placement.grow === MENU_GROW.UP ? placement.y - height : placement.y;
-    setAt({
-      left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
-      top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
-    });
+    setAt(clampInside(visibleViewport(), { left, top }, { width, height }));
   }, [placement]);
 
   // Focus lands on the first item, or the checked one where it opens on
