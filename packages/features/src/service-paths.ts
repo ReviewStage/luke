@@ -1,5 +1,3 @@
-import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
-
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
@@ -347,44 +345,6 @@ export function taskSkillsPath(taskId: string): string {
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
-}
-
-/** The query naming a repository place, which every read of one repository by its workspace opens with. */
-function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
-  return new URLSearchParams({
-    [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: place.workspaceId,
-    [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: place.repository,
-  });
-}
-
-/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `taskTreePath`'s folder is. */
-export function repositoryTreePath(
-  place: RepositoryPlace,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const query = repositoryPlaceQuery(place);
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?${query}`;
-}
-
-/** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
-export function repositorySkillsPath(place: RepositoryPlace): string {
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
-}
-
-/** One pull request of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryPullRequestPath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
-}
-
-/** One issue of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryIssuePath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
