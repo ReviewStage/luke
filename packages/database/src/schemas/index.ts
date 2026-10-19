@@ -27,6 +27,7 @@ export * from "./plan-revision.js";
 export * from "./plan-template-revision.js";
 export * from "./preferences.js";
 export * from "./preview-fork.js";
+export * from "./pull-request-chapters.js";
 export * from "./repository-pin.js";
 export * from "./sandbox-terminal-lease.js";
 export * from "./session-sandbox.js";
