@@ -103,6 +103,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_FIELD,
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
@@ -6678,6 +6679,31 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           }),
           refused(ASK_REFUSAL.UNKNOWN_RECOMMENDATION),
         );
+        const channel = {
+          type: CHAT_FIELD.SELECT,
+          label: "Channel",
+          options: ["Email", "Slack"],
+          recommended: "Slack",
+        };
+        const form = (key: string, fields: readonly object[]) => ({
+          text: "How are invitations sent?",
+          key,
+          ask: { response: { type: CHAT_ASK.FORM, fields } },
+        });
+        for (const fields of [
+          [{ ...channel, recommended: "SMS" }],
+          [channel, { type: CHAT_FIELD.BOOLEAN, label: "Remind", recommended: "Slack" }],
+        ]) {
+          assert.deepEqual(
+            yield* chat.post(chat.first, form("channel-refused", fields)),
+            refused(ASK_REFUSAL.SELECT_RECOMMENDATION),
+          );
+        }
+        assert.equal(
+          (yield* chat.post(chat.first, form("invite-channel", [channel]))).status,
+          ACTION_RESULT_STATUS.ACCEPTED,
+          "a select's recommendation naming one of its options is taken",
+        );
         assert.deepEqual(
           yield* chat.post(chat.first, {
             text: "These lines.",
@@ -6720,7 +6746,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("asks" in read);
         assert.deepEqual(
           read.asks.map((ask) => ask.key),
-          [QUEUE_ASK.key],
+          ["invite-channel", QUEUE_ASK.key],
         );
       }),
   );
