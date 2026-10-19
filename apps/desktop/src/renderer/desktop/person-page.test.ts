@@ -20,11 +20,13 @@ import {
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { PersonPage } from "@luke/panel/desktop/person-page";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import type { InboxChoice, TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { tasksControl, waitingOf } from "@luke/panel/testing/tasks-control";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -33,8 +35,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { PersonPage } from "./person-page";
 
 /**
  * A person's page lists what of theirs the listed workspace holds, and

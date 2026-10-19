@@ -45,8 +45,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import "@luke/panel/file-tree/index";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { DesktopTasks } from "./desktop-tasks";
+import { DesktopTasks } from "@luke/panel/desktop/desktop-tasks";
+import {
+  codingAgentsControl,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "@luke/panel/testing/tasks-control";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",

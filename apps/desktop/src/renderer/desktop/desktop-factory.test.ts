@@ -22,13 +22,13 @@ import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
 import type { InboxChoice, TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { tasksControl } from "#testing/tasks-control";
 
 const NOW = Date.now();
 const MINUTE = 60_000;

@@ -14,6 +14,7 @@ import {
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
 import { type SideBundles, sideBundles } from "@luke/panel/bundle-loader";
+import { IssuesPage } from "@luke/panel/desktop/issues-page";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
@@ -29,6 +30,7 @@ import { playMotions } from "@luke/panel/testing/pane-motion";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
+import { tasksControl } from "@luke/panel/testing/tasks-control";
 import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -37,8 +39,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { tasksControl } from "#testing/tasks-control";
-import { IssuesPage } from "./issues-page";
 
 /**
  * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return peeking a row beside the board and ⌘Return opening its page, an issue's page saying who filed it and when it was filed and last changed and listing the tasks started from it, Start task… opening New task on an issue, and a read that did not land said with a retry.
