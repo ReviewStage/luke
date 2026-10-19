@@ -56,7 +56,10 @@ const ACTS = [
 type HostAsk = IssueProceduresDependencies["host"];
 
 // SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
-const UNREACHED = { account: {}, settings: {} } as unknown as Omit<ActPortDependencies, "issues">;
+const UNREACHED = { accountAsks: {}, account: {}, settings: {} } as unknown as Omit<
+  ActPortDependencies,
+  "issues"
+>;
 
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];

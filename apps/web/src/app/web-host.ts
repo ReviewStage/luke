@@ -286,6 +286,7 @@ function portDependencies(operator: OperatorClient, reporter: string): ActPortDe
       haltSessionReplay: operator.haltSessionReplay,
       resumeSessionReplay: operator.resumeSessionReplay,
     },
+    accountAsks: { host },
     issues: { host },
     settings: {
       host,

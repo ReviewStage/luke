@@ -238,6 +238,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         haltSessionReplay: operator.haltSessionReplay,
         resumeSessionReplay: operator.resumeSessionReplay,
       },
+      accountAsks: { host: operator.host },
       issues: { host: operator.host },
       settings: {
         host: operator.host,

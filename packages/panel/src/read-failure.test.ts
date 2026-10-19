@@ -28,7 +28,7 @@ import { PANEL_TAB } from "./panel-tabs.js";
 import { ApiKeysSection } from "./settings/api-keys-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { AgentChangesTab } from "./tasks/agent-changes-tab.js";
-import { fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
@@ -67,8 +67,6 @@ function answer(request: Act): Promise<ActOutcome> {
       // A read past the cursor is held open while nothing changes, as the service holds it.
       if (request.payload.after !== INBOX_CURSOR_START) return new Promise(() => undefined);
       return done(answering ? { items: [], cursor: "1" } : UNANSWERED);
-    case ACT_KIND.PROVIDER_KEYS_READ:
-      return done(answering ? { keys: [] } : UNANSWERED);
     default:
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
   }
@@ -84,6 +82,9 @@ beforeEach(() => {
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
   });
   fakeAppBridge({ act: answer });
+  fakeActPort({
+    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
+  });
 });
 
 const unmounts: (() => void)[] = [];

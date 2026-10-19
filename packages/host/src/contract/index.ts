@@ -5,6 +5,7 @@ import type {
   InferContractRouterOutputs,
 } from "@orpc/contract";
 import { accountActsContract } from "./account.js";
+import { accountAskActsContract } from "./account-asks.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { settingsActsContract } from "./settings.js";
@@ -22,6 +23,7 @@ import { settingsActsContract } from "./settings.js";
 export { ACT_ERROR } from "./base.js";
 export {
   ACCOUNT_ACT_KIND,
+  ACCOUNT_ASK_ACT_KIND,
   ISSUE_ACT_KIND,
   type PortActKind,
   SETTINGS_ACT_KIND,
@@ -31,6 +33,7 @@ export type { SettingUpdatePayload } from "./settings.js";
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
   ...accountActsContract,
+  ...accountAskActsContract,
   ...issueActsContract,
   ...settingsActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;

@@ -202,12 +202,15 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
+  valueFormatter,
 }: React.ComponentProps<typeof RechartsPrimitive.Tooltip> & {
   hideLabel?: boolean;
   hideIndicator?: boolean;
   color?: string;
   nameKey?: string;
   labelKey?: string;
+  /** How a finite value is drawn, where the locale's plain number would misread it, as a share. */
+  valueFormatter?: (value: number) => string;
 } & Omit<
     RechartsPrimitive.DefaultTooltipContentProps<TooltipValueType, TooltipNameType>,
     "accessibilityLayer"
@@ -276,7 +279,8 @@ function ChartTooltipContent({
                   item.value == null ? null : (
                     <span className="luke-chart-tooltip-value">
                       {Number.isFinite(item.value)
-                        ? Number(item.value).toLocaleString()
+                        ? (valueFormatter?.(Number(item.value)) ??
+                          Number(item.value).toLocaleString())
                         : String(item.value)}
                     </span>
                   )

@@ -177,7 +177,7 @@ export class WorkspaceLinearConnect extends Context.Service<
 >()("WorkspaceLinearConnect") {}
 
 /** The variable naming the workspace Linear connector's UID. */
-const WORKSPACE_LINEAR_CONNECTOR_VARIABLE = "LINEAR_WORKSPACE_CONNECTOR_UID";
+export const WORKSPACE_LINEAR_CONNECTOR_VARIABLE = "LINEAR_WORKSPACE_CONNECTOR_UID";
 
 /** The subject every ask names: the one the account's row keeps, so a grant is that account's whatever principal a session runs under. */
 function subjectOf(subject: string) {
