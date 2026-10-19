@@ -4129,3 +4129,80 @@ test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn i
     `https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
   ]);
 });
+
+test("a thread on a changed image drawn as its picture lands above the picture, the list scrolled to the file's header rather than a line the picture draws none of", async () => {
+  const logo = {
+    path: "assets/logo.svg",
+    previousPath: null,
+    status: CHANGED_FILE_STATUS.MODIFIED,
+    additions: 1,
+    deletions: 1,
+    omitted: null,
+    patch: "@@ -1,3 +1,3 @@\n <svg>\n-<rect/>\n+<circle/>\n </svg>",
+  };
+  const onLogo = thread({
+    id: JUMPED,
+    path: logo.path,
+    line: 2,
+    startLine: null,
+    originalLine: 2,
+    originalStartLine: null,
+    startSide: null,
+  });
+  // The picture is read as it comes near the view, which nothing here watches.
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  const tab = await draw(
+    controlAnswering(
+      { conversation: () => Promise.resolve({ pullRequest: reviewWith([onLogo]) }) },
+      PULL_REQUEST_STATE.OPEN,
+      () =>
+        Promise.resolve({
+          pullRequest: {
+            url: PAGE,
+            headSha: READ_HEAD,
+            baseSha: READ_HEAD,
+            truncated: false,
+            files: [logo],
+          },
+        }),
+    ),
+  );
+
+  act(() => headPress(tab).click());
+  await settle();
+
+  assert.equal(lists.at(-1)?.files[0]?.lead, true, "the image is drawn as its picture");
+  assert.deepEqual(listReveals, [logo.path]);
+});
+
+test("a landing waits for the panel to be visible before it takes the focus, as a panel still arriving refuses it", async () => {
+  const heard: ReadLink[] = [];
+  const tab = await drawn(
+    createElement(Routed, {
+      control: jumpControl([thread({ id: JUMPED, path: "src/gone.ts" })]),
+      heard,
+    }),
+  );
+  tab.style.visibility = "hidden";
+
+  act(() => headPress(tab).click());
+  await settle();
+  await frames();
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
+  assert.equal(card.hasAttribute("data-search-landed"), false, "nothing lands on a hidden panel");
+
+  tab.style.visibility = "visible";
+  await frames();
+  assert.equal(
+    card.hasAttribute("data-search-landed"),
+    true,
+    "the landing ends once the panel is seen",
+  );
+  assert.equal(document.activeElement, card.querySelector("summary"));
+});

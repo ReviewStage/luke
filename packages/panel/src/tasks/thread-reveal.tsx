@@ -70,7 +70,7 @@ export interface ThreadLanding {
   readonly ask: number;
   /** Brings the card into sight in the view's own scroller; none where the view has scrolled it there itself. */
   readonly scroll?: ((card: HTMLElement) => void) | undefined;
-  /** Whether the card stands where the landing may end on it; defaults to drawn in a view not hidden. */
+  /** Whether the card stands where the landing may end on it; defaults to `landable`. */
   readonly ready?: ((card: HTMLElement) => boolean) | undefined;
   /** How many frames the card is waited for before the landing is given up. */
   readonly frames?: number | undefined;
@@ -102,9 +102,19 @@ const RING_ANIMATION = "search-landed";
 /** How many frames a card is waited for where the view says no other. */
 const LANDING_FRAMES = 60;
 
-/** Whether a card is in the panel's layout and in no hidden view, as a Pull request tab hides the views not chosen, the condition a landing waits for by default. */
-function drawnHere(card: HTMLElement): boolean {
-  return card.isConnected && card.closest("[hidden]") === null;
+/**
+ * Whether a card may take the focus a landing brings: in the panel's
+ * layout, in no hidden view, as a Pull request tab hides the views not
+ * chosen, and visible, the panel past the arrival its staged surface waits
+ * out (`focus-seek.ts`), since a card still `visibility: hidden` refuses
+ * the focus and the landing would end without it.
+ */
+export function landable(card: HTMLElement): boolean {
+  return (
+    card.isConnected &&
+    card.closest("[hidden]") === null &&
+    getComputedStyle(card).visibility === "visible"
+  );
 }
 
 /**
@@ -139,7 +149,7 @@ export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): Lan
     if (ask === undefined || standing === undefined) return undefined;
     return focusSeek({
       find: () => card.current,
-      ready: standing.ready ?? drawnHere,
+      ready: standing.ready ?? landable,
       frames: standing.frames ?? LANDING_FRAMES,
       act: (card) => {
         standing.scroll?.(card);
