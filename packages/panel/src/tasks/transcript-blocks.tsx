@@ -22,10 +22,12 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import {
+  BUTTON_SIZE,
   Disclosure,
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  IconButton,
   INLINE_REF_LOOK,
   InlineRef,
   ProviderMark,
@@ -43,6 +45,8 @@ import {
   ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CircleCheckIcon,
   CircleDotIcon,
   CircleIcon,
@@ -82,6 +86,7 @@ import {
   type ReactNode,
   useContext,
   useMemo,
+  useState,
 } from "react";
 import {
   type Components,
@@ -116,7 +121,7 @@ import { ModelLabel } from "./model-label.js";
 import { usePlanPictureDrawer } from "./plan-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
-import { cardTitle } from "./tool-call-model.js";
+import { cardTitle, type SentWords } from "./tool-call-model.js";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
@@ -737,6 +742,7 @@ export function TranscriptOpeningCall({
   state,
   hint,
   card,
+  sent,
   onOpen,
 }: {
   callId: string;
@@ -749,11 +755,16 @@ export function TranscriptOpeningCall({
   hint: string;
   /** The card the hover hangs in the hint's place: the tab's own, where the tab it opens hangs one. */
   card?: ReactNode;
+  /** What the call sent another agent, whole, which a toggle at the line's end shows under it; none for a call that sent no words of its own. */
+  sent?: SentWords | undefined;
   onOpen: () => void;
 }): ReactNode {
   const Icon = CALL_ICON[kind];
   const { line, chip } = chippedLine(kind, subject, undefined, agent);
-  return (
+  const [open, setOpen] = useState(false);
+  // Note that the line's preview of the words gives way while they are shown whole under it.
+  const preview = sent !== undefined && open ? undefined : line.subject;
+  const row = (
     <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
@@ -766,14 +777,53 @@ export function TranscriptOpeningCall({
           state={state}
           icon={<Icon aria-hidden="true" />}
           label={line.verb}
-          subject={line.subject}
+          subject={preview}
           chip={chip}
           subjectIsCode={line.code}
         />
       </button>
     </Tooltip>
   );
+  if (sent === undefined) return row;
+  return (
+    <div className="tool-opening-sent">
+      <div className="tool-opening-row">
+        {row}
+        <IconButton
+          label={open ? SENT_WORDS.HIDE : SENT_WORDS.SHOW}
+          icon={
+            open ? <ChevronDownIcon aria-hidden="true" /> : <ChevronRightIcon aria-hidden="true" />
+          }
+          size={BUTTON_SIZE.COMPACT}
+          pressed={open}
+          onClick={() => setOpen((was) => !was)}
+        />
+      </div>
+      {open ? (
+        <div className="tool-body tool-sent-words">
+          {sent.words === undefined ? null : (
+            <div className="tool-sent-block">
+              <TranscriptWords text={sent.words} />
+            </div>
+          )}
+          {sent.note === undefined ? null : (
+            <div className="tool-sent-block">
+              <div className="tool-sent-note">{SENT_WORDS.NOTE}</div>
+              <TranscriptWords text={sent.note} />
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
+
+/** What the toggle of a call's sent words says, and the heading over a start's note. */
+const SENT_WORDS = {
+  SHOW: "Show what was sent",
+  HIDE: "Hide what was sent",
+  NOTE: "Note",
+} as const;
 
 /**
  * How a to-do of each status is drawn: its glyph and what the glyph says

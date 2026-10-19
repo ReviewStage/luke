@@ -659,6 +659,32 @@ export function changesSidebar(tool: string, output: WireValue | undefined): boo
   return SECTION_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
 }
 
+/** What a call to another agent sent it, in the caller's own words: the words, and a start's note beside them. */
+export interface SentWords {
+  readonly words: string | undefined;
+  readonly note: string | undefined;
+}
+
+/**
+ * What a `start_agent` or a `message_agent` call sent, whole, which its row's
+ * line cuts to its first line: a message's words, or a start's prompt (named
+ * `task` by a start journaled before the prompt had its name) and its note;
+ * nothing for any other call, or for a start on the plan with no note, which
+ * sent nothing of its own.
+ */
+export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
+  const words =
+    tool === AGENT_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
+      ? stringAt(input, "text")
+      : tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT
+        ? (stringAt(input, "prompt") ?? stringAt(input, "task"))
+        : undefined;
+  const isStart = tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT;
+  const note = isStart ? stringAt(input, "note") : undefined;
+  if (words === undefined && note === undefined) return undefined;
+  return { words, note };
+}
+
 /** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 

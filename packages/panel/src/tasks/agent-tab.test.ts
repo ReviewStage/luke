@@ -546,6 +546,59 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
 });
 
+test("a message or a start another agent was sent shows its words whole under its row at the toggle beside it, a start's note under them, the row still opening the agent; a start on the plan has no toggle", () => {
+  const long = "Rebase on main.\n\nThe invoice table moved to billing.ts, so take the new path.";
+  const message = assistant([
+    toolPart("message_agent", { agentId: "agent-7", text: long }, ACCEPTED),
+    toolPart(
+      "start_agent",
+      { prompt: "Ship the invoice export", note: "Keep the CSV columns." },
+      { status: "accepted", agent: { id: "agent-9", onYourTask: true } },
+    ),
+  ]);
+  // Note that a turn still moving draws its calls in the open, rather than folded under how many there were.
+  const { container, opened } = drawn(message, true);
+  const toggle = (callId: string) =>
+    container
+      .querySelector(`button[data-call-id="call-${callId}"]`)
+      ?.closest(".tool-opening-row")
+      ?.querySelector<HTMLButtonElement>("button[aria-pressed]");
+  const words = () => container.querySelector(".tool-sent-words")?.textContent ?? null;
+
+  assert.equal(words(), null, "the words wait behind the toggle");
+  act(() => toggle("message_agent")?.click());
+  assert.ok(
+    words()?.includes("take the new path"),
+    "the message is read whole, past its first line",
+  );
+  assert.deepEqual(opened, [], "the toggle opens no agent");
+  act(() => toggle("start_agent")?.click());
+  const start = container
+    .querySelector('button[data-call-id="call-start_agent"]')
+    ?.closest(".tool-opening-sent")
+    ?.querySelector(".tool-sent-words")?.textContent;
+  assert.ok(start?.includes("Ship the invoice export") && start.includes("Keep the CSV columns."));
+  act(() =>
+    container.querySelector<HTMLElement>('button[data-call-id="call-message_agent"]')?.click(),
+  );
+  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
+
+  const sentNothing = drawn(
+    assistant([
+      toolPart(
+        "start_agent",
+        {},
+        { status: "accepted", agent: { id: "agent-9", onYourTask: true } },
+      ),
+    ]),
+  );
+  assert.equal(
+    sentNothing.container.querySelector(".tool-opening-row"),
+    null,
+    "nothing was sent to show",
+  );
+});
+
 /** Main's document holding one agent on no task, running on Codex, as the plan list carries it. */
 function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });

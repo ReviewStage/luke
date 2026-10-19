@@ -6087,3 +6087,26 @@ button.picture-frame {
 .comment-quote-link:hover {
   color: var(--luke-color-text);
 }
+
+/* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
+   the line that opens the agent, a toggle at its end, and the words whole
+   under it, set in to the line's words as a call's body is. */
+.tool-opening-row {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.tool-opening-row > :first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-sent-block {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.tool-sent-note {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
