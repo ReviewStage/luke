@@ -34,7 +34,7 @@ import {
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Option, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -42,7 +42,12 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AccountSource, AppIdentity, type Environment } from "./effect/seams.js";
+import {
+  AccountSource,
+  AppIdentity,
+  type Environment,
+  SettingsChangedElsewhere,
+} from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
@@ -124,6 +129,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
+    const changedElsewhere = yield* Effect.serviceOption(SettingsChangedElsewhere);
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -593,6 +599,20 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         // own lifetime scope: the scope closing interrupts it before the stop
         // above gives back what the start took.
         yield* Effect.forkScoped(drainAccountPreferencesSync);
+        // Another writer's change to the file, where the shell can hear one:
+        // read again and sent to the panel as any update is. A read that
+        // fails is written down and the next change is still heard.
+        if (Option.isSome(changedElsewhere)) {
+          yield* Effect.forkScoped(
+            Stream.runForEach(changedElsewhere.value, () =>
+              catchAllButInterrupt(Effect.andThen(store.reload(), emitSettings()), (cause) =>
+                Effect.sync(() => {
+                  report(`Reading settings another tab changed failed: ${Cause.pretty(cause)}`);
+                }),
+              ),
+            ),
+          );
+        }
       }),
     };
   },

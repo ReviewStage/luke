@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
+import { GATEWAY_EVENT, type GatewayEventKind } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { THEME } from "@luke/settings";
+import { isRecord, type WireValue } from "@luke/wire";
+import { ConfigProvider, Effect, Layer, Queue, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { composeSettings } from "./compose-settings.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import { AppIdentity, Environment } from "./effect/seams.js";
+import { AppIdentity, Environment, SettingsChangedElsewhere } from "./effect/seams.js";
 import { hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import { fixedAccountSource } from "./testing/fixed-account-source.js";
@@ -76,4 +79,66 @@ it.effect(
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),
     );
   },
+);
+
+it.effect(
+  "another tab's settings write reaches this tab's panel when the shell says the file changed",
+  () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-elsewhere-");
+      /** One tab's settings concern over the shared file, and every event it sent its panel. */
+      const tab = Effect.fnUntraced(function* (
+        changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
+      ) {
+        const sent = yield* Queue.unbounded<{ kind: GatewayEventKind; payload: WireValue }>();
+        const machine = Layer.mergeAll(
+          Layer.succeed(
+            HostKernelTag,
+            hostKernelOver({
+              stateRoot,
+              // A run that sends nothing, so no count leaves for the service.
+              runMode: runModeFor({ capture: false, fixture: true }),
+              accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
+              now: () => 0,
+              createId: () => "id",
+              report: () => undefined,
+              emit: (kind, payload) => {
+                Queue.offerUnsafe(sent, { kind, payload });
+              },
+            }),
+          ),
+          Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+          Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+          fixedAccountSource(),
+          changedElsewhere,
+          NodeFileSystem.layer,
+          NodePath.layer,
+        );
+        const settings = yield* Effect.provide(composeSettings(), machine);
+        yield* settings.lifetime;
+        return { settings, sent };
+      });
+
+      const signal = yield* Queue.unbounded<void>();
+      const writer = yield* tab(Layer.empty);
+      const reader = yield* tab(Layer.succeed(SettingsChangedElsewhere, Stream.fromQueue(signal)));
+      // The reader has read the file before the writer changes it.
+      assert.equal((yield* reader.settings.store.snapshot()).stored.theme, undefined);
+
+      yield* writer.settings.store.set("theme", THEME.DARK);
+      Queue.offerUnsafe(signal, undefined);
+
+      const event = yield* Queue.take(reader.sent);
+      assert.equal(event.kind, GATEWAY_EVENT.SETTINGS_CHANGED);
+      const { payload } = event;
+      const sentTheme =
+        isRecord(payload) && isRecord(payload.settings) && isRecord(payload.settings.stored)
+          ? payload.settings.stored.theme
+          : undefined;
+      assert.equal(sentTheme, THEME.DARK);
+      assert.equal((yield* reader.settings.store.snapshot()).stored.theme, THEME.DARK);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
 );

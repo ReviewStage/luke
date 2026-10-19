@@ -999,8 +999,12 @@ export class SettingsStore {
   }
 
   /**
-   * The one settings write: serialize, load, mutate, stamp, write, and cache.
-   * A mutator answering nothing means the stored value is already the one
+   * The one settings write: serialize, read the file again, mutate, stamp,
+   * write, and cache. The read is the file's and not the held copy, because
+   * another writer on the same file (a second browser tab over one storage)
+   * may have written since this store last read it, and a change applied to
+   * the held copy would write that writer's fields back as they were. A
+   * mutator answering nothing means the stored value is already the one
    * asked for, so nothing is written. It runs exactly once per call, so it
    * may record what it decided for its caller to read afterwards.
    */
@@ -1009,7 +1013,7 @@ export class SettingsStore {
   ): Effect.Effect<void, PlatformError> {
     return this.#writes.withPermits(1)(
       Effect.gen({ self: this }, function* () {
-        const persisted = yield* this.#load();
+        const persisted = yield* this.#reread();
         const mutated = mutate(persisted);
         if (!mutated) return;
         const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
@@ -1071,6 +1075,26 @@ export class SettingsStore {
                 this.#held = persisted;
               }),
             ),
+      ),
+    );
+  }
+
+  /**
+   * Reads the file again and holds what it says now, for when it may have
+   * been written by someone else: before every write, and when the shell
+   * says another writer changed it (`SettingsChangedElsewhere`). A read that
+   * fails leaves the held copy as it was.
+   */
+  reload(): Effect.Effect<void, PlatformError> {
+    return Effect.asVoid(this.#reread());
+  }
+
+  #reread(): Effect.Effect<PersistedSettings, PlatformError> {
+    return this.#reads.withPermits(1)(
+      Effect.tap(this.#readPersisted(), (persisted) =>
+        Effect.sync(() => {
+          this.#held = persisted;
+        }),
       ),
     );
   }
