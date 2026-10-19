@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Conductor workspace or a Luke coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Conductor workspace or a Luke coding agent) on the user's chosen model and effort, runs independent PRs in parallel, has each worker babysit its PR and merge it on green or on the user's go, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives each worker once its PR is merged. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
+description: Roll out a plan or Linear issue as a set of PRs by acting as an orchestrator, from a Conductor workspace or a Luke coding agent. Splits the plan into small PRs, gives each PR to its own worker (a Conductor workspace or a Luke coding agent) on a model and effort the orchestrator picks for that PR, runs independent PRs in parallel, has each worker babysit its PR and merge it on green unless the PR needs the user's attention, restacks a stack through a short-lived worker, monitors the workers through messages rather than polling, and archives each worker once its PR is merged. Use when the user says "orchestrate", "roll out this plan", or asks you to farm a plan or issue out to workspaces or agents instead of doing the work here.
 ---
 
 # Orchestrate
@@ -17,7 +17,7 @@ for the host you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
-| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `choice` (or `form`) response and `needsReply` |
+| Ask the user | `AskUserQuestion` | `post_to_inbox` with an `approval`, `choice`, or `form` response and `needsReply` |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
 | Start a worker | `conductor workspace create` (below) | `create_task` named for the PR, then `start_agent` with its `taskId` and `title`, the brief as `prompt`, plus `model` and `effort` (below) |
@@ -34,14 +34,34 @@ for the host you are in:
 
 Arguments: the plan (a file path, a Linear issue key such as `LUKE-159`, or
 inline text), optionally followed by the model and effort the user wants the
-workers on. In Conductor they arrive as `$ARGUMENTS`; in Luke they are the
-words after `/orchestrate` in the developer's message, and the task's plan is
-the plan where those words name none. Pull an issue with the Linear tools;
-read a plan file with `cat`. If the user did not name a model and effort, ask
-once; check the valid ids for the chosen agent rather than guessing. If the
-user did not say whether workers merge their PRs on green or hold for an
-explicit go, ask that too, in the same question when model or effort is also
-missing; never assume either.
+workers on, or by a word on merging. In Conductor they arrive as
+`$ARGUMENTS`; in Luke they are the words after `/orchestrate` in the
+developer's message, and the task's plan is the plan where those words name
+none. Pull an issue with the Linear tools; read a plan file with `cat`.
+
+Do not ask the user for a model, an effort, or a merge policy before you
+start; decide them yourself, as below, and say what you chose in your first
+report. What the user named in the arguments or the conversation wins.
+
+- **Model and effort**: pick them per PR, from the valid ids for the agent
+  (the table's "Valid model ids" row), never a guessed id. Match them to the
+  PR: the strongest model at high effort for a PR that is hard to get right
+  (a cross-cutting refactor, a migration or backfill, concurrency, security,
+  auth, a subtle bug), and a faster or cheaper one at lower effort for a
+  mechanical or well-specified PR (a rename, a copy change, a config or docs
+  edit, a test added to a pattern already there). When nothing sets a PR
+  apart, use the user's default model and effort where the host names one
+  (in Luke, `list_models`' default), and the strongest model at its default
+  effort otherwise. A restack worker runs on a fast model.
+- **Merging**: workers merge their PRs on green by default. Hold a PR for
+  the user's explicit go only when it needs their attention: it changes
+  data or infrastructure irreversibly (a destructive migration or backfill,
+  a production setting, a secret), it settles a product, design, or
+  security question the plan left open, it changes what users see in a way
+  the plan did not spell out, or the user asked to review it. Mark each
+  held PR in its brief and tell the user which PRs are held and why, through
+  the table's "Ask the user" row with an approval for each (in Luke, one
+  inbox item per held PR, mentioning it, once it is open and green).
 
 Split the plan into small PRs and draw the dependency graph. Every PR gets
 its own worker, which builds, opens, and babysits that one PR, so review
@@ -116,11 +136,14 @@ Every brief must contain:
    --hard FETCH_HEAD` before touching the branch again (its clone may track
    no other branch than the one it started on).
 3. **Babysit and merge**: watch CI and review comments on the PR, fix what
-   fails, and merge as root `AGENTS.md`'s "Merging" says, taking
-   merge-on-green at kickoff as the go or holding for an explicit go from the
-   orchestrator, as the user chose; say which. A PR based on another PR
-   merges only once that PR has merged and the restack has retargeted it to
-   `main`.
+   fails, and merge as root `AGENTS.md`'s "Merging" says. Say which of the
+   two applies: merge on green, taking the kickoff as the go (the default),
+   or hold for an explicit go from the orchestrator, for a PR that needs the
+   user's attention, saying why. A worker on merge-on-green that finds the
+   PR needs the user after all (a review comment it should not settle alone,
+   a change that grew past its brief) does not merge; it reports blocked and
+   waits. A PR based on another PR merges only once that PR has merged and
+   the restack has retargeted it to `main`.
 4. **Report back, do not wait to be asked**: on each milestone (opened, fix
    pushed, CI green, blocked, merged) send a message to the orchestrator, as
    the table's "Worker reports back" row says, in this shape:
@@ -150,10 +173,12 @@ and each message arrives as a new turn. On each report:
 - **PR opened**: if a PR is waiting on this one, kick its worker off now
   (Step 1) with this PR's branch as its base.
 - **Fix pushed**: if any PR builds on this one, restack (Step 3).
-- **PR opened**: under hold, relay the user's go to the worker when it comes.
+- **CI green on a held PR**: ask the user for the go (Arguments, above), and
+  relay it to the worker when it comes.
 - **Question or blocked**: answer from the plan and the other PRs' state by
   messaging that worker. Escalate to the user only when the decision is
-  theirs, and relay the answer back yourself.
+  theirs, and relay the answer back yourself. A merge-on-green PR that
+  turns out to need the user becomes a held PR.
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker.
 
