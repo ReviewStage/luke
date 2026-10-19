@@ -25,7 +25,6 @@ import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Stream } from "effect";
-import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { EVE_RESET_OUTCOME, type EveSessions } from "../agents/brain-host/eve-sessions.js";
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
@@ -33,12 +32,13 @@ import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../a
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { accountApp } from "./account-app.js";
+import { accountProcedures } from "./account-procedures.js";
 
 /**
- * An account's deletion, answered by the account group the way its function
- * answers it, over a real dialect, with the request's account resolved as
+ * An account's deletion, answered by the account procedures the way the
+ * hosted oRPC route answers it, over a real dialect, with the request's account resolved as
  * `resolveHostedUserId` resolves it and the auth service faked. Before
  * anything is erased, every eve session the account's standing
  * conversations run in is retired as the request's own caller: over the
@@ -123,7 +123,7 @@ const sessionOf = (
 
 /**
  * Two accounts, each behind its bearer and its browser's session cookie, and
- * the group answering on the test's database and clock over the eve given,
+ * the procedures answering on the test's database and clock over the eve given,
  * or, with none, over the eve the deployment composes itself, which names no
  * secret and reaches no network.
  */
@@ -143,7 +143,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
           accounts.find((id) => input.headers.get("cookie") === sessionCookieOf(id)),
         ),
       );
-    const app = accountApp({
+    const procedures = accountProcedures({
       resolveUserId: (incoming) => requestUserId(incoming, userInfo, session),
       eveOrigin: () => ORIGIN,
       ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
@@ -163,12 +163,12 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
         db.select({ id: user.id }).from(user).where(eq(user.id, userId)),
         (rows) => rows.length === 1,
       );
-    return { owner, other, stands, ask: (request: Request) => answer(app, request) };
+    return { owner, other, stands, ask: (request: Request) => answer(procedures, request) };
   });
 
-const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
+const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
   Effect.gen(function* () {
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
+    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
@@ -179,14 +179,9 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
       // A delete revokes each provider's first grant whatever the account holds, which Connect takes; nothing else is asked.
       integrationConnectOf(() => ({ ...CONNECTOR_ASKED_NOTHING, revoke: () => Effect.void })),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });

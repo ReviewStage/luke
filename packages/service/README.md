@@ -442,7 +442,8 @@ answers the route over a fixed catalog, byte for byte as the old group did.
 
 ## Accounts' own provider keys
 
-`src/accounts/provider-keys-app.ts` answers `/api/account/provider-keys`, the
+`src/accounts/provider-keys-procedures.ts` answers `/api/account/provider-keys` on the
+hosted oRPC router (`src/orpc/`), the
 account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, and `DELETE
 ?provider=<provider>` removes one, each answered with the keys as they then
@@ -1308,25 +1309,24 @@ and a reader that has heard some hears the rest and the end exactly once.
 
 ## The account group
 
-`src/accounts/account-app.ts` is the account route group: the signed-in desktop's
-own delete, preferences, and plan template endpoints, described as routes of the group's own
-rather than carried as a passthrough, because each answers from this
-deployment's own database and none owns a contract of its own the way Better Auth does.
-Each endpoint resolves the bearer against the deployment's own account store
+`src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
+router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
+template procedures, on the paths `@luke/features/contract`'s `account.ts`
+declares, each answering from this deployment's own database.
+Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `src/accounts/account-seams.ts` is
-the one place that hands the group a real user table and a real preferences
-store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
-the same group from the same wiring; the reads and the writes themselves are
+the one place that hands the procedures a real user table and a real preferences
+store, which `apps/web/server/orpc-route.ts` hands the router; the reads and the writes themselves are
 `packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
-handed to the group as the effects they are rather than run at the seam, and
+handed to the procedures as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `apps/web/tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real
 dialect; the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
-`HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
+`HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
 The preferences snapshot carries three parts. `preferences` is the settings

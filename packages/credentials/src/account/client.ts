@@ -1,7 +1,15 @@
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { fixedBearer, HOSTED_API_ERROR } from "@luke/features";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { askHosted, type HostedFailure, hostedClient } from "@luke/features/hosted-link";
 import { onOwnFiber } from "@luke/runtime/effect";
-import { isRecord, isWireString, text, type UnparsedWireValue, type WireRecord } from "@luke/wire";
+import {
+  HTTP_STATUS,
+  isRecord,
+  isWireString,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@luke/wire";
 import { webResponseFromClientResponse } from "@luke/wire/effect";
 import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -70,7 +78,7 @@ class AccountClientError extends Data.TaggedError("AccountClientError")<{
  * or the deadline. The name is the error's kind, the way `AbortSignal.timeout`
  * always named its own, so a reader tells a timeout from a closed socket.
  */
-export class AccountTransportError extends Data.TaggedError("AccountTransportError")<{
+class AccountTransportError extends Data.TaggedError("AccountTransportError")<{
   readonly message: string;
   readonly errorName: string | undefined;
 }> {}
@@ -416,31 +424,48 @@ interface AccountDeletionOptions {
 }
 
 /**
+ * A deletion that did not land, as the caller reads it: a refusal the
+ * service answered, an expired access token among them as the 401 it is, or
+ * a request that reached no answer this build could read.
+ */
+function deletionFailure(failed: HostedFailure): AccountClientFailure {
+  if (failed._tag === "HostedRefused") {
+    return new AccountClientError({
+      message: `Account service refused the deletion: ${failed.refusal}`,
+      ...(failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+        ? { status: HTTP_STATUS.UNAUTHORIZED }
+        : undefined),
+    });
+  }
+  if (failed.fault === undefined) {
+    return new AccountClientError({ message: "Account service returned an invalid response" });
+  }
+  return new AccountTransportError({
+    message: `Account service did not answer the deletion: ${failed.fault}`,
+    errorName: failed.errorName,
+  });
+}
+
+/**
  * Asks the hosted service to erase the signed-in account. The bearer token is
  * the whole request — the service resolves who to delete from it, so nothing
- * here can name a different account. A refusal fails with an
- * `AccountClientError` carrying the status, which is what lets the caller tell
+ * here can name a different account. The token is the one handed in and is
+ * never renewed here: a refusal fails with an `AccountClientError`, an
+ * expired access token carrying its 401, which is what lets the caller tell
  * an expired access token (refresh and retry) from a service that actually
  * said no.
  */
 export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("credentials/deleteHostedAccount")(
   function* (options: AccountDeletionOptions): Effect.fn.Return<void, AccountClientFailure> {
-    const response = yield* timedRequest(
-      options.httpClient ?? FetchHttpClient.layer,
-      HttpClientRequest.post(
-        `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
-        { headers: { authorization: `Bearer ${options.accessToken}` } },
-      ),
-      options.timeoutMs ?? DELETE_TIMEOUT_MS,
+    const hosted = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential: fixedBearer(options.accessToken),
+      requestTimeoutMs: options.timeoutMs ?? DELETE_TIMEOUT_MS,
+    });
+    yield* askHosted(hosted.account.delete, undefined).pipe(
+      Effect.provide(options.httpClient ?? FetchHttpClient.layer),
+      Effect.mapError(deletionFailure),
     );
-    if (!response.ok) {
-      return yield* Effect.fail(
-        new AccountClientError({
-          message: `Account service returned ${response.status}`,
-          status: response.status,
-        }),
-      );
-    }
   },
 );
 

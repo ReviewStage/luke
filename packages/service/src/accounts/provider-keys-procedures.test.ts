@@ -20,16 +20,16 @@ import { readEither } from "@luke/wire/effect";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
-import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
-import { providerKeysApp } from "./provider-keys-app.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
+import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 /**
- * The account's own provider keys, answered by the group the way a function
- * answers them, over a real dialect and a provider faked at its HTTP door:
+ * The account's own provider keys, answered by the procedures the way the
+ * hosted oRPC route answers them, over a real dialect and a provider faked at its HTTP door:
  * a key is kept only once its provider accepts it, kept sealed, answered
  * only as a hint, and never logged, an Anthropic key with whether its
  * organization may run fast mode; the bearer names the account and
@@ -111,7 +111,7 @@ const readFastCheck = Schema.decodeUnknownSync(
 /** How the fake Anthropic answers a fast request, per key: run where the key is not named here. */
 type FastAnswers = ReadonlyMap<string, Response>;
 
-/** Two accounts behind their own bearers, a provider, and the group answering under the ring given. */
+/** Two accounts behind their own bearers, a provider, and the procedures answering under the ring given. */
 const openAccounts = (
   options: { ring?: string; provider?: ProviderAnswers; fast?: FastAnswers } = {},
 ) =>
@@ -132,19 +132,19 @@ const openAccounts = (
         : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
     );
     const logged: string[] = [];
-    const app = providerKeysApp({
+    const procedures = providerKeysProcedures({
       resolveUserId: (incoming) =>
         Effect.succeed(
           Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
         ),
     });
     const ask = (request: Request, ring = options.ring) =>
-      answer(app, request, { ring, provider: provider.layer, logged });
+      answer(procedures, request, { ring, provider: provider.layer, logged });
     return { owner, other, ask, checks: provider.requests, logged };
   });
 
 const answer = (
-  app: ReturnType<typeof providerKeysApp>,
+  procedures: ReturnType<typeof providerKeysProcedures>,
   request: Request,
   seams: {
     readonly ring: string | undefined;
@@ -162,7 +162,7 @@ const answer = (
     const recorder = Logger.make(({ message, cause }) => {
       seams.logged.push(`${JSON.stringify(message)} ${Cause.pretty(cause)}`);
     });
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
+    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -171,14 +171,9 @@ const answer = (
       seams.provider,
       Logger.layer([recorder]),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body, text } satisfies Answer;
   });
@@ -191,7 +186,10 @@ function request(
   if (init.query !== undefined) url.search = init.query;
   return new Request(url, {
     method: init.method ?? "GET",
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
+    headers: {
+      ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+      ...(init.body === undefined ? undefined : { "content-type": "application/json" }),
+    },
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
 }
@@ -470,6 +468,39 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           ofAnswer(yield* ask(request(owner, { method: "POST" }))),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "a save whose stated length is past a save's bound is refused as too large, and an unsigned one whatever it carries as unsigned",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask, checks } = yield* openAccounts({ ring: KEK.ONE });
+        const ofAnswer = (answered: Answer) => ({ status: answered.status, body: answered.body });
+        const body = JSON.stringify({
+          provider: PROVIDER_KEY_PROVIDER.OPENAI,
+          key: "k".repeat(2_100),
+        });
+        const stated = (userId: string) =>
+          new Request(new URL(KEYS_PATH, ORIGIN), {
+            method: "PUT",
+            headers: {
+              authorization: `Bearer ${userId}`,
+              "content-type": "application/json",
+              "content-length": String(Buffer.byteLength(body)),
+            },
+            body,
+          });
+
+        assert.deepEqual(
+          ofAnswer(yield* ask(stated(owner))),
+          refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+        assert.deepEqual(
+          ofAnswer(yield* ask(request(undefined, { method: "PUT", body: { nope: true } }))),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(checks, []);
       }),
   );
 });

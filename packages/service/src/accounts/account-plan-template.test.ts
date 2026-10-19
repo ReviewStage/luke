@@ -23,6 +23,7 @@ import {
 } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
+  PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
   type PlanTemplateRevisionsAnswer,
   planTemplateAnswerSchema,
@@ -32,18 +33,19 @@ import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_BODY_CEILING_BYTES } from "../orpc/handler.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { accountApp } from "./account-app.js";
+import { accountProcedures } from "./account-procedures.js";
 
 /**
- * The account's plan template, answered by the account group the way its
- * function answers it, over a real dialect: the default until the account
+ * The account's plan template, answered by the account procedures the way
+ * the hosted oRPC route answers them, over a real dialect: the default until the account
  * keeps its own, the account's own kept verbatim, a reset back to the
  * default, and a write that leaves the preferences snapshot beside it
  * exactly as it stood. The bearer names the account and nothing else does.
@@ -96,7 +98,7 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts behind their own bearers, and the group answering on the test's database and clock. */
+/** Two accounts behind their own bearers, and the procedures answering on the test's database and clock. */
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -107,7 +109,7 @@ const openAccounts = Effect.gen(function* () {
     [`Bearer ${owner}`, owner],
     [`Bearer ${other}`, other],
   ]);
-  const app = accountApp({
+  const procedures = accountProcedures({
     resolveUserId: (incoming) =>
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
@@ -125,14 +127,26 @@ const openAccounts = Effect.gen(function* () {
     readPlanTemplateRevision: readTemplateRevision,
     restorePlanTemplate,
   });
-  const ask = (request: Request) => answer(app, request);
-  return { owner, other, ask };
+  const ask = (request: Request) => answer(procedures, request);
+  /** The request's status, the two headers a caller reads, and its bytes. */
+  const bytes = (request: Request) =>
+    Effect.gen(function* () {
+      const response = yield* respond(procedures, request);
+      return {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        cacheControl: response.headers.get("cache-control"),
+        text: yield* Effect.promise(() => response.text()),
+      };
+    });
+  return { owner, other, ask, bytes };
 });
 
-const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
+/** The request as the route answers it, its bytes as they left the handler. */
+const respond = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
+    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -143,14 +157,14 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
       // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    return yield* hostedAnswer({ account: procedures }, services, request);
+  });
+
+const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
+  Effect.gen(function* () {
+    const response = yield* respond(procedures, request);
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -162,7 +176,10 @@ function request(
 ) {
   return new Request(new URL(path, ORIGIN), {
     method: init.method ?? HTTP_METHOD.GET,
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
+    headers: {
+      ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+      ...(init.body === undefined ? undefined : { "content-type": "application/json" }),
+    },
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
 }
@@ -198,12 +215,12 @@ function historyOf(answered: Answer): PlanTemplateRevisionsAnswer {
 const readHistory = (userId: string, before?: number) =>
   request(before === undefined ? REVISIONS_PATH : `${REVISIONS_PATH}?before=${before}`, userId);
 
-/** The route a rewrite lands one revision's path on, its number moved into the query. */
+/** One revision's public path, its number in the path, as the rewrite carries it on to the router. */
 const readRevision = (userId: string, seq: number | string) =>
-  request(`${PLAN_TEMPLATE_PATH}/revision?seq=${seq}`, userId);
+  request(`${REVISIONS_PATH}/${seq}`, userId);
 
 const restoreRevision = (userId: string, seq: number | string) =>
-  request(`${PLAN_TEMPLATE_PATH}/restore?seq=${seq}`, userId, { method: HTTP_METHOD.POST });
+  request(`${REVISIONS_PATH}/${seq}/restore`, userId, { method: HTTP_METHOD.POST });
 
 it.layer(getTestDB())("the plan template route", (it) => {
   it.effect("a template written is answered and read back verbatim as the account's own", () =>
@@ -258,5 +275,124 @@ it.layer(getTestDB())("the plan template route", (it) => {
       assert.deepEqual(yield* ask(restoreRevision(other, 2)), notFound);
       assert.deepEqual(templateOf(yield* ask(readTemplate(other))), DEFAULT_ANSWER);
     }),
+  );
+
+  it.effect(
+    "the answers are byte for byte the old group's: a read under private, no-store, and each refusal bare",
+    () =>
+      Effect.gen(function* () {
+        const { owner, bytes } = yield* openAccounts;
+        const json = "application/json";
+        assert.deepEqual(yield* bytes(readTemplate(owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          contentType: json,
+          cacheControl: "private, no-store",
+          text: JSON.stringify(DEFAULT_ANSWER),
+        });
+        assert.deepEqual(yield* bytes(request(PLAN_TEMPLATE_PATH, undefined)), {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          contentType: json,
+          cacheControl: null,
+          text: '{"error":"invalid-token"}',
+        });
+        assert.deepEqual(
+          yield* bytes(request(PLAN_TEMPLATE_PATH, owner, { method: HTTP_METHOD.POST })),
+          {
+            status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+            contentType: json,
+            cacheControl: null,
+            text: '{"error":"method-not-allowed"}',
+          },
+        );
+        assert.deepEqual(yield* bytes(restoreRevision(owner, 99)), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          contentType: json,
+          cacheControl: null,
+          text: '{"error":"not-found"}',
+        });
+      }),
+  );
+
+  it.effect(
+    "an unsigned write is refused as unsigned whatever its body, and a key the write does not name is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const unsigned = refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          yield* ask(
+            request(PLAN_TEMPLATE_PATH, undefined, { method: HTTP_METHOD.PUT, body: { nope: 1 } }),
+          ),
+          unsigned,
+        );
+        assert.deepEqual(
+          yield* ask(writeTemplate(owner, { template: OWN_TEMPLATE, also: true })),
+          invalid,
+        );
+        assert.deepEqual(templateOf(yield* ask(readTemplate(owner))), DEFAULT_ANSWER);
+      }),
+  );
+
+  it.effect(
+    "a write whose stated length is past the template's bound is refused as too large",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const body = JSON.stringify({
+          template: "x".repeat(PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_100),
+        });
+        const tooLarge = new Request(new URL(PLAN_TEMPLATE_PATH, ORIGIN), {
+          method: HTTP_METHOD.PUT,
+          headers: {
+            authorization: `Bearer ${owner}`,
+            "content-type": "application/json",
+            "content-length": String(Buffer.byteLength(body)),
+          },
+          body,
+        });
+
+        assert.deepEqual(
+          yield* ask(tooLarge),
+          refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+      }),
+  );
+
+  it.effect(
+    "a write that states no length is bounded by the handler's ceiling, and refused as too large past it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        // A body handed as text states no length of its own here, so only the ceiling bounds it.
+        const streamed = new Request(new URL(PLAN_TEMPLATE_PATH, ORIGIN), {
+          method: HTTP_METHOD.PUT,
+          headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" },
+          body: "x".repeat(HOSTED_BODY_CEILING_BYTES + 1),
+        });
+        assert.equal(streamed.headers.get("content-length"), null);
+
+        assert.deepEqual(
+          yield* ask(streamed),
+          refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
+        );
+      }),
+  );
+
+  it.effect(
+    "a revision's path naming no revision number is refused as a request that does not read, before the caller is",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        for (const seq of ["0", "1.5", "abc"]) {
+          assert.deepEqual(yield* ask(readRevision(owner, seq)), invalid);
+          assert.deepEqual(yield* ask(restoreRevision(owner, seq)), invalid);
+        }
+        assert.deepEqual(yield* ask(request(`${REVISIONS_PATH}/abc`, undefined)), invalid);
+        assert.deepEqual(yield* ask(readHistory(owner, 0)), invalid);
+      }),
   );
 });

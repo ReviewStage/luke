@@ -133,11 +133,13 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/account/plan-template/revisions/([^/]+)/restore",
     route: "account/plan-template/restore",
     query: "seq=$1",
+    orpc: true,
   },
   {
     src: "/api/account/plan-template/revisions/([^/]+)",
     route: "account/plan-template/revision",
     query: "seq=$1",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",

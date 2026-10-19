@@ -27,18 +27,18 @@ import {
 } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option } from "effect";
-import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
+import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { accountApp } from "./account-app.js";
+import { accountProcedures } from "./account-procedures.js";
 
 /**
  * The parts of the account's preferences snapshot that stand beside the
- * shared one, answered by the account group the way its function answers
+ * shared one, answered by the account procedures the way the hosted oRPC route answers
  * it, over a real dialect. The experiments: none until the account chooses,
  * a write that merges its keys over what stood and leaves the other parts as
  * they were, a key this deployment does not list passed over rather than
@@ -72,7 +72,7 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts behind their own bearers, and the group answering on the test's database and clock. */
+/** Two accounts behind their own bearers, and the procedures answering on the test's database and clock. */
 const openAccounts = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -83,7 +83,7 @@ const openAccounts = Effect.gen(function* () {
     [`Bearer ${owner}`, owner],
     [`Bearer ${other}`, other],
   ]);
-  const app = accountApp({
+  const procedures = accountProcedures({
     resolveUserId: (incoming) =>
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
@@ -101,13 +101,13 @@ const openAccounts = Effect.gen(function* () {
     readPlanTemplateRevision: readTemplateRevision,
     restorePlanTemplate,
   });
-  return { owner, other, ask: (request: Request) => answer(app, request) };
+  return { owner, other, ask: (request: Request) => answer(procedures, request) };
 });
 
-const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
+const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The handler runs on the router's own fiber, so it is handed the test's clock and services.
+    // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
@@ -118,14 +118,9 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
       // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* hostedAnswer({ account: procedures }, services, request);
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
@@ -133,7 +128,10 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
 function request(userId: string, body?: WireBoundaryInput) {
   return new Request(new URL(PREFERENCES_PATH, ORIGIN), {
     method: body === undefined ? HTTP_METHOD.GET : HTTP_METHOD.PUT,
-    headers: { authorization: `Bearer ${userId}` },
+    headers: {
+      authorization: `Bearer ${userId}`,
+      ...(body === undefined ? undefined : { "content-type": "application/json" }),
+    },
     ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
   });
 }

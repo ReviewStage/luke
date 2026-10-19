@@ -1,9 +1,6 @@
-import {
-  type AccountCallEffects,
-  accountCall,
-  type CallCredential,
-  HOSTED_SERVICE_PATH,
-} from "@luke/features";
+import type { CallCredential } from "@luke/features";
+import type { AccountPreferencesAnswerWire } from "@luke/features/account-wire";
+import { askHosted, type HostedClient, hostedClient } from "@luke/features/hosted-link";
 import {
   type AccountPreferences,
   accountPreferencesFromParts,
@@ -13,15 +10,13 @@ import {
   NO_EXPERIMENTS,
 } from "@luke/settings";
 import {
-  HTTP_METHOD,
   isRecord,
   isWireNumber,
   type UnparsedWireValue,
   unparsedWire,
-  type WireValue,
-  WireValueSchema,
+  type WireBoundaryInput,
 } from "@luke/wire";
-import { Effect, Schema as EffectSchema, type Layer, SchemaGetter, SchemaIssue } from "effect";
+import { Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 
@@ -65,31 +60,15 @@ function accountPreferencesAnswerFromWire(
   };
 }
 
-/** A value admitted by its declaration alone, never re-validated once decoded. */
-const carried = <A>(): EffectSchema.Codec<A, A> =>
-  EffectSchema.declare((_value): _value is A => true);
-
 /**
- * The account preferences answer, decoded through `AccountCallEffects.ask`.
- * The settings vocabulary's own reader stays the one parser for the
- * snapshot's shape; this schema is the boundary that reader now decodes
- * through, in place of the caller's hand-written reader `AccountCallEffects.read`
- * used to take.
+ * The snapshot the link read, through the settings vocabulary's own reader,
+ * which stays the one parser for its shape: the wire knows each part only as
+ * far as it is JSON (`@luke/features/account-wire`).
  */
-const accountPreferencesAnswerSchema: EffectSchema.Codec<AccountPreferencesAnswer, WireValue> =
-  WireValueSchema.pipe(
-    EffectSchema.decodeTo(carried<AccountPreferencesAnswer>(), {
-      decode: SchemaGetter.transformEffect((value: WireValue) => {
-        const answer = accountPreferencesAnswerFromWire(unparsedWire(value));
-        return answer === undefined
-          ? Effect.fail(new SchemaIssue.InvalidValue(undefined, value))
-          : Effect.succeed(answer);
-      }),
-      encode: SchemaGetter.transformEffect((answer: AccountPreferencesAnswer) =>
-        Effect.fail(new SchemaIssue.Forbidden({ message: "encoding is not supported" }, answer)),
-      ),
-    }),
-  );
+function answerOf(answer: AccountPreferencesAnswerWire): AccountPreferencesAnswer | undefined {
+  // SAFETY: the link read the snapshot out of the response's JSON text, so every part is a JSON value.
+  return accountPreferencesAnswerFromWire(unparsedWire(answer as WireBoundaryInput));
+}
 
 /**
  * Reads and writes the account preference snapshot. The local store decides
@@ -98,11 +77,11 @@ const accountPreferencesAnswerSchema: EffectSchema.Codec<AccountPreferencesAnswe
  * makes its requests through.
  */
 export class AccountPreferencesClient {
-  readonly #call: AccountCallEffects;
+  readonly #hosted: HostedClient;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: AccountPreferencesClientOptions) {
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
@@ -111,12 +90,7 @@ export class AccountPreferencesClient {
   }
 
   readPreferences(): Effect.Effect<AccountPreferencesAnswer | undefined> {
-    return this.#over(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES },
-        accountPreferencesAnswerSchema,
-      ),
-    );
+    return this.#over(askHosted(this.#hosted.account.preferences, undefined));
   }
 
   writePreferences(
@@ -124,14 +98,7 @@ export class AccountPreferencesClient {
   ): Effect.Effect<AccountPreferencesAnswer | undefined> {
     // Note that the link choice is sent as its own part only where this device holds one, so a device that never chose clears no other's.
     return this.#over(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-          body: JSON.stringify(accountPreferencesParts(preferences)),
-        },
-        accountPreferencesAnswerSchema,
-      ),
+      askHosted(this.#hosted.account.writePreferences, accountPreferencesParts(preferences)),
     );
   }
 
@@ -144,21 +111,17 @@ export class AccountPreferencesClient {
   writeExperiments(
     experiments: ExperimentChoices,
   ): Effect.Effect<AccountPreferencesAnswer | undefined> {
-    return this.#over(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-          body: JSON.stringify({ experiments }),
-        },
-        accountPreferencesAnswerSchema,
-      ),
-    );
+    return this.#over(askHosted(this.#hosted.account.writePreferences, { experiments }));
   }
 
-  #over<Answer>(
-    effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer> {
-    return Effect.provide(effect, this.#client);
+  /** One ask over the client this one was handed: the snapshot as it reads, or nothing for any failure. */
+  #over<E>(
+    asked: Effect.Effect<AccountPreferencesAnswerWire, E, HttpClient.HttpClient>,
+  ): Effect.Effect<AccountPreferencesAnswer | undefined> {
+    return asked.pipe(
+      Effect.map(answerOf),
+      Effect.orElseSucceed(() => undefined),
+      Effect.provide(this.#client),
+    );
   }
 }

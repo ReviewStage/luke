@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -14,6 +14,7 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
+import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import {
   CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
@@ -113,22 +114,12 @@ import {
 } from "./inbox-wire.js";
 import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
 import {
-  codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
   modelChoiceSchema,
 } from "./models-wire.js";
-import {
-  planTemplateAnswerSchema,
-  planTemplateRevisionAnswerSchema,
-  planTemplateRevisionsAnswerSchema,
-  planTemplateWriteRequestSchema,
-} from "./plan-document-template.js";
-import {
-  PROVIDER_KEY_QUERY,
-  providerKeySaveRequestSchema,
-  providerKeysAnswerSchema,
-} from "./provider-key-wire.js";
+import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
+import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
@@ -156,8 +147,6 @@ import {
   inboxItemPath,
   inboxItemReadPath,
   inboxMessagesPath,
-  planTemplateRestorePath,
-  planTemplateRevisionPath,
   taskAgentsPath,
   taskInboxPath,
 } from "./service-paths.js";
@@ -340,6 +329,19 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
 }
 
 /**
+ * The default read off the preferences snapshot, or why there was none: its
+ * coding-agent part as a choice reads, the settings parts beside it the
+ * settings client's to read.
+ */
+function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefaultAnswer {
+  if ("failure" in read) return read;
+  const choice = Option.getOrUndefined(
+    Schema.decodeUnknownOption(modelChoiceSchema)(read.codingAgent),
+  );
+  return choice === undefined ? UNANSWERED : { choice };
+}
+
+/**
  * The window's reads and writes of a task's coding agents: the models the
  * service offers and the account's default among them, a task's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
@@ -385,12 +387,9 @@ export class HostedCodingAgentClient {
 
   /** The account's default model and effort, read off the preferences snapshot. */
   readDefault(): Effect.Effect<CodingAgentDefaultAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }),
-      (answer) =>
-        Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, {}), (read) =>
-          "failure" in read ? read : { choice: read.codingAgent },
-        ),
+    return Effect.map(
+      hostedAnswer(askHosted(this.#hosted.account.preferences, undefined), {}),
+      defaultOf,
     );
   }
 
@@ -402,25 +401,15 @@ export class HostedCodingAgentClient {
       readEither(codingAgentDefaultWriteSchema)({ codingAgent: choice }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, DEFAULT_REFUSALS), (read) =>
-          "failure" in read ? read : { choice: read.codingAgent },
-        ),
+    return Effect.map(
+      hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),
+      defaultOf,
     );
   }
 
   /** The account's plan template: its own, or the default while it keeps none. */
   readPlanTemplate(): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.planTemplate, undefined), {});
   }
 
   /**
@@ -433,40 +422,25 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planTemplateWriteRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.writePlanTemplate, admitted), {});
   }
 
   /** A page of the account's plan template history, the newest or the one before a revision. */
   readPlanTemplateRevisions(
     params: PlanTemplateRevisionsParams,
   ): Effect.Effect<PlanTemplateRevisionsAnswerView, never, HttpClient.HttpClient> {
-    const path = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS;
-    const query = new URLSearchParams(
-      params.before === undefined ? {} : { before: String(params.before) },
-    );
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: query.size === 0 ? path : `${path}?${query}`,
-      }),
-      (answer) => readAnswer(answer, planTemplateRevisionsAnswerSchema, {}),
-    );
+    // The revision a page is read before travels as the text a query carries.
+    const query = params.before === undefined ? {} : { before: String(params.before) };
+    return hostedAnswer(askHosted(this.#hosted.account.planTemplateRevisions, query), {});
   }
 
   /** One revision of the account's plan template beside the one before it. */
   readPlanTemplateRevision(
     params: PlanTemplateRevisionParams,
   ): Effect.Effect<PlanTemplateRevisionAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: planTemplateRevisionPath(params.seq) }),
-      (answer) => readAnswer(answer, planTemplateRevisionAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.account.planTemplateRevision, { seq: String(params.seq) }),
+      {},
     );
   }
 
@@ -474,18 +448,15 @@ export class HostedCodingAgentClient {
   restorePlanTemplate(
     params: PlanTemplateRevisionParams,
   ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: planTemplateRestorePath(params.seq) }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.account.restorePlanTemplate, { seq: String(params.seq) }),
+      {},
     );
   }
 
   /** The account's own provider keys, as hints and statuses. */
   readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.providerKeys, undefined), {});
   }
 
   /**
@@ -498,13 +469,19 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS,
-        body: JSON.stringify(admitted),
+    return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
+  }
+
+  /** One provider's key removed, answering the keys as they then stand. */
+  removeProviderKey(
+    params: ProviderKeyRemoveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    // The provider rides in the query, since a DELETE carries no body.
+    return hostedAnswer(
+      askHosted(this.#hosted.account.removeProviderKey, {
+        query: { [PROVIDER_KEY_QUERY.PROVIDER]: params.provider },
       }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+      {},
     );
   }
 
@@ -525,21 +502,6 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, dictationAnswerSchema, {}),
-    );
-  }
-
-  /** One provider's key removed, answering the keys as they then stand. */
-  removeProviderKey(
-    params: ProviderKeyRemoveParams,
-  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    // The provider rides in the query, since a DELETE carries no body.
-    const query = new URLSearchParams({ [PROVIDER_KEY_QUERY.PROVIDER]: params.provider });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.DELETE,
-        path: `${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}?${query}`,
-      }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
     );
   }
 
