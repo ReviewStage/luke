@@ -319,7 +319,7 @@ export const APP_SETTING_SCHEMA = {
   inlineDiff: choiceSetting({
     field: "inlineDiff",
     id: APP_SETTING_ID.DIFF_INLINE,
-    label: "Inline diffs",
+    label: "Changed words",
     values: INLINE_DIFF_LIST,
     token: (inline) => inline,
     optionLabel: (inline) => INLINE_DIFF_LABEL[inline],

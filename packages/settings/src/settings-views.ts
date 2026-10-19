@@ -89,6 +89,8 @@ export const SETTINGS_SECTION = {
   GITHUB_REPOSITORIES: "workspace-github-repositories",
   /** Where each repository is cloned on this Mac and the command that runs it, which Open on this Mac reads. */
   MAC_REPOSITORIES: "workspace-mac-repositories",
+  /** How code and diffs are drawn, on Appearance: every setting the View settings popover offers, and the File tabs' own. */
+  APPEARANCE_DIFFS: "appearance-diffs",
 } as const;
 
 type SettingsSection = (typeof SETTINGS_SECTION)[keyof typeof SETTINGS_SECTION];

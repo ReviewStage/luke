@@ -12,21 +12,27 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
   IconButton,
   POPOVER_ALIGN,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
+  TEXT_BUTTON_TONE,
+  TextButton,
 } from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { useOpenSettings } from "../open-settings.js";
 import { PopoverPanel } from "../popover-panel.js";
 import { Segmented } from "../segmented.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
+import { Shortcut } from "../shortcut.js";
 import { Tooltip } from "../tooltip.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 import {
@@ -36,22 +42,24 @@ import {
 } from "./file-view-settings.js";
 
 /**
- * diff-settings.tsx -- the diff settings button in the Files changed bar, and the popover under it: every diff setting stage-cli offers, in Luke's own controls.
+ * view-settings.tsx -- the View settings button in the Files changed bar, and the popover under it: every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes.
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each
- * changes: the layout and how a changed line is marked in segmented
- * controls, what of it is marked, the type, its size and line height, and
- * each appearance's syntax theme in settings pop-ups, that last searched,
- * and backgrounds, wrap, line numbers, ligatures, and minimized comments in
- * switches. Each row carries the settings' mark while it differs from its
- * default. A diff too narrow to split says so under its layout, the choice
- * kept for a wider one. It closes on Escape, its ×, the button, or focus
- * leaving it, and hands the keyboard back to the button, as a menu does.
+ * changes, in three groups under their names: Diff, what a diff marks (its
+ * layout, its changed words, its indicators, and its backgrounds); Lines,
+ * how lines run (wrap, numbers, and minimized comments, with the key that
+ * turns them); and Text, how code looks (the syntax theme of the appearance
+ * chosen, the type, its size and line height, and ligatures). Its foot opens
+ * Settings › Appearance › Diffs, which holds the same settings. Each row
+ * carries the settings' mark while it differs from its default. A diff too
+ * narrow to split says so under its layout, the choice kept for a wider one.
+ * It closes on Escape, its ×, the button, or focus leaving it, and hands the
+ * keyboard back to the button, as a menu does.
  */
 
 /** What the button and its popover are called. */
-const DIFF_SETTINGS_LABEL = "Diff settings";
+const VIEW_SETTINGS_LABEL = "View settings";
 
 /** A vocabulary's values as a control's options, each by the name the settings give it. */
 function optionsOf<Value extends string>(
@@ -69,6 +77,15 @@ const LINE_HEIGHT_OPTIONS = optionsOf(Object.values(DIFF_LINE_HEIGHT), DIFF_LINE
 
 /** Each size, in pixels. */
 const FONT_SIZE_OPTIONS = DIFF_FONT_SIZES.map((size) => ({ value: size, label: `${size}px` }));
+
+/** The key that turns Minimize inline comments in the list, which its row names. */
+const MINIMIZE_CHORD = FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.MINIMIZE_COMMENTS].chord;
+
+/** Where the popover's foot opens Settings: Appearance, at its Diffs. */
+const DIFF_SETTINGS_LINK = {
+  page: SETTINGS_VIEW.APPEARANCE,
+  section: SETTINGS_SECTION.APPEARANCE_DIFFS,
+} as const satisfies SettingsLink;
 
 /** What a picker of themes says where its search matches none. */
 const NO_THEME = "No theme matches.";
@@ -142,13 +159,69 @@ function ThemeRow<Id extends string>({
   );
 }
 
-/** The popover's rows, every diff setting in groups set apart by a rule, as the context popover sets its sections apart: the layout and the marks, the switches, the themes, the type, and the comments. Each is changed for every diff as it is set. */
-function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
+/** What the popover's groups are called, in the order they stand. */
+const GROUP_TITLE = {
+  DIFF: "Diff",
+  LINES: "Lines",
+  TEXT: "Text",
+} as const;
+
+/** The appearance whose syntax theme the Text group shows. */
+const APPEARANCE = {
+  LIGHT: "light",
+  DARK: "dark",
+} as const;
+
+type Appearance = (typeof APPEARANCE)[keyof typeof APPEARANCE];
+
+const APPEARANCE_OPTIONS = [
+  { value: APPEARANCE.LIGHT, label: "Light" },
+  { value: APPEARANCE.DARK, label: "Dark" },
+] as const;
+
+/** The query the window's appearance answers, which the Text group opens on. */
+const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
+
+/** The appearance the window is drawn in now. */
+function currentAppearance(): Appearance {
+  return window.matchMedia(DARK_APPEARANCE).matches ? APPEARANCE.DARK : APPEARANCE.LIGHT;
+}
+
+/** What the popover's foot says, and where it goes. */
+const ALL_SETTINGS = "All diff and code settings\u2026";
+
+/** A group of the popover's rows under its name, set apart from the one before by a rule. */
+function SettingsGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const id = useId();
+  return (
+    <section className="view-settings-group" aria-labelledby={id}>
+      <h3 className="view-settings-heading" id={id}>
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The popover's rows, every diff setting in its group: Diff, Lines, and
+ * Text. Each is changed for every diff as it is set. The Text group shows
+ * one appearance's syntax theme at a time, the window's own as it opens,
+ * and the other a press away.
+ */
+function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
+  const [appearance, setAppearance] = useState(currentAppearance);
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
   return (
     <>
-      <div className="diff-settings-group">
+      <SettingsGroup title={GROUP_TITLE.DIFF}>
         <SegmentedRow
           label="Layout"
           detail={roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT}
@@ -157,6 +230,15 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           changed={changed("diffLayout")}
           onChange={(diffLayout) => change("diffLayout", diffLayout)}
         />
+        <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label="Changed words"
+          value={settings.inlineDiff}
+          options={INLINE_DIFF_OPTIONS}
+          parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
+          changed={changed("inlineDiff")}
+          onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
+        />
         <SegmentedRow
           label="Indicators"
           value={settings.diffIndicators}
@@ -164,17 +246,6 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           changed={changed("diffIndicators")}
           onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
         />
-        <SelectRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Inline diffs"
-          value={settings.inlineDiff}
-          options={INLINE_DIFF_OPTIONS}
-          parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
-          changed={changed("inlineDiff")}
-          onChange={(inlineDiff) => change("inlineDiff", inlineDiff)}
-        />
-      </div>
-      <div className="diff-settings-group">
         <SwitchRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Backgrounds"
@@ -182,9 +253,11 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           changed={changed("diffBackgrounds")}
           onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
         />
+      </SettingsGroup>
+      <SettingsGroup title={GROUP_TITLE.LINES}>
         <SwitchRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Wrapping"
+          label="Word wrap"
           checked={settings.wordWrap}
           changed={changed("wordWrap")}
           onChange={(wordWrap) => change("wordWrap", wordWrap)}
@@ -196,24 +269,44 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           changed={changed("lineNumbers")}
           onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
         />
-      </div>
-      <div className="diff-settings-group">
-        <ThemeRow
-          label="Dark theme"
-          themes={DIFF_THEMES.DARK}
-          value={settings.diffDarkTheme}
-          changed={changed("diffDarkTheme")}
-          onChange={(diffDarkTheme) => change("diffDarkTheme", diffDarkTheme)}
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label="Minimize inline comments"
+          detail={
+            <>
+              Or press <Shortcut chord={MINIMIZE_CHORD} spoken /> in the list
+            </>
+          }
+          checked={settings.diffMinimizeComments}
+          changed={changed("diffMinimizeComments")}
+          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
         />
-        <ThemeRow
-          label="Light theme"
-          themes={DIFF_THEMES.LIGHT}
-          value={settings.diffLightTheme}
-          changed={changed("diffLightTheme")}
-          onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
+      </SettingsGroup>
+      <SettingsGroup title={GROUP_TITLE.TEXT}>
+        <SegmentedRow
+          label="Theme"
+          value={appearance}
+          options={APPEARANCE_OPTIONS}
+          changed={false}
+          onChange={setAppearance}
         />
-      </div>
-      <div className="diff-settings-group">
+        {appearance === APPEARANCE.DARK ? (
+          <ThemeRow
+            label="Dark theme"
+            themes={DIFF_THEMES.DARK}
+            value={settings.diffDarkTheme}
+            changed={changed("diffDarkTheme")}
+            onChange={(diffDarkTheme) => change("diffDarkTheme", diffDarkTheme)}
+          />
+        ) : (
+          <ThemeRow
+            label="Light theme"
+            themes={DIFF_THEMES.LIGHT}
+            value={settings.diffLightTheme}
+            changed={changed("diffLightTheme")}
+            onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
+          />
+        )}
         <SelectRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Font"
@@ -248,22 +341,13 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           changed={changed("diffLigatures")}
           onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
         />
-      </div>
-      <div className="diff-settings-group">
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Minimize inline comments"
-          checked={settings.diffMinimizeComments}
-          changed={changed("diffMinimizeComments")}
-          onChange={(diffMinimizeComments) => change("diffMinimizeComments", diffMinimizeComments)}
-        />
-      </div>
+      </SettingsGroup>
     </>
   );
 }
 
-/** The popover: its title and ×, then the rows (`PopoverPanel`). */
-function DiffSettingsPopover({
+/** The popover: its title and ×, then the rows (`PopoverPanel`), and at its foot the way to every such setting in Settings. */
+function ViewSettingsPopover({
   id,
   roomy,
   onClose,
@@ -276,21 +360,33 @@ function DiffSettingsPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
+  const openSettings = useOpenSettings();
   return (
     <PopoverPanel
       id={id}
-      title={DIFF_SETTINGS_LABEL}
+      title={VIEW_SETTINGS_LABEL}
       closeLabel="Close"
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <DiffSettingsRows roomy={roomy} />
+      <ViewSettingsRows roomy={roomy} />
+      <div className="view-settings-foot">
+        <TextButton
+          tone={TEXT_BUTTON_TONE.LINK}
+          onClick={() => {
+            onClose();
+            openSettings(DIFF_SETTINGS_LINK);
+          }}
+        >
+          {ALL_SETTINGS}
+        </TextButton>
+      </div>
     </PopoverPanel>
   );
 }
 
-/** The bar's diff settings button, and its popover while open. */
-export function DiffSettingsButton({
+/** The bar's View settings button, and its popover while open. */
+export function ViewSettingsButton({
   roomy,
 }: {
   /** Whether the diff is wide enough to split, which the layout row says where it is not. */
@@ -305,12 +401,12 @@ export function DiffSettingsButton({
     trigger.current?.focus();
   };
   return (
-    <div className="diff-settings" ref={root}>
-      <Tooltip label={DIFF_SETTINGS_LABEL}>
+    <div className="view-settings" ref={root}>
+      <Tooltip label={VIEW_SETTINGS_LABEL}>
         <IconButton
           ref={trigger}
           icon={<SlidersHorizontalIcon aria-hidden="true" />}
-          label={DIFF_SETTINGS_LABEL}
+          label={VIEW_SETTINGS_LABEL}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? popoverId : undefined}
@@ -319,7 +415,7 @@ export function DiffSettingsButton({
       </Tooltip>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
-          <DiffSettingsPopover
+          <ViewSettingsPopover
             id={popoverId}
             roomy={roomy}
             onClose={close}

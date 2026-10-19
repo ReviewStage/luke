@@ -24,6 +24,7 @@ import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
   FILES_CHANGED_KEYS,
@@ -42,6 +43,7 @@ import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -250,6 +252,8 @@ interface DrawOptions {
   readonly finding?: boolean;
   /** Whether the view is the Pull request tab's chosen one; it is unless told. */
   readonly shown?: boolean;
+  /** The window's way to open Settings at a place; nothing unless told. */
+  readonly openSettings?: (link: SettingsLink) => void;
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
@@ -269,9 +273,12 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
         registry,
         onSideBundles(
           bundles,
-          createElement(DisclosureFind, {
-            finding: options.finding ?? false,
-            children: createElement("div", null, tab, options.beside ?? null),
+          createElement(OpenSettingsProvider, {
+            value: options.openSettings ?? (() => undefined),
+            children: createElement(DisclosureFind, {
+              finding: options.finding ?? false,
+              children: createElement("div", null, tab, options.beside ?? null),
+            }),
           }),
         ),
       ),
@@ -369,12 +376,14 @@ const DEFAULT_LOOK = {
   ligatures: false,
 };
 
-/** Opens the bar's diff settings, answering the popover. */
-function openSettings(): HTMLElement {
-  const button = document.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]');
+/** Opens the bar's View settings, the window in the appearance given, answering the popover. */
+function openSettings(appearance: "light" | "dark" = "light"): HTMLElement {
+  // The popover opens on the window's appearance, which the test's window does not answer.
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes(appearance) }));
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="View settings"]');
   act(() => button?.click());
   return (
-    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the diff settings open")
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the view settings open")
   );
 }
 
@@ -733,6 +742,42 @@ test("? outside Files changed, or typed into its tree's search, opens no sheet",
   assert.equal(press(document.body, QUESTION_MARK), false, "outside the view ? is nobody's");
   assert.equal(press(field, QUESTION_MARK), false, "in the search ? is typed");
   assert.equal(keysSheet(), null);
+});
+
+test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and opens Settings at its Diffs from its foot", async () => {
+  const opened: SettingsLink[] = [];
+  await drawTab({ openSettings: (link) => opened.push(link) });
+  const popover = openSettings("dark");
+
+  const groups = [...popover.querySelectorAll<HTMLElement>(".view-settings-group")].map((group) => [
+    group.querySelector("h3")?.textContent,
+    [...group.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
+    ),
+  ]);
+  assert.deepEqual(groups, [
+    ["Diff", ["Layout", "Changed words", "Indicators", "Backgrounds"]],
+    ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
+    ["Text", ["Theme", "Dark theme", "Font", "Font size", "Line height", "Ligatures"]],
+  ]);
+  assert.match(popover.textContent ?? "", /Or press I in the list/u, "Minimize names its key");
+
+  act(() => settingControl(popover, '[role="radio"]', "Light").click());
+  assert.ok(
+    popover.querySelector('[aria-label^="Light theme"]') !== null &&
+      popover.querySelector('[aria-label^="Dark theme"]') === null,
+    "the other appearance's theme is a press away",
+  );
+
+  const foot = [...popover.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "All diff and code settings\u2026",
+  );
+  act(() => foot?.click());
+  assert.deepEqual(opened, [
+    { page: SETTINGS_VIEW.APPEARANCE, section: SETTINGS_SECTION.APPEARANCE_DIFFS },
+  ]);
+  assert.equal(document.querySelector('[role="dialog"]'), null, "and the popover closes");
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
