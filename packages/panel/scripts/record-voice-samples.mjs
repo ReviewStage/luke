@@ -45,7 +45,7 @@ const INPUT_STEP_MS = 100;
 const QUIET_AFTER_SPEECH_MS = 2_000;
 const TAKE_TIMEOUT_MS = 30_000;
 const CLOSE_TIMEOUT_MS = 15_000;
-const TAKES_PER_VOICE = 3;
+const TAKES_PER_VOICE = 5;
 /** The level under which a sample counts as quiet when the take is trimmed, and the quiet kept either side. */
 const QUIET_LEVEL = 400;
 const TRIM_PAD_MS = 150;
