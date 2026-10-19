@@ -9,7 +9,8 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * first open one while none is) and leaves the group in one press, and the
  * arrow keys move along the open rows and choose as they go, wrapping at
  * either end. A press on the checked row does nothing, unless the list is
- * `clearable`, where it takes the choice back. Picking several is a group of
+ * `clearable`, where it takes the choice back, or hears it (`onPressChecked`),
+ * as a list of voices does to play the chosen one again. Picking several is a group of
  * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
  * Space, the arrow keys moving the keyboard along them without toggling.
  * Enter presses a row as a button's Enter does, unless what holds the list
@@ -117,6 +118,8 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   select?: ChoiceSelect | undefined;
   /** Whether a pick-one list's checked row, pressed again, takes the choice back. */
   clearable?: boolean | undefined;
+  /** Hears a press on a pick-one list's checked row that changes nothing, for a row that acts when pressed again. */
+  onPressChecked?: ((value: Value) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether each row leads with its radio or its checkbox. */
   look?: ChoiceLook | undefined;
@@ -287,6 +290,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const press = (pressed: Value) => {
     const next = afterPress(props, pressed);
     if (next !== undefined) props.onChange(next);
+    else if (one) props.onPressChecked?.(pressed);
   };
   // An arrow chooses the next open row along and takes the keyboard there, wrapping at either end.
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {

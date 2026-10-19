@@ -105,7 +105,10 @@ const { FEMININE, MASCULINE } = LIVE_VOICE_PRESENTATION;
  * the SDK, or any endpoint, so they stand as `undefined` rather than with a
  * language or a region guessed at.
  */
-export const LIVE_VOICE_PROFILE: { readonly [Voice in LiveVoice]: LiveVoiceProfile | undefined } = {
+/** What OpenAI publishes about every voice, `undefined` for a voice it describes nowhere. */
+export type LiveVoiceProfiles = { readonly [Voice in LiveVoice]: LiveVoiceProfile | undefined };
+
+export const LIVE_VOICE_PROFILE: LiveVoiceProfiles = {
   alloy: undefined,
   ash: undefined,
   ballad: undefined,

@@ -162,6 +162,22 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
 });
 
+test("a press on the checked row is heard by a list that listens for it, and changes nothing", () => {
+  const pressed: string[] = [];
+  const page = render(
+    createElement(ChoiceList<Retry>, {
+      legend: "Retries",
+      options: OPTIONS,
+      value: ["never"],
+      onChange: (next: readonly Retry[]) => pressed.push(`change:${next.join("+")}`),
+      onPressChecked: (value: Retry) => pressed.push(`again:${value}`),
+    }),
+  );
+  act(() => row(page, "Never retry").click());
+  act(() => row(page, "Retry 3 times").click());
+  assert.deepEqual(pressed, ["again:never", "change:three"]);
+});
+
 test("after a clearable list's pick is taken back, the arrows step from the row the keyboard is on", () => {
   const page = render(createElement(Held, { clearable: true }));
   const never = row(page, "Never retry");

@@ -128,6 +128,10 @@ export interface SettingOption {
   picture?: string;
   /** The path of a clip that lets it be heard before it is chosen, such as a voice's, under the panel's asset base. */
   sample?: string;
+  /** The heading it stands under where the set is drawn in groups, such as a voice's language. */
+  group?: string;
+  /** A line of what it is, drawn under its label where the control has room for one. */
+  detail?: string;
 }
 
 /**

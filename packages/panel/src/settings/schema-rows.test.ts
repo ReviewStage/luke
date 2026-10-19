@@ -18,7 +18,7 @@ import type { SettingsWrites } from "./writes.js";
  * switch named by its row, a short choice a pop-up naming the stored value,
  * each writing what it is moved to, and a refused write said under the row
  * that asked, its control pressable again. A choice whose values are heard
- * plays the chosen one beside its pop-up, and plays each as it is chosen.
+ * opens a dialog that plays each as it is picked and keeps only what Done does.
  */
 
 /** Where the test's shell serves the panel's static files from. */
@@ -176,61 +176,71 @@ function listenToClips() {
   return heard;
 }
 
-test("the Voice row plays the chosen voice's clip beside its pop-up, and a second press stops it", async () => {
+/** The voice the dialog offers by `name`, as a radio row naming it. */
+function voiceRow(name: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="radio"]')].find(
+      (row) => row.textContent?.startsWith(name),
+    ) ?? assert.fail(`the dialog offers ${name}`)
+  );
+}
+
+/** The dialog's own button named `name`. */
+function dialogButton(name: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+      (button) => button.textContent === name || button.getAttribute("aria-label") === name,
+    ) ?? assert.fail(`the dialog has ${name}`)
+  );
+}
+
+test("the Voice row opens every voice under its heading, plays each as it is picked or pressed again, and Done keeps the last", async () => {
   fakeAppPlatform({ assetBase: () => ASSET_BASE });
   const heard = listenToClips();
   const page = mount(SETTINGS_PAGE.VOICE);
-
-  act(() => control(page, "Play sample").click());
-  await settle();
-  assert.deepEqual(heard.played, [`${ASSET_BASE}voices/cedar.m4a`]);
-
-  act(() => control(page, "Stop sample").click());
-  await settle();
-  assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/cedar.m4a`]);
-  control(page, "Play sample");
-});
-
-test("choosing another voice writes it and plays it, cutting off the clip already playing", async () => {
-  fakeAppPlatform({ assetBase: () => ASSET_BASE });
-  const heard = listenToClips();
-  const page = mount(SETTINGS_PAGE.VOICE);
-  act(() => control(page, "Play sample").click());
 
   act(() => control(page, "Voice: Cedar").click());
-  const marin =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-      (item) => item.textContent === "Marin (default)",
-    ) ?? assert.fail("the menu offers Marin");
-  act(() => marin.click());
-  await settle();
+  const headings = [...document.querySelectorAll('[role="dialog"] h3')].map((h) => h.textContent);
+  assert.deepEqual(headings.slice(0, 2), ["Original", "English · North American"]);
+  assert.ok(headings.includes("Japanese"));
+  assert.equal(voiceRow("Cedar").getAttribute("aria-checked"), "true");
+  assert.equal(voiceRow("Willow").textContent?.includes("Feminine"), true);
 
-  assert.deepEqual(written, [["voice", "marin"]]);
+  act(() => voiceRow("Willow").click());
+  act(() => voiceRow("Willow").click());
+  act(() => voiceRow("Shida").click());
+  await settle();
+  assert.deepEqual(written, []);
   assert.deepEqual(heard.played, [
-    `${ASSET_BASE}voices/cedar.m4a`,
-    `${ASSET_BASE}voices/marin.m4a`,
+    `${ASSET_BASE}voices/willow.m4a`,
+    `${ASSET_BASE}voices/willow.m4a`,
+    `${ASSET_BASE}voices/shida.m4a`,
   ]);
-  assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/cedar.m4a`]);
+
+  act(() => dialogButton("Done").click());
+  await settle();
+  assert.deepEqual(written, [["voice", "shida"]]);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(heard.paused.at(-1), `${ASSET_BASE}voices/shida.m4a`);
 });
 
-test("a voice whose choice is refused still plays, and the row's button stops it", async () => {
+test("Cancel keeps the voice as it stood and stops the clip, and Done on the voice already chosen writes nothing", async () => {
   fakeAppPlatform({ assetBase: () => ASSET_BASE });
   const heard = listenToClips();
   const page = mount(SETTINGS_PAGE.VOICE);
-  answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };
 
   act(() => control(page, "Voice: Cedar").click());
-  const marin =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-      (item) => item.textContent === "Marin (default)",
-    ) ?? assert.fail("the menu offers Marin");
-  act(() => marin.click());
+  act(() => voiceRow("Marin (default)").click());
+  act(() => dialogButton("Cancel").click());
   await settle();
-  assert.deepEqual(heard.played, [`${ASSET_BASE}voices/marin.m4a`]);
-  control(page, "Voice: Cedar");
-
-  act(() => control(page, "Stop sample").click());
-  await settle();
+  assert.deepEqual(written, []);
   assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/marin.m4a`]);
-  control(page, "Play sample");
+
+  act(() => control(page, "Voice: Cedar").click());
+  assert.equal(voiceRow("Cedar").getAttribute("aria-checked"), "true");
+  act(() => dialogButton("Play sample").click());
+  act(() => dialogButton("Done").click());
+  await settle();
+  assert.deepEqual(written, []);
+  assert.equal(heard.played.at(-1), `${ASSET_BASE}voices/cedar.m4a`);
 });

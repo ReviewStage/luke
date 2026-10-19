@@ -5,7 +5,7 @@ import {
   VIDEO_AVATAR_NAME,
   videoAvatarCover,
 } from "@luke/features/video-avatar";
-import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
+import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -34,6 +34,13 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
+import {
+  OFFERED_VOICE_LIST,
+  voiceDetail,
+  voiceGroup,
+  voiceOptionLabel,
+  voiceSamplePath,
+} from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
@@ -49,24 +56,6 @@ export {
 // The ids themselves live in core, because the product-event vocabulary names
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, isAppSettingId };
-
-/* The voice is an account preference every device applies, and every device
-   reads the one Live vocabulary, so the row offers the whole of it. */
-const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST;
-
-/* The API names its voices in lowercase; on a control they read as names. The
-   default carries its status into the menu, so returning to it never needs the
-   README or a memory of what shipped. */
-function voiceOptionLabel(voice: LiveVoice): string {
-  const name = voice.charAt(0).toUpperCase() + voice.slice(1);
-  return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
-}
-
-/* Each voice's clip under the panel's asset base, recorded from the voice
-   itself by `tools/voice-samples`, which names the file this way. */
-function voiceSamplePath(voice: LiveVoice): string {
-  return `voices/${voice}.m4a`;
-}
 
 /* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
@@ -180,6 +169,8 @@ export const APP_SETTING_SCHEMA = {
     token: (voice) => voice,
     optionLabel: voiceOptionLabel,
     optionSample: voiceSamplePath,
+    optionGroup: voiceGroup,
+    optionDetail: voiceDetail,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
     page: SETTINGS_PAGE.VOICE,
