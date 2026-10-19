@@ -73,6 +73,12 @@ export interface DesktopServices {
    * reported to Sentry, since many of them are begun and never awaited.
    */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /**
+   * The same services as they stand, handed to the act port as oRPC's
+   * `effect/context`, so a procedure's effect runs on them as `run` would
+   * run it rather than on a runtime of oRPC's own.
+   */
+  readonly services: Context.Context<never>;
 }
 
 /** What the desktop offers of its own, beside the platform concerns its host runs: every one of them. */
@@ -319,6 +325,7 @@ export function composeDesktop(
         testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
         avatar,
         run,
+        services,
       };
     }),
   );

@@ -22,6 +22,9 @@ catalogs:
     '@effect/vitest':
       specifier: 4.0.4
       version: 4.0.4
+    '@orpc/client':
+      specifier: 2.0.0-beta.44
+      version: 2.0.0-beta.44
     '@orpc/contract':
       specifier: 2.0.0-beta.44
       version: 2.0.0-beta.44
@@ -795,6 +798,15 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@orpc/contract':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44
+      '@orpc/experimental-effect':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44(crossws@0.4.12)(effect@4.0.4)
+      '@orpc/server':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44(crossws@0.4.12)
       '@shikijs/langs':
         specifier: 4.5.0
         version: 4.5.0
@@ -814,6 +826,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -881,6 +896,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44
       '@pierre/diffs':
         specifier: 1.5.2
         version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)

@@ -25,7 +25,8 @@ const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 
-const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
+// SAFETY: ACT declares exactly the kinds `app:act` carries, which Object.keys erases.
+const KINDS = Object.keys(ACT) as ActKind[];
 
 /** The router answers an Effect; every test here runs it to the outcome it settles. */
 function perform(router: ActRouter, act: Act, sender: ActSender): Effect.Effect<ActOutcome> {
@@ -85,7 +86,6 @@ const UNREACHED = {
   codingAgents: {},
   integrations: {},
   automations: {},
-  issues: {},
   factory: {},
 } as unknown as HostActDependencies<unknown>;
 

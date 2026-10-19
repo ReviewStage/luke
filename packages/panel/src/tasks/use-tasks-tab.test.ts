@@ -55,6 +55,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import type { ActHandle } from "../act.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -176,7 +177,8 @@ function mount(
     control = useTasksTab({
       acts: {
         // An act the test does not answer is recorded and refused.
-        act: <Kind extends ActKind>(
+        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
+        act: (<Kind extends ActKind>(
           kind: Kind,
           ...args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
@@ -185,8 +187,9 @@ function mount(
           const answer = answers[kind];
           if (answer !== undefined) return answer(...args);
           return Promise.reject(new Error("Not answered in this test."));
-        },
-        tell: (kind: ActKind, ...args: unknown[]) => {
+        }) as ActHandle["act"],
+        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
+        tell: ((kind: ActKind, ...args: unknown[]) => {
           record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
@@ -199,7 +202,7 @@ function mount(
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
             voiceCommands.push(voiceCommand.command);
           }
-        },
+        }) as ActHandle["tell"],
       },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
