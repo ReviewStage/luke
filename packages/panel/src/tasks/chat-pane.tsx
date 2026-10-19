@@ -196,11 +196,13 @@ function Body({
   ));
   const { ask } = message;
   if (ask === undefined) return <>{blocks}</>;
+  const home = context.chat.channels.find((channel) => channel.id === message.channelId);
   return (
     <AskCard
       message={message}
       ask={ask}
       mine={message.authorId === context.chat.self}
+      answers={home === undefined || postsIn(context.chat, home)}
       blocks={blocks}
       nameOf={(memberId) => chatWho(context.chat, context.names, memberId).name}
       onAnswer={context.onAnswer}

@@ -279,3 +279,24 @@ test("the reader posts in a standing channel and in a direct message of their ow
     ["maria", "agent-2 ↔ maria"],
   );
 });
+
+test("nothing in a direct message between two others waits on the reader, neither an open ask nor an unread line", () => {
+  const between: ChatChannel = {
+    id: "dm-others",
+    kind: CHANNEL_KIND.DM,
+    members: [AGENT, MARIA],
+    archived: false,
+  };
+  const chat = {
+    ...chatOf(0, [
+      message(1, AGENT, between.id, asking(ASK_STATUS.OPEN)),
+      message(2, MARIA, between.id),
+      message(3, MARIA, WITH_MARIA.id),
+    ]),
+    channels: [WITH_MARIA, between],
+  };
+  assert.deepEqual(
+    forYou(chat).map((entry) => entry.message.seq),
+    [3],
+  );
+});

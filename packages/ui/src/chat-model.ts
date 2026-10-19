@@ -273,7 +273,8 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
   const channels = new Map(chat.channels.map((channel) => [channel.id, channel]));
   const entries = chat.messages.toSorted(bySeq).flatMap((message): ForYouEntry[] => {
     const channel = channels.get(message.channelId);
-    if (channel === undefined || channel.archived) return [];
+    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
+    if (channel === undefined || !postsIn(chat, channel)) return [];
     const reason = waitingReason(chat, message, channel);
     if (reason === undefined) return [];
     const replies = chat.messages.filter((reply) => reply.parentId === message.id).toSorted(bySeq);

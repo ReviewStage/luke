@@ -61,8 +61,9 @@ function asInboxResponse(response: ChatReadResponse): InboxReadResponse | undefi
  * a choice, words, and a form are sent by its round press or Enter, and
  * an approval, a task, and an ask of nothing by the presses under it, the
  * one that holds back and the one that goes ahead, as the Inbox's are. A
- * card the developer posted waits, and says so; a card whose poster need
- * not hear back says answering tells nobody. Once answered, the options
+ * card the developer posted waits, and says so, as does one in a channel
+ * they cannot post in (an archived one, or a DM between two others); a
+ * card whose poster need not hear back says answering tells nobody. Once answered, the options
  * stand with the pick marked and the answer said under them, who gave it
  * and how, a form's fields each with what was filled in; once its poster
  * resolved it, why. An answer refused keeps the
@@ -317,6 +318,7 @@ export function AskCard({
   message,
   ask,
   mine,
+  answers,
   blocks,
   nameOf,
   onAnswer,
@@ -325,6 +327,8 @@ export function AskCard({
   ask: CarriedAsk;
   /** Whether the developer posted it, which leaves them nothing to answer. */
   mine: boolean;
+  /** Whether the reader may answer it where it stands: never in a channel they cannot post in, which the service refuses an answer in too. */
+  answers: boolean;
   blocks: React.ReactNode;
   nameOf: (memberId: string) => string;
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
@@ -342,8 +346,10 @@ export function AskCard({
           </Inline>
           {ask.title === undefined ? null : <Text variant={TEXT_VARIANT.DIALOG}>{ask.title}</Text>}
           {blocks}
-          {open && mine ? <Text tone={TEXT_TONE.MUTED}>{WAITING}</Text> : null}
-          {open && !mine ? <Answer message={message} ask={ask} onAnswer={onAnswer} /> : null}
+          {open && (mine || !answers) ? <Text tone={TEXT_TONE.MUTED}>{WAITING}</Text> : null}
+          {open && !mine && answers ? (
+            <Answer message={message} ask={ask} onAnswer={onAnswer} />
+          ) : null}
           {open ? null : (
             <>
               <Picked ask={ask} />

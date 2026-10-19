@@ -486,13 +486,35 @@ test("a direct message between two others reads as theirs, named by both, with n
             authorId: one,
             mentions: [],
           },
+          {
+            ...sample,
+            id: "6c7d8e9f-0a1b-4c2d-9e3f-4a5b6c7d8e9f",
+            seq: top + 1,
+            touchedSeq: top + 1,
+            channelId: BETWEEN,
+            authorId: two,
+            mentions: [],
+            ask: {
+              key: "between",
+              revision: 1,
+              status: ASK_STATUS.OPEN,
+              response: { type: CHAT_ASK.APPROVAL },
+              needsReply: true,
+            },
+          },
         ],
       },
     };
   });
+  // Nothing in it waits on the developer, so For you holds what it held.
+  assert.equal(rail(page)[0], "▸ For you (4)");
   act(() => railRow(page, "agent-1 ↔ agent-2").click());
   assert.equal(page.querySelector(".chat-head h2")?.textContent, "@agent-1 ↔ @agent-2");
   assert.equal(page.querySelector("textarea"), null);
   assert.match(page.textContent ?? "", /Only @agent-1 and @agent-2 post in this conversation\./u);
   assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
+  // Its open ask reads as waiting, with nothing to answer it by.
+  const ask = page.querySelector('.chat-ask[data-status="open"]');
+  assert.match(ask?.textContent ?? "", /Waiting on an answer/u);
+  assert.equal(ask?.querySelector("button"), null);
 });
