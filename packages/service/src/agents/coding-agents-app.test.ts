@@ -8629,6 +8629,17 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
   );
 
   it.effect(
+    "the window's read names the plan each agent member works on, as it names a Luke's",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const read = yield* chat.read;
+        const agent = read.members.find((member) => member.agentId === chat.agent.agentId);
+        assert.equal(agent?.planId, chat.channel.taskId);
+      }),
+  );
+
+  it.effect(
     "a person opens a topic channel with a purpose, renames it, and archives it from the window; a name another channel holds is refused",
     () =>
       Effect.gen(function* () {

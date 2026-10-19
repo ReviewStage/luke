@@ -32,8 +32,10 @@ export function useChatActor(
       case MEMBER_KIND.LUKE:
         return LUKE_ACTOR;
       case MEMBER_KIND.AGENT: {
+        // Note that the read names every agent's plan; the summaries' few stand in for a read from before it did.
         const taskId =
-          member.agentId === undefined ? undefined : names.agentTasks.get(member.agentId);
+          member.planId ??
+          (member.agentId === undefined ? undefined : names.agentTasks.get(member.agentId));
         return {
           kind: ACTOR_KIND.AGENT,
           name: who.name,

@@ -993,3 +993,32 @@ test("an agent's line names it by its title and quietly by its handle, and a pre
   assert.ok(link !== undefined && "place" in link);
   assert.equal(link.place.kind, LINK_PLACE.AGENT);
 });
+
+test("an agent the plans' summaries do not name opens its tab under the plan the chat read names for it", () => {
+  const opened: ReadLink[] = [];
+  const ELSEWHERE = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2910";
+  const page = mount(
+    (chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        members: chat.answer.members.map((member) =>
+          member.handle === "agent-1"
+            ? { ...member, agentId: ELSEWHERE, planId: ELSEWHERE }
+            : member,
+        ),
+      },
+    }),
+    undefined,
+    undefined,
+    opened,
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const agentLine = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+    (byline) => byline.querySelector(".chat-byline-handle")?.textContent === "@agent-1",
+  );
+  act(() => agentLine?.querySelector<HTMLButtonElement>(".chat-byline-name button")?.click());
+  const [link] = opened;
+  assert.ok(link !== undefined && "place" in link);
+  assert.deepEqual(link.place, { kind: LINK_PLACE.AGENT, planId: ELSEWHERE, agentId: ELSEWHERE });
+});
