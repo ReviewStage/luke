@@ -49,7 +49,8 @@ import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-c
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Result, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -1463,13 +1464,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const { automation } = yield* openAutomation({
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 4, subjectCooldownHours: 2 },
         });
-        const now = yield* Clock.currentTimeMillis;
         const act = (run: AutomationRun) =>
           executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        const long = yield* act(
-          yield* sentryRun(automation, { id: "7" }, { firedAt: new Date(now - 3 * 3_600_000) }),
-        );
+        // The cooldown is timed from a run's start, so the first run starts three hours before the rest.
+        const long = yield* act(yield* sentryRun(automation, { id: "7" }));
+        yield* TestClock.adjust(Duration.hours(3));
         const first = yield* act(yield* sentryRun(automation, { id: "7" }));
         const again = yield* act(yield* sentryRun(automation, { id: "7" }));
         const other = yield* act(yield* sentryRun(automation, { id: "8" }));
