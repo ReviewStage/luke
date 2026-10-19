@@ -14,6 +14,10 @@ import {
   type WorkspaceInvitationsProcedureSeams,
   workspaceInvitationsProcedures,
 } from "../accounts/workspace-invitations-procedures.js";
+import {
+  type WorkspacesProcedureSeams,
+  workspacesProcedures,
+} from "../accounts/workspaces-procedures.js";
 import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
@@ -40,7 +44,8 @@ export type HostedRouterSeams = AutomationsProcedureSeams &
   TasksProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
-  WorkspaceLinearProcedureSeams;
+  WorkspaceLinearProcedureSeams &
+  WorkspacesProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
@@ -54,5 +59,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
     workspaceLinear: workspaceLinearProcedures(seams),
+    workspaces: workspacesProcedures(seams),
   });
 }
