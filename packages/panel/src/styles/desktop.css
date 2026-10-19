@@ -6158,8 +6158,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* A fade at either end where tabs go on past it, drawn over them in the
    strip's ground rather than as a mask, because a mask would fade the
    chosen tab pinned there too; each comes in as the strip scrolls from that
-   end, by the strip's own scroll, so a strip that holds every tab draws
-   none. They stand at the ends, taking no room of their own. */
+   end, by the strip's own scroll. They stand at the ends, taking no room of
+   their own. Note that each is unseen at rest and drawn only by its scroll
+   timeline, because a strip that holds every tab has no scroll range, and a
+   timeline with none is inactive: its animation draws nothing, and the fade
+   would otherwise stand at full strength over the first tab and the last. An
+   engine with no scroll timelines draws no fade, rather than running the
+   animation once and keeping its last frame. */
 .tab-strip::before,
 .tab-strip::after {
   position: sticky;
@@ -6167,26 +6172,39 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex: 0 0 var(--luke-scroll-fade);
   align-self: stretch;
   content: "";
+  opacity: 0;
   pointer-events: none;
-  animation-timing-function: linear;
-  animation-fill-mode: both;
-  animation-timeline: scroll(nearest inline);
 }
 
 .tab-strip::before {
   left: calc(-1 * var(--luke-focus-ring-reach));
   margin-right: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to right, var(--strip-ground), transparent);
-  animation-name: strip-fade-in;
-  animation-range: 0 var(--luke-scroll-fade);
 }
 
 .tab-strip::after {
   right: calc(-1 * var(--luke-focus-ring-reach));
   margin-left: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to left, var(--strip-ground), transparent);
-  animation-name: strip-fade-out;
-  animation-range: calc(100% - var(--luke-scroll-fade)) 100%;
+}
+
+@supports (animation-timeline: scroll()) {
+  .tab-strip::before,
+  .tab-strip::after {
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(nearest inline);
+  }
+
+  .tab-strip::before {
+    animation-name: strip-fade-in;
+    animation-range: 0 var(--luke-scroll-fade);
+  }
+
+  .tab-strip::after {
+    animation-name: strip-fade-out;
+    animation-range: calc(100% - var(--luke-scroll-fade)) 100%;
+  }
 }
 
 @keyframes strip-fade-in {
