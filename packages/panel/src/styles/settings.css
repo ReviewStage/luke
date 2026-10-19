@@ -540,6 +540,19 @@
   }
 }
 
+/* A choice whose every value is heard (`sampled-choice-row.tsx`), in its
+   dialog: each heading over its run of values, the runs a step apart, so a
+   language reads as one family before its names do. */
+.sampled-choice {
+  display: grid;
+  gap: var(--luke-space-16);
+}
+
+.sampled-choice-group {
+  display: grid;
+  gap: var(--luke-space-6);
+}
+
 /* A choice whose every value has a face (`picture-choice-row.tsx`), under
    its row's words: the chosen face large, as the call will show it, beside
    every face round with its name under it, four to a line. The faces fill
