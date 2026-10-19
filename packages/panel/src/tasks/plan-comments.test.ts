@@ -1033,3 +1033,62 @@ test("a press on the line's count while the editor's caret holds its thread open
 
   assert.equal(opened(), false);
 });
+
+/** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
+function answerPointer(coarse: boolean): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: coarse && query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
+/** Where the comment bubble stands once `words` in the plan are selected, the selection laid at `box` and the body at the page's top. */
+function bubbleOver(words: string, box: { top: number; bottom: number }): HTMLElement {
+  const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
+  Range.prototype.getBoundingClientRect = () => new DOMRect(40, box.top, 120, box.bottom - box.top);
+  try {
+    const { container } = drawn("page");
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let text: Node | null = walker.nextNode();
+    while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+    assert.ok(text instanceof Text, `${words} is drawn`);
+    const range = document.createRange();
+    range.setStart(text, text.data.indexOf(words));
+    range.setEnd(text, text.data.indexOf(words) + words.length);
+    act(() => {
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    const bubble = container.querySelector<HTMLElement>(".comment-bubble");
+    assert.ok(bubble, "the bubble stands by the selection");
+    return bubble;
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+}
+
+test("on a touch screen the comment bubble stands under the words selected, clear of the system's menu over them, and with a mouse over them", () => {
+  const box = { top: 100, bottom: 120 };
+
+  answerPointer(true);
+  const touch = bubbleOver("withdraw an invite", box);
+  assert.ok(
+    Number.parseFloat(touch.style.top) >= box.bottom,
+    "a finger's bubble hangs under the words",
+  );
+
+  document.body.innerHTML = "";
+  answerPointer(false);
+  const mouse = bubbleOver("withdraw an invite", box);
+  assert.ok(
+    Number.parseFloat(mouse.style.top) <= box.top,
+    "a mouse's bubble rises from the words' top",
+  );
+});

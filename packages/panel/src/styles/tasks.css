@@ -6075,6 +6075,12 @@ button.picture-frame {
   transform: translateY(calc(-100% - var(--luke-space-6)));
 }
 
+/* On a touch screen the system's selection menu stands over the words, so
+   the bubble hangs under them, past the knob of the handle that ends them. */
+.comment-bubble[data-below] {
+  transform: translateY(var(--luke-space-16));
+}
+
 /* Where the margin folds: a line's comments counted at its end, in the
    gutter past the column where the block's button stands, a quiet button
    lit while its threads stand under it; the open thread floats under it. */

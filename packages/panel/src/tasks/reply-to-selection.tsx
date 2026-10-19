@@ -1,9 +1,13 @@
+import { useAtomSet } from "@effect/atom-react";
 import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
+import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../plan-editor/contract.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { Tooltip } from "../tooltip.js";
 
 /**
@@ -17,8 +21,11 @@ import { Tooltip } from "../tooltip.js";
  * A selection inside an agent's own words, a text part of one of its
  * messages, which wears `REPLY_SCOPE`, never a call's output or a thought
  * beside it, stands Reply over it once the pointer or the keys let it go,
- * and a press hands the words to the box (`AgentComposer`'s `replyDoor`),
- * whose editor lays them in (`insertQuote`), drawn here
+ * or, on a touch screen, once it has rested for `SELECTION_SETTLE`, since
+ * the handles a finger drags it by may let go with no pointerup on iOS;
+ * there it stands under the words, where the system's own selection menu
+ * does not (`coarse-pointer.ts`). A press hands the words to the box
+ * (`AgentComposer`'s `replyDoor`), whose editor lays them in (`insertQuote`), drawn here
  * (`ComposerQuoteView`), and sends them as a Markdown blockquote set apart
  * by a blank line (`@luke/ui/reply-quote`). The press is drawn over the window, not inside
  * the transcript, so the log's own clipping never cuts it, follows the
@@ -46,8 +53,29 @@ const REPLY_WORDS = {
 const PRESS_GAP = 6;
 const PRESS_MARGIN = 48;
 
+/** How far a finger's press stands under the selection, past the knob of the handle that ends it. */
+const PRESS_GAP_TOUCH = 16;
+
 /** The room the press needs over the selection, under which it stands below instead. */
 const PRESS_ROOM = 40;
+
+/**
+ * How long a finger's selection rests unchanged before Reply is offered
+ * over it: past the pauses of a handle being dragged, so the press does not
+ * stand up under the finger mid-drag, and short of a wait one notices.
+ */
+const SELECTION_SETTLE = Duration.millis(300);
+
+/**
+ * A finger's selection settling, as an atom whose work is the wait: each
+ * change starts it over, and once it runs out `offer` is called. Note that
+ * `offer` is handed inside a record, because a function handed to an atom's
+ * setter is read as an update of its value and called at once.
+ */
+const selectionSettleAtom = () =>
+  rendererRuntime.fn(({ offer }: { readonly offer: () => void }) =>
+    Effect.andThen(Effect.sleep(SELECTION_SETTLE), Effect.sync(offer)),
+  );
 
 /** A selection Reply answers: its words as the reply, and where the press stands. */
 interface Picked {
@@ -70,12 +98,13 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
-  const below = box.top < PRESS_ROOM;
+  const finger = coarsePointerNow();
+  const below = finger || box.top < PRESS_ROOM;
   const centre = box.left + box.width / 2;
   return {
     reply,
     left: Math.min(Math.max(centre, PRESS_MARGIN), window.innerWidth - PRESS_MARGIN),
-    top: below ? box.bottom + PRESS_GAP : box.top - PRESS_GAP,
+    top: below ? box.bottom + (finger ? PRESS_GAP_TOUCH : PRESS_GAP) : box.top - PRESS_GAP,
     below,
   };
 }
@@ -93,19 +122,27 @@ export function ReplyToSelection({
 }): ReactNode {
   const [picked, setPicked] = useState<Picked | undefined>(undefined);
   const shown = picked !== undefined;
+  const [settleAtom] = useState(selectionSettleAtom);
+  const settle = useAtomSet(settleAtom);
 
-  // A selection is offered once the pointer or the keys let it go, never while it is being drawn.
+  // A selection is offered once the pointer or the keys let it go, or a finger's once it rests, never while it is being drawn.
   useEffect(() => {
     const element = scope.current;
     if (element === null) return undefined;
     const offer = () => setPicked(pickedIn(element));
+    // Note that a mouse's selection waits for its pointerup as ever, so only a finger's is offered on resting.
+    const changed = () => {
+      if (pickedIn(element) !== undefined && coarsePointerNow()) settle({ offer });
+    };
     element.addEventListener("pointerup", offer);
     element.addEventListener("keyup", offer);
+    document.addEventListener("selectionchange", changed);
     return () => {
       element.removeEventListener("pointerup", offer);
       element.removeEventListener("keyup", offer);
+      document.removeEventListener("selectionchange", changed);
     };
-  }, [scope]);
+  }, [scope, settle]);
 
   // Once offered, the press follows the selection as the log scrolls and goes as it does.
   useEffect(() => {

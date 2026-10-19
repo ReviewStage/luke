@@ -13,7 +13,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -42,8 +42,10 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
  * the caret stands and hands the box the caret on a line under it, the
  * message sent holds each quote as a Markdown blockquote set apart, a
  * message that did not go comes back with its quotes as blocks, a quote's
- * way off takes it out, and a typed `>` line alone sends; and on the agent's own
- * tab, Reply stands down while a message is out.
+ * way off takes it out, and a typed `>` line alone sends; on a touch
+ * screen, whose handles may let go with no pointerup, Reply stands under a
+ * selection once it rests, and with a mouse only once the pointer lets it
+ * go; and on the agent's own tab, Reply stands down while a message is out.
  */
 
 const AGENT_WORDS = "Option A ships today. Option B waits for review.";
@@ -62,12 +64,28 @@ const TURN: CodingAgentMessage = {
 
 const ignore = () => undefined;
 
+/** How long past its last change a finger's selection is sure to have rested: well past the panel's own settle, a third of a second. */
+const RESTED = Duration.seconds(1);
+
+/** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
+function answerPointer(coarse: boolean): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: coarse && query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
 const roots: Root[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  answerPointer(false);
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
@@ -81,6 +99,8 @@ afterEach(() => {
   document.body.innerHTML = "";
   window.localStorage.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  Reflect.deleteProperty(window, "matchMedia");
 });
 
 async function settle(): Promise<void> {
@@ -137,8 +157,8 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
   return {
     container,
     sent,
-    /** The words of the text drawn as `words`, from `from` through `to`, selected as a drag lets them go. */
-    select: (words: string, from: string, to: string) => {
+    /** The words of the text drawn as `words`, from `from` through `to`, selected as a drag lets them go, or as a finger's handles do where `released` is false: with no pointerup. */
+    select: (words: string, from: string, to: string, released = true) => {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let text: Node | null = walker.nextNode();
       while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
@@ -148,8 +168,12 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
       range.setEnd(text, text.data.indexOf(to) + to.length);
       const selection = window.getSelection();
       assert.ok(selection);
-      selection.removeAllRanges();
-      selection.addRange(range);
+      act(() => {
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      if (!released) return;
       act(() => {
         text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
       });
@@ -252,6 +276,37 @@ test("a message that did not go comes back with its quotes as blocks, a quote's 
     "> Option B waits for review.\n\nShip it",
     "> Ship today?",
   ]);
+});
+
+test("on a touch screen Reply stands under a selection once it rests, though no pointerup lets it go", async () => {
+  answerPointer(true);
+  const tab = await mounted();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  tab.select(AGENT_WORDS, "Option B", "review.", false);
+  assert.equal(tab.reply() === undefined, true, "a selection still being drawn is offered nothing");
+  act(() => {
+    vi.advanceTimersByTime(Duration.toMillis(RESTED));
+  });
+  assert.ok(tab.reply(), "Reply stands once the selection rests");
+  vi.useRealTimers();
+
+  await tab.pressReply();
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
+});
+
+test("with a mouse, a selection resting is offered nothing until the pointer lets it go", async () => {
+  const tab = await mounted();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+  tab.select(AGENT_WORDS, "Option A", "today.", false);
+  act(() => {
+    vi.advanceTimersByTime(Duration.toMillis(RESTED));
+  });
+  assert.equal(tab.reply() === undefined, true, "a mouse's drag is not let go by resting");
+
+  tab.select(AGENT_WORDS, "Option A", "today.");
+  assert.ok(tab.reply(), "the pointer letting go offers Reply");
 });
 
 /** An agent of the developer's, handed a prompt and answered with one turn. */
