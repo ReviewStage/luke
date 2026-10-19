@@ -62,17 +62,21 @@ export const settingsActsContract = {
     .output(EffectSchema.flip(settingsUpdateResultSchema)),
   [SETTINGS_ACT_KIND.SETTINGS_RESET]: actProcedure("Could not reset those settings on this system.")
     .input(
-      EffectSchema.Struct({ scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)) }),
+      exactInput(
+        EffectSchema.Struct({ scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)) }),
+      ),
     )
     .output(EffectSchema.flip(settingsUpdateResultSchema)),
   [SETTINGS_ACT_KIND.EXPERIMENT_SET]: actProcedure(
     "Could not change that experiment on this system.",
   )
     .input(
-      EffectSchema.Struct({
-        experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
-        on: EffectSchema.Boolean,
-      }),
+      exactInput(
+        EffectSchema.Struct({
+          experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
+          on: EffectSchema.Boolean,
+        }),
+      ),
     )
     .output(EffectSchema.flip(settingsUpdateResultSchema)),
 };

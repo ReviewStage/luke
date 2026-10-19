@@ -173,3 +173,14 @@ it("a frame this build does not trust is refused every account act in the kind's
   );
   assert.deepEqual(happened, []);
 });
+
+it("a sign-in carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
+  const { client, happened } = windowPort();
+  const extra = { provider: ACCOUNT_PROVIDER.GITHUB, unexpected: true } as const;
+
+  assert.equal(
+    await refusal(client[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN](extra)),
+    REFUSAL[ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN],
+  );
+  assert.deepEqual(happened, []);
+});

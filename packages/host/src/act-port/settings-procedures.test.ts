@@ -266,3 +266,19 @@ it("a value its field's guard refuses, or a key the payload does not take, is re
   assert.equal(await refusal(update(extra)), REFUSAL[SETTINGS_ACT_KIND.SETTING_UPDATE]);
   assert.deepEqual(writes, []);
 });
+
+it("a reset or an experiment switch carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
+  const { client, writes } = windowPort();
+  const reset = { scope: SETTINGS_RESET_SCOPE.VOICE, unexpected: true } as const;
+  const experiment = { experiment: "factory", on: true, unexpected: true } as const;
+
+  assert.equal(
+    await refusal(client[SETTINGS_ACT_KIND.SETTINGS_RESET](reset)),
+    REFUSAL[SETTINGS_ACT_KIND.SETTINGS_RESET],
+  );
+  assert.equal(
+    await refusal(client[SETTINGS_ACT_KIND.EXPERIMENT_SET](experiment)),
+    REFUSAL[SETTINGS_ACT_KIND.EXPERIMENT_SET],
+  );
+  assert.deepEqual(writes, []);
+});

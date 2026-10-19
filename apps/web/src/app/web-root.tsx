@@ -15,8 +15,9 @@ import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { initialAppState } from "@luke/host/client";
+import { type ActPortClient, actContract } from "@luke/host/contract";
 import { App } from "@luke/panel/app";
-import { installAppBridge } from "@luke/panel/app-bridge";
+import { installActPortClient, installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
@@ -83,12 +84,27 @@ function fixtureBridge(): AppBridge {
 }
 
 /**
+ * The fixture act port: every kind it answers refused in the same words as
+ * the bridge's acts, so a press reads the fixture's refusal whichever door
+ * its kind rides.
+ */
+function fixtureActPort(): ActPortClient {
+  const refused = () => Promise.reject(new Error(FIXTURE_REFUSAL));
+  // SAFETY: every procedure of the contract, keyed by its kind, answers the one refusal, which is all a caller of any of them handles.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The contract's own keys prove the dynamically keyed object is the whole client, as the fixture bridge's map does.
+  return Object.fromEntries(
+    Object.keys(actContract).map((kind) => [kind, refused]),
+  ) as unknown as ActPortClient;
+}
+
+/**
  * Installs the tab's doors and draws the panel into the element given once
  * its document has been read. A tab whose document cannot be read draws
  * nothing, as a desktop window does.
  */
 export async function mountWebApp(rootElement: HTMLElement): Promise<void> {
   installAppBridge(fixtureBridge());
+  installActPortClient(fixtureActPort());
   installAppPlatform(WEB_PLATFORM);
   installShellBundles(WEB_BUNDLES);
   // The panel's back and forward live in memory until the tab's address carries them.
