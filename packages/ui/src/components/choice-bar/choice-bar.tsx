@@ -17,7 +17,9 @@
  * Each option is its glyph, its name, and a count. The name is always
  * given: a fill bar narrower than its options need scrolls sideways and
  * shows an option other than the chosen one by its glyph alone, its name
- * left to a reader who cannot see it. A count is words, or parts each in
+ * left to a reader who cannot see it; one standing in a toolbar beside other
+ * controls folds as the toolbar says instead (`fold`), every option at once.
+ * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red.
  *
@@ -80,6 +82,20 @@ export const CHOICE_BAR_INSET = {
 } as const;
 
 export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_INSET];
+
+/**
+ * What folds a fill bar's options when the row is short of room: its own
+ * width, each option but the chosen one drawn by its glyph alone below a
+ * width; or its toolbar, by the `--luke-fold` it sets, as it folds its
+ * buttons: `tight` takes the options' room in, and `folded` draws every
+ * option by its glyph alone, the chosen one too.
+ */
+export const CHOICE_BAR_FOLD = {
+  OWN: "own",
+  TOOLBAR: "toolbar",
+} as const;
+
+export type ChoiceBarFold = (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD];
 
 /** The ids a tab and the panel it controls carry. */
 export interface ChoicePanelIds {
@@ -273,6 +289,7 @@ interface ChoiceBarBase<Value extends string> {
   panels?: ((value: Value) => ChoicePanelIds) | undefined;
   focus?: ChoiceBarFocus | undefined;
   inset?: ChoiceBarInset | undefined;
+  fold?: ChoiceBarFold | undefined;
   disabled?: boolean | undefined;
 }
 
@@ -316,6 +333,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     panels,
     focus = CHOICE_BAR_FOCUS.ROVING,
     inset = CHOICE_BAR_INSET.NONE,
+    fold = CHOICE_BAR_FOLD.OWN,
     disabled = false,
     clearable: _,
     onChange: __,
@@ -346,6 +364,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       data-look={look}
       data-size={size}
       data-inset={inset}
+      data-fold={fold}
     >
       <span className="luke-choice-bar-thumb" aria-hidden="true" />
       {items.map((item) => {
