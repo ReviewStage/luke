@@ -43,6 +43,7 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -1700,6 +1701,65 @@ test("minimized, the threads on no line take a row of their own for their chip, 
       .querySelector(".diff-thread-chip-row");
   assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
+});
+
+test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("src/plan.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old/plan.ts",
+    }),
+  ];
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  await drawTab();
+  const copyButton = (path: string, name: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.getAttribute("aria-label")?.startsWith(name),
+    ) ?? assert.fail(`${path} offers ${name}`);
+  act(() => copyButton("src/seats.ts", "Copy path").click());
+  act(() => copyButton("src/plan.ts", "Copy old path").click());
+  act(() => copyButton("src/plan.ts", "Copy new path").click());
+  await flush();
+  assert.deepEqual(copied, ["src/seats.ts", "src/old/plan.ts", "src/plan.ts"]);
+  assert.deepEqual(
+    folds().map(([, collapsed]) => collapsed),
+    [false, false],
+    "a copy folds nothing",
+  );
+});
+
+test("a press anywhere on a header's row folds its file, and \u2325 with a press on the fold folds every file", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  const row = (path: string) =>
+    header(path).querySelector<HTMLElement>(".diff-list-head-row") ?? assert.fail("the row stands");
+  act(() => row("b.ts").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await flush();
+  assert.deepEqual(folds(), [
+    ["a.ts", false],
+    ["b.ts", true],
+    ["c.ts", false],
+  ]);
+
+  const fold =
+    header("a.ts").querySelector<HTMLButtonElement>("button") ?? assert.fail("the fold stands");
+  act(() => fold.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true })));
+  await flush();
+  assert.ok(
+    folds().every(([, collapsed]) => collapsed),
+    "every file folds",
+  );
+  act(() => {
+    const again = header("a.ts").querySelector<HTMLButtonElement>("button");
+    again?.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true }));
+  });
+  await flush();
+  assert.ok(
+    folds().every(([, collapsed]) => !collapsed),
+    "and every file unfolds",
+  );
 });
 
 /** The seats file at the pull request's head, ten lines, its fifth changed, and its patch as GitHub sends it. */
