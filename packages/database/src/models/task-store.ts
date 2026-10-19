@@ -487,35 +487,53 @@ function summaryOf(
   };
 }
 
+const TaskInsertSchema = Schema.Struct({
+  id: Schema.optionalKey(Schema.String),
+  userId: Schema.String,
+  organizationId: Schema.String,
+  name: Schema.String,
+  repository: Schema.NullOr(Schema.String),
+  document: Schema.String,
+  linearIssue: Schema.NullOr(taskLinearIssueSchema),
+  issueId: Schema.NullOr(Schema.String),
+  brief: Schema.NullOr(Schema.String),
+  now: Schema.Date,
+});
+
+/** A task's row as an insert writes it. */
+function taskValues(write: typeof TaskInsertSchema.Type) {
+  return {
+    ...(write.id === undefined ? undefined : { id: write.id }),
+    userId: write.userId,
+    organizationId: write.organizationId,
+    name: write.name,
+    repository: write.repository,
+    document: write.document,
+    linearIssue: write.linearIssue,
+    issueId: write.issueId,
+    brief: write.brief,
+    createdAt: write.now,
+    updatedAt: write.now,
+  };
+}
+
 const insertTask = SqlSchema.findOne({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.String,
-    name: Schema.String,
-    repository: Schema.NullOr(Schema.String),
-    document: Schema.String,
-    linearIssue: Schema.NullOr(taskLinearIssueSchema),
-    issueId: Schema.NullOr(Schema.String),
-    brief: Schema.NullOr(Schema.String),
-    now: Schema.Date,
-  }),
+  Request: TaskInsertSchema,
+  Result: TaskRowSchema,
+  execute: (write) =>
+    Database.use((db) => db.insert(task).values(taskValues(write)).returning(TASK_COLUMNS)),
+});
+
+/** A task inserted under its id where none stands under it yet; nothing where one does, written by nothing. */
+const insertTaskOnce = SqlSchema.findOneOption({
+  Request: TaskInsertSchema,
   Result: TaskRowSchema,
   execute: (write) =>
     Database.use((db) =>
       db
         .insert(task)
-        .values({
-          userId: write.userId,
-          organizationId: write.organizationId,
-          name: write.name,
-          repository: write.repository,
-          document: write.document,
-          linearIssue: write.linearIssue,
-          issueId: write.issueId,
-          brief: write.brief,
-          createdAt: write.now,
-          updatedAt: write.now,
-        })
+        .values(taskValues(write))
+        .onConflictDoNothing({ target: task.id })
         .returning(TASK_COLUMNS),
     ),
 });
@@ -849,13 +867,15 @@ export function readStartedText(userId: string, createdAt: number): TaskStoreEff
  * because an edit of the template must leave every plan started from it as
  * it stands.
  */
-export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
-  return Effect.gen(function* () {
+/** A started task's row as it is inserted: its name, or Untitled, its plan's text, the template where it plans, and its brief, or none for a blank one. */
+const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
+  Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
     const brief = started.brief?.trim() ?? "";
-    const row = yield* insertTask({
+    return {
+      ...(started.id === undefined ? undefined : { id: started.id }),
       userId,
       organizationId: started.organizationId,
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
@@ -865,11 +885,33 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
       issueId: started.issueId ?? null,
       brief: brief.length > 0 ? brief : null,
       now,
-    }).pipe(
+    };
+  });
+
+export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
+  return Effect.gen(function* () {
+    const row = yield* insertTask(yield* insertOf(userId, started)).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
     return yield* taskOf(userId, row);
+  });
+}
+
+/**
+ * Starts a task under the id its maker chose, as an agent's call makes one
+ * under an id drawn from its own key, its plan's text the one given in the
+ * template's place, where no task stands under that id yet; nothing where one
+ * does, so the call run again, even at once, makes one task between them.
+ */
+export function createTaskOnce(
+  userId: string,
+  started: NewTask & { readonly id: string; readonly text: string },
+): TaskStoreEffect<Option.Option<Task>> {
+  return Effect.gen(function* () {
+    const values = yield* insertOf(userId, { ...started, planning: false });
+    const row = yield* insertTaskOnce({ ...values, document: started.text });
+    return yield* Effect.transposeOption(Option.map(row, (made) => taskOf(userId, made)));
   });
 }
 

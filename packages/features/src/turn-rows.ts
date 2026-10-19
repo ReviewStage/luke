@@ -86,6 +86,8 @@ export const CALL_KIND = {
   READ_ISSUE: "read-issue",
   CREATE_ISSUE: "create-issue",
   UPDATE_ISSUE: "update-issue",
+  /** A task made in the workspace (`create_task`), its row naming it once answered. */
+  CREATE_TASK: "create-task",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
@@ -144,6 +146,7 @@ export const CALL_WORDS = {
   [CALL_KIND.READ_ISSUE]: { verb: "Read the issue", code: false },
   [CALL_KIND.CREATE_ISSUE]: { verb: "Filed the issue", code: false },
   [CALL_KIND.UPDATE_ISSUE]: { verb: "Updated the issue", code: false },
+  [CALL_KIND.CREATE_TASK]: { verb: "Made the task", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },

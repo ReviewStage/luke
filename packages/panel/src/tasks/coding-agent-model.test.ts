@@ -464,11 +464,13 @@ test("the starts that made a new task and the accepted section and task change c
         call("c9", "update_task", { status: "accepted", task: { id: "task-3" } }),
         call("c10", "update_task", { status: "rejected", reason: "Not archived." }),
         call("c11", "update_task"),
+        call("c12", "create_task", { status: "accepted", task: { id: "task-4" } }),
+        call("c13", "create_task", { status: "rejected", reason: "Not made." }),
       ],
     },
   ];
 
-  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9"]);
+  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9", "c12"]);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

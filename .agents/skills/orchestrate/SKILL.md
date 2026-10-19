@@ -20,7 +20,7 @@ for the host you are in:
 | Ask the user | `AskUserQuestion` | `post_to_inbox` with a `choice` (or `form`) response and `needsReply` |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
-| Start a worker | `conductor workspace create` (below) | `start_agent` with `newTask` and `title`, the brief as `prompt`, plus `model` and `effort` (below) |
+| Start a worker | `conductor workspace create` (below) | `create_task` named for the PR, then `start_agent` with its `taskId` and `title`, the brief as `prompt`, plus `model` and `effort` (below) |
 | Worker's base branch | `--branch <base-branch>` | `start_agent`'s `branch` |
 | Open a PR | `gh pr create --base <base-branch>` | `open_pull_request` with `base` |
 | Message a worker | `conductor message create --session <sessionId>` | `message_agent` with its agent id |
@@ -83,10 +83,11 @@ In Luke, before the first worker starts, make one section for the rollout
 with `create_section`, titled after the plan or the issue (such as "Inbox
 threads rollout"), so its tasks stand together in the developer's sidebar
 rather than scattered under Tasks; reuse a section `list_tasks` already names
-for this rollout rather than making a second. Then call `start_agent` with
-`newTask` set to the PR title, so each
-worker stands as its own task in the sidebar as a Conductor workspace does,
-and `title` set to the PR title too (at most 80 characters). Set `branch` to
+for this rollout rather than making a second. Then make each worker's task
+with `create_task` named for the PR title, so each worker stands as its own
+task in the sidebar as a Conductor workspace does, and call `start_agent`
+with that task's `taskId` and `title` set to the PR title too (at most 80
+characters). Set `branch` to
 the base branch when it is not `main`; the worker starts on it and is told to
 pass it as `base` when it opens its PR. Give the brief as `prompt`, so the
 worker works from the brief and not the whole plan, and the chosen `model`
@@ -96,8 +97,8 @@ hold at most 64,000 characters, and a `message_agent` message 16,000: put the
 PR's own scope and acceptance criteria in `prompt` and the rest of the brief
 in `note`, and where the plan is long, quote only the parts this PR needs and
 name the plan's file in the repository, if it has one, for the worker to read.
-Once a start answers its new task, move that task into the rollout's section
-with `move_task` before you start the next worker. Move only the tasks you
+Once `create_task` answers the worker's task, move that task into the rollout's section
+with `move_task` before you start its worker. Move only the tasks you
 made for the rollout, never the task you work on or a teammate's.
 
 Every brief must contain:

@@ -655,8 +655,9 @@ function taskUpdateKind(input: WireValue | undefined): CallKind {
   return archived === false ? CALL_KIND.UNARCHIVE_TASK : CALL_KIND.UPDATE_TASK;
 }
 
-/** The tools that keep the member's sidebar sections or change a task, whose accepted call changes the sidebar. */
-const SECTION_TOOLS: ReadonlySet<string> = new Set([
+/** The tools that keep the member's sidebar sections or make or change a task, whose accepted call changes the sidebar. */
+const SIDEBAR_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.CREATE_TASK,
   AGENT_TOOL.CREATE_SECTION,
   AGENT_TOOL.DELETE_SECTION,
   AGENT_TOOL.MOVE_TASK,
@@ -665,13 +666,14 @@ const SECTION_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * Whether an answered call changed what the sidebar draws, so the window
- * reads the tasks again: a start that made a new task, or a section made,
- * deleted, or a task moved or changed, each only once it was accepted.
+ * reads the tasks again: a task made, a start that made one before
+ * `create_task` did, or a section made, deleted, or a task moved or changed,
+ * each only once it was accepted.
  */
 export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
   if (!isRecord(output)) return false;
   if (tool === AGENT_TOOL.START_AGENT) return isRecord(output.newTask);
-  return SECTION_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
+  return SIDEBAR_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
 }
 
 /** What a call to another agent sent it, in the caller's own words: the words, and a start's note beside them. */
@@ -797,6 +799,8 @@ function tasksToolView(
       return issueCall(CALL_KIND.CREATE_ISSUE, input, output);
     case AGENT_TOOL.UPDATE_ISSUE:
       return issueCall(CALL_KIND.UPDATE_ISSUE, input, output);
+    case AGENT_TOOL.CREATE_TASK:
+      return namedCall(CALL_KIND.CREATE_TASK, input, output, "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -1015,6 +1019,8 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
   [AGENT_TOOL.UPDATE_TASK, answeredTask],
+  [AGENT_TOOL.CREATE_TASK, answeredTask],
+  [AGENT_TOOL.READ_TASK, answeredTask],
   [AGENT_TOOL.UPDATE_AGENT, namedAgent],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],

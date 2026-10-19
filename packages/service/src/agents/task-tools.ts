@@ -1,31 +1,41 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask } from "@luke/database/models/task-store";
+import { recordRevision } from "@luke/database/models/plan-revisions";
+import { createTaskOnce, readTask } from "@luke/database/models/task-store";
+import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { PLAN_ACTOR, TASK_BOUNDS } from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { calledId } from "./called-id.js";
 import {
+  AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
   type CodingAgentCall,
+  type CodingAgentToolServices,
   callerTask,
   callerUserId,
   callerWorkspace,
   cutOnLine,
   orStoreRefusal,
+  reachedRepository,
+  workedRepository,
 } from "./coding-agent-tools.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /**
- * task-tools.ts -- the tools every agent reads the workspace's tasks by: read one task's plan and where it stands.
+ * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
  *
  * Luke on a call and every coding agent are offered the same `read_task`,
  * one implementation, beside `list_tasks` (`coding-agent-tools.ts`), which
@@ -37,6 +47,15 @@ import { workspaceStepOf, writtenMention } from "./written-mentions.js";
  * brief the developer started it with, the issue it was started from with its description, as a start hands an agent
  * the issue (`coder-host/start.ts`), and its plan's saved text cut on a line to a
  * bound, so an agent reads another task's plan without its being mentioned.
+ *
+ * `create_task` makes a task as the member the caller acts for makes one from
+ * the sidebar: in the caller's workspace, owned by that member, on the
+ * repository named, the one the caller works in where none is, or none,
+ * confirmed through the workspace's installation as a task's repository is,
+ * with the developer's brief and a plan to start from where they are given,
+ * and no agent on it; `start_agent` starts one on it by its id. It is made
+ * under an id drawn from eve's key for the call (`called-id.ts`), so a call
+ * run again answers the task it made and makes no second.
  * Every answer is data the model reads, never a credential.
  */
 
@@ -129,6 +148,162 @@ export function runReadTask(
         },
         plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars },
       };
+    }),
+  );
+}
+
+/** Why a make made nothing, in words the model can act on. */
+export const CREATE_TASK_REFUSAL = {
+  UNREADABLE:
+    `Not made: give a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a repository as ` +
+    `owner/name, null for none, or none for the one you work in, a brief of at most ` +
+    `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, and a plan of at most ` +
+    `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none.`,
+} as const;
+
+const CREATE_TASK_INPUT = Schema.Struct({
+  name: describeWire(
+    Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
+    "The task's name, as the developer would name it in the sidebar.",
+  ),
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
+        "installation must reach; null for none, and left out for the one you work in.",
+    ),
+  ),
+  brief: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
+      "The developer's own words about the task, which Luke is handed when they open a call on " +
+        "it; their words where they gave them, left out otherwise.",
+    ),
+  ),
+  plan: Schema.optionalKey(
+    describeWire(
+      Schema.String.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
+      "The plan's body to start it with, as Markdown under its sections' ## headings, without " +
+        "the # title, which the task's name is; an agent started on it with no prompt is handed " +
+        "it. Left out, it starts empty.",
+    ),
+  ),
+});
+
+const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
+
+export const CREATE_TASK_TOOL = {
+  name: AGENT_TOOL.CREATE_TASK,
+  description:
+    "Make a task in your workspace for the developer you work for, as the sidebar's New task " +
+    "would: owned by them, on the repository named or the one you work in, with their brief " +
+    "and a plan to start from where given, and no agent on it. Make one for a separate piece " +
+    "of work that should stand as a task of its own, where the developer asked for it or you " +
+    `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
+    "Answers `accepted` with the task's id, name, repository, and mention, or `rejected` and why.",
+  inputSchema: CREATE_TASK_INPUT,
+} as const;
+
+/** A title heading at a plan's head, which the task's name stands for. */
+const TITLE_HEADING = /^\s*#(?!#)[^\n]*(?:\n|$)/u;
+
+/** A plan's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
+function planTextOf(plan: string): string {
+  return plan.replace(TITLE_HEADING, "").trim();
+}
+
+/** Who a task's first plan is written by, as its history names them: Luke on a call, or the calling coding agent. */
+function revisionWriterOf(call: CodingAgentCall): RevisionWriter {
+  return call.caller.kind === AGENT_CALLER.AGENT
+    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
+    : { actor: PLAN_ACTOR.NOTETAKER };
+}
+
+/** Who a revision is written by, as the history keeps it. */
+type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
+
+/** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
+export function runCreateTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readCreateAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { name, brief, plan } = asked.success;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(call.caller);
+      if (Option.isNone(workspace)) {
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      }
+      const userId = callerUserId(call.caller);
+      const id = calledId(userId, call.clientKey);
+      const step = yield* workspaceStepOf(userId, workspace.value);
+      const answer = (task: {
+        readonly id: string;
+        readonly name: string;
+        readonly repository: string | null;
+      }) => ({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        task: {
+          id: task.id,
+          name: task.name,
+          repository: task.repository,
+          mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+        },
+      });
+      // The call run again finds the task it made, and makes no second.
+      const before = yield* readTask(userId, id);
+      if (Option.isSome(before)) {
+        return answer({ ...before.value.task, repository: before.value.task.repository ?? null });
+      }
+      const named =
+        asked.success.repository === undefined
+          ? yield* workedRepository(call.caller)
+          : asked.success.repository;
+      const reached = yield* reachedRepository(workspace.value, named);
+      if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
+      const text = planTextOf(plan ?? "");
+      // The make and its plan's first revision are one write, so a call run again at once makes one task.
+      const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(
+          Effect.gen(function* () {
+            const once = yield* createTaskOnce(userId, {
+              id,
+              organizationId: workspace.value,
+              name,
+              repository: reached.success,
+              text,
+              ...(brief === undefined ? undefined : { brief }),
+            });
+            if (Option.isSome(once) && text !== "") {
+              yield* recordRevision({
+                taskId: id,
+                writer: revisionWriterOf(call),
+                userId,
+                before: "",
+                after: text,
+                changes: 1,
+                savedBefore: Option.none(),
+              });
+            }
+            return once;
+          }),
+        ),
+      );
+      if (Option.isNone(made)) {
+        // A run of the same call made it meanwhile, which this one answers.
+        const raced = yield* readTask(userId, id);
+        if (Option.isNone(raced)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE);
+        return answer({ ...raced.value.task, repository: raced.value.task.repository ?? null });
+      }
+      yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+        source: SERVER_TASK_SOURCE.AGENT,
+        has_issue: false,
+      });
+      return answer({ id: made.value.id, name: made.value.name, repository: reached.success });
     }),
   );
 }

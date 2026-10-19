@@ -40,6 +40,7 @@ export const AGENT_TOOL = {
   UPDATE_AGENT: "update_agent",
   LIST_TASKS: "list_tasks",
   READ_TASK: "read_task",
+  CREATE_TASK: "create_task",
   // The sections the member keeps tasks in in the workspace's sidebar, named for any agent offered `list_tasks`.
   CREATE_SECTION: "create_section",
   DELETE_SECTION: "delete_section",

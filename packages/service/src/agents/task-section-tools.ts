@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   deleteTaskSectionIn,
@@ -24,6 +23,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { calledId } from "./called-id.js";
 import {
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
@@ -151,30 +151,6 @@ export const MOVE_TASK_TOOL = {
   inputSchema: MOVE_TASK_INPUT,
 } as const;
 
-/** The UUID's version and variant bits, set as RFC 9562 sets them on a name-based (SHA) id. */
-const NAME_BASED_UUID = { VERSION: 0x50, VERSION_MASK: 0x0f, VARIANT: 0x80, VARIANT_MASK: 0x3f };
-
-/**
- * The id a section made by a call is made under: name-based on the member
- * and eve's key for the call, so the call run again names the section it
- * made, and no other account's call names it.
- */
-function sectionIdOf(userId: string, clientKey: string): string {
-  const digest = createHash("sha256")
-    .update(JSON.stringify([userId, clientKey]))
-    .digest();
-  digest[6] = ((digest[6] ?? 0) & NAME_BASED_UUID.VERSION_MASK) | NAME_BASED_UUID.VERSION;
-  digest[8] = ((digest[8] ?? 0) & NAME_BASED_UUID.VARIANT_MASK) | NAME_BASED_UUID.VARIANT;
-  const hex = digest.subarray(0, 16).toString("hex");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join("-");
-}
-
 /** A section as an answer names it. */
 function sectionReading(section: Pick<TaskSection, "id" | "title">) {
   return { id: section.id, title: section.title };
@@ -205,7 +181,7 @@ export function runCreateSection(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
-      const id = sectionIdOf(userId, call.clientKey);
+      const id = calledId(userId, call.clientKey);
       const written = yield* writeTaskSections(userId, {
         kind: TASK_SECTION_WRITE.CREATE,
         id,

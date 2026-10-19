@@ -15,6 +15,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { createIssue, readIssue } from "@luke/database/models/issue-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
+import { listRevisions } from "@luke/database/models/plan-revisions";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   createTask,
@@ -96,7 +97,7 @@ import {
 } from "../coding-agent-tools.js";
 import { ISSUE_TOOL_REFUSAL } from "../issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
-import { READ_TASK_REFUSAL } from "../task-tools.js";
+import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
@@ -1164,7 +1165,6 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   await refused({ from: { agentId: teammates.id, messageId: randomUUID() } }, R.NO_MESSAGE);
   await refused({ from: { agentId: teammates.id }, prompt: "Do it again." }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: teammates.id }, branch: STACKED_BRANCH }, R.FROM_WITH_PROMPT);
-  await refused({ from: { agentId: teammates.id }, newTask: "Invoices" }, R.FROM_WITH_PROMPT);
   await refused({ from: { agentId: caller.id } }, R.SELF_CONTINUE);
   // A teammate's agent with no turn yet is still starting, and one whose turn runs is working.
   await refused({ from: { agentId: teammates.id } }, R.SOURCE_RUNNING);
@@ -1427,7 +1427,7 @@ async function tasksNamed(userId: string, workspaceId: string, name: string): Pr
     .map((each) => each.id);
 }
 
-test("start_agent makes the new task it names in the caller's workspace, owned by the member the agent acts for and on the repository it works in, and starts on it; the same call run again makes no second task, a start that fails leaves none, and a newTask beside a taskId, a blank name, or one too long is refused", async () => {
+test("create_task makes a task in the caller's workspace for the member the agent acts for, on the repository it works in unless another or none is named, with the brief and plan given and no agent on it, once under the call's key; start_agent then starts on it by its id", async () => {
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
@@ -1435,144 +1435,95 @@ test("start_agent makes the new task it names in the caller's workspace, owned b
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), caller, eve.services);
   const name = "Invite expiry migration";
-  const prompt = "Write the migration that adds the invitation's expiry.";
+  // A plan handed with its # title keeps its body alone, the task's name standing for the title.
+  const body = "## Goal\n\nAdd the invitation's expiry.";
+  const plan = `# ${name}\n\n${body}`;
   const countedBefore = tasksCounted(bob);
 
-  const started = await call(CODER_TOOL.START_AGENT, { newTask: ` ${name} `, prompt }, "call-new");
-  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
-  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
-  assert.ok(isRecord(started.newTask) && isWireString(started.newTask.id), JSON.stringify(started));
-  const taskId = started.newTask.id;
-  assert.deepEqual(started.newTask, {
+  const made = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: ` ${name} `, brief: "Invites should lapse after a week.", plan },
+    "call-new",
+  );
+  assert.equal(made.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(made));
+  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
+  const taskId = made.task.id;
+  assert.deepEqual(made.task, {
     id: taskId,
     name,
+    repository: RELAY_FULL_NAME,
     mention: `[@${name}](https://tryluke.dev/workspace-${workspaceId}/plan/${taskId})`,
   });
-  assert.equal(started.agent.onYourTask, false);
-  const made = Option.getOrThrow(await database.run(readTask(bob, taskId)));
+  const stored = Option.getOrThrow(await database.run(readTask(bob, taskId)));
   assert.deepEqual(
-    [made.ownerId, made.task.workspaceId, made.task.repository, made.task.name, made.text],
-    [bob, workspaceId, RELAY_FULL_NAME, name, ""],
+    [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
+    [bob, workspaceId, RELAY_FULL_NAME, body, "Invites should lapse after a week."],
   );
-  const agent = Option.getOrThrow(await database.run(readCodingAgent(bob, started.agent.id)));
-  assert.equal(agent.taskId, taskId);
-  assert.equal(eve.sent.length, 1);
-  assert.ok(JSON.parse(eve.sent[0]?.body ?? "").message.startsWith(prompt));
+  // Its plan's first revision is the calling agent's, as its history shows it.
+  const history = await database.run(listRevisions(bob, taskId));
+  assert.deepEqual(
+    history.revisions.map((revision) => revision.agentId),
+    [caller.id],
+  );
+  assert.equal(eve.sent.length, 0, "a task is made with no agent on it");
   // It stands in the workspace's list as any task does, for a teammate too, and in no other workspace.
   const alice = agents.caller.userId;
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
-  // The same call run again answers the agent and task it made, and makes neither again.
-  const again = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-new");
-  assert.ok(isRecord(again.agent) && isRecord(again.newTask), JSON.stringify(again));
-  assert.equal(again.agent.id, started.agent.id);
-  assert.deepEqual(again.newTask, started.newTask);
-  assert.equal(eve.sent.length, 1);
-  assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
-  assert.equal(tasksCounted(bob), countedBefore + 1, "the task is counted once, as Bob's");
-
-  // A start the catalog refuses takes away the task made for it.
-  const refused = await call(
-    CODER_TOOL.START_AGENT,
-    { newTask: "Refused", prompt, model: OPUS, effort: "none" },
-    "call-refused",
+  // The same call run again, even twice at once, answers the task it made, and makes no second.
+  const again = await Promise.all([
+    call(CODER_TOOL.CREATE_TASK, { name }, "call-new"),
+    call(CODER_TOOL.CREATE_TASK, { name }, "call-new"),
+  ]);
+  assert.deepEqual(again, [made, made]);
+  const racing = await Promise.all([
+    call(CODER_TOOL.CREATE_TASK, { name: "Raced" }, "call-race"),
+    call(CODER_TOOL.CREATE_TASK, { name: "Raced" }, "call-race"),
+  ]);
+  assert.ok(
+    racing.every((each) => each.status === ACTION_RESULT_STATUS.ACCEPTED),
+    JSON.stringify(racing),
   );
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
-  assert.deepEqual(await tasksNamed(bob, workspaceId, "Refused"), []);
-  assert.equal(tasksCounted(bob), countedBefore + 1, "a task taken back is never counted");
+  assert.equal((await tasksNamed(bob, workspaceId, "Raced")).length, 1);
+  assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
+  assert.equal(tasksCounted(bob), countedBefore + 2, "each task is counted once, as Bob's");
 
-  for (const input of [
-    { newTask: "Both", taskId: tasks.billing, prompt },
-    { newTask: "   ", prompt },
-    { newTask: "a".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 1), prompt },
-  ]) {
-    assert.deepEqual(await call(CODER_TOOL.START_AGENT, input, "call-bad"), {
+  // A start on it by its id, as any other task of the workspace.
+  const started = await call(
+    CODER_TOOL.START_AGENT,
+    { taskId, prompt: "Write the migration." },
+    "call-start",
+  );
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id), JSON.stringify(started));
+  assert.equal(
+    Option.getOrThrow(await database.run(readCodingAgent(bob, started.agent.id))).taskId,
+    taskId,
+  );
+
+  // None names no repository, and one the installation does not reach makes nothing.
+  const bare = await call(CODER_TOOL.CREATE_TASK, { name: "Bare", repository: null }, "call-bare");
+  assert.ok(isRecord(bare.task), JSON.stringify(bare));
+  assert.equal(bare.task.repository, null);
+  assert.deepEqual(
+    await call(CODER_TOOL.CREATE_TASK, { name: "Away", repository: "Acme/Elsewhere" }, "call-away"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_TASK_REFUSAL.NOT_REACHABLE },
+  );
+  assert.deepEqual(await tasksNamed(bob, workspaceId, "Away"), []);
+  for (const input of [{ name: "   " }, { name: "a".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 1) }, {}]) {
+    assert.deepEqual(await call(CODER_TOOL.CREATE_TASK, input, "call-bad"), {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+      reason: CREATE_TASK_REFUSAL.UNREADABLE,
     });
   }
-  assert.deepEqual(await tasksNamed(bob, workspaceId, "Both"), []);
-  assert.equal(eve.sent.length, 1, "a refused start starts nothing");
-});
 
-test("start_agent run twice at once under one call's key keeps one new task: the run that finds the other's agent takes away the task it made and answers that agent with its own task", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller } = agents;
-  const name = "Invite expiry migration";
-  const prompt = "Write the migration that adds the invitation's expiry.";
-  // The other run lands its agent, on a task of its own, while this run confirms its repository.
-  let racing = false;
-  let raced: { readonly agentId: string; readonly taskId: string } | undefined;
-  const eve = await fakeCoderEve(workspaceId, [], async () => {
-    if (!racing) return;
-    racing = false;
-    const theirs = await database.run(
-      createTask(caller.userId, {
-        organizationId: workspaceId,
-        name,
-        repository: RELAY_FULL_NAME,
-        planning: false,
-      }),
-    );
-    const agent = await claimed(caller.userId, {
-      ...AGENT_CHOICE,
-      idempotencyKey: "call-race",
-      taskId: theirs.id,
-      planSnapshot: null,
-      prompt,
-    });
-    raced = { agentId: agent.id, taskId: theirs.id };
-  });
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-  const countedBefore = tasksCounted(caller.userId);
-
-  racing = true;
-  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-race");
-  assert.ok(raced !== undefined, "the other run landed while this one ran");
-  assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answered));
-  assert.ok(isRecord(answered.agent) && isRecord(answered.newTask), JSON.stringify(answered));
-  assert.equal(answered.agent.id, raced.agentId);
-  assert.equal(answered.newTask.id, raced.taskId);
-  assert.deepEqual(await tasksNamed(caller.userId, workspaceId, name), [raced.taskId]);
-  assert.equal(eve.sent.length, 0, "no second agent's session is opened");
-  assert.equal(
-    tasksCounted(caller.userId),
-    countedBefore,
-    "the task this run took back is not counted",
+  // A start that still names a new task, as starts did before create_task, is refused with where to go.
+  assert.deepEqual(
+    await call(CODER_TOOL.START_AGENT, { newTask: "Old way", prompt: "Sweep." }, "call-old"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NEW_TASK },
   );
-});
-
-test("start_agent's new task that another agent came to stand on while its own start failed is kept, and counted once", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const { caller } = agents;
-  const name = "Kept by another";
-  const prompt = "Write the migration that adds the invitation's expiry.";
-  // Another agent lands on the new task while this start confirms its repository, then GitHub fails this start.
-  let landing = true;
-  const eve = await fakeCoderEve(workspaceId, [], async () => {
-    // The new task's own repository check reaches GitHub before the task is made, so the landing waits for it.
-    const [taskId] = await tasksNamed(caller.userId, workspaceId, name);
-    if (!landing || taskId === undefined) return;
-    landing = false;
-    await claimed(caller.userId, {
-      ...AGENT_CHOICE,
-      idempotencyKey: "another",
-      taskId,
-      planSnapshot: null,
-      prompt,
-    });
-    // GitHub then does not answer this start, which is refused.
-    throw new Error("GitHub unreachable");
-  });
-  const call = await peerCaller(hostOf(true), caller, eve.services);
-  const countedBefore = tasksCounted(caller.userId);
-
-  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-kept");
-  assert.equal(answered.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(answered));
-  assert.equal(landing, false, "the other agent landed");
-  assert.equal((await tasksNamed(caller.userId, workspaceId, name)).length, 1);
-  assert.equal(tasksCounted(caller.userId), countedBefore + 1, "the task that stands is counted");
+  assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
+  assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {
@@ -1581,10 +1532,9 @@ test("an agent whose starter has left the workspace makes no task in it", async 
   const call = await peerCaller(hostOf(true), agents.teammates, eve.services);
   await database.run(leaveWorkspace(workspaceId, agents.teammates.userId));
 
-  const refused = await call(CODER_TOOL.START_AGENT, { newTask: "Left behind", prompt: "Sweep." });
+  const refused = await call(CODER_TOOL.CREATE_TASK, { name: "Left behind" });
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
-  assert.equal(eve.sent.length, 0);
 });
 
 test("an agent whose starter has left the workspace reaches no other agent", async () => {

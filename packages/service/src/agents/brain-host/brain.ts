@@ -106,7 +106,7 @@ import {
   runDeleteSection,
   runMoveTask,
 } from "../task-section-tools.js";
-import { READ_TASK_TOOL, runReadTask } from "../task-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import {
   type BrainChatCall,
   type ChatSince,
@@ -277,7 +277,7 @@ On a status question, read the agent and summarise its progress in a sentence or
 
 On an instruction, send it when it is clear which agent is meant and what to say: message_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When this task has one agent and they name no other task, it is the one they mean.
 
-On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither; where they named a model in their own words, list_models first for its id and an effort it lists. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
+On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither; where they named a model in their own words, list_models first for its id and an effort it lists. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Where they ask for an agent on a new task of its own ("make a task for the invite emails and start an agent on it"), create_task makes the task first, with their words as its brief, and start_agent then starts the agent on it by its taskId. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
 
 On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
@@ -330,6 +330,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
 - read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
+- create_task makes a task in the workspace for the developer, on the repository named or this task's, with their brief and a plan to start from where given, and no agent on it; start_agent then starts one on it.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
 - update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
 - list_issues lists the workspace's issues, each with its id, identifier, title, status, priority, and whether it is archived; read_issue reads one by its id or identifier with its description; create_issue files one; and update_issue changes its title, description, status, or priority, or archives it or brings it back.
@@ -675,6 +676,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...CREATE_TASK_TOOL,
+    run: (call, input) => runCreateTask(call.agents, input),
   },
   {
     ...READ_TASK_TOOL,
