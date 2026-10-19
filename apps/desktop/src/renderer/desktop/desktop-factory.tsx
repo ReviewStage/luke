@@ -8,6 +8,8 @@ import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
+import { FACTORY_CAMPUS } from "@luke/panel/factory-world/registry";
+import { useFactoryWorlds, WorldPicker } from "@luke/panel/factory-world/world-picker";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
 import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
@@ -52,9 +54,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { FACTORY_CAMPUS } from "../factory-world/registry";
 import { FactoryWorldPage } from "../factory-world/world-page";
-import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";

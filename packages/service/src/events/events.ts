@@ -165,6 +165,11 @@ export function handleEvents(
     if (!events) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
+    // Note that a batch of nothing but retired names is accepted with nothing
+    // to post, because the older build that sent it is not at fault.
+    if (events.length === 0) {
+      return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: 0 });
+    }
 
     const now = yield* Clock.currentTimeMillis;
     if (!(yield* eventsBrake.check(userId, events.length))) {

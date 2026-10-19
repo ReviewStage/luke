@@ -539,15 +539,22 @@ body,
   height: 11px;
 }
 
+/* A column's scrolling sections: a `ScrollArea` filling the rest of the
+   column, standing the keyboard ring's reach past it on every side, its
+   body padding that back, so a row's ring is whole at the area's edge. */
 .sidebar-section {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
+}
+
+.sidebar-section-body {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
   padding: var(--luke-focus-ring-reach);
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 /* The plans stand a section's gap below the pinned ones while any are
@@ -871,16 +878,21 @@ ul.actor-stack {
 }
 
 /* The rest a pile's count stands for, each by their mark and what their face would say. */
-/* However many it counts, the list stays inside the window and scrolls within the card. */
-.actor-more-list {
+/* However many it counts, the list stays inside the window and scrolls
+   within the card, in a `ScrollArea` as tall as it is, which gives way to
+   the room's height. */
+.actor-more {
   display: flex;
   max-height: min(240px, 40vh);
+  flex-direction: column;
+}
+
+.actor-more-list {
+  display: flex;
   flex-direction: column;
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
   list-style: none;
 }
 
@@ -2061,7 +2073,7 @@ ul.actor-stack {
   flex-direction: column;
 }
 
-.desktop-agent [role="log"],
+.desktop-agent .conversation-log,
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
@@ -2256,18 +2268,15 @@ ul.actor-stack {
   text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 60%, transparent);
 }
 
-.desktop-document .plan-document-scroll {
+/* Its column is a `ScrollArea` with nothing scrolling sideways, since
+   nothing in a plan is wider than the column (its code and tables scroll on
+   their own), and a stable gutter, so where macOS draws a bar that takes
+   room the column does not shift sideways on the line Luke writes that
+   first makes it scroll. This is the block inside it. */
+.desktop-document .plan-document-body {
   padding: var(--luke-page-inset);
   /* Room for the last line to scroll clear of the captions over the call bar. */
   padding-bottom: 140px; /* off-scale */
-  /* Nothing in a plan is wider than the column (its code and tables scroll
-     on their own), so a body gliding in from where a pane displaced it
-     never draws a scrollbar on the way. */
-  overflow-x: hidden;
-  /* Where macOS draws a bar that takes room, the room stands while the plan
-     is still short of the page, so the column does not shift sideways on
-     the line Luke writes that first makes it scroll. */
-  scrollbar-gutter: stable;
 }
 
 .desktop-document .plan-body,
@@ -4761,7 +4770,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: var(--chat-rail-width, 248px) minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
 }
 
 .chat-rail {
@@ -4784,14 +4793,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
-.chat-rail-heading {
-  margin: var(--luke-space-12) 0 var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+/* Channels and direct messages each stand under their heading in the
+   headings' voice (`.section-heading`), a section's room apart, as
+   Settings' page list's groups do. */
+.chat-rail-group {
+  margin-top: var(--luke-section-gap);
 }
 
 /* The task's own Chat tab fills its column as an agent's tab does, the
@@ -4842,23 +4848,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-head {
-  gap: var(--luke-space-12);
   padding-left: var(--column-inset);
-}
-
-.chat-head-title {
-  margin: 0;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-head-meta {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
@@ -4866,9 +4856,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
+/* The stream and its composer keep to the page's measure, as the Inbox's
+   thread and an agent's transcript do. */
 .chat-messages,
 .chat-replies {
-  max-width: 900px;
+  max-width: var(--luke-page-measure);
   margin: 0 auto;
   padding: 0;
   list-style: none;
@@ -4912,105 +4904,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
-.chat-author {
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-handle {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-where,
-.chat-time {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
 .chat-words {
   color: var(--luke-color-text-body);
 }
 
-.chat-code {
-  display: flex;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-}
-
-.chat-code-lines,
-.chat-image-words,
-.chat-unknown {
-  color: var(--luke-color-text-subtle);
-}
-
-.chat-image-words,
-.chat-unknown,
-.chat-link {
-  margin: 0;
-}
-
-/* An ask draws as a card in its row, headed by what kind of ask it is. */
+/* An ask draws as a card in its row (`Card`), a step under the byline. */
 .chat-ask {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
   margin-top: var(--luke-space-4);
-  padding: var(--luke-space-12) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-ask-kind {
-  margin: 0;
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.chat-ask-title {
-  margin: 0;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-ask-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chat-ask-option {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-ask-option-label {
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-ask-recommended,
-.chat-ask-option-detail {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-ask-option-detail {
-  margin: var(--luke-space-2) 0 0;
 }
 
 .chat-thread {
@@ -5026,12 +4926,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   line-height: var(--luke-type-label-leading);
 }
 
-/* The composer at a place's foot, at the stream's reading measure: the box,
-   and under it a bar of what it takes with the round send at its end. */
+/* The composer at a place's foot, at the stream's reading measure: the
+   shared composer card (`PromptInput`) around the box, its foot saying what
+   the box takes with the round send at its end. */
 .chat-composer {
   position: relative;
   width: calc(100% - 2 * var(--column-inset));
-  max-width: 900px;
+  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
@@ -5040,59 +4941,31 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: var(--luke-space-6) 0 0;
 }
 
-.chat-composer-box {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-composer[data-compact="true"] .chat-composer-box {
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: var(--luke-radius-10);
-}
-
+/* The box in the card, at the agent composer's insets (`.agent-composer-input`). */
 .chat-composer-field {
+  box-sizing: border-box;
   width: 100%;
   min-height: 0;
-  padding: 0;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
   border: 0;
   background: none;
   color: var(--luke-color-text);
   font: inherit;
   font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   resize: none;
   outline: none; /* no ring: the caret marks the field */
 }
 
-.chat-composer-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The send stands at the bar's end, past its hints. */
-.chat-composer-bar > :last-child {
-  margin-inline-start: auto;
-}
-
-.chat-composer[data-compact="true"] .chat-composer-bar {
-  position: absolute;
-  right: var(--luke-space-8);
-  bottom: 6px;
+.chat-composer[data-compact="true"] .chat-composer-field {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
 .chat-composer-note {
   margin: var(--luke-space-6) 0 0;
 }
 
-/* The list an `@` or `#` opens stands over the box at its left. */
+/* The list an `@` or `#` opens stands over the card at its left. */
 .chat-mention-menu {
   position: absolute;
   /* It stands over the box, so the searchable menu's own top is let go. */
@@ -5103,39 +4976,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   z-index: 10;
 }
 
-/* An open ask's note line, the round send at its end where the note is what is sent. */
 /* The note's field and, where the answer is sent by one, its send beside it. */
 .chat-ask-note {
   display: flex;
   align-items: center;
   gap: var(--luke-space-8);
-  margin: var(--luke-space-4) 0 0;
+  margin: 0;
 }
 
 .chat-ask-note-field {
   flex: 1;
   min-width: 0;
-}
-
-.chat-ask-presses {
-  display: flex;
-  gap: var(--luke-space-8);
-}
-
-.chat-ask-quiet,
-.chat-ask-settled {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-ask-values {
-  margin: var(--luke-space-4) 0 0;
-  padding-left: var(--luke-space-16);
-}
-
-.chat-ask-settled-note {
-  color: var(--luke-color-text);
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed
@@ -5178,12 +5029,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-empty {
-  margin: var(--luke-space-24) 0;
-  color: var(--luke-color-text-subtle);
-  text-align: center;
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -5366,7 +5211,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* The plan template laid out as every Settings page is (`PlanBody`'s
    `page`): at their measure, its name at a page title's place and size, the
    Edited line and the note under it. */
-.template-document .plan-document-scroll {
+.template-document .plan-document-body {
   padding-top: 0;
 }
 
@@ -5461,9 +5306,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* The sections' pane is a scroller of the sidebar's kind, its reach already
-   the track's, so it fills its cell rather than standing past it. */
+   the track's, so it fills its cell rather than standing past it, and its
+   area's body pads the reach in rather than the pane. */
 .version-log-track > .sidebar-section {
   margin-inline: 0;
+  padding-inline: 0;
 }
 
 .version-log-track[data-opened="true"] > .version-log-pane {
@@ -5529,7 +5376,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */
-.version-page .desktop-document .plan-document-scroll {
+.version-page .desktop-document .plan-document-body {
   padding-bottom: var(--luke-page-inset);
 }
 
@@ -5641,30 +5488,48 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Pinned, it stands as Cursor's does: no border and no fill of its own, on
    the column's ground, its rows a sidebar's in miniature under quiet
-   headings, the first of them level with its chevron. */
+   headings, the first of them level with its chevron. Its rows scroll in a
+   `ScrollArea` under the chevron, which stands outside what scrolls, so the
+   area's faded edge never fades it. */
 .task-summary {
+  position: relative;
   display: flex;
   box-sizing: border-box;
   width: var(--summary-width);
   flex: none;
   flex-direction: column;
-  gap: var(--luke-section-gap);
-  padding: var(--column-inset);
-  overflow-x: hidden;
-  overflow-y: auto;
   background: var(--luke-color-ground);
 }
 
-/* Collapsed, the panel's kinds alone in a rail under the chevron that
-   expands it, one glyph after the next at one even step. */
-.task-summary[data-mode="rail"],
-.task-summary[data-mode="rail"] > .task-summary-rows {
-  align-items: center;
-  gap: var(--luke-list-gap);
+.task-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-section-gap);
+  padding: var(--column-inset);
 }
 
+/* Collapsed, the panel's kinds alone in a rail under the chevron that
+   expands it, one glyph after the next at one even step. The rows' area
+   starts a step under the chevron less the ring's reach, which its body
+   pads back, so the first glyph's ring is whole at the area's edge. */
 .task-summary[data-mode="rail"] {
   width: var(--summary-rail-width);
+  padding-top: var(--column-inset);
+}
+
+.task-summary[data-mode="rail"] > .task-summary-chevron {
+  align-self: center;
+  margin-bottom: calc(var(--luke-list-gap) - var(--luke-focus-ring-reach));
+}
+
+.task-summary[data-mode="rail"] .task-summary-body {
+  align-items: center;
+  padding-top: var(--luke-focus-ring-reach);
+}
+
+.task-summary[data-mode="rail"] .task-summary-rows {
+  align-items: center;
+  gap: var(--luke-list-gap);
 }
 
 /* Expanded where it cannot be pinned, the whole summary stands in a card
@@ -5686,10 +5551,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   width: var(--summary-width);
   max-height: 100%;
   flex-direction: column;
-  gap: var(--luke-section-gap);
-  padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
@@ -5701,14 +5562,24 @@ polygon.factory-campus-edge[data-edge="selected"] {
     summary-card-grow var(--duration-fast) var(--spring-fast) both;
 }
 
+/* The card's rows, inside the `ScrollArea` that scrolls them where the
+   column is too short for all of them; its chevron stands in its corner. */
+.task-summary-card-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-section-gap);
+  padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+}
+
 /* The pinned summary's chevron and the card's stand on the rail's own, and
    show while the pointer is on the summary, and the pinned one while the keys
-   are in it too. The pinned one stands where the rail's does, in the
-   summary's padding, and stays there as the summary scrolls: it takes no
-   room of its own, so the first heading stands level with it, and stands on
-   the summary's ground, so a row scrolled under it never shows through. The
-   card's is in from the card's outer edges as far as the rail's padding,
-   less the card's border. */
+   are in it too. The pinned one stands where the rail's does, over the
+   area's corner as far in as the body's padding, and stays there as the
+   summary scrolls: it takes no room of its own, so the first heading stands
+   level with it, and stands on the summary's ground, so a row scrolled under
+   it never shows through. The card's is in from the card's outer edges as
+   far as the rail's padding, less the card's border. */
 .task-summary[data-mode="column"] > .task-summary-chevron,
 .task-summary-collapse {
   opacity: 0;
@@ -5720,14 +5591,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
   --luke-button-ground: var(--luke-color-ground);
-  position: sticky;
+  position: absolute;
   z-index: 1;
-  /* Held off the scroller's edge by the keyboard ring's reach, so its ring
-     stands whole once the column is scrolled under it. */
-  top: var(--luke-focus-ring-reach);
-  flex: none;
-  align-self: flex-end;
-  margin-bottom: calc(-1 * (var(--luke-control-height) + var(--luke-section-gap)));
+  top: var(--column-inset);
+  right: var(--column-inset);
   border-radius: var(--luke-control-radius);
   background-color: var(--luke-button-ground);
 }
@@ -5744,28 +5611,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   right: calc(var(--column-inset) - var(--card-edge));
 }
 
-/* While the chevron is drawn, the summary's fade keeps the chevron's own
-   spot whole, a second mask layer over the fade's, because a mask fades
-   every box inside the scroller and the chevron stands at its faded top. */
-.task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) {
-  mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
-  mask-position:
-    0 0,
-    right var(--column-inset) top var(--luke-focus-ring-reach);
-  mask-size:
-    100% 100%,
-    var(--luke-control-height) var(--luke-control-height);
-  mask-repeat: no-repeat;
-}
-
 .task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .task-summary-chevron,
 .task-summary-card:hover .task-summary-collapse,
 .task-summary-collapse:has(:focus-visible) {
   opacity: 1;
 }
 
-.task-summary[data-mode="column"] > .task-summary-section:first-of-type > .section-heading,
-.task-summary-card > .task-summary-section:first-of-type > .section-heading {
+.task-summary[data-mode="column"]
+  .task-summary-body
+  > .task-summary-section:first-of-type
+  > .section-heading,
+.task-summary-card-body > .task-summary-section:first-of-type > .section-heading {
   display: flex;
   min-height: var(--luke-control-height);
   align-items: center;
@@ -6059,14 +5915,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
    sticky call headers and the way back to the newest line already keep to
    the log's column. A File tab spans the panel as an editor does: a file's
    lines are read across all the width the developer gave the panel. */
-.side-panel-content [role="log"],
+.side-panel-content .conversation-log,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 
-.side-panel-content .code-pane [role="log"] {
+.side-panel-content .code-pane .conversation-log {
   padding-inline: max(var(--luke-space-16), var(--code-reading-room));
 }
 
@@ -6140,7 +5996,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .tab-strip::after {
   position: sticky;
   z-index: 1;
-  flex: 0 0 var(--scroll-fade);
+  flex: 0 0 var(--luke-scroll-fade);
   align-self: stretch;
   content: "";
   pointer-events: none;
@@ -6151,18 +6007,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .tab-strip::before {
   left: calc(-1 * var(--luke-focus-ring-reach));
-  margin-right: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
+  margin-right: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to right, var(--strip-ground), transparent);
   animation-name: strip-fade-in;
-  animation-range: 0 var(--scroll-fade);
+  animation-range: 0 var(--luke-scroll-fade);
 }
 
 .tab-strip::after {
   right: calc(-1 * var(--luke-focus-ring-reach));
-  margin-left: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
+  margin-left: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to left, var(--strip-ground), transparent);
   animation-name: strip-fade-out;
-  animation-range: calc(100% - var(--scroll-fade)) 100%;
+  animation-range: calc(100% - var(--luke-scroll-fade)) 100%;
 }
 
 @keyframes strip-fade-in {
@@ -6286,7 +6142,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
     top: calc(-1 * var(--luke-space-8));
     bottom: calc(-1 * var(--luke-space-8));
     left: 100%;
-    width: var(--scroll-fade);
+    width: var(--luke-scroll-fade);
     background: linear-gradient(to right, var(--strip-ground), transparent);
     content: "";
     pointer-events: none;
@@ -6299,7 +6155,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
     top: calc(-1 * var(--luke-space-8));
     right: 100%;
     bottom: calc(-1 * var(--luke-space-8));
-    width: var(--scroll-fade);
+    width: var(--luke-scroll-fade);
     background: linear-gradient(to left, var(--strip-ground), transparent);
     content: "";
     pointer-events: none;
@@ -7180,20 +7036,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
    card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
    lines each, then what the move does in a well under them, and the answers
-   at its foot. The list is the card's body, which scrolls where the window
-   is too short for all of it. */
+   at its foot. The list is the card's body, which scrolls in a `ScrollArea`
+   where the window is too short for all of it. */
 .move-dialog {
   display: flex;
   min-height: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-}
-
-.move-list {
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .move-effects {

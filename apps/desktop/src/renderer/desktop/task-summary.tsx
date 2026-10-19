@@ -11,6 +11,9 @@ import {
   LIST_DENSITY,
   List,
   ListRow,
+  SCROLL_FADE,
+  SCROLL_SIZE,
+  ScrollArea,
   useMenu,
 } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -708,12 +711,20 @@ function SummaryCard({
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
     >
-      <span className="task-summary-collapse">
-        <Tooltip label="Collapse summary">
-          <IconButton icon={<ChevronsRightIcon />} label="Collapse summary" onClick={collapse} />
-        </Tooltip>
-      </span>
-      <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
+      <ScrollArea size={SCROLL_SIZE.CONTENT}>
+        <div className="task-summary-card-body">
+          <span className="task-summary-collapse">
+            <Tooltip label="Collapse summary">
+              <IconButton
+                icon={<ChevronsRightIcon />}
+                label="Collapse summary"
+                onClick={collapse}
+              />
+            </Tooltip>
+          </span>
+          <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
+        </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -795,17 +806,22 @@ export function TaskSummary({
   return (
     <>
       {layout.mode === SUMMARY_MODE.NONE ? null : (
-        <aside className="task-summary scroll-fade" aria-label="Summary" data-mode={layout.mode}>
+        <aside className="task-summary" aria-label="Summary" data-mode={layout.mode}>
+          {/* Note that the chevron stands outside what scrolls, at one place in both modes, so its press keeps the focus as the summary turns and the fade never reaches it. */}
           <SummaryChevron layout={layout} cardId={cardId} />
-          {layout.mode === SUMMARY_MODE.COLUMN ? (
-            <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
-          ) : kinds.length === 0 ? null : (
-            <ul className="task-summary-rows" aria-label={TABS_SECTION}>
-              {kinds.map((entry) => (
-                <RailRow key={entry.row.id} entry={entry} />
-              ))}
-            </ul>
-          )}
+          <ScrollArea fade={SCROLL_FADE.BOTH}>
+            <div className="task-summary-body">
+              {layout.mode === SUMMARY_MODE.COLUMN ? (
+                <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
+              ) : kinds.length === 0 ? null : (
+                <ul className="task-summary-rows" aria-label={TABS_SECTION}>
+                  {kinds.map((entry) => (
+                    <RailRow key={entry.row.id} entry={entry} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </ScrollArea>
         </aside>
       )}
       {!card.mounted || hungFrom === undefined ? null : (

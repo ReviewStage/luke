@@ -13,6 +13,14 @@ import {
   RepositoryRemedyProvider,
 } from "@luke/panel/tasks/repository-remedy";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  QUIET_COMPOSER,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SkillOption } from "@luke/ui/skill-mention";
@@ -22,14 +30,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  QUIET_COMPOSER,
-  typeInComposer,
-} from "#testing/composer";
 import { AgentComposer } from "./agent-composer";
 import type { SkillSource } from "./skill-picker";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";

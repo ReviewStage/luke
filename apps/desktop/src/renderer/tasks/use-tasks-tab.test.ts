@@ -2705,50 +2705,139 @@ test("an agent asked of Start agent… whose task was left before it could start
   );
 });
 
-test("New task's Agent mode starts the task without planning and opens it on a draft agent holding the prompt, files, and model, marked to send itself", async () => {
+/** A start's agent, read back where it names one. */
+const readAgentNamed = Schema.decodeUnknownOption(
+  Schema.Struct({
+    planning: Schema.optionalKey(Schema.Boolean),
+    agent: Schema.optionalKey(
+      Schema.Struct({
+        idempotencyKey: Schema.String,
+        prompt: Schema.optionalKey(Schema.String),
+        model: Schema.optionalKey(Schema.String),
+        effort: Schema.optionalKey(Schema.String),
+      }),
+    ),
+  }),
+);
+
+/** The task New task's Agent mode starts, as the host opens it once started. */
+const AGENT_TASK: TasksView = {
+  ...OPEN,
+  activeTaskId: OTHER_TASK_ID,
+  document: {
+    status: TASKS_READ.READY,
+    task: { ...TASK, id: OTHER_TASK_ID, name: "Untitled", repository: "acme/web" },
+  },
+};
+
+/** The key New task's card minted for its agent's start. */
+const AGENT_KEY = "5b7e2c1a-9d4f-4a3b-8e6c-2f1d0a9b8c7e";
+
+/** Agent mode's start pressed with the words and the chip's model, answering why the card holds it, then the task standing open. */
+async function startAgentTask(tab: ReturnType<typeof mount>) {
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
-    },
-  );
+  const prompt = "Make the sidebar keep its folds.";
   act(() => tab.control().onNewTask());
   let note: string | undefined = "unanswered";
   await act(async () => {
     note = await tab.control().newTask.start("", "acme/web", undefined, false, {
-      handed: { prompt: "Make the sidebar keep its folds.", attachments: [], choice },
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
     });
   });
-  tab.stand({
-    tasks: {
-      ...OPEN,
-      activeTaskId: OTHER_TASK_ID,
-      document: {
-        status: TASKS_READ.READY,
-        task: { ...TASK, id: OTHER_TASK_ID, name: "Untitled", repository: "acme/web" },
-      },
-    },
-  });
+  tab.stand({ tasks: AGENT_TASK });
   await settle();
+  const starts = tab.payloads
+    .filter(({ kind }) => kind === ACT_KIND.TASKS_START)
+    .map(({ payload }) => Option.getOrUndefined(readAgentNamed(payload)));
+  return { choice, prompt, note, starts };
+}
 
-  const draft = tab.control().agents.draft;
+test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  const { choice, prompt, note, starts } = await startAgentTask(tab);
+
   assert.equal(note, undefined);
   assert.equal(tab.control().newTask.open, false, "the dialog closes");
+  assert.equal(starts.length, 1);
+  const { idempotencyKey, ...agent } = starts[0]?.agent ?? { idempotencyKey: "" };
+  assert.equal(starts[0]?.planning, false);
   assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
-      .map((asked) => Option.getOrUndefined(readPlanningNamed(asked.payload))?.planning),
-    [false],
+    agent,
+    { prompt, ...choice },
+    "the agent carries the words and the chip's model",
   );
+  assert.equal(idempotencyKey, AGENT_KEY, "the agent carries the card's key");
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    [],
+    "no second call starts the agent",
+  );
+  assert.equal(tab.control().agents.draft, undefined, "no draft stands in its place");
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
+});
+
+test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  // The service holds the agent once its own Start made it.
+  let agents: CodingAgentSummary[] = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({
+          planId: OTHER_TASK_ID,
+          agentStart: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents }),
+      [ACT_KIND.CODING_AGENTS_START]: () => {
+        agents = [started];
+        return Promise.resolve({ agent: started });
+      },
+    },
+  );
+  const { choice, prompt, note, starts } = await startAgentTask(tab);
+  const draft = tab.control().agents.draft;
+
+  assert.equal(note, undefined, "the task started, so the card says nothing");
+  assert.equal(tab.control().newTask.open, false, "the dialog closes");
   assert.ok(draft, "the new task holds a draft agent");
   assert.deepEqual(
-    { prompt: draft.prompt, choice: draft.choice, sendsOnOpen: draft.sendsOnOpen },
-    { prompt: "Make the sidebar keep its folds.", choice, sendsOnOpen: true },
+    { prompt: draft.prompt, choice: draft.choice },
+    { prompt, choice },
+    "the draft holds the words and the model",
   );
+  assert.match(draft.refused?.text ?? "", /could not be started/u);
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "the task opens on its tab");
-  assert.equal(tab.control().agents.start.available, true, "the draft can send itself");
+  assert.equal(draft.id, AGENT_KEY, "the draft holds the start's key");
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    [],
+    "nothing is sent again by itself",
+  );
+
+  // The draft tab's Retry sends what the draft holds.
+  await act(async () => {
+    await tab.control().agents.startPrompt(draft.id, draft.prompt, draft.choice, draft.attachments);
+  });
+  await settle();
+  const retries = tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
+  assert.equal(retries.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(retries[0]?.payload)), {
+    taskId: OTHER_TASK_ID,
+    idempotencyKey: draft.id,
+    prompt,
+    ...choice,
+  });
+  assert.equal(starts.length, 1, "the task's start is never sent again");
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 });
 
 test("an agent's title first landing on a task still Untitled reads the tasks again, so the name it took shows; a titled task asks nothing", async () => {

@@ -11,11 +11,11 @@ import type { Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -146,7 +146,7 @@ test("the plan's first words, under no heading, offer no link", () => {
 
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
   const { container } = drawn();
-  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
+  const scroller = container.querySelector<HTMLElement>(".plan-document-body")?.parentElement;
   assert.ok(scroller);
   const units = container.querySelectorAll<HTMLElement>(".plan-unit");
   // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.

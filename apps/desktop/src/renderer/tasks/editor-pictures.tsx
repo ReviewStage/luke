@@ -21,7 +21,7 @@ import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cac
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
+import { documentScrollerOf } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -213,7 +213,7 @@ interface ToolsLayout {
 function useToolsLayout(column: HTMLElement): ToolsLayout {
   const [layout, setLayout] = useState<ToolsLayout>({ worded: true, above: true });
   useLayoutEffect(() => {
-    const scroller = column.closest<HTMLElement>(`.${DOCUMENT_SCROLL_CLASS}`);
+    const scroller = documentScrollerOf(column);
     const measure = () => {
       const box = column.getBoundingClientRect();
       if (box.width <= 0) return;

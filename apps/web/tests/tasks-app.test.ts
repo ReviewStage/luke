@@ -119,6 +119,7 @@ const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
 const EDIT = "/api/plans/edit";
+const STOP = "/api/plans/stop";
 const PAGE = "/api/plans/page";
 
 const RELAY = {
@@ -654,9 +655,26 @@ it.layer(getTestDB())("the plan routes", (it) => {
       for (const path of [MESSAGES, CODE]) {
         assert.deepEqual(yield* ask(request(path, other, { id: taskId })), notFound);
       }
+      assert.deepEqual(yield* ask(request(STOP, other, { id: taskId, method: "POST" })), notFound);
       assert.deepEqual(
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
         notFound,
+      );
+    }),
+  );
+
+  it.effect("stopping Luke on a plan he never worked on stops nothing, and only a POST stops", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
+
+      assert.deepEqual(yield* ask(request(STOP, owner, { id: taskId, method: "POST" })), {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: {},
+      });
+      assert.deepEqual(
+        yield* ask(request(STOP, owner, { id: taskId })),
+        refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
       );
     }),
   );

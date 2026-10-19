@@ -25,6 +25,8 @@ import {
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
+  SCROLL_SIZE,
+  ScrollArea,
   TEXT_BUTTON_LINES,
   TextButton,
   WingFace,
@@ -682,15 +684,19 @@ function MoreFaces({
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
     <HoverCard data-actor-card="more">
-      <ul className="actor-more-list">
-        {actors.map((actor, index) => (
-          // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-          <li key={index} className="actor-more-row">
-            <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-            <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
-          </li>
-        ))}
-      </ul>
+      <div className="actor-more">
+        <ScrollArea size={SCROLL_SIZE.CONTENT}>
+          <ul className="actor-more-list">
+            {actors.map((actor, index) => (
+              // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+              <li key={index} className="actor-more-row">
+                <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+                <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+      </div>
     </HoverCard>
   );
   return (

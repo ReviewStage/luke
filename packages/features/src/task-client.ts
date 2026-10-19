@@ -61,6 +61,7 @@ import {
   taskPath,
   taskRestorePath,
   taskSkillsPath,
+  taskStopPath,
   taskTranscriptPath,
   taskTreePath,
   taskWorkPath,
@@ -645,6 +646,11 @@ export class HostedTaskClient {
       ),
       (answer) => answer?.page,
     );
+  }
+
+  /** Stops the turn Luke is running on a task. */
+  stopWork(taskId: string): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.asVoid(this.#call.send({ method: HTTP_METHOD.POST, path: taskStopPath(taskId) }));
   }
 
   /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */

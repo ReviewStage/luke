@@ -56,6 +56,8 @@ import {
   type FoldingButtonHint,
   FormField,
   GAP,
+  SCROLL_FADE,
+  ScrollArea,
   Stack,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -76,6 +78,7 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref";
+import { ArchivedComposerNote } from "./archived-task";
 import { AttachedFileChips } from "./attached-file-chips";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
@@ -83,6 +86,7 @@ import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text";
 import {
+  archivedHolder,
   CODE_READ,
   CODE_READ_FAILED,
   type CodeRead,
@@ -931,10 +935,11 @@ function useOptionNumbers(
   item: InboxItem,
   draft: InboxDraft,
   control: TaskInboxControl,
+  answerable: boolean,
 ): void {
   const latest = useRef({ item, draft, control });
   latest.current = { item, draft, control };
-  const numbered = item.status === INBOX_STATUS.OPEN && NUMBERED_RESPONSES.has(item.response.type);
+  const numbered = answerable && NUMBERED_RESPONSES.has(item.response.type);
   useEffect(() => {
     if (!numbered) return;
     const onKey = (event: KeyboardEvent) => {
@@ -1521,6 +1526,12 @@ const STANDING_WORDS = {
   [INBOX_STATUS.CLOSED]: "Withdrawn",
 } as const;
 
+/** What an open item put away with its task says it stands as, needing nobody until the task is back. */
+const ARCHIVED_STANDING = "Archived";
+
+/** What stands in the box's place while the item's task is archived. */
+const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
+
 /**
  * Where the item stands, in the subject's line. An item that needs the
  * reader, open and asked by an agent they started (`needsReader`), wears the
@@ -1531,12 +1542,22 @@ const STANDING_WORDS = {
 function Standing({
   item,
   readerId,
+  archived,
 }: {
   item: InboxItem;
   readerId: string | undefined;
+  /** Whether the item's task is archived, so an open item waits on nobody. */
+  archived: boolean;
 }): React.JSX.Element {
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
+  if (archived && item.status === INBOX_STATUS.OPEN) {
+    return (
+      <span className="inbox-standing" data-status={item.status}>
+        {ARCHIVED_STANDING}
+      </span>
+    );
+  }
   const waitsOn =
     item.status === INBOX_STATUS.OPEN && !readersItem(item, reader)
       ? personActor(item.startedBy, directory.members, reader, directory.former)
@@ -1570,11 +1591,13 @@ function Subject({
   by,
   readerId,
   now,
+  archived,
 }: {
   item: InboxItem;
   by: ItemAgent;
   readerId: string | undefined;
   now: number;
+  archived: boolean;
 }): React.JSX.Element {
   return (
     <header className="inbox-subject">
@@ -1590,7 +1613,7 @@ function Subject({
           asked <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
         </span>
         <span aria-hidden="true">·</span>
-        <Standing item={item} readerId={readerId} />
+        <Standing item={item} readerId={readerId} archived={archived} />
       </p>
     </header>
   );
@@ -1632,6 +1655,8 @@ export interface InboxPaneDoors {
   /** Opens a link block's web page in the browser (`use-open-link.ts`). */
   readonly openLink: (url: string) => void;
   readonly code: InboxCodeDoors;
+  /** Brings the item's task back from the archive, offered where the box would stand while it is archived; none where the task is not archived. */
+  readonly onUnarchive?: (() => void) | undefined;
 }
 
 /**
@@ -1772,8 +1797,11 @@ export function InboxPane({
     onOpen: () => doors.onOpenAgent(item.agentId),
   };
   const open = item.status === INBOX_STATUS.OPEN;
+  // An item put away with its task is read but not answered, nor written on, until the task is back.
+  const archived = archivedHolder(holder);
+  const answerable = open && !archived;
   const draft = control.draftOf(item);
-  useOptionNumbers(pane, item, draft, control);
+  useOptionNumbers(pane, item, draft, control, answerable);
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
   return (
@@ -1794,82 +1822,89 @@ export function InboxPane({
         )}
       </header>
       <div className="desktop-inbox">
-        <div
-          // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture"
-          data-item-id={item.id}
-          ref={board}
-        >
-          <WordsWorkspace value={workspaceId}>
-            <Subject item={item} by={by} readerId={agents.me} now={now} />
-            <ol className="inbox-thread" aria-label="Thread">
-              <Comment
-                kind={COMMENT.ASKED}
-                face={by.subject.tile}
-                head={
-                  <>
-                    <CommentName>
-                      <AgentName by={by} nameOnly />
-                    </CommentName>
-                    <span className="inbox-comment-when">
-                      <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
-                    </span>
-                  </>
-                }
-              >
-                <Blocks
-                  item={item}
-                  images={control.images}
-                  onImage={control.onImage}
-                  onRetryImage={control.onRetryImage}
-                  openLink={doors.openLink}
-                  code={doors.code}
-                />
-                {open ? (
-                  // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
-                  <div className="inbox-response" onKeyDown={(event) => onResponseKey(pane, event)}>
-                    {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
-                    <AnswerMentions value={mentions}>
-                      <ResponseControls
-                        item={item}
-                        draft={draft}
-                        disabled={control.sending.has(item.id)}
-                        text={{
-                          self: item.agentId,
-                          agent: by.subject.agent,
-                          skills: agents.readSkills,
-                          keywords: answerKeywords(holder, item),
-                          onEnter: () => sendFromPane(pane.current),
-                        }}
-                        onDraft={(next) => control.onDraft(item, next)}
-                      />
-                    </AnswerMentions>
-                  </div>
-                ) : (
-                  // Keyed by its item, so the fold opened on one item stands closed on the next.
-                  <Offered key={item.id} item={item} />
-                )}
-              </Comment>
-              <ThreadAfter item={item} by={by} now={now} control={control} />
-            </ol>
-          </WordsWorkspace>
-          {control.failed ? (
-            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
-          ) : null}
-        </div>
-        {open || next === undefined ? null : <InboxNextUp next={next} />}
-        <AnswerMentions value={mentions}>
-          <InboxAnswerBox
-            item={item}
-            control={control}
-            agent={by.subject.agent}
-            agentName={by.subject.name}
-            skills={agents.readSkills}
-            keywords={answerKeywords(holder, item)}
-            replyScope={board}
-            onMissing={(missing) => focusMissing(pane.current, missing)}
-          />
-        </AnswerMentions>
+        {/* The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there. */}
+        <ScrollArea fade={SCROLL_FADE.BOTH} data-item-id={item.id} ref={board}>
+          <div className="inbox-board agent-log-over-composer ph-no-capture">
+            <WordsWorkspace value={workspaceId}>
+              <Subject item={item} by={by} readerId={agents.me} now={now} archived={archived} />
+              <ol className="inbox-thread" aria-label="Thread">
+                <Comment
+                  kind={COMMENT.ASKED}
+                  face={by.subject.tile}
+                  head={
+                    <>
+                      <CommentName>
+                        <AgentName by={by} nameOnly />
+                      </CommentName>
+                      <span className="inbox-comment-when">
+                        <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
+                      </span>
+                    </>
+                  }
+                >
+                  <Blocks
+                    item={item}
+                    images={control.images}
+                    onImage={control.onImage}
+                    onRetryImage={control.onRetryImage}
+                    openLink={doors.openLink}
+                    code={doors.code}
+                  />
+                  {open ? (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
+                    <div
+                      className="inbox-response"
+                      onKeyDown={(event) => onResponseKey(pane, event)}
+                    >
+                      {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
+                      <AnswerMentions value={mentions}>
+                        <ResponseControls
+                          item={item}
+                          draft={draft}
+                          disabled={!answerable || control.sending.has(item.id)}
+                          text={{
+                            self: item.agentId,
+                            agent: by.subject.agent,
+                            skills: agents.readSkills,
+                            keywords: answerKeywords(holder, item),
+                            onEnter: () => sendFromPane(pane.current),
+                          }}
+                          onDraft={(next) => control.onDraft(item, next)}
+                        />
+                      </AnswerMentions>
+                    </div>
+                  ) : (
+                    // Keyed by its item, so the fold opened on one item stands closed on the next.
+                    <Offered key={item.id} item={item} />
+                  )}
+                </Comment>
+                <ThreadAfter item={item} by={by} now={now} control={control} />
+              </ol>
+            </WordsWorkspace>
+            {control.failed ? (
+              <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
+            ) : null}
+          </div>
+        </ScrollArea>
+        {open || archived || next === undefined ? null : <InboxNextUp next={next} />}
+        {archived ? (
+          doors.onUnarchive === undefined ? null : (
+            <ArchivedComposerNote onUnarchive={doors.onUnarchive} words={ARCHIVED_ITEM_NOTE} />
+          )
+        ) : (
+          <AnswerMentions value={mentions}>
+            <InboxAnswerBox
+              item={item}
+              control={control}
+              agent={by.subject.agent}
+              agentName={by.subject.name}
+              skills={agents.readSkills}
+              keywords={answerKeywords(holder, item)}
+              replyScope={board}
+              onMissing={(missing) => focusMissing(pane.current, missing)}
+            />
+          </AnswerMentions>
+        )}
       </div>
     </section>
   );

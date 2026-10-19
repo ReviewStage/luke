@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
+import { TREE_LOAD_FAILED, useSideBundles } from "@luke/panel/bundle-loader";
 import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
 import type {
   FileMark,
@@ -12,7 +13,6 @@ import { IconButton, SearchField } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import { entriesOf } from "./folder-listings";
 
 /**

@@ -14,7 +14,11 @@ import {
   type CallAnswer,
   callAnswered,
 } from "./account-call.js";
-import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
+import {
+  ACCOUNT_INBOX_ARCHIVED,
+  ACCOUNT_INBOX_QUERY,
+  accountInboxAnswerSchema,
+} from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
   CHAT_QUERY,
@@ -811,14 +815,17 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed. */
+  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
   accountInbox(
     after: string,
   ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#held.send({
         method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
+        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
+          [ACCOUNT_INBOX_QUERY.AFTER]: after,
+          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
+        })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
     );

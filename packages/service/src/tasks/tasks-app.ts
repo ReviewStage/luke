@@ -1,7 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
+import { hostedStore } from "@luke/database/models/hosted-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readIssue } from "@luke/database/models/issue-store";
 import {
@@ -11,7 +13,7 @@ import {
 } from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { standingSessionsNamed } from "@luke/database/models/recorded-session";
+import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
   createTask,
   deleteTask,
@@ -51,6 +53,8 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
+import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
 import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -229,6 +233,8 @@ const TASKS_PATH = {
   RESTORE: "/api/plans/restore",
   /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
+  /** POST stops everything Luke has running or waiting on the task; the rewrite moves the path's id into the `id` query. */
+  STOP: "/api/plans/stop",
   /** GET lists the task's pages; the rewrite moves the path's id into the `id` query. */
   PAGES: "/api/plans/pages",
   /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
@@ -1221,6 +1227,37 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
+/** POST stops the turn Luke is running on the task, call or no call, under its conversation's owner, through eve on the developer's own bearer. */
+const stopEndpoint = /* @__PURE__ */ Effect.fn("web/planStopEndpoint")(function* (
+  seams: TasksAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST)
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const taskId = yield* idOf(request, TASK_ID_QUERY);
+  const { conversationId } = yield* reachedTask(yield* resolvedUserId(seams, request), taskId);
+  const owner = Option.getOrUndefined(
+    conversationId === undefined
+      ? Option.none()
+      : yield* hostedStoreOrUnavailable(conversationOwnerOf(conversationId)),
+  );
+  if (conversationId === undefined || owner === undefined)
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
+  const eve = yield* eveFor(seams, request, EVE_MOUNT.TASKS);
+  const stopSeams = { store: hostedStore(), asks: askRecord(), writer: yield* writer, eve };
+  const stopped = yield* hostedStoreOrUnavailable(
+    stopConversation(stopSeams, owner, conversationId),
+  );
+  const refused =
+    stopped !== undefined &&
+    Result.isFailure(stopped) &&
+    stopped.failure.refusal === STOP_REFUSAL.UPSTREAM;
+  if (refused) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
+});
+
 /** GET lists the task's pages, the most recently written first; a task id the account does not own answers none, as the history does. */
 const pagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskPagesEndpoint")(function* (
   seams: TasksAppSeams,
@@ -1349,6 +1386,7 @@ export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {
     HttpRouter.add(ANY_METHOD, TASKS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, TASKS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.PAGES, hostedRefusing(pagesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.PAGE, hostedRefusing(pageEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.ATTACHMENTS, hostedRefusing(attachmentsEndpoint(seams))),

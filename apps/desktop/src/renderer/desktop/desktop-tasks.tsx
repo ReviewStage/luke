@@ -351,6 +351,11 @@ function TaskInboxTab({
             onOpenAgent,
             openLink,
             code,
+            // An archived plan's items are read but not answered, the box giving way to Unarchive.
+            onUnarchive:
+              task.archivedAt === undefined
+                ? undefined
+                : () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE),
           }}
         />
       )}

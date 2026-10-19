@@ -20,6 +20,11 @@ import {
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
@@ -28,7 +33,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { composerEditor, editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { AgentTab } from "./agent-tab";

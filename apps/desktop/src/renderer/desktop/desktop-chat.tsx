@@ -30,7 +30,8 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
  * marked while it does, as the window's Inbox (`desktop-inbox.tsx`) does.
  * The rail is drawn from the sidebar's own pieces: For you at its head,
  * counting what waits on the developer, then the channels, then the direct
- * messages, each row counting what in it the developer has not read and
+ * messages, each group under its heading as Settings' page list's are
+ * (`.section-heading`), each row counting what in it the developer has not read and
  * in the unread weight while anything is (`chat-model.ts`). A direct
  * message's row leads with the other member's mark and names their agent's
  * title or plan after their handle. A press on a row shows its place in
@@ -152,13 +153,15 @@ export function DesktopChat({
                 </NavItem>
               </li>
             </ul>
-            <h2 className="chat-rail-heading">Channels</h2>
-            <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
+            <section className="chat-rail-group">
+              <h2 className="section-heading">Channels</h2>
+              <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
+            </section>
             {rail.direct.length === 0 ? null : (
-              <>
-                <h2 className="chat-rail-heading">Direct messages</h2>
+              <section className="chat-rail-group">
+                <h2 className="section-heading">Direct messages</h2>
                 <ul className="sidebar-tasks">{rail.direct.map(row)}</ul>
-              </>
+              </section>
             )}
           </div>
         </ScrollArea>

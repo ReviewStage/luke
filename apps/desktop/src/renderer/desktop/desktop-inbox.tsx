@@ -25,13 +25,16 @@ import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { TASK_MARK } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
   anyUnread,
+  EVERYONES,
   firstChoice,
+  INBOX_GROUPING,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -91,7 +94,12 @@ import { taskCardOf } from "./task-card";
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A press on a row chooses it, and the pane beside the
+ * same items. An archived task's items are put away with it rather than
+ * dropped: no other tab lists or counts them, and the Archived tab beside
+ * the others lists them, read only while it is shown and counted by main's
+ * word of each task, each drawn as it stood but answered no longer, the
+ * pane's box giving way to Unarchive, which brings the task back and its
+ * items with it as they stood. A press on a row chooses it, and the pane beside the
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
  * task's own held read, which stands in for the list's read of that task
  * so an answer shows at once. With nothing chosen, the first item listed
@@ -124,12 +132,34 @@ const BACK_TO_INBOX = "Back to Inbox";
 /** What the list says where a task's read did not answer. */
 const NOT_READ = "Some items could not be read.";
 
-/** The tasks the list holds items of, in main's order: each holding one that the listed workspace's list holds, so an archived task, one not yet read, or another workspace's is listed nowhere. */
+/**
+ * The tasks the list holds items of, in main's order: each holding one that
+ * the listed workspace's list given holds, so one not yet read, or another
+ * workspace's, is listed nowhere. Handed the standing tasks, an archived
+ * one is listed nowhere either; handed the archived ones, it is what the
+ * Archived tab lists.
+ */
 function listedHoldings(
   holdings: TasksControl["inboxTasks"],
   listed: TasksControl["tasks"],
 ): readonly AppInboxTaskHolding[] {
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
+}
+
+/** No task's items are read for the Archived tab while it is not shown. */
+const NO_HOLDINGS: readonly AppInboxTaskHolding[] = [];
+
+/** Each task holding items as the list groups it, with its items as last read; a task the list given does not hold is left out. */
+function holdingGroups(
+  holdings: readonly AppInboxTaskHolding[],
+  listed: TasksControl["tasks"],
+  itemsOf: (taskId: string) => readonly InboxItem[] | undefined,
+): InboxGroup[] {
+  return holdings.flatMap((holding) => {
+    const task = listed.find((each) => each.id === holding.taskId);
+    if (task === undefined) return [];
+    return [{ holder: taskHolder(task), items: itemsOf(holding.taskId) ?? [] }];
+  });
 }
 
 /** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
@@ -209,12 +239,22 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
   );
-  const { inboxTasks, tasks: listedTasks } = tasks.listed;
+  const { inboxTasks, tasks: listedTasks, archived: listedArchived } = tasks.listed;
   const holdings = useMemo(
     () => listedHoldings(inboxTasks, listedTasks),
     [inboxTasks, listedTasks],
   );
+  const archivedHoldings = useMemo(
+    () => listedHoldings(inboxTasks, listedArchived),
+    [inboxTasks, listedArchived],
+  );
   const read = useInboxItems({ holdings, readInbox });
+  // Note that the archived tasks' items are read only while the Archived tab is shown, since nothing in them waits on anyone.
+  const showArchived = choices.show === INBOX_SHOW.ARCHIVED;
+  const archivedRead = useInboxItems({
+    holdings: showArchived ? archivedHoldings : NO_HOLDINGS,
+    readInbox,
+  });
   const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
   // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
   const tasklessItems = useSettledReads(tasklessReads.items);
@@ -222,8 +262,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
-      ? tasks.tasks.find((task) => task.id === asked.taskId)
+      ? (tasks.tasks.find((task) => task.id === asked.taskId) ??
+        tasks.archived.find((task) => task.id === asked.taskId))
       : undefined;
+  // The chosen task's items are read with the archived tasks' while it is archived, with the rest's otherwise.
+  const chosenArchived = chosenTask?.archivedAt !== undefined;
+  const chosenRead = chosenArchived ? archivedRead : read;
+  const chosenHoldings = chosenArchived ? archivedHoldings : holdings;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
   const agents = useCodingAgents({
@@ -262,13 +307,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   // at once, and only while it holds, since one that failed stops hearing what changed.
   const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
   const holdsLive = live.read && !live.failed;
-  const taskEntries: InboxGroup[] = holdings.flatMap((holding) => {
-    const task = tasks.tasks.find((each) => each.id === holding.taskId);
-    if (task === undefined) return [];
-    const items =
-      holdsLive && holding.taskId === taskId ? liveItems : read.items.get(holding.taskId);
-    return [{ holder: taskHolder(task), items: items ?? [] }];
-  });
+  const itemsOf =
+    (reads: typeof read) =>
+    (each: string): readonly InboxItem[] | undefined =>
+      holdsLive && each === taskId ? liveItems : reads.items.get(each);
+  const taskEntries = holdingGroups(holdings, tasks.tasks, itemsOf(read));
+  const archivedEntries = holdingGroups(archivedHoldings, tasks.archived, itemsOf(archivedRead));
   const tasklessRead =
     holdsLive && chosenAgentId !== undefined
       ? new Map(taskless.items).set(chosenAgentId, liveItems)
@@ -304,27 +348,44 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     },
   });
   // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
-  const entries: readonly InboxGroup[] = [
+  // The archived tasks' items stand on the Archived tab alone, which counts what main says each holds whether or not it is read yet.
+  const standing: readonly InboxGroup[] = [
     ...taskEntries,
     ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
   ];
-  const counts = inboxCounts(entries, tasks.me, choices.whose);
+  const entries = showArchived ? archivedEntries : standing;
+  const archivedCount = archivedHoldings.reduce((total, holding) => total + holding.items, 0);
+  const counts = {
+    ...inboxCounts(standing, tasks.me, choices.whose),
+    [INBOX_SHOW.ARCHIVED]: archivedCount,
+  };
+  // Note that the Archived tab lists every archived item, whoever's, as main's count of them does, and
+  // groups by task where Status is chosen, since nothing in it needs anyone or waits on anyone.
   const filter = {
-    grouping: choices.grouping,
+    grouping:
+      showArchived && choices.grouping === INBOX_GROUPING.STATUS
+        ? INBOX_GROUPING.TASK
+        : choices.grouping,
     show: choices.show,
     sort: choices.sort,
-    whose: choices.whose,
+    whose: showArchived ? EVERYONES : choices.whose,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(entries, { ...filter, chosen: undefined });
   const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
-  // Note that a tab leaving out every item listed is said apart from an Inbox holding none.
+  // Note that a tab leaving out every item listed is said apart from an Inbox holding none, the
+  // archived tasks' items among what another tab would list.
+  const holdsItems = (groups: readonly InboxGroup[]) =>
+    groups.some(({ items }) => items.length > 0);
   const filteredOut =
-    (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
     listedItems(list).length === 0 &&
-    entries.some(({ items }) => items.length > 0);
+    (showArchived
+      ? holdsItems(standing)
+      : ((choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
+          holdsItems(standing)) ||
+        archivedCount > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose task left the list, archived elsewhere, gives way.
   // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
@@ -334,9 +395,9 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
   const chosenWaits =
     (taskId !== undefined &&
-      !read.current.has(taskId) &&
+      !chosenRead.current.has(taskId) &&
       !live.read &&
-      (holdings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
+      (chosenHoldings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
       !taskless.current.has(chosenAgentId) &&
       !live.read &&
@@ -345,15 +406,17 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const listUnread = !tasks.listRead && !tasks.listFailed;
   const reading =
     listUnread ||
-    holdings.some((holding) => !read.items.has(holding.taskId)) ||
-    tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
+    (showArchived
+      ? archivedHoldings.some((holding) => !archivedRead.items.has(holding.taskId))
+      : holdings.some((holding) => !read.items.has(holding.taskId)) ||
+        tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId)));
   // An item asked for by a link or a notification that no read holds once every read has landed is
   // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
   // says so rather than giving way to the first item.
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     taskId !== undefined
-      ? read.current.has(taskId) || live.read || holderEmpty
+      ? chosenRead.current.has(taskId) || live.read || holderEmpty
       : chosenAgentId !== undefined
         ? live.read || taskless.current.has(chosenAgentId) || holderEmpty
         : true;
@@ -369,6 +432,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
       ? firstChoice(list)
       : undefined;
+  // An item a link or a notification asked for on an archived task is shown on the Archived tab, the one that lists it.
+  const { onShow } = choices;
+  const opensArchived = asked?.opened === true && chosenArchived && !showArchived;
+  useEffect(() => {
+    if (opensArchived) onShow(INBOX_SHOW.ARCHIVED);
+  }, [opensArchived, onShow]);
   const { onChoose } = view;
   const choose = useCallback(
     ({ holder, item }: InboxListed) =>
@@ -427,6 +496,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
+    archivedRead.onRetry();
     taskless.onRetry();
   };
   const listedWorkspace = tasks.workspace;
@@ -514,16 +584,17 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                     show: choices,
                     counts,
                     view: { choices, folds },
+                    // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
                     readAll: {
-                      unread: anyUnread(entries),
-                      onMarkAll: () => marks.onMarkAll(entries.flatMap(({ items }) => items)),
+                      unread: anyUnread(standing),
+                      onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
                     },
                   }}
                   models={named.models}
                   readerId={tasks.me}
                   note={
                     <ListNote
-                      failed={read.failed || taskless.failed}
+                      failed={showArchived ? archivedRead.failed : read.failed || taskless.failed}
                       reading={reading}
                       empty={listedItems(list).length === 0}
                       alone={columns.shown === INBOX_COLUMNS.LIST}
@@ -752,6 +823,10 @@ function paneDoors(
       taskCard: taskCardOf(tasks, task, seams.now),
       onOpenAgent: (agentId) => tasks.onShowAgent(task.id, agentId),
       openLink: seams.openLink,
+      onUnarchive:
+        task.archivedAt === undefined
+          ? undefined
+          : () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE),
       code: {
         repository: task.repository,
         readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),

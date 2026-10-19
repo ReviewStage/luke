@@ -24,6 +24,15 @@
   initial-value: 0px;
 }
 
+/* How far below the area's start edge its start fade begins: none, or a
+   stuck band's height. It does not inherit either, so an area inside one
+   with a band begins its own fade at its edge. */
+@property --luke-scroll-area-fade-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @keyframes luke-scroll-area-fade-start {
   from {
     --luke-scroll-area-fade-start: 0px;
@@ -76,6 +85,10 @@
     overflow-y: auto;
   }
 
+  .luke-scroll-area[data-gutter="stable"] {
+    scrollbar-gutter: stable;
+  }
+
   /* Filling, it takes the rest of a flex column or row, and the whole of a
      box or a grid cell that is no flex container. Note that its basis is a
      percentage, so in a column of no fixed height, where that resolves to
@@ -97,16 +110,18 @@
      on, in either theme. A scroll timeline stands only while the area has
      something to scroll, and is not motion, so reduced motion leaves it
      be. The scroll padding brings what the keys move to clear of a faded
-     edge. */
+     edge. Above its inset the mask is whole, so a band stuck there stands
+     whole, and the fade begins beneath it; the scroll padding clears both. */
   .luke-scroll-area:not([data-fade="none"]) {
     mask-image: linear-gradient(
       to bottom,
-      transparent,
-      #000 var(--luke-scroll-area-fade-start),
+      #000 var(--luke-scroll-area-fade-inset),
+      transparent var(--luke-scroll-area-fade-inset),
+      #000 calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-area-fade-start)),
       #000 calc(100% - var(--luke-scroll-area-fade-end)),
       transparent
     );
-    scroll-padding-block-start: var(--luke-scroll-fade);
+    scroll-padding-block-start: calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-fade));
     animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
     animation-timing-function: linear;
     animation-fill-mode: both;
@@ -114,6 +129,10 @@
     animation-range:
       0 var(--luke-scroll-fade),
       calc(100% - var(--luke-scroll-fade)) 100%;
+  }
+
+  .luke-scroll-area[data-fade-inset="band"] {
+    --luke-scroll-area-fade-inset: var(--luke-scroll-band);
   }
 
   /* The end's depth stays at none where the start alone fades. */

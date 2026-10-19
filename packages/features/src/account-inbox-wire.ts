@@ -18,7 +18,13 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * however long ago it changed, as a task's read carries every open one
  * apart from its bound: the open items an agent may hold at once keep them
  * few. An archived task's items wait
- * nowhere, since the developer put the task out of the way. The read is
+ * nowhere, since the developer put the task out of the way: none of its open
+ * items is carried, so neither the Dock nor a toast counts one. A reader
+ * that asks with `archived=include` (`ACCOUNT_INBOX_QUERY`) is listed the
+ * archived tasks holding items beside the rest in `plans`, which its
+ * Inbox's Archived tab reads, so an item is put away with its task and
+ * comes back as it stood when the task is brought back; a build from
+ * before it never asks, and lists none. The read is
  * held open while nothing changed past the cursor, as a task's inbox read
  * is, and starts from the task read's own start (`INBOX_CURSOR_START`).
  *
@@ -44,6 +50,20 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * channel it stands in, and none of its words, which the window reads
  * from the chat itself. A build that predates it reads none.
  */
+
+/**
+ * The account's read's query (GET): `after` the cursor read past, and
+ * `archived=include` to be listed the archived tasks holding items too.
+ */
+export const ACCOUNT_INBOX_QUERY = {
+  AFTER: "after",
+  ARCHIVED: "archived",
+} as const;
+
+/** What the read's `archived` query may say. */
+export const ACCOUNT_INBOX_ARCHIVED = {
+  INCLUDE: "include",
+} as const;
 
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
 export const accountInboxEntrySchema = EffectSchema.Struct({

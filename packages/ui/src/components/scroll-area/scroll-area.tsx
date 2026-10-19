@@ -18,7 +18,12 @@ import type { ComponentPropsWithRef, ReactNode } from "react";
  *   pinned stands at, it dissolves over the profile's `--luke-scroll-fade`
  *   rather than being sliced there, the start edge alone or both. The fade
  *   eases in over the first stretch of scrolling, so an area at rest at its
- *   start, or one with nothing to scroll, is left whole.
+ *   start, or one with nothing to scroll, is left whole. Where a band stands
+ *   stuck at the area's start (`fadeInset`), a checkpoint's, the start fade
+ *   begins beneath it, so the band stands whole; and
+ * - its gutter (`gutter`): where the system draws a scroll bar that takes
+ *   room, a stable gutter keeps that room while nothing scrolls yet, so what
+ *   the area holds does not shift sideways the moment it first overflows.
  *
  * Note that it draws no padding and no inner layout of its own: the caller's
  * goes on one element of its own inside the area, as Radix's and shadcn's
@@ -59,6 +64,27 @@ export const SCROLL_FADE = {
 
 export type ScrollFade = (typeof SCROLL_FADE)[keyof typeof SCROLL_FADE];
 
+/**
+ * Where an up-and-down area's start fade begins: at its edge, or beneath a
+ * band of the profile's `--luke-scroll-band` stuck at its start, which
+ * stands whole while what scrolls under it dissolves just below it. What
+ * the keys move to clears both.
+ */
+export const SCROLL_FADE_INSET = {
+  NONE: "none",
+  BAND: "band",
+} as const;
+
+export type ScrollFadeInset = (typeof SCROLL_FADE_INSET)[keyof typeof SCROLL_FADE_INSET];
+
+/** Whether the room a scroll bar takes is kept while nothing scrolls: only once it does, or always. */
+export const SCROLL_GUTTER = {
+  AUTO: "auto",
+  STABLE: "stable",
+} as const;
+
+export type ScrollGutter = (typeof SCROLL_GUTTER)[keyof typeof SCROLL_GUTTER];
+
 export type ScrollAreaProps = {
   /** The axis it scrolls; up and down where none is named. */
   axis?: ScrollAxis | undefined;
@@ -66,6 +92,10 @@ export type ScrollAreaProps = {
   size?: ScrollSize | undefined;
   /** Which edges fade where content runs past them; none where none is named. */
   fade?: ScrollFade | undefined;
+  /** Where the start fade begins; at the edge where none is named. */
+  fadeInset?: ScrollFadeInset | undefined;
+  /** Whether the scroll bar's room is kept while nothing scrolls; only once it does where none is named. */
+  gutter?: ScrollGutter | undefined;
   /** The caller's one element, which holds its padding and its layout. */
   children: ReactNode;
 } & Omit<
@@ -73,16 +103,26 @@ export type ScrollAreaProps = {
   "className" | "style" | "children" | "dangerouslySetInnerHTML"
 >;
 
-/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` says. */
+/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say. */
 export function ScrollArea({
   axis = SCROLL_AXIS.VERTICAL,
   size = SCROLL_SIZE.FILL,
   fade = SCROLL_FADE.NONE,
+  fadeInset = SCROLL_FADE_INSET.NONE,
+  gutter = SCROLL_GUTTER.AUTO,
   children,
   ...div
 }: ScrollAreaProps): React.JSX.Element {
   return (
-    <div {...div} className="luke-scroll-area" data-axis={axis} data-size={size} data-fade={fade}>
+    <div
+      {...div}
+      className="luke-scroll-area"
+      data-axis={axis}
+      data-size={size}
+      data-fade={fade}
+      data-fade-inset={fadeInset}
+      data-gutter={gutter}
+    >
       {children}
     </div>
   );

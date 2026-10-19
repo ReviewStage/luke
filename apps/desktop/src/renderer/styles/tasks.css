@@ -52,15 +52,11 @@
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
    the plan carries one: unset, the caret, the writing ring, and the fresh tint
-   all drew nothing. Luke is the one writing, so the accent is his. */
-.plan-document-scroll {
+   all drew nothing. Luke is the one writing, so the accent is his. It is
+   the block inside the `ScrollArea` the document scrolls in. */
+.plan-document-body {
   --accent: var(--voice-luke);
-  flex: 1;
-  min-height: 0;
   padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -633,10 +629,11 @@
 }
 
 /* The transcript's frame (../ai-elements/conversation.tsx): a log that
-   scrolls inside the room its pane leaves it, its lines a step apart, the way
-   back to its newest line floating over their foot, and the line it says in
-   place of lines. It sits in the components layer, under the window's own
-   rules and utilities, so a pane's log (`.checkpoint-log`,
+   scrolls inside the room its pane leaves it, in a `ScrollArea` holding the
+   block its lines stand in (`.conversation-log`), its lines a step apart,
+   the way back to its newest line floating over their foot, and the line it
+   says in place of lines. It sits in the components layer, under the
+   window's own rules and utilities, so a pane's log (`.checkpoint-log`,
    `.agent-log-over-composer`) and a line's own spacing still say the last
    word, as they did over the utilities this replaced. */
 @layer components {
@@ -649,10 +646,6 @@
   }
 
   .conversation-log {
-    min-height: 0;
-    flex: 1;
-    overflow-x: hidden;
-    overflow-y: auto;
     padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
   }
 
@@ -822,15 +815,12 @@
     white-space: nowrap;
   }
 
-  /* The Inbox's thread, scrolling inside the room its pane leaves it. */
+  /* The Inbox's thread, inside the `ScrollArea` that scrolls it in the room
+     its pane leaves it. */
   .inbox-board {
     display: flex;
-    min-height: 0;
-    flex: 1;
     flex-direction: column;
     gap: var(--luke-space-12);
-    overflow-x: hidden;
-    overflow-y: auto;
     padding-top: var(--luke-section-gap);
   }
 
@@ -930,20 +920,18 @@
 }
 
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
-   to the log's top (../ai-elements/checkpoint.tsx): the fade starts beneath
-   the checkpoint's band, so the time stands whole and what scrolls under it
-   dissolves just below it. The band is held at one height whatever it
-   holds, because a band taller than the inset would slice what passes under
-   its foot, and one shorter would fade its own foot. What the keys reach,
-   and a card a File tab's note reveals (code-pane.tsx), scrolls in past
-   both. */
+   to the log's top (../ai-elements/checkpoint.tsx): the log's fade starts
+   beneath the checkpoint's band (`SCROLL_FADE_INSET.BAND`), so the time
+   stands whole and what scrolls under it dissolves just below it. The band
+   is held at that inset's height whatever it holds, because a band taller
+   than the inset would slice what passes under its foot, and one shorter
+   would fade its own foot. What the keys reach, and a card a File tab's note
+   reveals (code-pane.tsx), scrolls in past both. */
 .checkpoint-log {
-  --checkpoint-height: 32px;
+  --checkpoint-height: var(--luke-scroll-band);
   /* No top padding, because a sticky checkpoint would leave what scrolled
      under it showing in that band; cards fade beneath it. */
   padding-top: 0;
-  --fade-inset-top: var(--checkpoint-height);
-  scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
 }
 
 /* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
@@ -1406,6 +1394,58 @@
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
+/* A Browser tab (browser-pane.tsx): the page's bar, its address field
+   filling what the steps leave, and the body main lays the page's view
+   over, which draws a still of the page while something covers it. */
+.browser-view-address {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+
+.browser-view-address input {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
+  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+  background: var(--luke-color-well);
+  color: var(--luke-color-text);
+  font-family: inherit;
+  font-size: var(--luke-type-caption-size);
+  text-overflow: ellipsis;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.browser-view-address input::placeholder {
+  color: var(--luke-color-text-subtle);
+}
+
+.browser-view-address input:focus {
+  border-color: var(--luke-color-text-subtle);
+  outline: none; /* no ring: its border lights */
+}
+
+.browser-view-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+}
+
+/* The still stands where the page stood, at the size the page was drawn
+   at (browser-pane.tsx sets it), never at the image's own, which is in the
+   screen's pixels, nor stretched to a body that has since moved. */
+.browser-view-still {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+}
+
 .page-view-find {
   display: flex;
   min-height: 0;
@@ -3371,7 +3411,7 @@ ol.transcript-list {
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
    but its last, which the reset below takes, so a failure's press never
    touches the pull request's row under it. */
-[role="log"] > :is(.agent-end, .agent-end-line):not(:last-child) {
+.conversation-log > :is(.agent-end, .agent-end-line):not(:last-child) {
   margin-bottom: var(--luke-space-12);
 }
 
@@ -3579,13 +3619,13 @@ ol.transcript-list {
 }
 
 /* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--scroll-fade` just above it (`scroll-fade`), rather than
-   being sliced short of the card. Its foot pads past the fade, so the
-   newest line, scrolled to or followed, stands whole above it, and a
-   control focused from below is scrolled in past the fade as well. */
+   dissolve over `--luke-scroll-fade` just above it (its `ScrollArea`'s end
+   fade), rather than being sliced short of the card. Its foot pads past the
+   fade, so the newest line, scrolled to or followed, stands whole above it;
+   the area's own scroll padding brings a control focused from below in
+   past the fade as well. */
 .agent-log-over-composer {
-  padding-bottom: calc(var(--scroll-fade) + var(--luke-space-4));
-  scroll-padding-bottom: calc(var(--scroll-fade) + var(--luke-space-4));
+  padding-bottom: calc(var(--luke-scroll-fade) + var(--luke-space-4));
 }
 
 /* The to-do list the agent is working through, docked over the composer

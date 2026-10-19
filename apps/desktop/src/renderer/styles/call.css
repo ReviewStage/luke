@@ -104,7 +104,7 @@ html.call-window #root {
    plan column's, or the side panel's while the panel fills the window. */
 .desktop-shell:has(> .call-card[data-surface="floating"])
   :is(.desktop-agent, .side-panel[data-full-screen="true"] .side-panel-content)
-  [role="log"] {
+  .conversation-log {
   padding-bottom: calc(var(--luke-space-20) + var(--floating-card, 0px) + var(--luke-space-8));
 }
 

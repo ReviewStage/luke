@@ -321,14 +321,18 @@ function readShow(key: string, earlier: string): InboxShow {
   return readKept(key, storedShow, fallback);
 }
 
-/** An Inbox's tab, read from `key` (or `earlier`'s press) and kept there as it is pressed. */
+/**
+ * An Inbox's tab, read from `key` (or `earlier`'s press) and kept there as
+ * it is pressed. Note that Archived is never kept, because it is a look into
+ * the archive rather than where the Inbox should open on what waits.
+ */
 function useKeptShow(key: string, earlier: string): InboxShowChoice {
   const [show, setShow] = useState<InboxShow>(() => readShow(key, earlier));
   return {
     show,
     onShow: (next) => {
       setShow(next);
-      writeKept(key, storedShow, next);
+      if (next !== INBOX_SHOW.ARCHIVED) writeKept(key, storedShow, next);
     },
   };
 }

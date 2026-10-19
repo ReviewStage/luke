@@ -21,6 +21,7 @@ import {
   useMenuCommands,
 } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { usePrefetchEditorBundle } from "@luke/panel/bundle-loader";
 import { useWindowFocused } from "@luke/panel/call/use-window-focused";
 import { useSidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { FeedbackDialog } from "@luke/panel/feedback-dialog";
@@ -78,7 +79,6 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useDraftsOwner } from "./composer-drafts";
@@ -311,6 +311,13 @@ export function App(): React.JSX.Element {
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
     leaveGuard,
   });
+  // A Browser tab left open as its experiment goes off closes, its page with
+  // it, on whatever plan and whatever the window shows, Settings included.
+  const browsing = useExperiment(EXPERIMENT.BROWSER);
+  const { onCloseBrowsers } = tasks.sidePanel;
+  useEffect(() => {
+    if (!browsing) onCloseBrowsers();
+  }, [browsing, onCloseBrowsers]);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,

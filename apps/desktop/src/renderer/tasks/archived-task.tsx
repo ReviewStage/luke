@@ -62,8 +62,11 @@ export function ArchivedComposerNote({
   onUnarchive,
   stop,
   archivedBy,
+  words = ARCHIVED_TASK_COPY.COMPOSER,
 }: {
   onUnarchive: () => void;
+  /** Why nothing is sent, where the box it stands in sends something other than a message, as an Inbox item's answer. */
+  words?: string;
   /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
@@ -102,7 +105,7 @@ export function ArchivedComposerNote({
             {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
           </Text>
         )}
-        <Text tone={TEXT_TONE.MUTED}>{ARCHIVED_TASK_COPY.COMPOSER}</Text>
+        <Text tone={TEXT_TONE.MUTED}>{words}</Text>
       </Banner>
     </div>
   );

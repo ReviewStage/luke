@@ -14,6 +14,14 @@ import {
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  QUIET_COMPOSER,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -22,14 +30,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  QUIET_COMPOSER,
-  typeInComposer,
-} from "#testing/composer";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";

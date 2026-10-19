@@ -3,7 +3,7 @@ import { AUTH_STATUS_TONE, AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { captureSiteEvent, identifySiteVisitor, SITE_EVENT, startSiteAnalytics } from "./analytics";
+import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
 
@@ -17,20 +17,19 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
   useEffect(() => {
+    const signedIn = authClient
+      .getSession({ fetchOptions: { signal: signInCountDeadline() } })
+      .then((answer) => answer.data)
+      .catch(() => null);
     void authClient.oauth2.consent({ accept: true }).then(async (result) => {
       if (result.error) {
         setFailure(true);
         return;
       }
-      // Where the two halves of the funnel join. The desktop's counts resolve
-      // to the same account id from the bearer token, so naming the visitor by
-      // it here links the page views they arrived through to the account they
-      // just made.
-      const account = (await authClient.getSession()).data?.user;
-      if (account) {
-        identifySiteVisitor(account.id, { name: account.name, email: account.email });
-      }
-      captureSiteEvent(SITE_EVENT.SIGN_IN_COMPLETE);
+      // Note that the desktop's client skips this page, so its hand-off
+      // (`desktop-session.tsx`) is where a sign-in is usually counted; one
+      // that passes both is counted once, by its session.
+      await completeSiteSignIn(signedIn);
     });
   }, []);
   return (

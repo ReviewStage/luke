@@ -17,6 +17,14 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type BrowserPage,
+  browserAddressParamsSchema,
+  browserPageSchema,
+  browserPlaceParamsSchema,
+  browserStepParamsSchema,
+  browserViewParamsSchema,
+} from "@luke/features/browser-acts";
+import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
@@ -565,6 +573,21 @@ export const ACT_KIND = {
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
   /**
+   * A Browser tab's view, which main owns over the panel that asked
+   * (`browser-views.ts`): opened on an address and answered how its page
+   * stands, sent to another, stepped back, forward, reloaded or stopped,
+   * placed over the tab's body or put out of sight, caught as a still while
+   * something covers it, and closed with its tab. How the page goes on to
+   * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
+   * and only while the account has the Browser tab experiment on.
+   */
+  BROWSER_OPEN: "browser.open",
+  BROWSER_NAVIGATE: "browser.navigate",
+  BROWSER_STEP: "browser.step",
+  BROWSER_PLACE: "browser.place",
+  BROWSER_CAPTURE: "browser.capture",
+  BROWSER_CLOSE: "browser.close",
+  /**
    * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
    * each repository's run command read and set; and a terminal of this Mac
    * opened on the agent's branch for the asking panel, and closed with its
@@ -601,6 +624,8 @@ export const ACT_KIND = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Stop Luke, the stop key's and the Call tab's Stop's one action: on the task named, else the call's, else the open one. */
+  LUKE_STOP: "luke.stop",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
@@ -1586,6 +1611,37 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not close that shell.",
   },
+  [ACT_KIND.BROWSER_OPEN]: {
+    payload: actSchema(browserAddressParamsSchema),
+    result: wireResult<BrowserPage>(isReadable(browserPageSchema)),
+    refusal: "Could not open that page.",
+  },
+  [ACT_KIND.BROWSER_NAVIGATE]: {
+    payload: actSchema(browserAddressParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open that page.",
+  },
+  [ACT_KIND.BROWSER_STEP]: {
+    payload: actSchema(browserStepParamsSchema),
+    result: answersNothing,
+    refusal: "Could not move the page.",
+  },
+  [ACT_KIND.BROWSER_PLACE]: {
+    payload: actSchema(browserPlaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not show the page.",
+  },
+  [ACT_KIND.BROWSER_CAPTURE]: {
+    payload: actSchema(browserViewParamsSchema),
+    // A still of the page as a data address, or none where the view stands nowhere.
+    result: wireResult<string | null>((value) => value === null || isWireString(value)),
+    refusal: "Could not draw the page.",
+  },
+  [ACT_KIND.BROWSER_CLOSE]: {
+    payload: actSchema(browserViewParamsSchema),
+    result: answersNothing,
+    refusal: "Could not close the page.",
+  },
   [ACT_KIND.CODING_AGENTS_CHAT]: {
     payload: actSchema(codingAgentChatParamsSchema),
     result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
@@ -1633,6 +1689,11 @@ export const ACT = {
       Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
     ),
     refusal: "Could not tell Luke to stop speaking on this system.",
+  },
+  [ACT_KIND.LUKE_STOP]: {
+    payload: record({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
+    result: answersNothing,
+    refusal: "Could not stop Luke on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,

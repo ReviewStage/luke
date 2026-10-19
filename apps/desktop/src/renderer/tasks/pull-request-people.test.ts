@@ -352,8 +352,9 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
   );
   assert.equal(list?.children.length, 45);
+  // Note that the list scrolls in the area it stands in.
   act(() => {
-    list?.dispatchEvent(new Event("scroll"));
+    list?.parentElement?.dispatchEvent(new Event("scroll"));
   });
   assert.ok(
     document.querySelector('[data-actor-card="more"]'),
@@ -402,7 +403,7 @@ test("the count's card hung from a Changes card that itself hangs over its tab s
   );
   assert.ok(list, "the count's card hangs over the Changes card");
   act(() => {
-    list.dispatchEvent(new Event("scroll"));
+    list.parentElement?.dispatchEvent(new Event("scroll"));
   });
   assert.ok(
     document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
