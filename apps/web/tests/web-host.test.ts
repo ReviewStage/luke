@@ -129,13 +129,12 @@ it.effect(
           undefined,
         );
 
+        installAppBridge(writer.bridge);
+        installActPort(writer.actPort);
         const written = yield* Effect.promise(() =>
-          writer.bridge.act({
-            kind: ACT_KIND.SETTING_UPDATE,
-            payload: { field: "theme", value: THEME.DARK },
-          }),
+          askAct(ACT_KIND.SETTING_UPDATE, { field: "theme", value: THEME.DARK }),
         );
-        assert.equal(written.status, ACT_OUTCOME_STATUS.DONE);
+        assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
         // The browser tells every tab but the writer's; jsdom holds one window, so the event is
         // said here as the browser would, again until the reader has heard it.
         yield* Effect.promise(() =>
