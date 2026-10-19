@@ -23,7 +23,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortAnswering,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  type SentPortAct,
+} from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -523,13 +529,17 @@ test("on the Call tab, a chat call's row opens the task's Chat while the account
 
 test("Luke's working line ends on a Stop that takes the stop key's action on the open task, and a finished turn draws none", async () => {
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, activeTaskId: "task-open" } });
-  const sent: Act[] = [];
+  const sent: (Act | SentPortAct)[] = [];
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const working = workTurn(TASK_WORK_STATE.RUNNING, [words("Reading.")], { startedAt: 5_000 });
   const container = mounted(

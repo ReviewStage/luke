@@ -20,7 +20,7 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
-import { createActPortHandler } from "@luke/host/act-port";
+import { createActPortHandler, refusedPlatformProcedures } from "@luke/host/act-port";
 import {
   createHostActRouter,
   type HostActDependencies,
@@ -85,46 +85,24 @@ const CONTACT_MAILTO = "mailto:founders@stagereview.app";
 const FEEDBACK_PATH = "/api/feedback";
 
 /**
- * Every act a platform answers that a browser tab cannot carry yet: the
- * updater, the terminals and the Mac's own, Browser tabs, the voice, the
- * call window and the avatar, the microphone, and notifications.
+ * Every `app:act` kind a platform answers that a browser tab cannot carry
+ * yet: the updater, Browser tabs, the microphone, and notifications. The
+ * terminals and the Mac's own, the voice, the call window, and the avatar
+ * ride the act port, where `refusedPlatformProcedures` refuses them.
  */
 const REFUSED_KINDS = [
   ACT_KIND.UPDATE_CHECK,
   ACT_KIND.UPDATE_INSTALL,
   ACT_KIND.UPDATE_OPEN_RELEASE,
   ACT_KIND.UPDATE_OPEN_CHANGELOG,
-  ACT_KIND.TERMINAL_LIST,
-  ACT_KIND.TERMINAL_CREATE,
-  ACT_KIND.TERMINAL_RENAME,
-  ACT_KIND.TERMINAL_KILL,
-  ACT_KIND.TERMINAL_RESUME,
-  ACT_KIND.TERMINAL_ATTACH,
-  ACT_KIND.TERMINAL_DETACH,
   ACT_KIND.BROWSER_OPEN,
   ACT_KIND.BROWSER_NAVIGATE,
   ACT_KIND.BROWSER_STEP,
   ACT_KIND.BROWSER_PLACE,
   ACT_KIND.BROWSER_CAPTURE,
   ACT_KIND.BROWSER_CLOSE,
-  ACT_KIND.MAC_REPOSITORIES,
-  ACT_KIND.MAC_REPOSITORY_SET,
-  ACT_KIND.MAC_TERMINAL_OPEN,
-  ACT_KIND.MAC_TERMINAL_CLOSE,
-  ACT_KIND.VOICE_COMMAND,
-  ACT_KIND.CALL_SHOW_TASK,
-  ACT_KIND.AVATAR_REPORT,
-  ACT_KIND.VOICE_SET_VIDEO,
-  ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-  ACT_KIND.VOICE_END_LIVE_SESSION,
-  ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
-  ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
-  ACT_KIND.VOICE_STOP_SPEAKING,
-  ACT_KIND.LUKE_STOP,
-  ACT_KIND.VOICE_DIAGNOSTICS,
   ACT_KIND.MICROPHONE_REQUEST,
   ACT_KIND.MICROPHONE_ROUTE,
-  ACT_KIND.MICROPHONE_OPEN_SETTINGS,
   ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS,
   ACT_KIND.NOTIFICATIONS_TEST,
 ] as const;
@@ -321,11 +299,15 @@ const servedActPort = (operator: OperatorClient, services: Context.Context<never
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      createActPortHandler({
-        accountAsks: { host: operator.host },
-        issues: { host: operator.host },
-        workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
-      }).upgrade(channel.port2, {
+      // Every platform kind on the port is refused, since a tab carries none of them yet.
+      createActPortHandler(
+        {
+          accountAsks: { host: operator.host },
+          issues: { host: operator.host },
+          workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
+        },
+        refusedPlatformProcedures<WebSender>(),
+      ).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },
           trusted: true,

@@ -17,10 +17,16 @@ import {
   type Act,
   type ActKind,
   type ActOutcome,
-  type ActResultFor,
 } from "@luke/host/acts";
+import {
+  ACT_ERROR,
+  type PortActPayload,
+  type PortActResult,
+  type TERMINAL_ACT_KIND,
+} from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
+import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -30,7 +36,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -82,14 +88,24 @@ interface HostPort {
   readonly say: (message: TerminalPortOutbound | UnparsedWireValue) => void;
 }
 
+type TerminalKind = (typeof TERMINAL_ACT_KIND)[keyof typeof TERMINAL_ACT_KIND];
+
+/** One Terminal tab act as it rides the act port: its kind, and the payload the kind takes. */
+type TerminalAct = {
+  [Kind in TerminalKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
+}[TerminalKind];
+
+/** Any act the tab sends, on `app:act` or on its act port. */
+type SentAct = Act | TerminalAct;
+
 /** What main answers and posts, as the test stages it. */
 interface Main {
   /** Every act the tab sent, by kind and payload, in order. */
-  readonly sent: Act[];
+  readonly sent: SentAct[];
   /** The sandbox's list as `terminal.list` answers it, which a test may change. */
   listed: TerminalsAnswer;
   /** The kinds main refuses outright, as it does when the service cannot be reached. */
-  readonly down: Set<ActKind>;
+  readonly down: Set<ActKind | TerminalKind>;
   /** What `terminal.create` answers in place of a shell, where the sandbox refuses one. */
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
@@ -97,7 +113,7 @@ interface Main {
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
-  readonly holding: Set<ActKind>;
+  readonly holding: Set<ActKind | TerminalKind>;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -109,8 +125,8 @@ beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 let main: Main;
 
 beforeEach(() => {
-  const sent: Act[] = [];
-  const answer = (request: Act): ActResultFor<ActKind> => {
+  const sent: SentAct[] = [];
+  const answer = (request: TerminalAct): PortActResult<TerminalKind> => {
     switch (request.kind) {
       case ACT_KIND.TERMINAL_LIST:
         return main.listRefused === undefined ? main.listed : { refused: main.listRefused };
@@ -174,24 +190,57 @@ beforeEach(() => {
       };
     },
   };
+  /** A Terminal tab act answered as main's procedure would: refused, held back, or answered now. */
+  const respond = (request: TerminalAct): Promise<PortActResult<TerminalKind>> => {
+    sent.push(request);
+    if (main.down.has(request.kind)) {
+      return Promise.reject(
+        new ORPCError(ACT_ERROR.REFUSED, { message: "Could not reach this agent's sandbox." }),
+      );
+    }
+    // A held answer says what main said when it was asked, landing whenever it is let go.
+    if (main.holding.has(request.kind)) {
+      const value = answer(request);
+      return new Promise((resolve) => main.held.push(() => resolve(value)));
+    }
+    return Promise.resolve(answer(request));
+  };
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       sent.push(request);
-      if (main.down.has(request.kind)) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
-          reason: "Could not reach this agent's sandbox.",
-        });
-      }
-      // A held answer says what main said when it was asked, landing whenever it is let go.
-      if (main.holding.has(request.kind)) {
-        const value = answer(request);
-        return new Promise((resolve) =>
-          main.held.push(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
-        );
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request) });
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
+  });
+  // SAFETY: each procedure answers its own kind, whose answer `answer` gives by the same kind; the casts are the one dispatch on it.
+  fakeActPort({
+    [ACT_KIND.TERMINAL_LIST]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_LIST, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_LIST>
+      >,
+    [ACT_KIND.TERMINAL_CREATE]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_CREATE, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_CREATE>
+      >,
+    [ACT_KIND.TERMINAL_RENAME]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_RENAME, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_RENAME>
+      >,
+    [ACT_KIND.TERMINAL_KILL]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_KILL, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_KILL>
+      >,
+    [ACT_KIND.TERMINAL_RESUME]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_RESUME, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_RESUME>
+      >,
+    [ACT_KIND.TERMINAL_ATTACH]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_ATTACH, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_ATTACH>
+      >,
+    [ACT_KIND.TERMINAL_DETACH]: (payload) =>
+      respond({ kind: ACT_KIND.TERMINAL_DETACH, payload }) as Promise<
+        PortActResult<typeof ACT_KIND.TERMINAL_DETACH>
+      >,
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {
@@ -720,7 +769,7 @@ test("a tab taken down with attaches out for two shells closes both ports, which
 });
 
 /** The payload of the last act of the kind the tab sent, as main received it. */
-function lastPayload(kind: ActKind) {
+function lastPayload(kind: ActKind | TerminalKind) {
   const request = main.sent.findLast((each) => each.kind === kind);
   assert.ok(request, `the tab sent ${kind}`);
   return "payload" in request ? request.payload : undefined;

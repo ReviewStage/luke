@@ -1,10 +1,15 @@
-import { onError } from "@orpc/server";
+import { type ContractedRouter, onError, type Router } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/message-port";
+import {
+  type actContract,
+  PLATFORM_PORT_ACT_KIND,
+  type PlatformPortActKind,
+} from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
   accountAskProcedures,
 } from "./account-ask-procedures.js";
-import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
+import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import {
   type WorkspaceProceduresDependencies,
@@ -20,11 +25,43 @@ import {
  */
 
 export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
+export { type ActPortContext, actPortFor } from "./base.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
-export type ActPortHandler = RPCHandler<ActPortContext>;
+export type ActPortHandler<Sender = unknown> = RPCHandler<ActPortContext<Sender>>;
+
+/**
+ * The procedures a platform answers itself, built from `actPortFor`: every
+ * port kind that reaches its windows, ports, or system, and none of the
+ * host's, so each kind has its procedure on exactly one side.
+ */
+export type PlatformActProcedures<Sender> = ContractedRouter<
+  Pick<typeof actContract, PlatformPortActKind>,
+  ActPortContext<Sender>
+>;
+
+/**
+ * Every platform kind refused in its own sentence, as a platform that can
+ * carry none of them answers: a shell spreads these under the few it does
+ * answer, so its table stays total and the window draws each refusal, as
+ * `refusedRows` does for `app:act`.
+ */
+export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sender> {
+  const port = actPortFor<Sender>();
+  const procedures: Partial<PlatformActProcedures<Sender>> = {};
+  for (const kind of Object.values(PLATFORM_PORT_ACT_KIND)) {
+    // Note that every kind is refused alike, whatever it takes and answers, so it is assigned rather than typed by the kind.
+    Object.assign(procedures, {
+      [kind]: port[kind].handler(({ errors }) => {
+        throw errors.REFUSED();
+      }),
+    });
+  }
+  // SAFETY: the loop above gave every platform kind its procedure.
+  return procedures as PlatformActProcedures<Sender>;
+}
 
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
@@ -40,14 +77,28 @@ export interface ActPortDependencies {
  * schema could not encode, is answered with the procedure's own sentence, so
  * the window never hears what a failure held and never meets an error it
  * does not draw. That failure is logged here, in main, before it is replaced.
+ * The host's procedures sit beside the platform's own, as the host's act
+ * rows sit beside the platform's on `app:act` (`createHostActRouter`), and
+ * together they answer every kind of the contract.
  */
-export function createActPortHandler(dependencies: ActPortDependencies): ActPortHandler {
+export function createActPortHandler<Sender>(
+  dependencies: ActPortDependencies,
+  platformProcedures: PlatformActProcedures<Sender>,
+): ActPortHandler<Sender> {
   const router = {
+    ...platformProcedures,
     ...accountAskProcedures(dependencies.accountAsks),
     ...issueProcedures(dependencies.issues),
     ...workspaceProcedures(dependencies.workspaces),
-  };
-  return new RPCHandler<ActPortContext>(router, {
+  } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
+  return actPortHandlerOf(router);
+}
+
+/** The act port's handler over the procedures given, every failure but a refusal answered as `createActPortHandler` says. */
+export function actPortHandlerOf<Sender>(
+  router: Router<ActPortContext<Sender>>,
+): ActPortHandler<Sender> {
+  return new RPCHandler<ActPortContext<Sender>>(router, {
     interceptors: [
       async ({ next, procedure }) => {
         try {
