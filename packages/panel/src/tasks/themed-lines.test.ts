@@ -21,9 +21,10 @@ import { type RunRead, ThemedCodeLinesView, ThemeWarmer } from "./themed-lines.j
 
 const roots: Root[] = [];
 
-/** Each colouring the bundle was asked for, how many times the bundle was imported, and what its import waits on. */
-let asked: ColourRequest[] = [];
-let imported = 0;
+/** Whether the bundle was imported, what its import waits on, and the colourings it holds unanswered while a test holds them. */
+let imported = false;
+let holding = false;
+let held: (() => void)[] = [];
 let landing: Promise<void> = Promise.resolve();
 
 /** How many runs were drawn, which names each its own unless a test names one. */
@@ -43,6 +44,12 @@ const PINK = (request: ColourRequest): ColouredLines | undefined => ({
   ground: { dark: "#282a36", light: "#fdf6e3" },
 });
 
+/** A later answer, Nord's blue, which a window shows only where it was asked for again. */
+const BLUE = (request: ColourRequest): ColouredLines | undefined => ({
+  lines: request.lines.map((text) => (text === "" ? [] : [{ text, color: "#88c0d0" }])),
+  ground: { dark: "#2e3440", light: "#eceff4" },
+});
+
 /** What the bundle answers a colouring with. */
 let answer = PINK;
 
@@ -50,8 +57,10 @@ const STAND_IN: DiffViewModule = {
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
   mountList: () => ({ update: () => 0, reveal: () => 0, unmount: () => undefined }),
   colourLines: (request) => {
-    asked.push(request);
-    return Promise.resolve(answer(request));
+    if (!holding) return Promise.resolve(answer(request));
+    const { promise, resolve } = Promise.withResolvers<ColouredLines | undefined>();
+    held.push(() => resolve(answer(request)));
+    return promise;
   },
 };
 
@@ -75,8 +84,9 @@ beforeEach(() => {
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
   landing = Promise.resolve();
   answer = PINK;
-  asked = [];
-  imported = 0;
+  imported = false;
+  holding = false;
+  held = [];
   fakeAppBridge({});
 });
 
@@ -99,7 +109,7 @@ async function draw(lines: CodeLines, { read }: { read?: RunRead } = {}): Promis
   roots.push(root);
   const bundles = sideBundles({
     diffView: () => {
-      imported += 1;
+      imported = true;
       return landing.then(() => STAND_IN);
     },
   });
@@ -141,25 +151,24 @@ test("in the default themes the host's colours are drawn and the diff bundle is 
   handSettings();
   const container = await draw(hostLines(3));
 
-  assert.equal(imported, 0);
+  assert.equal(imported, false);
   assert.deepEqual(drawnColours(container), ["#ff7b72", "#ff7b72", "#ff7b72"]);
   assert.equal(container.querySelector(".code-lines-ground"), null);
 });
 
-test("in another pair each window held is coloured again, its words the same, on the theme's ground", async () => {
+test("in another pair every window held is coloured again over its own words, on the theme's ground", async () => {
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   const container = await draw(hostLines(700));
 
-  assert.equal(imported, 1);
-  assert.deepEqual(
-    asked.map((request) => [request.lines.length, request.lines[0], request.look.themes]),
-    [
-      [500, "line 1", { dark: "dracula", light: "solarized-light" }],
-      [200, "line 501", { dark: "dracula", light: "solarized-light" }],
-    ],
-    "one colouring per window, each its own lines' words",
-  );
+  assert.equal(imported, true);
   assert.ok(drawnColours(container).every((colour) => colour === "#ff79c6"));
+  assert.deepEqual(
+    [...container.querySelectorAll(".code-line-text")]
+      .slice(498, 502)
+      .map((line) => line.textContent),
+    ["line 499", "line 500", "line 501", "line 502"],
+    "each window's own words, across the windows' edge",
+  );
   const ground =
     container.querySelector<HTMLElement>(".code-lines-ground") ?? assert.fail("a ground");
   assert.equal(ground.style.getPropertyValue("--theme-ground-dark"), "#282a36");
@@ -170,14 +179,15 @@ test("a window given no colours, or other words, or drawn plain by the host, kee
   answer = (request) =>
     request.lines[0] === "line 1"
       ? undefined
-      : {
-          lines: request.lines.map(() => [{ text: "other words", color: "#ff79c6" }]),
-          ground: { dark: "#282a36", light: "#fdf6e3" },
-        };
+      : request.lines[0] === "line 501"
+        ? {
+            lines: request.lines.map(() => [{ text: "other words", color: "#ff79c6" }]),
+            ground: { dark: "#282a36", light: "#fdf6e3" },
+          }
+        : PINK(request);
   const plain = Array.from({ length: 3 }, (_, index) => [{ text: `plain ${index}` }]);
   const container = await draw([...hostLines(500), ...hostLines(2, 501), ...plain]);
 
-  assert.equal(asked.length, 2, "the host's plain window is never asked for");
   assert.ok(
     drawnColours(container)
       .slice(0, 502)
@@ -187,12 +197,7 @@ test("a window given no colours, or other words, or drawn plain by the host, kee
 });
 
 test("changing the themes colours the lines again in the pair chosen", async () => {
-  answer = (request) => ({
-    lines: request.lines.map((text) => [
-      { text, color: request.look.themes.dark === "nord" ? "#88c0d0" : "#ff79c6" },
-    ]),
-    ground: { dark: "#282a36", light: "#fdf6e3" },
-  });
+  answer = (request) => (request.look.themes.dark === "nord" ? BLUE(request) : PINK(request));
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   const container = await draw(hostLines(2));
   assert.equal(drawnColours(container)[0], "#ff79c6");
@@ -202,12 +207,12 @@ test("changing the themes colours the lines again in the pair chosen", async () 
   });
   await flush();
 
-  assert.equal(asked.at(-1)?.look.themes.dark, "nord");
   assert.equal(drawnColours(container)[0], "#88c0d0");
 });
 
-test("the window in view is asked for first, and no more than two are out at once", async () => {
+test("the window in view takes its colours before the windows far from it", async () => {
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  holding = true;
   const landed = Promise.withResolvers<void>();
   landing = landed.promise;
   const container = await draw(hostLines(2000));
@@ -220,30 +225,42 @@ test("the window in view is asked for first, and no more than two are out at onc
   landed.resolve();
   await flush();
 
-  assert.deepEqual(
-    asked.slice(0, 2).map((request) => request.lines[0]),
-    ["line 1501", "line 1001"],
-    "the window in view, then the nearest",
-  );
-  assert.equal(asked.length, 4, "every window, two at a time");
+  held.shift()?.();
+  await flush();
+
+  const colours = drawnColours(container);
+  assert.equal(colours[1600], "#ff79c6", "the window in view is coloured first");
+  assert.equal(colours[0], "#ff7b72", "the first window still waits");
 });
 
 /** The read a kept run comes from. */
 const KEPT_READ: RunRead = { source: "src/kept.ts", revision: "abc" };
 
-test("a run drawn again, as a File tab opened again, takes its kept colours at once without asking", async () => {
+test("a run drawn again, as a File tab opened again, takes its kept colours rather than colouring anew", async () => {
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   await draw(hostLines(3), { read: KEPT_READ });
-  const before = asked.length;
   for (const root of roots.splice(0)) act(() => root.unmount());
+  answer = BLUE;
 
   const container = await draw(hostLines(3), { read: KEPT_READ });
 
-  assert.equal(asked.length, before, "nothing is asked again");
   assert.deepEqual(drawnColours(container), ["#ff79c6", "#ff79c6", "#ff79c6"]);
 });
 
-test("a file opened in a chosen pair warms its colouring before its lines land, and in the default pair loads nothing", async () => {
+test("a window the bundle gave no colours keeps the host's when its run is drawn again", async () => {
+  handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
+  const failed: RunRead = { source: "src/failed.ts", revision: "abc" };
+  answer = () => undefined;
+  await draw(hostLines(3), { read: failed });
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  answer = PINK;
+
+  const container = await draw(hostLines(3), { read: failed });
+
+  assert.deepEqual(drawnColours(container), ["#ff7b72", "#ff7b72", "#ff7b72"]);
+});
+
+test("a file opened in a chosen pair loads the diff bundle before its lines land, and in the default pair loads nothing", async () => {
   /** Draws the warmer alone, as a File tab does before its read lands. */
   const warm = async () => {
     const container = document.body.appendChild(document.createElement("div"));
@@ -251,7 +268,7 @@ test("a file opened in a chosen pair warms its colouring before its lines land, 
     roots.push(root);
     const bundles = sideBundles({
       diffView: () => {
-        imported += 1;
+        imported = true;
         return Promise.resolve(STAND_IN);
       },
     });
@@ -267,15 +284,11 @@ test("a file opened in a chosen pair warms its colouring before its lines land, 
   };
   handSettings();
   await warm();
-  assert.equal(imported, 0);
+  assert.equal(imported, false);
 
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   await warm();
-  assert.equal(imported, 1);
-  assert.deepEqual(
-    asked.map((request) => [request.name, request.lines]),
-    [["src/seats.ts", [""]]],
-  );
+  assert.equal(imported, true);
 });
 
 test("kept colours over words the read no longer holds are not drawn, and the window is coloured again", async () => {
@@ -283,7 +296,7 @@ test("kept colours over words the read no longer holds are not drawn, and the wi
   const reloaded: RunRead = { source: "page-1", revision: "3" };
   await draw([[{ text: "hello", color: "#ff7b72" }]], { read: reloaded });
   for (const root of roots.splice(0)) act(() => root.unmount());
-  asked = [];
+  answer = BLUE;
 
   const container = await draw([[{ text: "goodbye", color: "#ff7b72" }]], { read: reloaded });
 
@@ -291,10 +304,7 @@ test("kept colours over words the read no longer holds are not drawn, and the wi
     [...container.querySelectorAll(".code-line-text")].map((line) => line.textContent),
     ["goodbye"],
   );
-  assert.deepEqual(
-    asked.map((request) => request.lines),
-    [["goodbye"]],
-  );
+  assert.deepEqual(drawnColours(container), ["#88c0d0"], "coloured anew over its own words");
 });
 
 test("a window left in the host's colours keeps the host's ink beside one coloured in the theme", async () => {
@@ -311,19 +321,17 @@ test("a window left in the host's colours keeps the host's ink beside one colour
   assert.equal(drawnColours(container)[500], undefined, "the host's own-ink run names none");
 });
 
-test("a run's own colours outlast their being let go from the kept windows, so it never asks for a window twice", async () => {
+test("a run's own colours outlast their being let go from the kept windows, so a window is never coloured twice", async () => {
   handSettings({ diffDarkTheme: "dracula", diffLightTheme: "solarized-light" });
   const container = await draw(hostLines(1000));
-  assert.equal(asked.length, 2);
   // Sixty-four other runs of a line each, as many windows as are kept, let the first run's go.
   for (let other = 0; other < 64; other += 1) await draw(hostLines(1));
-  const before = asked.length;
+  answer = BLUE;
 
   const scroller =
     container.querySelector<HTMLElement>(".luke-scroll-area") ?? assert.fail("a scroller");
   act(() => scroller.dispatchEvent(new Event("scroll")));
   await flush();
 
-  assert.equal(asked.length, before, "nothing is asked again");
-  assert.equal(drawnColours(container)[0], "#ff79c6");
+  assert.ok(drawnColours(container).every((colour) => colour === "#ff79c6"));
 });

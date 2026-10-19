@@ -213,11 +213,13 @@ function RecolouredLinesView({
 
   /** A window's colours, its own or kept, where they stand over its words; none otherwise. */
   const colouredOf = (window: HeldWindow, run: Asked): ColouredLines | null | undefined => {
-    const found =
-      run.landed.get(window.firstLine) ??
-      keptWindows(run.read, run.themes, false)?.get(window.firstLine);
-    if (found === null) return run.landed.has(window.firstLine) ? null : undefined;
-    return found !== undefined && sameWords(window, found) ? found : undefined;
+    const kept = keptWindows(run.read, run.themes, false);
+    const from = run.landed.has(window.firstLine) ? run.landed : kept;
+    if (from === undefined || !from.has(window.firstLine)) return undefined;
+    // Note that a window given no colours keeps the host's, its own or kept, and is not asked for again.
+    const found = from.get(window.firstLine);
+    if (found === null || found === undefined) return null;
+    return sameWords(window, found) ? found : undefined;
   };
 
   const latest = useRef({ windows, module, look, colouredOf });
