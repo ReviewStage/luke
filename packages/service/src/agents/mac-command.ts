@@ -47,13 +47,11 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
 const MAC_COMMAND_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often the Mac's held read looks again. */
-  POLL: Duration.millis(500),
   /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
   /**
    * How long a command may wait for a Mac to take it; one not taken by then
-   * is never run. A listening Mac takes one within a poll, and a command
+   * is never run. A listening Mac takes one as Realtime wakes its read, and a command
    * taken inside this window ends inside the call's wait.
    */
   CLAIM_WINDOW: Duration.seconds(30),
@@ -214,8 +212,7 @@ export function runOnMacTool(
  * The Mac's held read: it is counted listening as the read arrives, and
  * answered with every waiting command claimed for it as soon as one waits,
  * or with none once the hold ends. Between looks it waits on Neon Realtime's
- * word that the account's unclaimed commands changed, where the deployment
- * has Realtime, and its own poll where it has none (`lookedUntil`).
+ * word that the account's unclaimed commands changed (`lookedUntil`).
  */
 export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacCommand[]> {
   const queuedSince = Effect.map(
@@ -231,7 +228,6 @@ export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacComm
     Effect.andThen(
       lookedUntil(
         waits,
-        MAC_COMMAND_SERVICE.POLL,
         MAC_COMMAND_SERVICE.HOLD,
         Option.toArray(macCommandsWaitingLiveStatement(userId)),
       ),

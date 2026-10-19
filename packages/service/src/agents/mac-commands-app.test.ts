@@ -90,7 +90,6 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
             Effect.sync(() => {
               watched.push(...statements.map((statement) => statement.params));
               return {
-                live: Effect.succeed(true),
                 changed: Effect.callback<void>((resume) => {
                   Deferred.doneUnsafe(
                     parked,
