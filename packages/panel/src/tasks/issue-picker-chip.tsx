@@ -1,6 +1,7 @@
 import { useAtom } from "@effect/atom-react";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
@@ -30,7 +31,8 @@ import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
  * word stand nearest first, and once the typing rests Linear itself is
  * searched for the words, so a Linear issue older than those read is found
  * too; a Linear key typed whole or a link to a Linear issue pasted asks
- * Linear for that one issue instead. ↑ and ↓ move the highlight, Return
+ * Linear for that one issue instead, and a Luke link to one of the
+ * workspace's own issues pasted offers that issue. ↑ and ↓ move the highlight, Return
  * chooses the highlighted issue, and Escape closes the menu, not the card,
  * handing focus back to what opened it: the chip, or the field whose ⌘L
  * asked for it (`openRequest`). The issues are read as the chip first
@@ -165,6 +167,19 @@ function listedIssues(
   return offeredIssues(known, typed, found);
 }
 
+/**
+ * The workspace's own issues the menu lists for the words typed so far:
+ * every one read while nothing is typed, the one a pasted Luke link to it
+ * names, and else those whose title or key holds the words, nearest first.
+ */
+function ownOffered(issues: readonly NewTaskIssue[], typed: string): readonly NewTaskIssue[] {
+  const words = typed.trim();
+  if (words === "") return issues;
+  const place = readLink(words)?.place;
+  if (place?.kind === LINK_PLACE.ISSUE) return issues.filter((issue) => issue.id === place.issueId);
+  return offeredIssues(issues, typed);
+}
+
 /** One Linear issue as a row: its title, then its key and the state it stands in, under Linear's heading where one is drawn. */
 function linearRow(issue: LinearIssueSummary, section: string | undefined): MenuRow {
   return {
@@ -257,7 +272,7 @@ export function IssuePickerChip({
   if (!connected) return null;
 
   const listed = linear ? listedIssues(issues, searched, workspaceId, typed) : [];
-  const ownListed = typed.trim() === "" ? ownIssues : offeredIssues(ownIssues, typed);
+  const ownListed = ownOffered(ownIssues, typed);
   // Note that each kind stands under its heading only where both may be listed.
   const both = linear && own;
   const rows = [

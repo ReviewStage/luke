@@ -1155,6 +1155,21 @@ test("the Issue chip lists the workspace's own issues and Linear's, each under i
   assert.deepEqual(card.starts, []);
 });
 
+test("a Luke link to one of the workspace's own issues pasted in the search offers that issue", async () => {
+  const linked: NewTaskIssue = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000009",
+    workspaceId: "workspace-2",
+    identifier: "ACME-9",
+    title: "Billing page loads slowly",
+  };
+  await mount(undefined, undefined, {}, undefined, () => [], [...OWN_ISSUES, linked]);
+  await openLinear();
+  search(`https://tryluke.dev/acme/issue/${linked.id}`);
+  await settle();
+
+  assert.deepEqual(issueRows().rows, ["Billing page loads slowlyACME-9"]);
+});
+
 test("choosing one of the workspace's own issues lays it over the words in the Linear issue's place; Return starts an agent on a mention of it and the words, the task named by it and linked to it, and with no words an agent on the task's plan", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES, () => [], OWN_ISSUES);
   await openLinear();
