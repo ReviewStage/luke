@@ -60,9 +60,11 @@ import {
  * unknown reference is dropped and a repeated one stays in its first
  * chapter. Hunks no chapter holds are put to the model once more, in one
  * repair call asking where each belongs, an existing chapter by its number
- * or a new chapter read after them; whatever is still outside, with every
+ * or a new chapter read after them, a hunk placed in a chapter raising its
+ * risk where the hunk earns more; whatever is still outside, with every
  * hunk the model never saw, closes the story as "Other changes". A repair
- * that fails is passed over, since the first answer already stands. Each
+ * that fails, or whose prompt is past the cap, is passed over, since the
+ * first answer already stands. Each
  * key change keeps only line references inside its own chapter's hunks, and
  * the literal `\n` a model escapes twice is read as the newline it meant.
  *
@@ -164,18 +166,26 @@ const answerChapterSchema = Schema.Struct({
 type AnswerChapter = typeof answerChapterSchema.Type;
 
 /** The one-pass answer: the chapters in reading order. */
-const chaptersAnswerSchema = Schema.Struct({
+export const chaptersAnswerSchema = Schema.Struct({
   chapters: Schema.Array(answerChapterSchema),
 });
 
-/** The repair's answer: where each left-out hunk goes, an existing chapter by its number or a new chapter. */
-const repairAnswerSchema = Schema.Struct({
+/** The repair's answer: where each left-out hunk goes, an existing chapter by its number with the risk it earns, or a new chapter. */
+export const repairAnswerSchema = Schema.Struct({
   placements: describeWire(
     Schema.Array(
       Schema.Struct({
         path: Schema.String,
         oldStart: Schema.Int,
         chapter: describeWire(Schema.Int, "The number of the existing chapter, as listed."),
+        risk: describeWire(
+          Schema.Literals(Object.values(CHAPTER_RISK)),
+          "The risk this hunk earns on its own, by the rubric.",
+        ),
+        riskReason: describeWire(
+          Schema.String,
+          "Why this hunk earns that risk, in a short phrase.",
+        ),
       }),
     ),
     "Left-out hunks that belong to an existing chapter.",
@@ -290,17 +300,37 @@ function withHunkPlaced(chapter: Chapter, ref: HunkRef): Chapter {
   return { ...chapter, hunkRefs: [...refs.slice(0, at), ref, ...refs.slice(at)] };
 }
 
-/** The chapters with the repair applied: each placement in the chapter it names, where one stands at that number, and the new chapters after them. */
+/** How risky each level is against the others; a chapter with no level is below them all. */
+const RISK_RANK = new Map<Chapter["risk"], number>([
+  [null, -1],
+  [CHAPTER_RISK.LOW, 0],
+  [CHAPTER_RISK.MEDIUM, 1],
+  [CHAPTER_RISK.HIGH, 2],
+]);
+
+/**
+ * The chapter at the risk a hunk placed in it earns where that is higher,
+ * with the hunk's reason beside its own. Note that a placed hunk raises a
+ * chapter's risk and never lowers it, because the chapter was judged
+ * without it and a risk told too low is the one a reviewer cannot see.
+ */
+function withRiskOf(chapter: Chapter, risk: Chapter["risk"], reason: string): Chapter {
+  if ((RISK_RANK.get(risk) ?? -1) <= (RISK_RANK.get(chapter.risk) ?? -1)) return chapter;
+  return { ...chapter, risk, riskReasons: [...chapter.riskReasons, reason] };
+}
+
+/** The chapters with the repair applied: each placement in the chapter it names, where one stands at that number, raising its risk where the hunk earns more, and the new chapters after them. */
 function repairedChapters(
   chapters: readonly Chapter[],
   repair: typeof repairAnswerSchema.Type,
 ): readonly Chapter[] {
   let placed = chapters;
-  for (const { path, oldStart, chapter } of repair.placements) {
+  for (const { path, oldStart, chapter, risk, riskReason } of repair.placements) {
     const at = chapter - 1;
     const target = placed[at];
     if (target === undefined) continue;
-    placed = placed.with(at, withHunkPlaced(target, { path, oldStart }));
+    const raised = withRiskOf(target, risk, unescapeLiteralNewlines(riskReason));
+    placed = placed.with(at, withHunkPlaced(raised, { path, oldStart }));
   }
   return [...placed, ...repair.newChapters.map(storyChapter)];
 }
@@ -320,9 +350,19 @@ function repairCoverage(
 ): Effect.Effect<{ readonly chapters: readonly Chapter[]; readonly missing: readonly HunkRef[] }> {
   const missingSet = new Set(covered.missing);
   const missing = shown.filter((each) => missingSet.has(each.ref));
+  const prompt = repairPrompt({
+    title: input.title,
+    chapters: covered.chapters,
+    missing,
+    statusOf,
+  });
+  // A repair past the cap is never sent, and what it would place closes the story as Other changes.
+  if (estimatedTokens(REPAIR_INSTRUCTIONS + prompt) > CHAPTERS_BOUNDS.MAX_INPUT_TOKENS) {
+    return Effect.succeed(covered);
+  }
   const asked = askStructured(model, {
     system: REPAIR_INSTRUCTIONS,
-    prompt: repairPrompt({ title: input.title, chapters: covered.chapters, missing, statusOf }),
+    prompt,
     schema: repairAnswerSchema,
     maxOutputTokens: CHAPTERS_BOUNDS.REPAIR_MAX_OUTPUT_TOKENS,
   });

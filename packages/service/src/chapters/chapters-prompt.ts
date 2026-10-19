@@ -16,7 +16,7 @@ import type { Chapter, ChapterHunk, HunkRef } from "@luke/features/pull-request-
  * rows under an old and a new line-number column a line reference is read
  * from. The pull request's title and body, and its commit subjects where the
  * caller has them, are the author's words, fenced in
- * `<author_provided_context>` with any try at closing the fence taken out,
+ * `<author_provided_context>` with any try at closing the fence defused,
  * so nothing in them reads as an instruction or as the prompt's structure.
  */
 
@@ -24,13 +24,15 @@ import type { Chapter, ChapterHunk, HunkRef } from "@luke/features/pull-request-
 const AUTHOR_CONTEXT_TAG = "author_provided_context";
 
 /**
- * The fence's name, however it is cased. Note that the name itself is
- * broken in the author's words rather than its tags matched, because
- * without it no tag of the fence can be written, however spaced, and a
- * match on a fixed word cannot backtrack. Each is put out as a space, never
- * as nothing, so the words around one cannot close up into the name again.
+ * The `<` that opens a tag of the fence, closing or opening, however it is
+ * spaced or cased. Note that only that bracket is matched, by a lookahead
+ * over one character class that holds no `<`, so a match cannot backtrack
+ * past the next bracket and a name the author writes in prose stays whole.
  */
-const AUTHOR_CONTEXT_NAME = /author_provided_context/giu;
+const AUTHOR_CONTEXT_TAG_OPENER = /<(?=[\s/]*author_provided_context)/giu;
+
+/** What a tag's opening bracket is put out as: a bracket's entity, which opens no tag and adds no bracket to close up into another. */
+const NEUTRAL_BRACKET = "&lt;";
 
 /** The most of a pull request's body the model reads, as ReviewStage cuts one. */
 const MAX_BODY_CHARS = 4_000;
@@ -139,7 +141,7 @@ Answer with the chapters in reading order, as the schema describes.`;
 /** The repair's instructions: where each hunk the first pass left out belongs. */
 export const REPAIR_INSTRUCTIONS = `A first pass split a pull request's diff into chapters for code review but left some hunks out of every chapter. Place each left-out hunk where it belongs.
 
-- Where a hunk belongs to an existing chapter, answer a placement naming its \`path\`, its \`oldStart\`, and the chapter's number as listed.
+- Where a hunk belongs to an existing chapter, one whose summary it fits, answer a placement naming its \`path\`, its \`oldStart\`, the chapter's number as listed, and the risk the hunk earns on its own by the rubric below with a short reason.
 - Where it belongs to none of them, put it in a new chapter of its own, together with the other left-out hunks it belongs with. A new chapter is told by the rules below and is read after the existing ones.
 - Place every left-out hunk exactly once, and cite only the \`path\` and \`oldStart\` pairs listed under \`=== LEFT OUT ===\`.
 
@@ -147,9 +149,9 @@ The pull request's title, inside <${AUTHOR_CONTEXT_TAG}> tags, is the author's w
 
 ${NARRATION_RULES}`;
 
-/** The author's words with the fence's name taken out, so they cannot close it early or open another. */
+/** The author's words with every tag of the fence put out of reach, so they cannot close it early or open another. */
 function withoutFence(text: string): string {
-  return text.replaceAll(AUTHOR_CONTEXT_NAME, " ");
+  return text.replaceAll(AUTHOR_CONTEXT_TAG_OPENER, NEUTRAL_BRACKET);
 }
 
 /** The author's words fenced as untrusted data. */
@@ -249,10 +251,12 @@ export function chaptersPrompt(input: ChaptersPromptInput): string {
   ].join("\n");
 }
 
-/** One chapter as the repair reads it: its number, title, and the hunks it holds. */
+/** One chapter as the repair reads it: its number, title, risk, summary, and the hunks it holds. */
 function listedChapter(chapter: Chapter, at: number): string {
   return [
     `Chapter ${at + 1}: ${chapter.title}`,
+    `  Risk: ${chapter.risk ?? "none"}`,
+    `  Summary: ${chapter.summary.replaceAll("\n", " ")}`,
     ...chapter.hunkRefs.map((ref) => `  - ${citation(ref)}`),
   ].join("\n");
 }
