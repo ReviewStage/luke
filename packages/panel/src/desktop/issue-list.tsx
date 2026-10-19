@@ -95,7 +95,7 @@ function IssueRow({
         }
         current={peeked ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={(event) => onOpen(openingOf(event))}
-        onContextMenu={menu.contextMenu(row)}
+        contextMenu={menu.contextMenu(row)}
         onKeyDown={(event) => {
           // Note that ⌘Return is taken before the row's own Return, which would peek it.
           if (!pageKey(event)) return menu.keyMenu(event);

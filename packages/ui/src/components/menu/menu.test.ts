@@ -2,8 +2,15 @@
 
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, test } from "vitest";
-import { MENU_ITEM_MARK, Menu, type MenuEntry, MenuItem, useMenu } from "./menu.js";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import {
+  MENU_ITEM_MARK,
+  Menu,
+  type MenuEntry,
+  MenuItem,
+  NO_CONTEXT_MENU,
+  useMenu,
+} from "./menu.js";
 
 /**
  * menu.test.ts -- a menu behaves as a system menu does: its button opens it
@@ -13,7 +20,10 @@ import { MENU_ITEM_MARK, Menu, type MenuEntry, MenuItem, useMenu } from "./menu.
  * handing focus back to what opened it. An item steered from a field, as
  * a searchable menu's pinned rows are, is a switch for a setting and says
  * whether the list it opens stands, keeps a press from taking the focus,
- * and takes no press where it does not apply now.
+ * and takes no press where it does not apply now. A touch held still on
+ * what a right-click opens a menu on opens the same menu at the touch,
+ * once, and its release makes no click; a touch that moves or lets go
+ * first, and a mouse held down, open nothing.
  */
 
 declare global {
@@ -27,6 +37,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
 });
@@ -46,7 +57,7 @@ function Harness({ groups }: { groups: readonly (readonly MenuEntry[])[] }): Rea
     null,
     createElement("button", { type: "button", ...menu.trigger() }, "More"),
     createElement("button", { type: "button" }, "After"),
-    createElement("p", { onContextMenu: menu.contextMenu() }, "Row"),
+    createElement("p", menu.contextMenu(), "Row"),
     menu.drawn === undefined
       ? null
       : createElement(Menu, {
@@ -383,4 +394,222 @@ test("an item steered from a field is a switch for a setting, says its list stan
   expect(item("long").getAttribute("aria-disabled")).toBe("true");
   expect(mousedown.defaultPrevented).toBe(true);
   expect(chosen).toEqual(["fast", "hover effort"]);
+});
+
+/** A row a right-click or a long press opens the task's menu on, whose press is counted in `opened`, with a switch in it that keeps the menu. */
+function HeldRow({ opened }: { opened: string[] }): React.JSX.Element {
+  const menu = useMenu(true);
+  return createElement(
+    Fragment,
+    null,
+    createElement(
+      "div",
+      { role: "row", ...menu.contextMenu() },
+      createElement("button", { type: "button", onClick: () => opened.push("Row") }, "Row"),
+      createElement("button", { type: "button", role: "switch", ...NO_CONTEXT_MENU }, "Switch"),
+    ),
+    menu.drawn === undefined
+      ? null
+      : createElement(Menu, {
+          label: "Plan actions",
+          menu: menu.drawn,
+          groups: taskGroups([]),
+          onClose: menu.close,
+        }),
+  );
+}
+
+/** Well past a long press's hold, in milliseconds, so no test leans on its exact length. */
+const HELD_MS = 2000;
+
+/** The held row drawn on a fake clock, its row, and the presses the row heard. */
+function heldRow() {
+  vi.useFakeTimers();
+  const opened: string[] = [];
+  mount(createElement(HeldRow, { opened }));
+  return { row: button("Row"), opened };
+}
+
+/** A pointer event of a `pointerType` at `x`, `y`, as the browser sends it. */
+function pointer(type: string, pointerType: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    pointerType,
+    isPrimary: true,
+    clientX: x,
+    clientY: y,
+  });
+}
+
+/** A press of a `pointerType` going down on `target` at `x`, `y`. */
+function down(target: HTMLElement, pointerType: string, x = 40, y = 20): void {
+  act(() => {
+    target.dispatchEvent(pointer("pointerdown", pointerType, x, y));
+  });
+}
+
+/** Time passing on the fake clock. */
+function wait(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+}
+
+/**
+ * The press lifted at `x`, `y`, and the click its release makes, as the
+ * browser makes it: for a touch, only where its touchend was not refused.
+ * Answers whether the release made a click.
+ */
+function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean {
+  const touchEnd = new TouchEvent("touchend", { bubbles: true, cancelable: true });
+  act(() => {
+    target.dispatchEvent(pointer("pointerup", pointerType, x, y));
+    if (pointerType === "touch") target.dispatchEvent(touchEnd);
+    if (touchEnd.defaultPrevented) return;
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  });
+  return !touchEnd.defaultPrevented;
+}
+
+/** Where the open menu hangs, as its style places it. */
+function hungAt(): [string, string] | undefined {
+  const menu = openMenu();
+  return menu === null ? undefined : [menu.style.left, menu.style.top];
+}
+
+test("a touch held still opens the menu where it went down, on its first item, and its release presses nothing", () => {
+  const { row, opened } = heldRow();
+  down(row, "touch", 120, 60);
+  expect(openMenu()).toBeNull();
+  wait(HELD_MS);
+  expect(hungAt()).toEqual(["120px", "60px"]);
+  expect(focused()).toBe("Rename");
+  expect(lift(row, "touch", 120, 60)).toBe(false);
+  expect(opened).toEqual([]);
+  expect(openMenu()).not.toBeNull();
+});
+
+test("a touch that moves past its slop, scrolls, or lifts before the hold is done opens nothing, and a tap still presses", () => {
+  const { row, opened } = heldRow();
+  down(row, "touch");
+  act(() => {
+    row.dispatchEvent(pointer("pointermove", "touch", 40, 40));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    window.dispatchEvent(new Event("scroll"));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  wait(100);
+  lift(row, "touch");
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  expect(opened).toEqual(["Row"]);
+});
+
+test("a mouse or a pen held down opens nothing, and its click presses as it always has", () => {
+  const { row, opened } = heldRow();
+  for (const pointerType of ["mouse", "pen"]) {
+    down(row, pointerType);
+    wait(HELD_MS);
+    expect(openMenu()).toBeNull();
+    expect(lift(row, pointerType)).toBe(true);
+  }
+  expect(opened).toEqual(["Row", "Row"]);
+});
+
+test("the contextmenu Android sends for a hold opens nothing more, whether it comes after the hold's menu or before it", () => {
+  const { row, opened } = heldRow();
+  const android = (x: number) =>
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: 20 });
+  down(row, "touch", 120, 60);
+  wait(HELD_MS);
+  key("ArrowDown");
+  const after = android(300);
+  act(() => {
+    row.dispatchEvent(after);
+  });
+  expect(after.defaultPrevented).toBe(true);
+  expect(hungAt()).toEqual(["120px", "60px"]);
+  expect(focused()).toBe("Archive");
+  lift(row, "touch", 120, 60);
+  key("Escape");
+  expect(openMenu()).toBeNull();
+
+  down(row, "touch", 120, 60);
+  wait(100);
+  act(() => {
+    row.dispatchEvent(android(200));
+  });
+  expect(hungAt()).toEqual(["200px", "20px"]);
+  key("ArrowDown");
+  wait(HELD_MS);
+  expect(hungAt()).toEqual(["200px", "20px"]);
+  expect(focused()).toBe("Archive");
+  lift(row, "touch", 120, 60);
+  expect(opened).toEqual([]);
+});
+
+test("a row taken away while a touch is held on it leaves no hold behind to open its menu later", () => {
+  const { row } = heldRow();
+  down(row, "touch");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  expect(vi.getTimerCount()).toBe(0);
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+});
+
+test("a touch a list captures to drag its row opens nothing, dragged, lifted, or resting within the slop; the browser's own capture on the row is no drag", () => {
+  const { row } = heldRow();
+  const list =
+    row.closest('[role="row"]')?.parentElement ?? expect.fail("the row stands in its list");
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("pointermove", "touch", 46, 20));
+    list.dispatchEvent(pointer("pointerup", "touch", 46, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("pointermove", "touch", 80, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    list.dispatchEvent(pointer("gotpointercapture", "touch", 44, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  act(() => {
+    row.dispatchEvent(pointer("gotpointercapture", "touch", 40, 20));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).not.toBeNull();
+});
+
+test("a switch in the row that keeps its menu opens nothing, held or right-clicked, while the row beside it still opens on a hold", () => {
+  const { row } = heldRow();
+  const toggle = button("Switch");
+  down(toggle, "touch");
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  lift(toggle, "touch");
+  act(() => {
+    toggle.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 10 }),
+    );
+  });
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
+  wait(HELD_MS);
+  expect(openMenu()).not.toBeNull();
 });

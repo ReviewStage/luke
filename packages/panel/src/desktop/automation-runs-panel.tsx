@@ -163,7 +163,7 @@ function RunRow({
         }
         current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={agent === null ? undefined : () => onOpenAgent(agent.id)}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
+        contextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
       />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu

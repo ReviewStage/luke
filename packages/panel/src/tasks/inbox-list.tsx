@@ -573,7 +573,7 @@ export function InboxItemRow({
         unread={unread}
         hint={{ Hint: Tooltip, label: title }}
         onPress={() => onChoose(listed)}
-        onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
+        contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
       />
       {menu.drawn === undefined || groups.length === 0 ? null : (
         <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
