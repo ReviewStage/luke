@@ -2401,6 +2401,20 @@ ul.actor-stack {
   padding-bottom: 140px; /* off-scale */
 }
 
+/* A plan's comment counts and a block's comment button stand in the gutter
+   past the column's end (tasks.css), which the desktop's 40px inset holds.
+   The web's 24px holds neither, so its documents end a finger's target and a
+   hair either side of it short of the column, whether or not a thread stands
+   yet, as the desktop's inset does, so the words never move when the first
+   comment lands, and a plan, its versions, and an issue keep one width. */
+[data-luke-profile="web"] .desktop-document {
+  --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
+}
+
+[data-luke-profile="web"] .desktop-document .plan-document-body {
+  padding-right: var(--comment-gutter);
+}
+
 .desktop-document .plan-body,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
@@ -6619,6 +6633,43 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: flex;
   align-items: center;
   gap: var(--luke-list-gap);
+}
+
+/* A narrow room's bars have no room beside their buttons for their tabs,
+   so a strip and its "+" take a row of their own under them, as a phone's
+   browser stands its tabs under its address bar: the task's column's and the
+   side panel's, standing full screen, alike. The top row keeps its actions at
+   its end, both rows clear of the title bar's buttons at either edge, and the
+   row beneath reaches past that clearance to the column's own inset, its
+   whole width; the strip scrolls along in it as it does anywhere, its chosen
+   tab pinned in view. */
+.desktop-shell[data-room="narrow"]
+:is(
+  .desktop-task-main .desktop-toolbar:has(> .main-tabs),
+  .side-panel-bar:has(> .side-panel-tabs)
+) {
+  --bar-start: var(--sidebar-toggle-clearance);
+  --bar-end: var(--panel-toggle-clearance);
+  flex-wrap: wrap;
+  padding-right: var(--bar-end);
+  padding-left: var(--bar-start);
+}
+
+.desktop-shell[data-room="narrow"]
+  :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
+  > :is(.main-tabs, .side-panel-tabs) {
+  order: 1;
+  flex: 0 0 calc(100% + var(--bar-start) + var(--bar-end) - 2 * var(--column-inset));
+  margin-right: calc(var(--column-inset) - var(--bar-end));
+  margin-left: calc(var(--column-inset) - var(--bar-start));
+}
+
+.desktop-shell[data-room="narrow"]
+  :is(.desktop-task-main .desktop-toolbar, .side-panel-bar)
+  > :is(.main-tabs, .side-panel-tabs)
+  + * {
+  min-height: var(--luke-control-height);
+  margin-left: auto;
 }
 
 /* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
