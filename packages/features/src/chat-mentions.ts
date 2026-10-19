@@ -43,6 +43,16 @@ function addresses(mention: Mention): mention is ChatMemberMention {
   );
 }
 
+/**
+ * Every mention the words write, however many: a message is bounded by its
+ * own length, and the cap a message's mentions are read under elsewhere
+ * would let references to tasks or files written first crowd out a member
+ * named after them.
+ */
+function everyMention(text: string) {
+  return mentionsIn(text, null, mentionLinksIn(text).length);
+}
+
 /** The words with every mention link blanked out, each character a space, so what is read around them keeps its place. */
 function withoutLinks(text: string): string {
   let out = "";
@@ -66,7 +76,7 @@ export interface ChatMentions {
 export function chatMentionsIn(text: string): ChatMentions {
   return {
     handles: mentionedHandles(withoutLinks(text)),
-    members: mentionsIn(text, null).flatMap(({ mention, label }) =>
+    members: everyMention(text).flatMap(({ mention, label }) =>
       addresses(mention) ? [{ mention, label }] : [],
     ),
   };
@@ -83,7 +93,7 @@ export function chatWordsForAgents(
 ): string {
   let out = "";
   let at = 0;
-  for (const found of mentionsIn(text, null)) {
+  for (const found of everyMention(text)) {
     if (!addresses(found.mention)) continue;
     const handle = handleOf(found.mention);
     out += text.slice(at, found.start) + (handle === undefined ? found.label : `@${handle}`);

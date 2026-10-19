@@ -189,7 +189,11 @@ export function namedIn(words: string): ChatNamed {
   const read = chatMentionsIn(words);
   return {
     mentions: read.handles,
-    subjects: read.members.map(({ mention, label }) => ({ subject: subjectOf(mention), label })),
+    // Note that a label is kept without its `@`, as a handle is, since whoever reads an unresolved one writes the `@` back.
+    subjects: read.members.map(({ mention, label }) => ({
+      subject: subjectOf(mention),
+      label: label.replace(/^@/u, ""),
+    })),
   };
 }
 

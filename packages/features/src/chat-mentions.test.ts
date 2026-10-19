@@ -40,3 +40,12 @@ test("an agent reads each member's link as its @handle, a link to no member as i
   );
   assert.equal(words, `@Ada Lovelace, @agent-2, @luke: see ${task}`);
 });
+
+test("a member named after many references is still read, however many references come first", () => {
+  const references = Array.from({ length: 25 }, () => task).join(" ");
+  const read = chatMentionsIn(`${references} and ${person}`);
+  assert.deepEqual(
+    read.members.map(({ mention }) => mention.kind),
+    [MENTION_KIND.PERSON],
+  );
+});

@@ -7987,6 +7987,15 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const notice = JSON.stringify(eve.sent.map(({ message }) => message.message));
         assert.match(notice, /@agent-1 take the table, please\./u);
         assert.doesNotMatch(notice, /tryluke\.dev/u);
+        // A chip naming no member comes back unresolved under its label, as a handle does, without its `@`.
+        const ghost = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: randomUUID() },
+          "Ghost",
+          { workspace: "acme", repository: null },
+        );
+        const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
+        assert.ok("posted" in unknown);
+        assert.deepEqual(unknown.receipt.unresolved, ["Ghost"]);
       }),
   );
 

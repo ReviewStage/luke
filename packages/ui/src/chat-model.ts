@@ -315,7 +315,10 @@ function mentionOf(member: ChatMember): ChatMemberMention | undefined {
     return { kind: MENTION_KIND.PERSON, userId: member.userId };
   }
   if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
-    return { kind: MENTION_KIND.AGENT, agentId: member.agentId };
+    // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
+    return member.planId === undefined
+      ? { kind: MENTION_KIND.AGENT, agentId: member.agentId }
+      : { kind: MENTION_KIND.AGENT, taskId: member.planId, agentId: member.agentId };
   }
   return undefined;
 }
