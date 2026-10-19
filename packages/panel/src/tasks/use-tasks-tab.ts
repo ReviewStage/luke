@@ -154,6 +154,7 @@ import {
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
 import { useInboxPages } from "./use-inbox-pages.js";
+import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
 import { useLastTask } from "./use-last-task.js";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs.js";
 import { usePanelArrivals } from "./use-panel-arrivals.js";
@@ -254,6 +255,8 @@ interface InboxViewControl {
   readonly pages: readonly PageLine[] | undefined;
   /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
   readonly onRereadPages: () => void;
+  /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
+  readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
 }
 
 /**
@@ -1518,6 +1521,7 @@ export function useTasksTab(input: {
     () => (inboxAgent === undefined ? NO_IDS : [inboxAgent]),
     [inboxAgent],
   );
+  const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
   // The Issues list's panel is its peek's, which the list draws itself, beside no task.
   const issuesStand = standIn?.kind === STAND_IN.ISSUES;
   const sidePanel = useSidePanel(
@@ -1543,12 +1547,12 @@ export function useTasksTab(input: {
         : pageAgents === undefined
           ? pages
           : NO_IDS,
-    // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by.
+    // Note that the task's agents in the Inbox are its own read's (`desktop-inbox.tsx`), which the panel draws a Pull request tab by (`use-inbox-task-agents.ts`).
     issuesStand
       ? NO_IDS
       : inboxView !== undefined
         ? inboxAgent === undefined
-          ? undefined
+          ? inboxTaskAgents.agentIds
           : inboxAgents
         : (pageAgents ?? agents.agentIds),
   );
@@ -3057,6 +3061,7 @@ export function useTasksTab(input: {
         ),
       pages: inboxPages.pages,
       onRereadPages: inboxPages.onReread,
+      onTaskAgents: inboxTaskAgents.onRead,
     },
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
     chatView: {

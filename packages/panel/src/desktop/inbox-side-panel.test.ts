@@ -30,6 +30,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
+import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
@@ -81,6 +82,15 @@ const AGENT: CodingAgentSummary = {
   createdAt: 3,
   status: CODING_AGENT_STATUS.COMPLETED,
   turnId: null,
+};
+
+/** An agent of the task archived since, whose Pull request tab the task may still keep. */
+const ARCHIVED: CodingAgentSummary = {
+  ...AGENT,
+  id: "5e7d9c3b-1a2f-4b6e-9d8c-7f6a5b4c3d2e",
+  title: "Draft the invitation email",
+  createdAt: 2,
+  archivedAt: 4,
 };
 
 const PULL = "https://github.com/acme/relay/pull/42";
@@ -149,7 +159,10 @@ function answer(request: Act): Promise<ActOutcome> {
           })
         : new Promise(() => undefined);
     case ACT_KIND.CODING_AGENTS_LIST:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [AGENT] } });
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { agents: [ARCHIVED, AGENT] },
+      });
     case ACT_KIND.CODING_AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
@@ -214,6 +227,8 @@ async function inbox(
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
+    // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
+    const taskAgents = useInboxTaskAgents(panelFor);
     const sidePanel = useSidePanel(
       undefined,
       { id: panelFor, holds: {}, bare: true },
@@ -221,7 +236,7 @@ async function inbox(
       [],
       [],
       [FUNNEL.id],
-      undefined,
+      taskAgents.agentIds,
     );
     control = sidePanel;
     // The window's keymap, which hears a chord as the window's root mounts it.
@@ -245,6 +260,7 @@ async function inbox(
             onRereadPages: () => {
               left.rereads += 1;
             },
+            onTaskAgents: taskAgents.onRead,
           },
           sidePanel,
           onShowTask: (taskId) => left.tasks.push(taskId),
@@ -361,4 +377,22 @@ test("a click into a Browser tab's page beside the Inbox hands the panel the key
   await settle();
 
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
+});
+
+test("closing the last tab drawn beside the Inbox shuts the panel, as on a task's page, though the task keeps an archived agent's Pull request tab", async () => {
+  const { container, panel } = await inbox();
+  // The archived agent's tab, as one opened on the task's page before the agent was archived, which no strip draws.
+  act(() => panel().onChoose({ changes: ARCHIVED.id }));
+  await settle();
+  await pressChip(container, "relay#42");
+  assert.equal(panelTabs(container)?.[0], "▸ #42 Send invitations in batches");
+
+  const close = container.querySelector<HTMLButtonElement>(
+    'aside[aria-label="Panel"] button[aria-label="Close #42 Send invitations in batches"]',
+  );
+  assert.ok(close, "the tab offers its close");
+  act(() => close.click());
+  await settle();
+
+  assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
 });

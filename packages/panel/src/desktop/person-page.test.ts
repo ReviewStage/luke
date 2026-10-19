@@ -303,6 +303,7 @@ function mountWith(
       onChoose: (chosen) => opened.inbox.push(chosen),
       pages: undefined,
       onRereadPages: () => undefined,
+      onTaskAgents: () => undefined,
     },
     ...overrides,
   });
