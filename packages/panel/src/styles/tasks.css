@@ -3619,8 +3619,7 @@ ol.transcript-list {
   white-space: nowrap;
 }
 
-/* A suggested change's header names it in words rather than as a language,
-   and its lines stand on the added lines' tint. */
+/* A suggested change's header names it in words rather than as a language. */
 .transcript-code-suggestion {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-medium);
@@ -3644,8 +3643,30 @@ ol.transcript-list {
   font: inherit;
 }
 
-.transcript-code[data-suggestion] .transcript-code-body {
-  background: var(--luke-color-complete-tint);
+/* A block drawn as rows, a suggestion's or a diff's: each row as wide as
+   the widest and inset as the block's lines are, so its tint runs edge to
+   edge; a line removed on the diff's removed ground, one added on its added
+   ground, as Files changed tints them. */
+.transcript-code-body[data-rows] {
+  padding-inline: 0;
+}
+
+.transcript-code-body[data-rows] > code {
+  display: block;
+  min-width: fit-content;
+}
+
+.transcript-code-row {
+  display: block;
+  padding-inline: var(--luke-space-12);
+}
+
+.transcript-code-row[data-row="removed"] {
+  background: var(--diff-removed-ground);
+}
+
+.transcript-code-row[data-row="added"] {
+  background: var(--diff-added-ground);
 }
 
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
