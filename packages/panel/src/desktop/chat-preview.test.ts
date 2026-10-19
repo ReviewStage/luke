@@ -51,4 +51,6 @@ test("a preview says the words inside raw HTML, as the message draws them, and n
   assert.equal(previewWords(said("Ship <b>now</b><!-- not this -->")), "Ship now");
   assert.equal(previewWords(said('<div title="a>b">Ready</div>')), "Ready");
   assert.equal(previewWords(said("<div>Tom &amp; Jerry</div>")), "Tom & Jerry");
+  assert.equal(previewWords(said("<div>Ship</div><div>today</div>")), "Ship today");
+  assert.equal(previewWords(said("<p>un<b>bold</b>ed</p>")), "unbolded");
 });
