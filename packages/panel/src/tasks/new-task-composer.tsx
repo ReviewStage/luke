@@ -25,7 +25,7 @@ import {
   Text,
 } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
@@ -40,14 +40,16 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  *
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
  * the "+" that attaches files, with an image pasted or files dropped taken
- * too, dictation, the model chip, and the round Start button. Its foot holds
- * New task's own chips beside them: after the "+", the repository the task
- * is about (`repository-chip.tsx`), which starts on the one the press chose
+ * too, dictation, the model chip, and the round Start button, with the
+ * Plan toggle at the foot's right, before the model chip. New task's own
+ * chips stand in a head row over the card where the owner hands a title, as
+ * the dialog does (`heading`): the title, then the repository the task is
+ * about (`repository-chip.tsx`), and at the row's right end the Linear
+ * chip, where the workspace has Linear connected (`linear-issue-chip.tsx`,
+ * ⌘L from the card). With no title, as on Home, both stand in the foot after
+ * the "+" instead. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
- * was about, either only where the workspace's GitHub reaches it, and then
- * the Linear chip, where the workspace has Linear connected
- * (`linear-issue-chip.tsx`, ⌘L from the card); at the right, before the model
- * chip, the Plan toggle.
+ * was about, either only where the workspace's GitHub reaches it.
  *
  * The card is in one of two modes (`new-task-mode.ts`), kept for the next
  * New task, and Shift+Tab from the field turns it as the toggle does:
@@ -73,8 +75,8 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  *   names it, as a planned task always has.
  *
  * Choosing a Linear issue lays it over the words as a chip, its key, title,
- * and state, with the × that lets it go, rather than starting anything; a
- * switch of workspace lets it go too. The task is linked to it in either
+ * and state, with the × that lets it go, rather than starting anything; the
+ * owner's workspace changing, as Home's does, lets it go too. The task is linked to it in either
  * mode and named by it, Luke researches it in Plan mode as he always did,
  * beside the brief, and in Agent mode the agent is handed a mention of it
  * before the words (`agentPromptOf`), so an issue picked and Return starts
@@ -232,6 +234,7 @@ export function NewTaskComposer({
   onStarting,
   onLeave,
   focusedByOwner = false,
+  heading,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -244,6 +247,8 @@ export function NewTaskComposer({
   onLeave: () => void;
   /** Whether the owner hands the words focus as the card first draws, as the dialog does; the words take it themselves otherwise. */
   focusedByOwner?: boolean;
+  /** The owner's title, drawn in a head row over the card with the repository chip after it and the Linear chip at its right end; with none, as on Home, both chips stand in the card's foot. */
+  heading?: ReactNode;
 }): React.JSX.Element {
   const [kept, setMode] = useNewTaskMode();
   // An issue's Start agent… asks for an agent alone, so its card stands in Agent mode and offers no Plan toggle.
@@ -266,7 +271,7 @@ export function NewTaskComposer({
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
   // A repository or an issue picked in one workspace is none of another's,
-  // so a switch lets them go, in the render that brings it; the scope first
+  // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
@@ -367,6 +372,40 @@ export function NewTaskComposer({
     setLinearAsks((asks) => asks + 1);
   };
 
+  const repositoryChip = (
+    <RepositoryChip
+      key={repositories.scope}
+      place={CHIP_PLACE.FIELD}
+      width={CHIP_WIDTH.AUTO}
+      align={PICKER_ALIGN.START}
+      value={repository}
+      chooser={repositories}
+      onChoose={setChosen}
+      onUnreached={() => setChosen(null)}
+    />
+  );
+  const chooseIssue = (picked: LinearIssueSummary) => {
+    setIssue(picked);
+    setNote(undefined);
+  };
+  // Note that the chip at the head row's right end hangs its menu from its trailing edge.
+  const linearChip = (
+    <LinearIssueChip
+      readIn={linearIssuesIn}
+      workspaceId={workspaceId}
+      disabled={starting}
+      openRequest={linearAsks}
+      align={heading === undefined ? PICKER_ALIGN.START : PICKER_ALIGN.END}
+      onChoose={chooseIssue}
+    />
+  );
+  const chips = (
+    <>
+      {repositoryChip}
+      {linearChip}
+    </>
+  );
+
   const composer: AgentComposerControl = {
     draft: words,
     setDraft: (next) => {
@@ -386,6 +425,15 @@ export function NewTaskComposer({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
     <div className="new-task-composer" data-mode={mode} onKeyDown={onCardKey}>
+      {heading === undefined ? null : (
+        <div className="new-task-head">
+          <div className="new-task-title">
+            {heading}
+            {repositoryChip}
+          </div>
+          {linearChip}
+        </div>
+      )}
       <AgentComposer
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
@@ -410,30 +458,7 @@ export function NewTaskComposer({
             <IssueChip issue={issue} disabled={starting} onDrop={() => setIssue(undefined)} />
           )
         }
-        tools={
-          <>
-            <RepositoryChip
-              key={repositories.scope}
-              place={CHIP_PLACE.FIELD}
-              width={CHIP_WIDTH.AUTO}
-              align={PICKER_ALIGN.START}
-              value={repository}
-              chooser={repositories}
-              onChoose={setChosen}
-              onUnreached={() => setChosen(null)}
-            />
-            <LinearIssueChip
-              readIn={linearIssuesIn}
-              workspaceId={workspaceId}
-              disabled={starting}
-              openRequest={linearAsks}
-              onChoose={(picked) => {
-                setIssue(picked);
-                setNote(undefined);
-              }}
-            />
-          </>
-        }
+        tools={heading === undefined ? chips : undefined}
         actions={
           agentOnly ? undefined : (
             <span className="new-task-plan-toggle">

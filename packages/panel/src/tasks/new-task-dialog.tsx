@@ -1,23 +1,18 @@
-import type { Workspace } from "@luke/features/workspace-wire";
-import { CHIP_WIDTH, DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import { DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
-import { WorkspaceTile } from "../desktop/workspace-tile.js";
-import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * new-task-dialog.tsx -- New task as a small modal over the window: where the task starts, and the composer card whose words start a coding agent on it, or a plan with Luke.
+ * new-task-dialog.tsx -- New task as a small modal over the window: the title, and the composer card whose words start a coding agent, or a plan with Luke.
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
- * whatever stood open, and a card holds the title and New task's composer
- * (`new-task-composer.tsx`), which takes focus. Its title says where the
- * task will start, "New task in Acme", the workspace a chip there that
- * chooses another, as Linear's team chip and GitHub's Owner do: the app's
- * one picker, Settings' bordered chip and its menu, hung from the chip's
- * leading edge. The composer then lists that workspace's repositories and
- * its Linear issues, and a switch lets go of a repository or an issue
- * picked in the other.
+ * whatever stood open, and a card holds New task's composer
+ * (`new-task-composer.tsx`), which takes focus, with the title handed to it
+ * for its head row: "New task", the repository chip after it, and the
+ * Linear chip at the row's right end. The task starts in the workspace the
+ * window lists, and the dialog offers no other; the composer lists that
+ * workspace's repositories and its Linear issues.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
@@ -38,11 +33,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * at once.
  */
 
-/** The card's title, before the workspace's chip: an agent's where one alone is asked for, the issue it starts from where there is one, and "in" where the chip stands after it. */
-function newTaskHeading(issue: string | undefined, inWorkspace: boolean, agent: boolean): string {
+/** The card's title, before the repository's chip: an agent's where one alone is asked for, and the issue it starts from where there is one. */
+function newTaskHeading(issue: string | undefined, agent: boolean): string {
   const what = agent ? "New agent" : "New task";
-  const heading = issue === undefined ? what : `${what} from ${issue}`;
-  return inWorkspace ? `${heading} in` : heading;
+  return issue === undefined ? what : `${what} from ${issue}`;
 }
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
@@ -51,58 +45,16 @@ const FIELD_SELECTOR = '[role="textbox"]';
 /** The dialog's own card, which holds focus while the field has not landed. */
 const CARD_SELECTOR = '[aria-modal="true"]';
 
-/** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
-const NO_WORKSPACE_MATCH = "No workspaces match";
-
-/**
- * The title's workspace: the one the task starts in, by its tile and name, a
- * press away from the picker's menu of every workspace the account is in,
- * the one chosen checked; nothing before the workspaces are read.
- */
-function WorkspaceChip({
-  workspaces,
-  chosen,
-  disabled,
-  onChoose,
-}: {
-  workspaces: readonly Workspace[];
-  chosen: string | undefined;
-  disabled: boolean;
-  onChoose: (workspaceId: string) => void;
-}): React.JSX.Element | null {
-  const workspace = workspaces.find((each) => each.id === chosen);
-  if (workspace === undefined) return null;
-  return (
-    <Picker
-      label="Workspace"
-      value={workspace.id}
-      valueLabel={workspace.name}
-      valueIcon={<WorkspaceTile workspace={workspace} />}
-      rows={workspaces.map((each) => ({
-        id: each.id,
-        label: each.name,
-        icon: <WorkspaceTile workspace={each} />,
-      }))}
-      noMatch={NO_WORKSPACE_MATCH}
-      align={PICKER_ALIGN.START}
-      width={CHIP_WIDTH.AUTO}
-      disabled={disabled}
-      onPick={onChoose}
-    />
-  );
-}
-
 /**
  * The card with its own state, mounted afresh on each opening so cancelled
- * words are never offered again: the workspace chosen, and whether a start
- * is under way, which holds the card.
+ * words are never offered again, and whether a start is under way, which
+ * holds the card.
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
   const from = newTask.preset?.issue;
-  // The workspace the task starts in: the one listed, or the issue's, until the title's chip chooses another.
-  const [workspaceId, setWorkspaceId] = useState(from?.workspaceId ?? newTask.workspaceId);
-  const startsIn = workspaceId ?? newTask.workspaceId;
+  // The workspace the task starts in: the issue's, else the one listed.
+  const startsIn = from?.workspaceId ?? newTask.workspaceId;
   const [starting, setStarting] = useState(false);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -132,23 +84,6 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
       onDismiss={close}
     >
       <div className="new-task ph-no-capture" ref={body}>
-        <div className="new-task-head">
-          <div className="new-task-title">
-            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(
-                from?.identifier,
-                startsIn !== undefined,
-                newTask.preset?.agent === true,
-              )}
-            </Text>
-            <WorkspaceChip
-              workspaces={newTask.workspaces}
-              chosen={startsIn}
-              disabled={starting || from !== undefined}
-              onChoose={setWorkspaceId}
-            />
-          </div>
-        </div>
         <NewTaskComposer
           newTask={newTask}
           workspaceId={startsIn}
@@ -156,6 +91,11 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           onStarting={setStarting}
           onLeave={close}
           focusedByOwner
+          heading={
+            <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+              {newTaskHeading(from?.identifier, newTask.preset?.agent === true)}
+            </Text>
+          }
         />
       </div>
     </Dialog>
