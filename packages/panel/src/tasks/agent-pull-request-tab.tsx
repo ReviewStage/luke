@@ -29,6 +29,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import {
+  LINK_PLACE,
+  type LinkPlace,
+  PULL_REQUEST_THREAD_VIEW,
+  type PullRequestThreadView,
+} from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -81,21 +87,36 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import {
+  createContext,
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAct } from "../act.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
+import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
+  type ChangesReveal,
   type ChangesThreads,
   THREAD_PLACE,
   type ThreadPlace,
   useAgentRead,
 } from "./agent-changes-tab.js";
 import { threadPreview } from "./changes-model.js";
+import { centreWithin, scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
   type ConversationFiltersControl,
@@ -136,13 +157,20 @@ import {
 import { RelativeTime } from "./relative-time.js";
 import { useMinute } from "./task-time.js";
 import {
+  THREAD_REVEAL_WORDS,
+  type ThreadLanding,
+  ThreadLandingProvider,
+  useLandedThread,
+  useWindowThreadReveal,
+} from "./thread-reveal.js";
+import {
   type GitHubPictureDrawer,
   GitHubPictureLink,
   GitHubWords,
   TranscriptWords,
 } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useOpenLink } from "./use-open-link.js";
+import { useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 import { useWorkingNow, workingTime } from "./working-time.js";
 
@@ -193,7 +221,10 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * outdated by a later push is folded closed under its head, which says
  * which, until opened. The description and every comment wear their
  * reactions under their words, as GitHub draws them
- * (`pull-request-reactions.tsx`). Over the conversation, stage-cli's two filters,
+ * (`pull-request-reactions.tsx`). A thread's file and lines take it to
+ * Files changed, and its ⋯ to the other view or its link copied, each
+ * through the window's route for the thread's link, which brings it into
+ * view there (`thread-reveal.tsx`). Over the conversation, stage-cli's two filters,
  * Hide bots and Hide resolved, each counting what it leaves out and kept
  * across launches (`conversation-filters.ts`). Every name and word here is
  * the repository's, so the tab is left out of the screen recording
@@ -873,6 +904,88 @@ function EntryWords({
   );
 }
 
+/** How a thread drawn in the tab is taken to its other view, and the place a link to it names there; none for a thread GitHub named no id for. */
+interface ThreadJumps {
+  readonly jump: (thread: ReviewThread, view: PullRequestThreadView) => void;
+  readonly place: (thread: ReviewThread, view: PullRequestThreadView) => LinkPlace | undefined;
+}
+
+const ThreadJumpContext = createContext<ThreadJumps | undefined>(undefined);
+
+/** The door taking a thread to `view`, where the tab can find it there again; none for a thread with no id. */
+function useThreadJump(
+  thread: ReviewThread,
+  view: PullRequestThreadView,
+): (() => void) | undefined {
+  const jumps = useContext(ThreadJumpContext);
+  return jumps === undefined || thread.id === undefined
+    ? undefined
+    : () => jumps.jump(thread, view);
+}
+
+/** A press on something in a thread's head that keeps it for itself, rather than folding the thread. */
+function keptInHead(event: MouseEvent<HTMLElement>): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+/**
+ * A thread's ⋯ at the end of its head: View in the tab's other view, where
+ * the thread is found by its id, and Copy link, the thread's Luke link in
+ * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`); nothing where
+ * the thread offers neither.
+ */
+function ThreadMenu({
+  thread,
+  here,
+  there,
+}: {
+  thread: ReviewThread;
+  /** The view the thread is drawn in, which its link names. */
+  here: PullRequestThreadView;
+  /** The view its View in takes it to. */
+  there: PullRequestThreadView;
+}): React.JSX.Element | null {
+  const menu = useMenu(true);
+  const jumps = useContext(ThreadJumpContext);
+  const copyLink = useCopyLinkItem();
+  const jump = useThreadJump(thread, there);
+  const place = jumps?.place(thread, here);
+  const copy = place === undefined ? undefined : copyLink(place);
+  const actions: MenuAction[] = [
+    ...(jump === undefined
+      ? []
+      : [
+          there === PULL_REQUEST_THREAD_VIEW.FILES
+            ? {
+                label: THREAD_REVEAL_WORDS.VIEW_FILES,
+                icon: <FileDiffIcon aria-hidden="true" />,
+                onSelect: jump,
+              }
+            : {
+                label: THREAD_REVEAL_WORDS.VIEW_CONVERSATION,
+                icon: <MessagesSquareIcon aria-hidden="true" />,
+                onSelect: jump,
+              },
+        ]),
+    ...(copy === undefined ? [] : [copy]),
+  ];
+  if (actions.length === 0) return null;
+  const label = THREAD_REVEAL_WORDS.MENU;
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the ⋯'s press from folding the thread whose head it stands in; the button inside is the control.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on the button inside reaches it as a click, which the wrapper keeps the same way.
+    <span className="pull-request-thread-menu" onClick={keptInHead}>
+      <Tooltip label={label}>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+      )}
+    </span>
+  );
+}
+
 /**
  * One review thread: its file and lines at its head, with whether it was
  * resolved or a later push outdated it, which folds it closed until opened;
@@ -894,19 +1007,50 @@ function ThreadCard({
   const preview = threadPreview(thread);
   const lines = threadLines(thread);
   const labels = threadLabels(thread);
+  const landed = useLandedThread(thread, labels.length === 0);
+  const toFiles = useThreadJump(thread, PULL_REQUEST_THREAD_VIEW.FILES);
+  const where = (
+    <>
+      <span className="pull-request-thread-path">
+        <bdi>{thread.path}</bdi>
+      </span>
+      {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
+    </>
+  );
   return (
-    <li className="pull-request-thread">
-      <Fold defaultOpen={labels.length === 0}>
+    <li
+      ref={landed.ref}
+      className="pull-request-thread"
+      data-search-landed={landed.ringed ? "" : undefined}
+      onAnimationEnd={landed.onAnimationEnd}
+    >
+      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
         <FoldSummary className="pull-request-thread-head">
-          <Tooltip label={thread.path}>
-            <span className="pull-request-thread-path">
-              <bdi>{thread.path}</bdi>
-            </span>
+          {/* The file and lines take the thread to them in Files changed, where it can be found there. */}
+          <Tooltip label={toFiles === undefined ? thread.path : THREAD_REVEAL_WORDS.VIEW_FILES}>
+            {toFiles === undefined ? (
+              <span className="pull-request-thread-where">{where}</span>
+            ) : (
+              <TextButton
+                tone={TEXT_BUTTON_TONE.QUIET}
+                aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${thread.path}${lines === undefined ? "" : ` ${lines}`}`}
+                onClick={(event) => {
+                  keptInHead(event);
+                  toFiles();
+                }}
+              >
+                <span className="pull-request-thread-where">{where}</span>
+              </TextButton>
+            )}
           </Tooltip>
-          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
           {labels.map((label) => (
             <Badge key={label}>{label}</Badge>
           ))}
+          <ThreadMenu
+            thread={thread}
+            here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+            there={PULL_REQUEST_THREAD_VIEW.FILES}
+          />
           <span className="pull-request-thread-turn">
             <DisclosureChevron />
           </span>
@@ -988,9 +1132,15 @@ function InlineThread({
   const labels = threadLabels(thread);
   const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
   const first = thread.comments[0];
+  const landed = useLandedThread(thread, labels.length === 0);
   return (
-    <div className="diff-inline-thread">
-      <Fold defaultOpen={labels.length === 0}>
+    <div
+      ref={landed.ref}
+      className="diff-inline-thread"
+      data-search-landed={landed.ringed ? "" : undefined}
+      onAnimationEnd={landed.onAnimationEnd}
+    >
+      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
         <FoldSummary className="pull-request-thread-head">
           {first === undefined ? null : <PersonRef person={first.by} />}
           {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
@@ -1002,6 +1152,11 @@ function InlineThread({
           <span className="pull-request-quiet">
             {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
           </span>
+          <ThreadMenu
+            thread={thread}
+            here={PULL_REQUEST_THREAD_VIEW.FILES}
+            there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+          />
           <span className="pull-request-thread-turn">
             <DisclosureChevron />
           </span>
@@ -1282,12 +1437,15 @@ function DescriptionPart({
 function ConversationPart({
   parts,
   filters,
+  kept,
   url,
   now,
   picture,
 }: {
   parts: OverviewParts;
   filters: ConversationFiltersControl["filters"];
+  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
+  kept: string | undefined;
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
   now: number;
@@ -1313,7 +1471,7 @@ function ConversationPart({
     );
   }
   const { conversation, earlier } = part.value;
-  const shown = filteredConversation(conversation, filters);
+  const shown = filteredConversation(conversation, filters, kept);
   return (
     <Section
       title="Conversation"
@@ -1552,12 +1710,18 @@ function ConversationView({
   parts,
   url,
   comment,
+  kept,
+  landing,
 }: {
   agentId: string;
   parts: OverviewParts;
   url: string | undefined;
   /** The comment box's words and its own change, held by the tab so the box may come and go. */
   comment: PullRequestComment;
+  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
+  kept: string | undefined;
+  /** The thread to land on, once; none lands on none. */
+  landing: ThreadLanding | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
@@ -1581,13 +1745,16 @@ function ConversationView({
         subject={landed(parts.conversation)?.descriptionSubject}
         picture={picture}
       />
-      <ConversationPart
-        parts={parts}
-        filters={filters.filters}
-        url={url}
-        now={now}
-        picture={picture}
-      />
+      <ThreadLandingProvider value={landing}>
+        <ConversationPart
+          parts={parts}
+          filters={filters.filters}
+          kept={kept}
+          url={url}
+          now={now}
+          picture={picture}
+        />
+      </ThreadLandingProvider>
       {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
     </DetailPage>
   );
@@ -1603,6 +1770,125 @@ function reviewThreadsOf(
   conversation: CodingAgentOverviewConversation | undefined,
 ): readonly ReviewThread[] {
   return conversation?.conversation.flatMap((entry) => entry.threads ?? []) ?? [];
+}
+
+/** A review thread being brought into view in the tab: by its id, on the view it was asked on; counted, so each ask is its own. */
+interface ThreadJump {
+  readonly threadId: string;
+  readonly view: PullRequestThreadView;
+  readonly ask: number;
+}
+
+/** A card brought into sight in the Conversation's own scroller, never by `scrollIntoView`, which would scroll every box around it (panel AGENTS.md). */
+function centreCard(card: HTMLElement): void {
+  const scroller = scrollerOf(card);
+  if (scroller !== undefined) centreWithin(scroller, card);
+}
+
+/**
+ * The tab's door to its review threads by id, and the thread it is bringing
+ * into view. A thread is taken to its other view through the window's own
+ * route for its link (`LINK_PLACE.PULL_REQUEST_THREAD`), as any link to it
+ * would take it, which opens this tab on that view and leaves the ask for
+ * it to take; a tab the route cannot reach, one showing another pull
+ * request by its number, or one outside the window, takes the jump itself.
+ * Once the conversation is read, the thread is found by its id, or said
+ * gone, and the ask let go.
+ */
+function useThreadJumps(input: {
+  agentId: string;
+  planId: string | null;
+  number: number | undefined;
+  shown: boolean;
+  threads: readonly ReviewThread[];
+  conversation: Part<CodingAgentOverviewConversation>;
+  onView: (view: PullRequestView) => void;
+}) {
+  const { agentId, planId, number, shown, threads, conversation } = input;
+  const openPlace = useOpenPlace();
+  const toast = useToast();
+  const [jump, setJump] = useState<ThreadJump | undefined>(undefined);
+  // The thread last brought into the Conversation, which stands through its filters while it is read.
+  const [kept, setKept] = useState<string | undefined>(undefined);
+  const asks = useRef(0);
+  const start = useCallback((threadId: string, view: PullRequestThreadView) => {
+    asks.current += 1;
+    if (view === PULL_REQUEST_THREAD_VIEW.CONVERSATION) setKept(threadId);
+    setJump({ threadId, view, ask: asks.current });
+  }, []);
+  // A link names the agent's own pull request, never one a tab shows by its number.
+  const windowAsk = useWindowThreadReveal(agentId);
+  const taken = number === undefined && shown ? windowAsk : undefined;
+  const latestAsk = useRef(taken);
+  latestAsk.current = taken;
+  useEffect(() => {
+    const standing = latestAsk.current;
+    if (standing === undefined) return;
+    start(standing.reveal.threadId, standing.reveal.view);
+    standing.onRevealed(standing.reveal.ask);
+  }, [taken?.reveal.ask, start]);
+  const place = (thread: ReviewThread, view: PullRequestThreadView): LinkPlace | undefined =>
+    thread.id === undefined || planId === null || number !== undefined
+      ? undefined
+      : { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId, agentId, threadId: thread.id, view };
+  const latestView = useRef(input.onView);
+  latestView.current = input.onView;
+  const jumpTo = (thread: ReviewThread, view: PullRequestThreadView) => {
+    const routed = place(thread, view);
+    if (routed !== undefined && openPlace !== undefined) {
+      openPlace(routed);
+      return;
+    }
+    if (thread.id === undefined) return;
+    latestView.current(view);
+    start(thread.id, view);
+  };
+  const target = jump === undefined ? undefined : threads.find((each) => each.id === jump.threadId);
+  // A thread the conversation read no longer holds is said gone; one a read that failed or is out stands for its Retry.
+  const gone = jump !== undefined && conversation.kind === PART.LANDED && target === undefined;
+  useEffect(() => {
+    if (!gone) return;
+    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    setJump(undefined);
+  }, [gone, toast]);
+  const letGo = useCallback((ask: number) => {
+    setJump((was) => (was?.ask === ask ? undefined : was));
+  }, []);
+  const conversationLanding: ThreadLanding | undefined =
+    jump?.view === PULL_REQUEST_THREAD_VIEW.CONVERSATION && target?.id !== undefined
+      ? {
+          threadId: target.id,
+          ask: jump.ask,
+          scroll: centreCard,
+          onLanded: letGo,
+          onFaded: () => undefined,
+        }
+      : undefined;
+  // Note that a thread whose file the changes no longer hold is shown in the Conversation instead, said so.
+  const filesReveal: ChangesReveal | undefined =
+    jump?.view === PULL_REQUEST_THREAD_VIEW.FILES && target !== undefined
+      ? {
+          thread: target,
+          ask: jump.ask,
+          onLanded: letGo,
+          onGone: (ask) => {
+            if (jump.ask !== ask || target.id === undefined) return;
+            toast({
+              words: THREAD_REVEAL_WORDS.FILE_GONE,
+              tone: TOAST_TONE.FAILED,
+              hold: TOAST_HOLD.FAILED,
+            });
+            latestView.current(PULL_REQUEST_VIEW.CONVERSATION);
+            start(target.id, PULL_REQUEST_THREAD_VIEW.CONVERSATION);
+          },
+        }
+      : undefined;
+  return {
+    jumps: { jump: jumpTo, place } satisfies ThreadJumps,
+    kept,
+    conversationLanding,
+    filesReveal,
+  };
 }
 
 /**
@@ -1738,99 +2024,113 @@ function PullRequestTabBody({
     () => ({ list: threadList, draw: drawThread, refresh: conversationRead.ask }),
     [threadList, drawThread, conversationRead.ask],
   );
+  const threadJumps = useThreadJumps({
+    agentId,
+    planId: control.agents?.find((each) => each.id === agentId)?.planId ?? null,
+    number,
+    shown,
+    threads: threadList,
+    conversation: parts.conversation,
+    onView,
+  });
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
-      <div className="file-view pull-request-tab ph-no-capture">
-        <PullRequestBar
-          published={bar}
-          writes={writes}
-          review={review}
-          pending={pendingReview}
-          reading={reading}
-          onRefresh={refresh}
-        />
-        <PullRequestWriteNote writes={writes} />
-        {none ? (
-          <EmptyState icon={<GitPullRequestIcon />}>
-            {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
-          </EmptyState>
-        ) : (
-          <>
-            <header className="pull-request-header">
-              <HeaderTitle title={title} writes={writes} />
-              <PullRequestHead
-                parts={parts}
-                now={now}
-                repository={repository}
-                shown={shown}
-                writes={writes}
-                editing={{ options, refreshing: pullRequestRead.out }}
-              />
-            </header>
-            <div className="pull-request-tabs">
-              <Tabs<PullRequestView>
-                label="Pull request"
-                tabs={tabsOf(parts, published, bar)}
-                value={view}
-                onChange={onView}
-                ids={ids}
-                inset={TABS_INSET.READING}
-              />
-            </div>
-            <div
-              className="pull-request-view"
-              role="tabpanel"
-              id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-              aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-              hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-            >
-              <ConversationView
-                agentId={agentId}
-                parts={parts}
-                url={title?.url}
-                comment={comment}
-              />
-            </div>
-            <div
-              className="pull-request-view"
-              role="tabpanel"
-              id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-              aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-              hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-            >
-              <DetailPage
-                frame={PAGE_FRAME.TOOLBAR}
-                label="Pull request checks"
-                inset={DETAIL_PAGE_INSET.READING}
+      <ThreadJumpContext.Provider value={threadJumps.jumps}>
+        <div className="file-view pull-request-tab ph-no-capture">
+          <PullRequestBar
+            published={bar}
+            writes={writes}
+            review={review}
+            pending={pendingReview}
+            reading={reading}
+            onRefresh={refresh}
+          />
+          <PullRequestWriteNote writes={writes} />
+          {none ? (
+            <EmptyState icon={<GitPullRequestIcon />}>
+              {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+            </EmptyState>
+          ) : (
+            <>
+              <header className="pull-request-header">
+                <HeaderTitle title={title} writes={writes} />
+                <PullRequestHead
+                  parts={parts}
+                  now={now}
+                  repository={repository}
+                  shown={shown}
+                  writes={writes}
+                  editing={{ options, refreshing: pullRequestRead.out }}
+                />
+              </header>
+              <div className="pull-request-tabs">
+                <Tabs<PullRequestView>
+                  label="Pull request"
+                  tabs={tabsOf(parts, published, bar)}
+                  value={view}
+                  onChange={onView}
+                  ids={ids}
+                  inset={TABS_INSET.READING}
+                />
+              </div>
+              <div
+                className="pull-request-view"
+                role="tabpanel"
+                id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+                aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+                hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
               >
-                <ChecksPart
+                <ConversationView
                   agentId={agentId}
                   parts={parts}
-                  live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                  url={title?.url}
+                  comment={comment}
+                  kept={threadJumps.kept}
+                  landing={threadJumps.conversationLanding}
                 />
-              </DetailPage>
-            </div>
-          </>
-        )}
-        <div
-          className="pull-request-view"
-          role="tabpanel"
-          id={ids(PULL_REQUEST_VIEW.FILES).panel}
-          aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-          hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-        >
-          <AgentChangesTab
-            agentId={agentId}
-            control={control}
-            shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-            repository={repository}
-            tree={tree}
-            threads={changesThreads}
-            lineComments={{ pending: pendingReview, onWritten: written }}
-          />
+              </div>
+              <div
+                className="pull-request-view"
+                role="tabpanel"
+                id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+                aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+                hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+              >
+                <DetailPage
+                  frame={PAGE_FRAME.TOOLBAR}
+                  label="Pull request checks"
+                  inset={DETAIL_PAGE_INSET.READING}
+                >
+                  <ChecksPart
+                    agentId={agentId}
+                    parts={parts}
+                    live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                  />
+                </DetailPage>
+              </div>
+            </>
+          )}
+          <div
+            className="pull-request-view"
+            role="tabpanel"
+            id={ids(PULL_REQUEST_VIEW.FILES).panel}
+            aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+            hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+          >
+            <AgentChangesTab
+              agentId={agentId}
+              control={control}
+              shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+              repository={repository}
+              tree={tree}
+              threads={changesThreads}
+              lineComments={{ pending: pendingReview, onWritten: written }}
+              reveal={threadJumps.filesReveal}
+            />
+          </div>
         </div>
-      </div>
+      </ThreadJumpContext.Provider>
     </ThreadWritesProvider>
   );
 }

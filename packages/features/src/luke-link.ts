@@ -21,7 +21,9 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *   `/plan/<id>/call[/<callId>]`, and a turn of Luke's in its Work,
  *   `/plan/<id>/work/<at>`;
  * - one of its agents, `/plan/<id>/agent/<agentId>`, and under it a worker,
- *   `/worker/<callId>`, its Changes, `/changes`, or a message,
+ *   `/worker/<callId>`, its Changes, `/changes`, one review thread of its
+ *   pull request in one of that tab's views,
+ *   `/changes/<conversation|files>/thread/<threadId>`, or a message,
  *   `/message/<messageId>`; a worker of Luke's own is `/plan/<id>/worker/<callId>`;
  * - an agent with no task, `/agent/<agentId>`, and a message of its own;
  * - the Inbox, `/inbox`, and an item in it under the task or the agent with
@@ -59,6 +61,8 @@ export const LINK_PLACE = {
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
+  /** One review thread of an agent's pull request, in its Pull request tab's Conversation or Files changed, by GitHub's node id for the thread. */
+  PULL_REQUEST_THREAD: "pull-request-thread",
   MESSAGE: "message",
   INBOX: "inbox",
   INBOX_ITEM: "inbox-item",
@@ -71,6 +75,17 @@ export const LINK_PLACE = {
   ISSUE: "issue",
 } as const;
 
+/** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
+export const PULL_REQUEST_THREAD_VIEW = {
+  CONVERSATION: "conversation",
+  FILES: "files",
+} as const;
+
+export type PullRequestThreadView =
+  (typeof PULL_REQUEST_THREAD_VIEW)[keyof typeof PULL_REQUEST_THREAD_VIEW];
+
+const THREAD_VIEWS: ReadonlySet<string> = new Set(Object.values(PULL_REQUEST_THREAD_VIEW));
+
 /** The steps of a link's path, each naming what the step after it is. */
 const STEP = {
   PLAN: "plan",
@@ -82,6 +97,7 @@ const STEP = {
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
+  THREAD: "thread",
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
@@ -173,6 +189,13 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.CHANGES),
     planId: idSchema,
     agentId: idSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.PULL_REQUEST_THREAD),
+    planId: idSchema,
+    agentId: idSchema,
+    threadId: idSchema,
+    view: EffectSchema.Literals(Object.values(PULL_REQUEST_THREAD_VIEW)),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.MESSAGE),
@@ -296,6 +319,7 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
   if (step === STEP.CHANGES && id === undefined && taskId !== undefined) {
     return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId };
   }
+  if (step === STEP.CHANGES && taskId !== undefined) return threadFields(taskId, agentId, rest);
   if (id === undefined || more.length > 0) return undefined;
   if (step === STEP.MESSAGE) return { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId: id };
   if (step === STEP.INBOX && taskId === undefined) {
@@ -305,6 +329,14 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
     return { kind: LINK_PLACE.WORKER, planId: taskId, agentId, callId: id };
   }
   return undefined;
+}
+
+/** A review thread's steps after its agent's Changes, `<view>/thread/<threadId>`; nothing for any other. */
+function threadFields(taskId: string, agentId: string, rest: readonly string[]) {
+  const [, view, step, threadId, ...more] = rest;
+  if (view === undefined || !THREAD_VIEWS.has(view) || step !== STEP.THREAD) return undefined;
+  if (threadId === undefined || more.length > 0) return undefined;
+  return { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId: taskId, agentId, threadId, view };
 }
 
 /** The fields a link's steps after its workspace spell, for the schema to read; nothing where they name no place. */
@@ -391,6 +423,14 @@ function placePath(place: LinkPlace): readonly string[] {
         : [...agentPath(place.planId, place.agentId), STEP.WORKER, place.callId];
     case LINK_PLACE.CHANGES:
       return [...agentPath(place.planId, place.agentId), STEP.CHANGES];
+    case LINK_PLACE.PULL_REQUEST_THREAD:
+      return [
+        ...agentPath(place.planId, place.agentId),
+        STEP.CHANGES,
+        place.view,
+        STEP.THREAD,
+        place.threadId,
+      ];
     case LINK_PLACE.MESSAGE:
       return [...agentPath(place.planId, place.agentId), STEP.MESSAGE, place.messageId];
     case LINK_PLACE.INBOX:

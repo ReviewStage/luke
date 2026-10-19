@@ -12,7 +12,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import {
+  LINK_PLACE,
+  PULL_REQUEST_THREAD_VIEW,
+  type PullRequestThreadView,
+} from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
@@ -61,9 +65,10 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
-import { SIDE_PANEL_TAB } from "./use-side-panel.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,
@@ -1027,6 +1032,50 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.deepEqual(first, { agentId: AGENT_ID, messageId: "msg-7", ask: 1 });
   assert.equal(tab.control().messageReveal, undefined);
+});
+
+test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const link = (view: PullRequestThreadView) =>
+    ({
+      workspace: "acme",
+      place: {
+        kind: LINK_PLACE.PULL_REQUEST_THREAD,
+        planId: TASK.id,
+        agentId: AGENT_ID,
+        threadId: "PRRT_1",
+        view,
+      },
+    }) as const;
+
+  act(() => tab.control().onOpenLink(link(PULL_REQUEST_THREAD_VIEW.FILES)));
+  const first = tab.control().threadReveal;
+  const files = ofPullRequestTab(tab.control().sidePanel.pullRequestViews, { changes: AGENT_ID });
+  act(() => tab.control().onOpenLink(link(PULL_REQUEST_THREAD_VIEW.CONVERSATION)));
+  const second = tab.control().threadReveal;
+  const conversation = ofPullRequestTab(tab.control().sidePanel.pullRequestViews, {
+    changes: AGENT_ID,
+  });
+  act(() => tab.control().onThreadRevealed(1));
+  const stale = tab.control().threadReveal;
+  act(() => tab.control().onThreadRevealed(2));
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+  assert.deepEqual(first, {
+    agentId: AGENT_ID,
+    threadId: "PRRT_1",
+    view: PULL_REQUEST_THREAD_VIEW.FILES,
+    ask: 1,
+  });
+  assert.equal(files, PULL_REQUEST_VIEW.FILES);
+  assert.equal(second?.ask, 2);
+  assert.equal(conversation, PULL_REQUEST_VIEW.CONVERSATION);
+  assert.equal(stale?.ask, 2, "letting go an older ask leaves the newer one standing");
+  assert.equal(tab.control().threadReveal, undefined);
 });
 
 test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {

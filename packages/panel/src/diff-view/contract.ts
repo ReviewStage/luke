@@ -218,10 +218,12 @@ export function sameListSelection(
   );
 }
 
-/** The list as mounted: drawn again for new props, scrolled to a file's header, and taken down. */
+/** The list as mounted: drawn again for new props, scrolled to a file's header or to one of its lines, and taken down. */
 export interface DiffListHandle {
   readonly update: (props: DiffListProps) => void;
   readonly reveal: (path: string) => void;
+  /** Scrolls to a line of a file on the side it counts on, a few lines under the file's header, so what stands under the line, a review thread, follows it into view. */
+  readonly revealLine: (path: string, side: DiffSelection["side"], line: number) => void;
   readonly unmount: () => void;
 }
 
