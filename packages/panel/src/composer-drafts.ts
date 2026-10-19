@@ -17,9 +17,10 @@ import { readKept, writeKept } from "./desktop/folded-groups.js";
  * Every chat keeps an unsent message per conversation, Slack's, Linear's,
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
- * draft agent its first message per plan, and an inbox card its answer per
- * item, at the revision it was written against, the options picked and the
- * fields filled beside its note. A draft is known by where
+ * draft agent its first message per plan, New task its words per workspace
+ * the task starts in, and per issue where it was opened on one, and an inbox
+ * card its answer per item, at the revision it was written against, the
+ * options picked and the fields filled beside its note. A draft is known by where
  * it goes, a place named by the ids of what it goes to, never one key built
  * of them. Sending a draft lets it go, and so does emptying its box, so a
  * place holds a draft only while its box holds something.
@@ -48,11 +49,12 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, or an inbox item. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, or a task not yet started. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
+  NEW_TASK: "newTask",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -89,6 +91,13 @@ const draftPlaceSchema = Schema.Union([
     revision: Schema.Number,
     /** Set where the draft is a message on a settled item's thread rather than the answer to an open one, so neither is ever taken for the other. */
     thread: Schema.optionalKey(Schema.Literal(true)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
+    /** The workspace the task starts in; null before the workspaces are read. */
+    workspaceId: Schema.NullOr(Schema.String),
+    /** The workspace's own issue New task was opened on, whose words are that issue's alone. */
+    issueId: Schema.optionalKey(Schema.String),
   }),
 ]);
 
@@ -344,7 +353,9 @@ export function useDraftsOwner(
  * each word typed.
  */
 const draftedAtom = Atom.withEquality(
-  Atom.make((get): readonly (string | null)[] => get(draftsAtom).map(({ place }) => place.planId)),
+  Atom.make((get): readonly (string | null)[] =>
+    get(draftsAtom).flatMap(({ place }) => ("planId" in place ? [place.planId] : [])),
+  ),
   Equal.equals,
 );
 

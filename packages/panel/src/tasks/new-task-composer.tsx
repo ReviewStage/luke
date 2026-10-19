@@ -1,7 +1,6 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
@@ -26,6 +25,7 @@ import {
 } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
@@ -101,10 +101,15 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  * that was refused keeps the card and its words, with why under it and
  * Retry. Nothing typed here reaches the model as conversation.
  *
- * The card holds its own words, files, issue, repository, and model, so the
- * owner mounts it afresh to start over; the workspace it starts in is the
- * owner's, as is a workspace's own issue it was opened from, which names
- * the task and offers no Linear chip.
+ * The words and files are New task's draft in the workspace it starts in,
+ * or on the workspace's own issue it was opened from, kept apart from the
+ * card (`../composer-drafts.ts`), so a card put away and opened again, or
+ * Home's, finds them where they were left, the words after a relaunch too;
+ * a task started lets them go, as emptying the box does. The card holds
+ * its own issue, repository, and model, so the owner mounts it afresh to
+ * start those over; the workspace it starts in is the owner's, as is a
+ * workspace's own issue it was opened from, which names the task and
+ * offers no Linear chip.
  */
 
 /** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
@@ -254,8 +259,12 @@ export function NewTaskComposer({
   // An issue's Start agent… asks for an agent alone, so its card stands in Agent mode and offers no Plan toggle.
   const agentOnly = newTask.preset?.agent === true;
   const mode = agentOnly ? NEW_TASK_MODE.AGENT : kept;
-  const [words, setWords] = useState("");
-  const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
+  const draft = useDraft({
+    kind: DRAFT_PLACE.NEW_TASK,
+    workspaceId: workspaceId ?? null,
+    ...(from === undefined ? undefined : { issueId: from.id }),
+  });
+  const { text: words, attachments } = draft.draft;
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
   const [choice, choose] = useDefaultChoice(newTask);
@@ -314,7 +323,11 @@ export function NewTaskComposer({
         ...handing,
       })
       .then((refused) => {
-        if (refused === undefined) pressed.current = undefined;
+        if (refused === undefined) {
+          // A task started lets its words go, so the next New task opens empty.
+          pressed.current = undefined;
+          draft.update(() => EMPTY_DRAFT);
+        }
         setNote(
           refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused },
         );
@@ -408,12 +421,13 @@ export function NewTaskComposer({
 
   const composer: AgentComposerControl = {
     draft: words,
-    setDraft: (next) => {
-      setWords(next);
+    setDraft: (text) => {
+      draft.update((was) => ({ ...was, text }));
       setNote(undefined);
     },
     attachments,
-    setAttachments,
+    setAttachments: (next) =>
+      draft.update((was) => ({ ...was, attachments: next(was.attachments) })),
     sending: starting,
     note,
     closed: undefined,

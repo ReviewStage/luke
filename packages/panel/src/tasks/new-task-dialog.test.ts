@@ -14,6 +14,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -26,6 +27,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -38,7 +40,8 @@ import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.
  * over the composer, whose words start a coding agent in Agent mode, or the
  * plan and a call with Luke in Plan mode, with the Plan toggle at its foot. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
- * does, so closing is read as the card leaving the window.
+ * does, so closing is read as the card leaving the window, on a registry
+ * of its own, as one launch of the window holds.
  */
 
 const roots: Root[] = [];
@@ -130,8 +133,11 @@ async function mount(
     ...chooser,
   };
   const links: SettingsLink[] = [];
+  let registry = AtomRegistry.make();
+  let openAgain = () => undefined as void;
   function Owner() {
     const [open, setOpen] = useState(true);
+    openAgain = () => setOpen(true);
     const dialog = createElement(NewTaskDialog, {
       newTask: {
         ...control.newTask,
@@ -179,9 +185,9 @@ async function mount(
   opener.focus();
   const container = document.createElement("div");
   document.body.append(container);
-  const root = createRoot(container);
+  let root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Owner)));
+  act(() => root.render(onRegistry(registry, createElement(Owner))));
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
   const field = (): HTMLElement => composerEditor(document);
@@ -233,7 +239,21 @@ async function mount(
     /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
-      act(() => root.render(createElement(Owner)));
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      await settle();
+    },
+    /** Opens New task again, as another press of it does. */
+    reopen: async () => {
+      act(() => openAgain());
+      await settle();
+    },
+    /** Stands the window again from what it stored, as a relaunch does, the card open. */
+    relaunch: async () => {
+      act(() => root.unmount());
+      registry = AtomRegistry.make();
+      root = createRoot(container);
+      roots.push(root);
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
     },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
@@ -466,6 +486,25 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   assert.equal(card.dialog(), null);
   assert.equal(document.activeElement, card.opener);
   assert.deepEqual(card.starts, []);
+});
+
+test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
+  const card = await mount();
+  card.type("Dark mode");
+  await card.key("Escape");
+  assert.equal(card.dialog(), null);
+
+  await card.reopen();
+  assert.equal(card.field().textContent, "Dark mode");
+  await card.relaunch();
+  assert.equal(card.field().textContent, "Dark mode");
+
+  await card.key("Enter");
+  assert.equal(card.agents[0]?.prompt, "Dark mode");
+  await card.reopen();
+  assert.equal(card.field().textContent, "");
+  await card.relaunch();
+  assert.equal(card.field().textContent, "");
 });
 
 test("Escape in the repository menu closes the menu and leaves the dialog standing", async () => {
