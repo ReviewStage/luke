@@ -27,9 +27,9 @@ import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse.js";
 import { PANEL_TAB } from "./panel-tabs.js";
 import { ApiKeysSection } from "./settings/api-keys-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
-import { AgentChangesTab } from "./tasks/agent-changes-tab.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
@@ -225,7 +225,7 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
     return Promise.resolve(reads === 1 ? UNANSWERED : { pullRequest: null });
   };
   const page = await mount(
-    createElement(AgentChangesTab, {
+    createElement(ChangesTabReading, {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
       control: codingAgentsControl({ readChanges }),
       shown: true,

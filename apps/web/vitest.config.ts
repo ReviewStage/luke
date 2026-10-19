@@ -1,6 +1,13 @@
 import { defineConfig } from "vitest/config";
 import { panelResolve } from "./scripts/panel-build";
 
+/**
+ * The shared tokens' sheet, which vitest answers as its text where a test
+ * imports it `?inline`, rather than as the empty module it answers any other
+ * stylesheet with, so a test reads the palette a page wears its theme in.
+ */
+const TOKEN_STYLESHEET = /\/ui\/src\/tokens\/tokens\.css\?inline$/;
+
 export default defineConfig({
   // The panel's imports answered as the build answers them, so the web app's
   // root draws in a test what it ships. Streamdown is inlined so that its
@@ -9,6 +16,7 @@ export default defineConfig({
   test: {
     name: "web",
     include: ["tests/**/*.test.ts"],
+    css: { include: [TOKEN_STYLESHEET] },
     server: { deps: { inline: ["streamdown"] } },
     // The whole suite stands up a database, and a PGlite test exceeds vitest's
     // 5 s default on a loaded machine; node:test, which ran it before, had no

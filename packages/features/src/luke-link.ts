@@ -37,7 +37,9 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  * - an issue's page, `/issue/<issueId>`, by the id the service minted it.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
- * is read as its task, since nothing of a picture is opened by its link.
+ * is read as its task, and a picture in an Inbox item's words, the item's
+ * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
+ * the item, since nothing of a picture is opened by its link.
  *
  * Note that a link carries ids and nothing else: never a name, a token, or
  * any of the thing's words, since a link is pasted where anyone may read it
@@ -282,11 +284,21 @@ function parsedUrl(target: string): URL | undefined {
   }
 }
 
+/** Whether the steps after an Inbox item's id name one of its pictures, `files/<picture>`, which opens the item. */
+function namesItemPicture(more: readonly string[]): boolean {
+  const [step, id, ...after] = more;
+  return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
+}
+
 /** The steps after a task's id: a version, a page, the Call tab or a call, a turn, an agent's, or a worker of Luke's. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId: taskId };
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
+  // A picture in an item's words opens the item, and nothing of the picture.
+  if (step === STEP.INBOX && id !== undefined && namesItemPicture(more)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
+  }
   if (id === undefined || more.length > 0) return undefined;
   switch (step) {
     case STEP.VERSION:
@@ -320,6 +332,9 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
     return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId };
   }
   if (step === STEP.CHANGES && taskId !== undefined) return threadFields(taskId, agentId, rest);
+  if (step === STEP.INBOX && taskId === undefined && id !== undefined && namesItemPicture(more)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
+  }
   if (id === undefined || more.length > 0) return undefined;
   if (step === STEP.MESSAGE) return { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId: id };
   if (step === STEP.INBOX && taskId === undefined) {

@@ -91,7 +91,7 @@ test("a push that changes only the desktop app or the docs since the last deploy
   const deployed = commit(root, "apps/web/package.json");
   commit(root, "apps/desktop/src/main/main.ts");
   assert.equal(decide(root, deployed), VERDICT.SKIP);
-  commit(root, "docs/proposals/factory/index.html");
+  commit(root, "docs/DESIGN.md");
   assert.equal(decide(root, deployed), VERDICT.SKIP);
 });
 

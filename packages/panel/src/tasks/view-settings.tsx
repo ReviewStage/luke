@@ -22,6 +22,7 @@ import {
   SETTINGS_ROW_DENSITY,
   SettingsRow,
 } from "@luke/ui";
+import { drawnDark } from "@luke/ui/appearance";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel.js";
@@ -180,12 +181,9 @@ const APPEARANCE_OPTIONS = [
   { value: APPEARANCE.DARK, label: "Dark" },
 ] as const;
 
-/** The query the window's appearance answers, which the Text group opens on. */
-const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
-
-/** The appearance the window is drawn in now. */
+/** The appearance the window is drawn in now, which the Text group opens on. */
 function currentAppearance(): Appearance {
-  return window.matchMedia(DARK_APPEARANCE).matches ? APPEARANCE.DARK : APPEARANCE.LIGHT;
+  return drawnDark() ? APPEARANCE.DARK : APPEARANCE.LIGHT;
 }
 
 /** A group of the popover's rows under its name, set apart from the one before by a rule. */

@@ -2723,21 +2723,11 @@ ul.actor-stack {
    Neon's two greens, and Mercury's near-white on dark and near-black on
    light (`@luke/ui`'s `marks/provider-mark.tsx`). */
 :root {
-  --integration-ink-executor: #fff;
-  --integration-ink-mercury: #f4f5f9;
-  --integration-ink-neon: #34d59a;
-  --integration-ink-notion: #fff;
-  --integration-ink-sentry: #fff;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --integration-ink-executor: #000;
-    --integration-ink-mercury: #272735;
-    --integration-ink-neon: #37c38f;
-    --integration-ink-notion: #000;
-    --integration-ink-sentry: #181225;
-  }
+  --integration-ink-executor: light-dark(#000, #fff);
+  --integration-ink-mercury: light-dark(#272735, #f4f5f9);
+  --integration-ink-neon: light-dark(#37c38f, #34d59a);
+  --integration-ink-notion: light-dark(#000, #fff);
+  --integration-ink-sentry: light-dark(#181225, #fff);
 }
 
 .integration-mark-executor {

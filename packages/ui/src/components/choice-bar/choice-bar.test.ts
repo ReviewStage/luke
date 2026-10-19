@@ -25,7 +25,8 @@ import {
  * group, and neither with a modifier held nor in a disabled bar; a disabled
  * option is not chosen; a count's glyph says its state in words; the
  * app's `data-` attributes reach the bar; and a bar folding together folds
- * every option once their names no longer fit, and unfolds once they would.
+ * every option once their names no longer fit, and unfolds once they would;
+ * and an option that says more hangs the app's hint saying it.
  */
 
 declare global {
@@ -408,4 +409,31 @@ test("a bar folding together folds every option once their names no longer fit i
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   }
+});
+
+test("an option that says more hangs the app's hint saying it, and one that says nothing more hangs none", () => {
+  const heard: (string | undefined)[] = [];
+  function Hint({ label, children }: { label: string | undefined; children: ReactElement }) {
+    heard.push(label);
+    return createElement("span", { "data-hint": label }, children);
+  }
+  const page = render(
+    createElement(ChoiceBar<View>, {
+      label: "Pull request",
+      items: [
+        { value: VIEW.CONVERSATION, label: "Conversation" },
+        { value: VIEW.FILES, label: "Files", count: linesCount(50, 5), hint: "+60 −7 total" },
+      ],
+      value: VIEW.CONVERSATION,
+      onChange: () => undefined,
+      look: CHOICE_BAR_LOOK.FILL,
+      hint: Hint,
+    }),
+  );
+  assert.equal(
+    option(page, "Files").closest("[data-hint]")?.getAttribute("data-hint"),
+    "+60 −7 total",
+  );
+  assert.equal(option(page, "Conversation").closest("[data-hint]"), null);
+  assert.ok(heard.every((label) => label === "+60 −7 total"));
 });

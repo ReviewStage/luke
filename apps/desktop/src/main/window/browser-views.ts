@@ -16,7 +16,7 @@ import { BrowserWindow, type Session, session, type WebContents, WebContentsView
  *
  * A Browser tab's page is any site on the web, the Mac's own `localhost`
  * among them, so it is drawn in a `WebContentsView` of its own rather than in
- * the panel's page (`docs/proposals/browser-tab.md` §2): the panel's
+ * the panel's page: the panel's
  * hardened posture is left as it is, and the page runs sandboxed, isolated,
  * with no preload and no Node, in a partition of its own, so no cookie of a
  * site ever shares a jar with Luke's own. Every permission a page asks for

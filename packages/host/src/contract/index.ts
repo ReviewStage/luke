@@ -4,6 +4,7 @@ import type {
   InferContractRouterInputs,
   InferContractRouterOutputs,
 } from "@orpc/contract";
+import { accountActsContract } from "./account.js";
 import { accountAskActsContract } from "./account-asks.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
@@ -13,6 +14,7 @@ import { integrationActsContract } from "./integrations.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
+import { settingsActsContract } from "./settings.js";
 import { terminalActsContract } from "./terminals.js";
 import { voiceRuntimeActsContract } from "./voice-runtime.js";
 import { workspaceActsContract } from "./workspaces.js";
@@ -30,6 +32,7 @@ import { workspaceActsContract } from "./workspaces.js";
 export type { ChatShown } from "./agents.js";
 export { ACT_ERROR } from "./base.js";
 export {
+  ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
   AGENT_ACT_KIND,
   AUTOMATION_ACT_KIND,
@@ -41,14 +44,17 @@ export {
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
   type PortActKind,
+  SETTINGS_ACT_KIND,
   TERMINAL_ACT_KIND,
   VOICE_RUNTIME_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
+export type { SettingUpdatePayload } from "./settings.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {
+  ...accountActsContract,
   ...accountAskActsContract,
   ...agentActsContract,
   ...automationActsContract,
@@ -57,6 +63,7 @@ export const actContract = {
   ...integrationActsContract,
   ...issueActsContract,
   ...macTerminalActsContract,
+  ...settingsActsContract,
   ...terminalActsContract,
   ...voiceRuntimeActsContract,
   ...workspaceActsContract,

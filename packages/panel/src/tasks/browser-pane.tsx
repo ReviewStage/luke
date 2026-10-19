@@ -41,8 +41,7 @@ import type { OpenBrowser } from "./use-side-panel.js";
  * tooltip over it, whether drawn over the document's body or from inside
  * the window's root (`coveredAt`). Otherwise a still of the page is caught first and drawn
  * in its place, then the view is put out of sight, so the change cannot be
- * seen and the layer over it reads as standing over the page
- * (`docs/proposals/browser-tab.md` §2). The pane watches for that once a
+ * seen and the layer over it reads as standing over the page. The pane watches for that once a
  * frame while it is drawn, since a pane's motion is played on transforms
  * that no observer hears.
  *

@@ -84,7 +84,7 @@ const UNREACHED = {
   settings: {},
   tasks: {},
   codingAgents: {},
-} as unknown as HostActDependencies<unknown>;
+} as unknown as HostActDependencies;
 
 /** A platform table of every kind the host's rows leave, each recording that it ran. */
 function platformRecording(ran: ActKind[]): PlatformActRows<unknown> {

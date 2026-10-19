@@ -119,6 +119,8 @@ import {
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
+import { useInboxPictureDrawer } from "./inbox-pictures.js";
+import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
 import { usePlanPictureDrawer } from "./plan-pictures.js";
@@ -199,11 +201,26 @@ const PICTURE_ELEMENT = {
   CAPTION: "caption",
 } as const;
 
-/** The mention's element and the picture's, let through the drawing's sanitizer with what each carries. */
+/** The element a paragraph holding a link alone is drawn as in words drawn as a document, and the attributes that carry the link's target and its words. */
+const LONE_LINK_ELEMENT = {
+  TAG: "luke-lone-link",
+  TARGET: "to",
+  WORDS: "words",
+} as const;
+
+/** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
+const PICTURE_ROW_ELEMENT = {
+  TAG: "luke-pictures",
+  CLASS: "transcript-pictures",
+} as const;
+
+/** The mention's element and the picture's, and a document's paragraphs of either, let through the drawing's sanitizer with what each carries. */
 const MENTION_TAGS = {
   [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
   [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS, PICTURE_ELEMENT.CAPTION],
   [LINK_GLUE.TAG]: [],
+  [LONE_LINK_ELEMENT.TAG]: [LONE_LINK_ELEMENT.TARGET, LONE_LINK_ELEMENT.WORDS],
+  [PICTURE_ROW_ELEMENT.TAG]: [],
 };
 
 /** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
@@ -276,9 +293,10 @@ function definitionsIn(
  * names it as a link to where it points and never fetches it, because a
  * picture an agent writes is a request to wherever its address points the
  * moment the tab opens, and a model's words must make none; the pictures an
- * agent shows are its `show_image` calls'. The one picture drawn is a plan's
- * own, inside the plan's card, which is read through the host
- * (`plan-pictures.tsx`) rather than from its address. Note that the mark is
+ * agent shows are its `show_image` calls'. The pictures drawn are a plan's
+ * own, inside the plan's card, and an Inbox item's own, inside its pane,
+ * each read through the host (`plan-pictures.tsx`, `inbox-pictures.tsx`)
+ * rather than from its address. Note that the mark is
  * made on the markdown, before the drawing's hardening reads a picture at
  * all, which draws a relative one as a placeholder of its own and an
  * absolute one as nothing.
@@ -316,11 +334,74 @@ function glueMentions(node: MarkdownNode): void {
   });
 }
 
+/** Whether a node of a paragraph says nothing: a run of whitespace, or a line break. */
+function blank(node: MarkdownNode): boolean {
+  return node.type === "break" || (node.type === "text" && (node.value ?? "").trim() === "");
+}
+
+/** Whether a node of a paragraph is a picture, written whole or by reference. */
+function isPicture(node: MarkdownNode): boolean {
+  return node.type === "image" || node.type === "imageReference";
+}
+
+/**
+ * Marks each paragraph of words drawn as a document that holds pictures
+ * alone, the line breaks and spaces between them aside, to be drawn as a
+ * row of them, so two written next to each other, a before and an after,
+ * stand side by side. Note that the spaces between them go, since a row
+ * lays out its pictures and nothing else.
+ */
+function markPictureRows(node: MarkdownNode): void {
+  const said = (node.children ?? []).filter((child) => !blank(child));
+  if (node.type === "paragraph" && said.length > 0 && said.every(isPicture)) {
+    node.data = { hName: PICTURE_ROW_ELEMENT.TAG };
+    node.children = said;
+    return;
+  }
+  for (const child of node.children ?? []) markPictureRows(child);
+}
+
+/**
+ * Marks each paragraph of words drawn as a document that holds one link
+ * and nothing else, the spaces around it aside, to be drawn as the card of
+ * what the link names (`lone-link-card.tsx`). Note that only a paragraph
+ * standing on its own counts, never one in a list or a quote, where a
+ * link is one of a run rather than a line of its own.
+ */
+function markLoneLinks(tree: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
+  for (const paragraph of tree.children ?? []) {
+    const said = (paragraph.children ?? []).filter((child) => !blank(child));
+    const [link] = said;
+    if (paragraph.type !== "paragraph" || said.length !== 1 || link === undefined) continue;
+    const target =
+      link.type === "link"
+        ? link.url
+        : link.type === "linkReference" && link.identifier !== undefined
+          ? definitions.get(link.identifier)?.url
+          : undefined;
+    if (target === undefined) continue;
+    paragraph.data = {
+      hName: LONE_LINK_ELEMENT.TAG,
+      hProperties: { [LONE_LINK_ELEMENT.TARGET]: target, [LONE_LINK_ELEMENT.WORDS]: wordsOf(link) },
+    };
+  }
+}
+
 /** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */
 function markLinks(tree: MarkdownNode): void {
   const definitions = definitionsIn(tree);
   markMentions(tree, definitions);
   markPictures(tree, definitions);
+  glueMentions(tree);
+}
+
+/** The step that marks words drawn as a document: a transcript's marks, then its rows of pictures and its links standing alone. */
+function markDocument(tree: MarkdownNode): void {
+  const definitions = definitionsIn(tree);
+  markMentions(tree, definitions);
+  markPictures(tree, definitions);
+  markPictureRows(tree);
+  markLoneLinks(tree, definitions);
   glueMentions(tree);
 }
 
@@ -330,17 +411,22 @@ const UNNAMED_PICTURE = "Picture";
 /**
  * A picture in a transcript's words: a plan's own picture drawn as the plan
  * draws it where its words stand inside `PlanPictures`, as the plan's card
- * does; any other a link to where it points, with the picture's glyph,
- * never drawn.
+ * does, and an Inbox item's own where they stand inside `InboxPictures`
+ * (`inbox-pictures.tsx`); any other a link to where it points, with the
+ * picture's glyph, never drawn.
  */
 function PictureElement({ node }: ExtraProps): ReactNode {
   const planPicture = usePlanPictureDrawer();
+  const inboxPicture = useInboxPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
   const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
   const caption = String(node?.properties[PICTURE_ELEMENT.CAPTION] ?? "");
   if (planPicture !== undefined && planAttachmentOf(address) !== undefined) {
     return planPicture(address, said, caption === "" ? undefined : caption);
   }
+  // An Inbox item's own picture, where its words stand inside `InboxPictures`.
+  const itemPicture = inboxPicture?.(address, said, caption === "" ? undefined : caption);
+  if (itemPicture !== undefined) return itemPicture;
   const words = said === "" ? UNNAMED_PICTURE : said;
   return (
     <TranscriptLink href={address === "" ? undefined : address} words={words}>
@@ -350,8 +436,27 @@ function PictureElement({ node }: ExtraProps): ReactNode {
   );
 }
 
+/** The plugin that marks a transcript's links. */
+function markLinksStep(): (tree: MarkdownNode) => void {
+  return markLinks;
+}
+
+/**
+ * The plugin that marks a document's links, pictures, and paragraphs. Note
+ * that each step is a function named apart, because the library keeps one
+ * processor per list of plugins and tells two lists apart by their plugins'
+ * names alone, so two unnamed steps would draw a transcript with a
+ * document's processor.
+ */
+function markDocumentStep(): (tree: MarkdownNode) => void {
+  return markDocument;
+}
+
 /** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
-const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
+const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), markLinksStep];
+
+/** The steps words drawn as a document are read with: a transcript's, with the document's own marks. */
+const DOCUMENT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), markDocumentStep];
 
 /**
  * The steps a message someone typed is read with: a transcript's, with each
@@ -360,11 +465,20 @@ const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () =>
  * and wrong for words a person typed line by line into a box whose Enter is
  * a new line, as GitHub keeps a comment's line breaks for the same reason.
  */
-const TYPED_REMARK_PLUGINS = [
+const TYPED_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkBreaks, markLinksStep];
+
+/** The steps a document someone typed is read with: a typed message's, with the document's own marks. */
+const TYPED_DOCUMENT_REMARK_PLUGINS = [
   ...Object.values(defaultRemarkPlugins),
   remarkBreaks,
-  () => markLinks,
+  markDocumentStep,
 ];
+
+/** The steps words are read with, by whether a person typed them and whether they are drawn as a document. */
+function remarkPluginsFor(typed: boolean, asDocument: boolean) {
+  if (asDocument) return typed ? TYPED_DOCUMENT_REMARK_PLUGINS : DOCUMENT_REMARK_PLUGINS;
+  return typed ? TYPED_REMARK_PLUGINS : TRANSCRIPT_REMARK_PLUGINS;
+}
 
 /**
  * A link in a transcript's words: the chip that opens what it names
@@ -384,6 +498,18 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
       </TranscriptLink>
     )
   );
+}
+
+/** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
+function LoneLinkElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
+  const target = String(node?.properties[LONE_LINK_ELEMENT.TARGET] ?? "");
+  const words = String(node?.properties[LONE_LINK_ELEMENT.WORDS] ?? "");
+  return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
+}
+
+/** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
+function PictureRowElement({ children }: ExtraProps & { children?: ReactNode }): ReactNode {
+  return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
@@ -410,6 +536,8 @@ const TRANSCRIPT_COMPONENTS: Components = {
   [MENTION_ELEMENT.TAG]: MentionElement,
   [PICTURE_ELEMENT.TAG]: PictureElement,
   [LINK_GLUE.TAG]: LinkGlueElement,
+  [LONE_LINK_ELEMENT.TAG]: LoneLinkElement,
+  [PICTURE_ROW_ELEMENT.TAG]: PictureRowElement,
   img: () => null,
 };
 
@@ -533,13 +661,16 @@ export function TranscriptWords({
   text,
   element,
   typed = false,
+  asDocument = false,
 }: {
   text: string;
   element?: TranscriptElement | undefined;
   /** Whether a person typed the words, whose every line break is kept (`TYPED_REMARK_PLUGINS`). */
   typed?: boolean | undefined;
+  /** Whether the words are drawn as a document, as an Inbox item's are: pictures written next to each other side by side, and a link alone in its paragraph as its card (`lone-link-card.tsx`). */
+  asDocument?: boolean | undefined;
 }): ReactNode {
-  const remarkPlugins = typed ? TYPED_REMARK_PLUGINS : TRANSCRIPT_REMARK_PLUGINS;
+  const remarkPlugins = remarkPluginsFor(typed, asDocument);
   if (element === undefined) {
     return (
       <TranscriptMarkdownSource markdown={text}>

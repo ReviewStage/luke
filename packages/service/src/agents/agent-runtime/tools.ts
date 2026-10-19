@@ -1,7 +1,7 @@
 /**
  * tools.ts -- every tool Luke offers any of its agents, and the roles each one serves.
  *
- * The one registry of the agent runtime's tools (`docs/proposals/one-agent-runtime.md`):
+ * The one registry of the agent runtime's tools:
  * each tool, named once by the name a model calls it by
  * (`@luke/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept

@@ -1053,7 +1053,10 @@
    stand on the theme's ground, as a diff in that theme does; every run
    coloured in the theme names its own ink. */
 .code-lines-ground {
-  --code-ground: var(--theme-ground-dark, var(--luke-color-ground));
+  --code-ground: light-dark(
+    var(--theme-ground-light, var(--luke-color-ground)),
+    var(--theme-ground-dark, var(--luke-color-ground))
+  );
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -1062,11 +1065,6 @@
   background: var(--code-ground);
 }
 
-@media (prefers-color-scheme: light) {
-  .code-lines-ground {
-    --code-ground: var(--theme-ground-light, var(--luke-color-ground));
-  }
-}
 .code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
@@ -2445,23 +2443,22 @@
   max-width: 100%;
   overflow: hidden;
   padding: 1px var(--luke-space-8);
-  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
+  border: 1px solid;
+  border-color: light-dark(
+    var(--label-edge-light, var(--luke-color-border)),
+    var(--label-edge-dark, var(--luke-color-border))
+  );
   border-radius: var(--luke-radius-full);
-  background: var(--label-fill-dark, transparent);
-  color: var(--label-words-dark, var(--luke-color-text-muted));
+  background: light-dark(var(--label-fill-light, transparent), var(--label-fill-dark, transparent));
+  color: light-dark(
+    var(--label-words-light, var(--luke-color-text-muted)),
+    var(--label-words-dark, var(--luke-color-text-muted))
+  );
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
   line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@media (prefers-color-scheme: light) {
-  .pull-request-label {
-    border-color: var(--label-edge-light, var(--luke-color-border));
-    background: var(--label-fill-light, transparent);
-    color: var(--label-words-light, var(--luke-color-text-muted));
-  }
 }
 
 /* The labels at the end of the header's line of people, after the
@@ -3360,14 +3357,7 @@
    transcript's fenced block is coloured the same way. */
 .code-line-text > span,
 .transcript-code-body span {
-  color: var(--run-dark, var(--code-text));
-}
-
-@media (prefers-color-scheme: light) {
-  .code-line-text > span,
-  .transcript-code-body span {
-    color: var(--run-light, var(--code-text));
-  }
+  color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
 }
 
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
@@ -5846,6 +5836,30 @@ button.subagent-line:hover {
    words, below, whose room around it is the card's gap between blocks. */
 [data-inbox-image] > .picture-block {
   margin: 0;
+}
+
+/* Pictures standing alone in a paragraph of words drawn as a document
+   (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
+   by side, sharing the column's width, so a before and an after read as a
+   pair; each still hugs its own picture, and none grows past its own size. */
+.transcript-pictures {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  margin: var(--luke-space-12) 0;
+}
+
+.transcript-pictures > .picture-block {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+/* A link standing alone in a paragraph of a document (lone-link-card.tsx):
+   its card of one row, a pull request's or a page's, or the Code tab's card
+   of the lines it names, standing apart from the words around it. */
+.lone-link-card {
+  margin: var(--luke-space-12) 0;
 }
 
 /* A picture in written words (`picture-block.tsx`): its own block, at its

@@ -239,7 +239,7 @@ const AutomationKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.St
 
 /**
  * What an account asks to do with an automation, each allowed by its own
- * rule (`docs/proposals/automations-scope.md`, D2): a personal automation
+ * rule: a personal automation
  * is its creator's, which the workspace's owners and admins see, pause, and
  * delete; a workspace's every member sees, runs, and pauses, and its
  * creator, owners, and admins change and delete.

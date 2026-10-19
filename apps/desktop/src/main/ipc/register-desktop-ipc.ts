@@ -22,6 +22,7 @@ import {
   ipcMain,
   MessageChannelMain,
   type WebContents,
+  webContents,
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
@@ -173,23 +174,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const router = createHostActRouter<WebContents>(
     {
-      account: {
-        host: operator.host,
-        haltSessionReplay: operator.haltSessionReplay,
-        resumeSessionReplay: operator.resumeSessionReplay,
-      },
-      settings: {
-        host: operator.host,
-        reporterOf: windows.reporterOf,
-        lastSettings: () => operator.settings(),
-        sideEffects: clientSettingSideEffects({
-          hotkeys,
-          applyLoginItem: windows.applyLoginItem,
-          mediaDuck: native.mediaDuck,
-        }),
-        stopChordHolder: (chord) =>
-          hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
-      },
       tasks: {
         host: operator.host,
         openExternal: config.openExternal,
@@ -258,12 +242,34 @@ export function registerDesktopIpc(services: DesktopServices): void {
     run,
     actPort: createActPortHandler(
       {
+        account: {
+          host: operator.host,
+          haltSessionReplay: operator.haltSessionReplay,
+          resumeSessionReplay: operator.resumeSessionReplay,
+        },
         accountAsks: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },
         issues: { host: operator.host },
+        settings: {
+          host: operator.host,
+          // The port names its window as an unknown sender; only a window of
+          // this process's own is one the reporter is minted for.
+          reporterOf: (actor) => {
+            const contents = webContents.getAllWebContents().find((open) => open === actor.sender);
+            return contents === undefined ? undefined : windows.reporterOf(contents);
+          },
+          lastSettings: () => operator.settings(),
+          sideEffects: clientSettingSideEffects({
+            hotkeys,
+            applyLoginItem: windows.applyLoginItem,
+            mediaDuck: native.mediaDuck,
+          }),
+          stopChordHolder: (chord) =>
+            hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
+        },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,

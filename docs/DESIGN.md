@@ -102,7 +102,13 @@ so the window and the site draw one control at two densities rather than two
 controls. A root, and every overlay it portals into the body, carries two
 attributes (`surfaceAttributes` in `surface.ts`): `data-luke-profile`,
 `desktop` or `web`, which picks the density, and `data-luke-theme`, `dark`,
-`light`, or, on the desktop alone, `system`, which picks the palette.
+`light`, or, on the desktop alone, `system`, which picks the palette. Both
+roots follow the Theme setting: the desktop's stays `system` while Electron
+steers the Mac's appearance to the setting, and the web's wears the setting
+resolved, following the machine under System (`apps/web/src/app/web-appearance.tsx`).
+A sheet picks a colour of its own by `light-dark()`, which the theme decides
+through `color-scheme`, never by `prefers-color-scheme`, and script asks
+`@luke/ui/appearance`.
 
 The tokens come in three layers. The base scale (`scale.css`) names a value
 by what it is, so `--luke-space-16` is sixteen pixels in either app. A role

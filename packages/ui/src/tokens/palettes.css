@@ -253,7 +253,8 @@
   --luke-color-text-body: rgba(255, 255, 255, 0.92);
   --luke-color-ink: #fff;
   --luke-color-ink-inverse: var(--luke-color-ground);
-  --luke-color-accent-text: #0d6e80;
+  /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
+  --luke-color-accent-text: #15b3d0;
 
   --luke-color-ground: #08090b;
   /* A step above the page (1.06:1) lets a card read before its border does. */

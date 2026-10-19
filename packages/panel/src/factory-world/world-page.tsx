@@ -1,5 +1,6 @@
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import { taskBlastRadiusOf } from "@luke/ui/factory-campus";
 import { blastRadiusOf, factoryWorldViewOf, SIGNAL_COLOR } from "@luke/ui/factory-world";
 import { FactoryIcon } from "lucide-react";
@@ -80,17 +81,11 @@ const SIGNALS = cssCustomProperties({
   "--world-touched": SIGNAL_COLOR.SELECTION,
 });
 
-const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
-
 /** Whether the window draws in its dark appearance, kept as it flips. */
 function useDarkAppearance(): boolean {
   return useSyncExternalStore(
-    (changed) => {
-      const query = window.matchMedia(DARK_APPEARANCE);
-      query.addEventListener("change", changed);
-      return () => query.removeEventListener("change", changed);
-    },
-    () => window.matchMedia(DARK_APPEARANCE).matches,
+    (changed) => onDrawnThemeChange(changed),
+    () => drawnDark(),
   );
 }
 

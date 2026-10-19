@@ -1034,8 +1034,7 @@ const DELETE_REFUSED: ActionResult = {
  * What the Inbox holds, by workspace. Main reads what waits across every
  * task the account can reach, and the window lists one workspace at a time,
  * so everything the window lists of the Inbox, its rows, the sidebar's
- * count, and Home's waiting list, is the listed workspace's share
- * (`docs/proposals/workspace-clarity.md`, decision 11). A task is placed by
+ * count, and Home's waiting list, is the listed workspace's share. A task is placed by
  * the workspace the account's task list says it is in, so an item of a task
  * not yet listed is in no workspace's share until it is.
  */
