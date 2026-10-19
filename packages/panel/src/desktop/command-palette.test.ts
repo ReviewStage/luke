@@ -213,17 +213,17 @@ function field(): HTMLInputElement {
   return input;
 }
 
-/** The toggles in the group named Filter. */
-function filterChips(): HTMLButtonElement[] {
-  const group = document.querySelector('fieldset[aria-label="Filter"]');
+/** The options of the radio group named Filter. */
+function filterOptions(): HTMLButtonElement[] {
+  const group = document.querySelector('[role="radiogroup"][aria-label="Filter"]');
   assert.ok(group, "the filters are drawn");
-  return [...group.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
+  return [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
 }
 
 function chooseFilter(name: string): void {
-  const chip = filterChips().find((each) => each.textContent === name);
-  assert.ok(chip, `the ${name} filter is drawn`);
-  act(() => chip.click());
+  const option = filterOptions().find((each) => each.textContent === name);
+  assert.ok(option, `the ${name} filter is drawn`);
+  act(() => option.click());
 }
 
 function type(words: string): void {
@@ -335,9 +335,9 @@ test("choosing a page opens Settings on that page", () => {
   assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
 });
 
-/** The filter whose chip stands pressed. */
+/** The filter standing checked. */
 function chosenFilter(): string | null | undefined {
-  return filterChips().find((each) => each.getAttribute("aria-pressed") === "true")?.textContent;
+  return filterOptions().find((each) => each.getAttribute("aria-checked") === "true")?.textContent;
 }
 
 /** Presses a key in the search field, answering whether the field kept it for itself. */
@@ -406,6 +406,28 @@ test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or n
   key(FORWARD);
   assert.equal(chosenFilter(), "All", "stepping on from the last filter wraps to All");
   assert.equal(field().value, "invite", "the words stay as typed");
+});
+
+test("a press on a filter chooses it and leaves the caret in the field, no filter taking the keyboard", () => {
+  openPalette();
+  type("invite");
+  act(() => field().focus());
+  assert.deepEqual(
+    filterOptions().filter((each) => each.tabIndex >= 0),
+    [],
+    "no filter is a tab stop",
+  );
+  const agents = filterOptions().find((each) => each.textContent === "Agents");
+  assert.ok(agents);
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    agents.dispatchEvent(down);
+  });
+  assert.equal(down.defaultPrevented, true, "the press does not move the keyboard");
+  act(() => agents.click());
+  assert.equal(chosenFilter(), "Agents");
+  assert.equal(document.activeElement, field(), "the caret stays in the field");
+  assert.equal(field().value, "invite");
 });
 
 test("the footer names the keys that step the filters now: ← → while the field is empty, ⌘[ ⌘] once typed", () => {
@@ -1690,7 +1712,7 @@ test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads no
   await settle();
   type("login redirect");
 
-  assert.ok(!filterChips().some((chip) => chip.textContent === "Issues"));
+  assert.ok(!filterOptions().some((option) => option.textContent === "Issues"));
   assert.deepEqual(rows(), []);
   assert.deepEqual(asked, []);
 });
