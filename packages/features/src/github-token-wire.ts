@@ -15,10 +15,6 @@ import { countedNumber } from "./service-wire.js";
  * draws the service's word rather than its own guess.
  */
 
-/** GitHub's page that makes a classic token with the scopes Luke asks for already ticked. */
-export const GITHUB_TOKEN_CREATE_URL =
-  "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=Luke";
-
 /** Where a stored token stands. */
 export const GITHUB_TOKEN_STATUS = {
   /** GitHub accepted the token at its save, and has refused it at no use since. */
@@ -60,7 +56,7 @@ const GITHUB_TOKEN_BOUNDS = {
 } as const;
 
 /** What the member sees of their token: never the token, only what tells it apart. */
-export const githubTokenSummarySchema = EffectSchema.Struct({
+const githubTokenSummarySchema = EffectSchema.Struct({
   /** The GitHub login the token belongs to, as GitHub answered it at the save. */
   login: EffectSchema.String,
   /** The token's prefix and its last four characters, as `ghp_…abcd`. */
