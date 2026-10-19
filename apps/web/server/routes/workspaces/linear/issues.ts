@@ -1,9 +1,7 @@
-import { workspaceLinearAppSeams } from "@luke/service/integrations/integration-seams";
-import { workspaceLinearApp } from "@luke/service/integrations/workspace-linear-app";
-import { routeFromHttpRouter } from "../../../route-effect.js";
+import { orpcRoute } from "../../../orpc-route.js";
 
 /**
- * The Linear issues a member of a workspace may start a plan from (POST). The logic lives in
- * `packages/service/src/integrations/workspace-linear-app.ts`; this file only hands it the deployment's real seams.
+ * The Linear issues a member of a workspace may start a plan from (POST), answered by the hosted oRPC router
+ * (`packages/service/src/integrations/workspace-linear-procedures.ts`).
  */
-export default routeFromHttpRouter(workspaceLinearApp(workspaceLinearAppSeams()));
+export default orpcRoute;

@@ -15,11 +15,6 @@ import {
   callAnswered,
 } from "./account-call.js";
 import {
-  ACCOUNT_INBOX_ARCHIVED,
-  ACCOUNT_INBOX_QUERY,
-  accountInboxAnswerSchema,
-} from "./account-inbox-wire.js";
-import {
   CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
   type ChatWriteRequest,
@@ -27,7 +22,6 @@ import {
 } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
@@ -103,11 +97,13 @@ import {
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxImageTypeSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
@@ -115,6 +111,7 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
+import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
@@ -155,6 +152,7 @@ import {
   agentStopPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
+  inboxClosePath,
   inboxItemPath,
   inboxItemReadPath,
   inboxMessagesPath,
@@ -859,22 +857,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
-  accountInbox(
-    after: string,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
-          [ACCOUNT_INBOX_QUERY.AFTER]: after,
-          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
-        })}`,
-      }),
-      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
@@ -917,6 +899,18 @@ export class HostedCodingAgentClient {
         }
         return readImage(answer.response);
       },
+    );
+  }
+
+  /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime: answered at once, never held. Unanswered for
+   * anything that went wrong, which the caller answers by asking again.
+   */
+  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
+      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
     );
   }
 
@@ -1076,6 +1070,28 @@ export class HostedCodingAgentClient {
       this.#call.send({
         method: HTTP_METHOD.POST,
         path: inboxItemPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * Closes one open item of the inbox without an answer, against the
+   * revision the window drew, under the key the window made for the close,
+   * which a retry carries again, and answers the item as it then stands with
+   * whether the close was taken, as an answer does.
+   */
+  closeInbox(
+    itemId: string,
+    request: InboxCloseRequest,
+  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxCloseRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxClosePath(itemId),
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),

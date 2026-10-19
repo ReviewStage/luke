@@ -81,6 +81,7 @@ const NAMES: ChatNames = {
     ],
   ]),
   tasks: new Map([[TASK_ID, "Teammate invitations"]]),
+  agentTasks: new Map([[AGENT_ID, TASK_ID]]),
   selfName: "Dean Stratakos",
 };
 

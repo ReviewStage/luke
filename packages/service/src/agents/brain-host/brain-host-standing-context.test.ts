@@ -6,12 +6,18 @@ import {
 } from "@luke/database/models/plan-comments";
 import { openTaskConversation, savePlanText } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { insertMessage, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
+import {
+  insertMessage,
+  linearIssueLink,
+  openHostedStoreTestDatabase,
+  startTask,
+} from "@luke/database/testing";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_SCOPE,
 } from "@luke/features/plan-comment-wire";
+import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -188,7 +194,7 @@ test("a turn whose request named no time zone, or one that stands nowhere, reads
   }
 });
 
-test("a plan started from a Linear issue hands every turn the issue as it was read then, beside the plan's name", async () => {
+test("a task that links a Linear issue hands every turn the issue as it read when it was linked, beside the plan's name", async () => {
   const issue = {
     identifier: "ENG-42",
     title: "Start a plan from Linear",
@@ -196,7 +202,9 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
     description: "Pick an issue and plan it at once.",
   };
   const userId = await database.createUser();
-  const task = await database.run(startTask(userId, { name: issue.title, linearIssue: issue }));
+  const task = await database.run(
+    startTask(userId, { name: issue.title, issueLinks: [linearIssueLink(issue)] }),
+  );
   const plain = await database.run(startTask(userId, { name: TASK_NAME }));
   const targetOf = async (taskId: string) => ({
     userId,
@@ -207,8 +215,18 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
   const started = await standingContextOf(await targetOf(task.id));
   const other = await standingContextOf(await targetOf(plain.id));
 
-  assert.ok(started.includes(`[linear issue the task was started from]\n${JSON.stringify(issue)}`));
-  assert.equal(other.includes("[linear issue"), false);
+  const linked = [
+    {
+      provider: TASK_ISSUE_PROVIDER.LINEAR,
+      key: issue.identifier,
+      title: issue.title,
+      url: issue.url,
+      relation: TASK_ISSUE_RELATION.CLOSES,
+      description: issue.description,
+    },
+  ];
+  assert.ok(started.includes(`[issues the task links]\n${JSON.stringify(linked)}`));
+  assert.equal(other.includes("[issues the task links]"), false);
 });
 
 test("a task started with the developer's brief hands every turn the brief as they wrote it, beside the plan's name", async () => {

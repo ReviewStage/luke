@@ -9,8 +9,9 @@ import {
   CHAT_IMAGE_TYPE,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
@@ -29,6 +30,8 @@ import {
   stagedChannel,
   stagedPost,
 } from "../tasks/chat-fixture.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
@@ -77,6 +80,7 @@ function mount(
   workspace: Workspace | undefined = undefined,
   readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
+  opened: ReadLink[] | undefined = undefined,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -118,7 +122,15 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  const page =
+    opened === undefined
+      ? createElement(Page)
+      : createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => opened.push(link) },
+          createElement(Page),
+        );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return container;
 }
 
@@ -137,12 +149,11 @@ function rail(page: HTMLElement): string[] {
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
 function stream(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
-    // The byline reads its author, their handle, where it was posted where it says, then when.
-    const [author, , where] = node.querySelector(":scope > .chat-message-body > .chat-byline")
-      ?.children ?? [undefined];
-    const said = where === undefined || where.querySelector("time") !== null ? undefined : where;
+    const byline = node.querySelector(":scope > .chat-message-body > .chat-byline");
+    const author = byline?.querySelector(".chat-byline-name")?.textContent ?? "";
+    const where = byline?.querySelector(".chat-byline-where")?.textContent;
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
-    return `${indent}${author?.textContent ?? ""}${said === undefined ? "" : ` ${said.textContent}`}`;
+    return `${indent}${author}${where === undefined ? "" : ` ${where}`}`;
   });
 }
 
@@ -200,7 +211,9 @@ test("a press on a channel shows its messages in the order posted, a thread fold
   const toggle = page.querySelector<HTMLButtonElement>(
     '.chat-message[data-seq="43"] button[aria-expanded]',
   );
-  assert.equal(toggle?.textContent, "View thread · 2 replies");
+  // The folded thread is summed up by its repliers' faces and how many replied, as a comment thread at rest is.
+  assert.equal(toggle?.textContent, "2 replies");
+  assert.equal(toggle?.querySelectorAll(".actor-stack .actor-mark").length, 2);
   act(() => toggle?.click());
   assert.deepEqual(stream(page).slice(0, 4), [
     "Add teammate invitations",
@@ -468,7 +481,6 @@ test("a post still out names the composer's send Sending and busy, and the box e
         AtomRegistry.make(),
         createElement(ChatComposer, {
           label: "Message #general",
-          hints: [],
           targets: [],
           keywords: [],
           onSend: () => gate.promise,
@@ -577,7 +589,6 @@ async function plainChat() {
           bundles,
           createElement(ChatComposer, {
             label: "Message #general",
-            hints: [],
             targets: [{ sigil: "@", name: "agent-1", detail: undefined }],
             keywords: [],
             onSend: (text) => {
@@ -928,4 +939,86 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
     document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
     "a press opens the picture over the window",
   );
+});
+
+test("in a listed workspace, a person is drawn with their photo from the members read, as everywhere else in the window", async () => {
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        {
+          userId: "maria",
+          name: "Maria Chen",
+          email: "maria@example.com",
+          role: WORKSPACE_ROLE.MEMBER,
+          pictureUrl: "https://example.com/maria.png",
+        },
+      ]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  const acme: Workspace = {
+    id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b1",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  const page = mount((chat) => chat, acme);
+  await settle();
+  const maria = railRow(page, "maria");
+  assert.ok(
+    maria.querySelector("img[src^='https://example.com/maria.png']"),
+    "her row wears her photo",
+  );
+  act(() => railRow(page, "general").click());
+  const named = [...page.querySelectorAll(".chat-byline-name")].map((each) => each.textContent);
+  assert.ok(named.includes("Maria Chen"), "her messages name her as the members read does");
+  assert.ok(
+    page.querySelector(".chat-face img[src^='https://example.com/maria.png']"),
+    "and lead with her photo",
+  );
+});
+
+test("an agent's line names it by its title and quietly by its handle, and a press on its name opens its tab", () => {
+  const opened: ReadLink[] = [];
+  const page = mount((chat) => chat, undefined, undefined, opened);
+  act(() => railRow(page, "teammate-invitations").click());
+  const [byline] = [...page.querySelectorAll(".chat-message .chat-byline")];
+  assert.ok(byline);
+  assert.equal(byline.querySelector(".chat-byline-handle")?.textContent, "@agent-1");
+  const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
+  assert.ok(name, "the agent's name is a press");
+  act(() => name.click());
+  assert.equal(opened.length, 1);
+  const [link] = opened;
+  assert.ok(link !== undefined && "place" in link);
+  assert.equal(link.place.kind, LINK_PLACE.AGENT);
+});
+
+test("an agent the plans' summaries do not name opens its tab under the plan the chat read names for it", () => {
+  const opened: ReadLink[] = [];
+  const ELSEWHERE = "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2910";
+  const page = mount(
+    (chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        members: chat.answer.members.map((member) =>
+          member.handle === "agent-1"
+            ? { ...member, agentId: ELSEWHERE, planId: ELSEWHERE }
+            : member,
+        ),
+      },
+    }),
+    undefined,
+    undefined,
+    opened,
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const agentLine = [...page.querySelectorAll(".chat-message .chat-byline")].find(
+    (byline) => byline.querySelector(".chat-byline-handle")?.textContent === "@agent-1",
+  );
+  act(() => agentLine?.querySelector<HTMLButtonElement>(".chat-byline-name button")?.click());
+  const [link] = opened;
+  assert.ok(link !== undefined && "place" in link);
+  assert.deepEqual(link.place, { kind: LINK_PLACE.AGENT, planId: ELSEWHERE, agentId: ELSEWHERE });
 });

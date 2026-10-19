@@ -6,6 +6,7 @@
   "description": "The hosted store's Drizzle schema, queries, and migrations, and the test databases",
   "exports": {
     "./core/effect-migration-folders": "./src/core/effect-migration-folders.js",
+    "./core/live-statement": "./src/core/live-statement.js",
     "./core/migrator": "./src/core/migrator.js",
     "./core/neon-compute-limit": "./src/core/neon-compute-limit.js",
     "./core/query": "./src/core/query.js",
@@ -35,6 +36,7 @@
     "./models/plan-pages": "./src/models/plan-pages.js",
     "./models/plan-revisions": "./src/models/plan-revisions.js",
     "./models/plan-template-revisions": "./src/models/plan-template-revisions.js",
+    "./models/task-issue-store": "./src/models/task-issue-store.js",
     "./models/task-section-store": "./src/models/task-section-store.js",
     "./models/task-store": "./src/models/task-store.js",
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",

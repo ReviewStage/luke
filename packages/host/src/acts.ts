@@ -39,6 +39,7 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
@@ -281,6 +282,8 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
@@ -825,6 +828,13 @@ export const ACT = {
       isReadable(codingAgentInboxAnsweredViewSchema),
     ),
     refusal: "Could not answer the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: {
+    payload: actSchema(codingAgentInboxCloseParamsSchema),
+    result: wireResult<CodingAgentInboxAnsweredView>(
+      isReadable(codingAgentInboxAnsweredViewSchema),
+    ),
+    refusal: "Could not close the inbox item on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
     payload: actSchema(codingAgentInboxMessageParamsSchema),

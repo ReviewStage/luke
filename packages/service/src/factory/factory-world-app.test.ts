@@ -9,7 +9,7 @@ import { codingAgent, type StoredPullRequest } from "@luke/database/schemas/codi
 import { conversations } from "@luke/database/schemas/storage";
 import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, linearIssueLink, openWorkspace } from "@luke/database/testing";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   CHECK_SUMMARY,
@@ -351,12 +351,13 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
           organizationId: workspaceId,
           name: "Invite expiry",
           repository: "acme/relay",
-          linearIssue: {
-            identifier: "ENG-7",
-            title: "Issue ENG-7",
-            url: "https://linear.app/acme/issue/ENG-7",
-            description: "",
-          },
+          issueLinks: [
+            linearIssueLink({
+              identifier: "ENG-7",
+              title: "Issue ENG-7",
+              url: "https://linear.app/acme/issue/ENG-7",
+            }),
+          ],
         });
         const openPull = relayPull(11, PULL_REQUEST_STATE.OPEN, [
           { path: "packages/api/src/routes", additions: 20, deletions: 2 },

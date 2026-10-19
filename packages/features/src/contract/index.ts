@@ -11,6 +11,9 @@ import { integrationsContract } from "./integrations.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 import { tasksContract } from "./tasks.js";
+import { workspaceGithubContract } from "./workspace-github.js";
+import { workspaceInvitationsContract } from "./workspace-invitations.js";
+import { workspaceLinearContract } from "./workspace-linear.js";
 
 export { HOSTED_ERRORS } from "./errors.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
@@ -24,4 +27,7 @@ export const hostedContract = {
   messages: messagesContract,
   models: modelsContract,
   plans: tasksContract,
+  workspaceGithub: workspaceGithubContract,
+  workspaceInvitations: workspaceInvitationsContract,
+  workspaceLinear: workspaceLinearContract,
 };

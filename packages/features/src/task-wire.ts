@@ -63,6 +63,8 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
+  /** The most external issues one task may link (`task-issue-wire.ts`); a link past it is refused, and nothing is written. */
+  MAX_ISSUES: 10,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */

@@ -140,6 +140,11 @@ function fixture() {
           asked.push(`answer:${itemId}:${revision}:${reply}:${clientKey}`);
           return { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true };
         }),
+      codingAgentInboxClose: ({ itemId, revision, clientKey }) =>
+        Effect.sync(() => {
+          asked.push(`close:${itemId}:${revision}:${clientKey}`);
+          return { item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true };
+        }),
       codingAgentInboxMessage: ({ itemId, text, attachments, clientKey }) =>
         Effect.sync(() => {
           const files = (attachments ?? []).map((file) => file.name).join(",");
@@ -293,6 +298,31 @@ it.effect(
       });
       assert.deepEqual(sent, { status: ACT_OUTCOME_STATUS.DONE, value: { item: ITEM } });
       assert.deepEqual(asked, [`message:${ITEM.id}:Also page on-call.:pager.txt:message-1`]);
+    }),
+);
+
+it.effect(
+  "a panel's close of an inbox item without an answer reaches the host with its revision and key, and hears the item; the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const close = {
+        kind: ACT_KIND.CODING_AGENTS_INBOX_CLOSE,
+        payload: { itemId: ITEM.id, revision: 2, clientKey: "close-1" },
+      } as const;
+
+      const refused = yield* router.performAct(close, VOICE);
+      const sent = yield* router.performAct(close, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX_CLOSE].refusal,
+      });
+      assert.deepEqual(sent, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true },
+      });
+      assert.deepEqual(asked, [`close:${ITEM.id}:2:close-1`]);
     }),
 );
 

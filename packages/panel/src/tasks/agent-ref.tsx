@@ -1,12 +1,14 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import { INLINE_REF_LOOK } from "@luke/ui";
+import { HoverCard, HoverCardHead, INLINE_REF_LOOK } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { ActorMark, ActorRef } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import type { HeldTranscripts } from "../desktop/strip-tabs.js";
 import { InlineRef } from "../inline-ref.js";
+import { useMemberDirectory } from "../member-directory.js";
 import { Tooltip } from "../tooltip.js";
 import {
   AgentTabCard,
@@ -24,8 +26,10 @@ import {
   providerOf,
   teammateRef,
 } from "./coding-agent-model.js";
+import { MentionedAgentCard } from "./mentioned-agent-card.js";
 import { agentTranscript } from "./transcript-copy.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
+import { useOpenPlace } from "./use-open-link.js";
 
 /**
  * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows, and its mark and name as the one button that hangs that card and opens its tab.
@@ -320,4 +324,50 @@ export function AgentActorRef({
       nameOnly={nameOnly}
     />
   );
+}
+
+/**
+ * Another coding agent named as a line's sender, by the id the service
+ * answered for it: its harness's mark and its name, as it sent the line,
+ * hanging its tab's card as it stands now, read as the card is first hung
+ * (`mentioned-agent-card.tsx`), and opening its tab on a press.
+ */
+export function SendingAgent({
+  actor,
+  agentId,
+  nameOnly = false,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
+  agentId: string;
+  /** Whether the name stands without its mark, whose face the line already draws. */
+  nameOnly?: boolean;
+}): React.JSX.Element {
+  const { workspaceId } = useMemberDirectory();
+  const openPlace = useOpenPlace();
+  const { taskId } = actor;
+  // Its own card stands while the agent is read, and where the read answers nothing.
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+    </HoverCard>
+  );
+  const card = (
+    <MentionedAgentCard
+      agentId={agentId}
+      taskId={taskId}
+      name={actor.name}
+      workspaceId={workspaceId}
+      fallback={fallback}
+    />
+  );
+  const open =
+    openPlace === undefined
+      ? undefined
+      : () =>
+          openPlace({
+            kind: LINK_PLACE.AGENT,
+            ...(taskId === undefined ? undefined : { planId: taskId }),
+            agentId,
+          });
+  return <ActorRef actor={actor} card={card} onOpen={open} nameOnly={nameOnly} />;
 }

@@ -52,6 +52,17 @@ import {
  * which the item names by attachment, file name, and type until the answer
  * is taken back or the agent posts the item again.
  *
+ * An item is closed by its agent, which takes it back with why, or by a
+ * member, who puts it away without answering it, at the revision they were
+ * shown, as an answer is taken. A member's close names the member and
+ * reaches the agent under its own lead where the item asks to be heard
+ * back, so an agent waiting on it is not left waiting; otherwise the agent
+ * reads it the next time it reads its inbox. Either close is undone by the
+ * agent posting under the item's key again. Note that a member's close is
+ * the closed status an older desktop already reads, with `closedBy`
+ * beside it, which such a desktop ignores, so it draws the item as closed
+ * rather than refusing the inbox.
+ *
  * Beside its one answer, an item holds a thread: messages a member of its
  * workspace or its agent adds at any point, open or settled, each in
  * Markdown with the files it carried, read oldest first. A message changes
@@ -231,7 +242,7 @@ export const INBOX_STATUS = {
   OPEN: "open",
   /** The developer answered it. */
   ANSWERED: "answered",
-  /** The agent took it back. */
+  /** The agent took it back, or a member closed it without answering (`closedBy`). */
   CLOSED: "closed",
 } as const;
 
@@ -760,8 +771,14 @@ export const inboxItemSchema = EffectSchema.Struct({
    * is the signed-in account.
    */
   answeredBy: EffectSchema.optionalKey(memberRefSchema),
-  /** Why the agent took the item back, on a closed one. */
+  /** Why the agent took the item back, on one it closed. */
   closedReason: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The member who closed the item without answering it, on one a member
+   * closed; absent on one its agent took back, and once the member's
+   * account is gone. Absent from a service before members closed items.
+   */
+  closedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The item's thread, oldest first, the latest `MAX_MESSAGES_READ` of it; absent where nobody wrote one. */
   messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
@@ -824,6 +841,34 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 export const INBOX_ANSWER_LEAD = "Inbox answer";
 
 /**
+ * A member's close of one item without an answer: the revision they were
+ * shown, so an item the agent changed since is not closed unseen, and a key
+ * the client made, so a close sent again after a lost reply reaches the
+ * agent once. It answers as an answer does (`inboxAnsweredSchema`): the
+ * item as it then stands, and whether the close was taken.
+ */
+export const inboxCloseRequestSchema = EffectSchema.Struct({
+  revision: countedNumber,
+  clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
+});
+
+export type InboxCloseRequest = typeof inboxCloseRequestSchema.Type;
+
+/** How a member's close opens, in the message that tells the agent of it. */
+export const INBOX_CLOSE_LEAD = "Inbox closed";
+
+/**
+ * The message a member's close reaches the agent as: a first line naming
+ * the item by its key and title, as an answer's does, and that it was
+ * closed without an answer, which the agent takes as the developer not
+ * wanting what it asked.
+ */
+export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): string {
+  const title = item.title.replace(/\s+/gu, " ").trim();
+  return `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+}
+
+/**
  * A member's message on an item's thread: the words in Markdown, trimmed and
  * bounded, the files they attached, bounded as a message's to an agent are,
  * words or files or both and never neither, and a key the client made, so
@@ -875,9 +920,9 @@ export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text:
   return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
 }
 
-/** An answer's or a thread message's first line, as `inboxAnswerMessage` and `inboxThreadMessage` write it. */
+/** An answer's, a close's, or a thread message's first line, as `inboxAnswerMessage`, `inboxClosedMessage`, and `inboxThreadMessage` write it. */
 const INBOX_LINE_HEAD = new RegExp(
-  `^(${INBOX_ANSWER_LEAD}|${INBOX_MESSAGE_LEAD}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
+  `^(${INBOX_ANSWER_LEAD}|${INBOX_CLOSE_LEAD}|${INBOX_MESSAGE_LEAD}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
   "u",
 );
 
