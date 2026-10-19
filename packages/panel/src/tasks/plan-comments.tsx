@@ -13,6 +13,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -70,6 +71,7 @@ import {
   useState,
 } from "react";
 import { ActorMark, ActorRef } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -114,7 +116,9 @@ import { useOpenLink } from "./use-open-link.js";
  *
  * A thread is started from words selected in the read view, with the
  * bubble that rises over them, or from the button a block shows at its end
- * under the pointer, which comments on the whole block. Its words are
+ * under the pointer, which comments on the whole block; while the bubble
+ * stands, ⌥⌘M starts it as a press on the bubble does
+ * (`APP_COMMAND.COMMENT_ON_SELECTION`). Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -1418,6 +1422,9 @@ export function PlanCommentLayer({
     };
   }, [body, editor, sections, unitClass, setPending, onActive, active]);
 
+  // While the bubble stands, its command starts the thread as a press on it does.
+  useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, bubble?.start);
+
   const cardRef = (id: string) => (element: HTMLDivElement | null) => {
     if (element === null) cards.current.delete(id);
     else cards.current.set(id, element);
@@ -1488,9 +1495,11 @@ export function PlanCommentLayer({
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
-        <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
-          {COMMENT_WORDS.COMMENT}
-        </Button>
+        <Tooltip label={COMMENT_WORDS.COMMENT} command={APP_COMMAND.COMMENT_ON_SELECTION}>
+          <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
+            {COMMENT_WORDS.COMMENT}
+          </Button>
+        </Tooltip>
       </div>
     );
   if (wide) {

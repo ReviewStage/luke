@@ -14,12 +14,14 @@ import {
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { useAppKeymap } from "../app-commands.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -38,7 +40,8 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
  * ✓ resolving it and its reply posting the words typed, a thread whose
  * words were deleted saying so over its quote, a resolved thread marking
  * nothing and listed under Resolved in the Comments tab, where Reopen
- * brings it back, and no mark on a page that is not the plan's own.
+ * brings it back, and no mark on a page that is not the plan's own; and
+ * ⌥⌘M starts a thread on the words selected, as the bubble over them does.
  * Synthetic plan and threads.
  */
 
@@ -1099,5 +1102,77 @@ test("on a touch screen the comment bubble stands under the words selected, clea
   assert.ok(
     Number.parseFloat(mouse.style.top) <= box.top,
     "a mouse's bubble rises from the words' top",
+  );
+});
+
+/** The window's keymap, which answers a chord while its command's offer stands. */
+function Keymap(): null {
+  useAppKeymap(true);
+  return null;
+}
+
+test("⌥⌘M starts a thread on the words selected, as the bubble over them does, and nothing with none selected", async () => {
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(keys);
+  act(() => keys.render(createElement(Keymap)));
+  const { container, started } = wide(() => drawn("page", []));
+  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  const pressComment = () =>
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "µ",
+          code: "KeyM",
+          metaKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+  pressComment();
+  assert.equal(pending(), null, "with nothing selected, no thread is started");
+
+  const words = "withdraw an invite";
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(words));
+  range.setEnd(text, text.data.indexOf(words) + words.length);
+  // Note that jsdom lays nothing out, so the selection is given a box for the bubble to stand by.
+  const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
+  Range.prototype.getBoundingClientRect = () => new DOMRect(40, 100, 120, 20);
+  answerPointer(false);
+  try {
+    act(() => {
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+  assert.equal(
+    container.querySelector(".comment-bubble button")?.getAttribute("aria-keyshortcuts"),
+    shortcutAria(APP_SHORTCUTS[APP_COMMAND.COMMENT_ON_SELECTION].chord),
+    "the bubble names its key",
+  );
+
+  pressComment();
+  const field = pending()?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field, "the thread is being started");
+  await post(field, "Who can withdraw?");
+  assert.deepEqual(
+    started.map((start) => [
+      start.scope,
+      start.quote,
+      TEXT.slice(start.anchor.from, start.anchor.to),
+    ]),
+    [[PLAN_COMMENT_SCOPE.WORDS, words, words]],
   );
 });

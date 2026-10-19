@@ -28,6 +28,7 @@ export const APP_COMMAND = {
   NEW_TASK: "new-task",
   COPY_PLAN: "copy-plan",
   COPY_LINK: "copy-link",
+  COMMENT_ON_SELECTION: "comment-on-selection",
   ARCHIVE_TASK: "archive-plan",
   DELETE_TASK: "delete-plan",
   PREVIOUS_TASK: "previous-plan",
@@ -310,7 +311,8 @@ export interface AppShortcut {
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
- * agent's message box, beside the palette's ⌘K, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
+ * words selected as Google Docs has it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
@@ -325,6 +327,10 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
   // Note that ⇧⌘C, Linear's chord for a link, was Copy plan's first, so a link takes ⌥⌘C, where macOS copies a thing's address (Finder's Copy as Pathname).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, option: true } },
+  [APP_COMMAND.COMMENT_ON_SELECTION]: {
+    label: "Comment on selection",
+    chord: { key: SHORTCUT_KEY.M, option: true },
+  },
   [APP_COMMAND.ARCHIVE_TASK]: {
     label: "Archive task",
     chord: { key: SHORTCUT_KEY.A, shift: true },
@@ -511,6 +517,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.COPY_LINK,
+      APP_COMMAND.COMMENT_ON_SELECTION,
       APP_COMMAND.ARCHIVE_TASK,
       APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
