@@ -1,8 +1,9 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { BUTTON_SIZE, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, IconButton, TextButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
+  type ComponentProps,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -12,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useCopyToast } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
 import {
@@ -269,10 +271,14 @@ export function useChangesList(
   );
   const asSource = useCallback((path: string) => sources.has(path), [sources]);
   const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
+  const latestAll = useRef({ kept, allCollapsed });
+  latestAll.current = { kept, allCollapsed };
+  // Note that the door stays the same door across draws, as a header's others do, reading the files kept and their folds as they stand.
   const toggleAll = useCallback(() => {
+    const { kept, allCollapsed } = latestAll.current;
     choose(kept.map((file) => file.path));
     setChosen((was) => foldedAs(was, kept, !allCollapsed));
-  }, [kept, allCollapsed, choose]);
+  }, [choose]);
   // A file the filter leaves out is chosen in the tree's crumbs, which list every changed file: the filter is cleared, and the list scrolled to it once it holds it again.
   const [revealing, setRevealing] = useState<string | undefined>(undefined);
   const go = useCallback(
@@ -340,6 +346,20 @@ export function useChangesList(
   };
 }
 
+/** What a file's header says and hints. */
+const HEAD_WORDS = {
+  EXPAND: "Expand file",
+  COLLAPSE: "Collapse file",
+  ALL_HINT: "\u2325-click for all files",
+  COPY_PATH: "Copy path",
+  COPY_OLD_PATH: "Copy old path",
+  COPY_NEW_PATH: "Copy new path",
+  PATH_COPIED: "Path copied",
+} as const;
+
+/** What on a header's row keeps its press for itself rather than folding the file. */
+const HEAD_CONTROLS = "button, a, input, label, summary, [role='button'], [role='checkbox']";
+
 /** A path as a header names it: its folder, quiet, then its name. */
 function PathParts({ path }: { path: string }): React.JSX.Element {
   const cut = path.lastIndexOf("/") + 1;
@@ -382,6 +402,7 @@ export function FileHead({
   collapsed,
   standing,
   onToggle,
+  onToggleAll,
   onStand,
 }: {
   file: CodingAgentChangedFile;
@@ -391,36 +412,74 @@ export function FileHead({
   /** Whether the keys stand on the file, which outlines it. */
   standing: boolean;
   onToggle: () => void;
+  /** Folds every file the filter keeps, or unfolds them all, as ⌥ and a press on the fold do. */
+  onToggleAll: () => void;
   onStand: () => void;
 }): React.JSX.Element {
+  const copy = useCopyToast();
   const [near, setNear] = useState(false);
-  const foldRef = useRef<HTMLButtonElement>(null);
-  const letterRef = useRef<HTMLSpanElement>(null);
-  // What brought the hints: the keyboard's focus on the fold, or the pointer on the fold or the letter.
-  const arrived = useRef({ focused: false, overFold: false, overLetter: false });
+  // The header's hinted parts, in order: its fold, its letter, the path it moved from, and its path.
+  const parts = useRef<(HTMLElement | null)[]>([]);
+  const partAt = (at: number) => (element: HTMLElement | null) => {
+    parts.current[at] = element;
+  };
+  // Which part brought the hints: the keyboard's focus on one, or the pointer over one.
+  const arrived = useRef<{ readonly focused: number; readonly over: number }>({
+    focused: -1,
+    over: -1,
+  });
   useLayoutEffect(() => {
     if (!near) return;
-    const { focused, overFold, overLetter } = arrived.current;
-    if (focused) foldRef.current?.focus();
-    // Note that the control the pointer is already on is told so again, because the one drawn in its place has heard no arrival.
-    if (overFold) foldRef.current?.dispatchEvent(pointerOver());
-    if (overLetter) letterRef.current?.dispatchEvent(pointerOver());
+    const { focused, over } = arrived.current;
+    const focusable = (at: number) => {
+      const part = parts.current[at];
+      return part?.matches("button") === true ? part : part?.querySelector("button");
+    };
+    if (focused !== -1) focusable(focused)?.focus();
+    // Note that the part the pointer is already on is told so again, because the one drawn in its place has heard no arrival.
+    if (over !== -1) (focusable(over) ?? parts.current[over])?.dispatchEvent(pointerOver());
   }, [near]);
-  const label = collapsed ? "Expand file" : "Collapse file";
+  const partOf = (target: EventTarget) =>
+    target instanceof Node
+      ? parts.current.findIndex((part) => part?.contains(target) === true)
+      : -1;
+  const label = collapsed ? HEAD_WORDS.EXPAND : HEAD_WORDS.COLLAPSE;
+  const hinted = (
+    hint: string,
+    part: ComponentProps<typeof Tooltip>["children"],
+    chord?: ShortcutChord,
+  ) =>
+    near ? (
+      <Tooltip label={hint} chord={chord}>
+        {part}
+      </Tooltip>
+    ) : (
+      part
+    );
   const fold = (
     <IconButton
-      ref={foldRef}
+      ref={partAt(0)}
       icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
       label={label}
       size={BUTTON_SIZE.COMPACT}
       aria-expanded={!collapsed}
       aria-keyshortcuts={shortcutAria(FOLD_CHORD.ONE)}
-      onClick={onToggle}
+      onClick={(event) => (event.altKey ? onToggleAll() : onToggle())}
     />
   );
   const letter = (
-    <span ref={letterRef} className="file-view-status" data-status={file.status}>
+    <span ref={partAt(1)} className="file-view-status" data-status={file.status}>
       {STATUS_LETTER[file.status]}
+    </span>
+  );
+  const pathCopy = (path: string, at: number, words: string, hint: string, moved: boolean) => (
+    <span ref={partAt(at)} className="diff-list-path-part" data-moved={moved ? "" : undefined}>
+      {hinted(
+        hint,
+        <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
+          <PathParts path={path} />
+        </TextButton>,
+      )}
     </span>
   );
   return (
@@ -431,42 +490,46 @@ export function FileHead({
       onPointerDown={onStand}
       onPointerEnter={(event) => {
         if (near) return;
-        const { target } = event;
-        const on = (control: HTMLElement | null) =>
-          target instanceof Node && control?.contains(target) === true;
-        arrived.current = {
-          focused: false,
-          overFold: on(foldRef.current),
-          overLetter: on(letterRef.current),
-        };
+        arrived.current = { focused: -1, over: partOf(event.target) };
         setNear(true);
       }}
       onFocusCapture={(event) => {
         if (near) return;
-        arrived.current = {
-          focused: foldRef.current?.contains(event.target) === true,
-          overFold: false,
-          overLetter: false,
-        };
+        arrived.current = { focused: partOf(event.target), over: -1 };
         setNear(true);
       }}
     >
-      <div className="diff-list-head-row">
-        {near ? (
-          <Tooltip label={label} chord={FOLD_CHORD.ONE}>
-            {fold}
-          </Tooltip>
-        ) : (
-          fold
-        )}
-        {near ? <Tooltip label={STATUS_WORDS[file.status]}>{letter}</Tooltip> : letter}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: a press anywhere on the row folds the file as its fold does, which is the control the keyboard reaches. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the fold beside it is the row's keyboard control, and ; folds the file stood on. */}
+      <div
+        className="diff-list-head-row"
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest(HEAD_CONTROLS) !== null) {
+            return;
+          }
+          onToggle();
+        }}
+      >
+        {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
+        {hinted(STATUS_WORDS[file.status], letter)}
         <span className="diff-list-path">
-          {file.previousPath === null ? null : (
-            <span className="diff-list-folder">
-              <bdi>{file.previousPath}</bdi> →{"\u00a0"}
-            </span>
+          {file.previousPath === null ? (
+            pathCopy(file.path, 3, HEAD_WORDS.PATH_COPIED, HEAD_WORDS.COPY_PATH, false)
+          ) : (
+            <>
+              {pathCopy(
+                file.previousPath,
+                2,
+                HEAD_WORDS.PATH_COPIED,
+                HEAD_WORDS.COPY_OLD_PATH,
+                true,
+              )}
+              <span className="diff-list-folder" aria-hidden="true">
+                {"\u00a0\u2192\u00a0"}
+              </span>
+              {pathCopy(file.path, 3, HEAD_WORDS.PATH_COPIED, HEAD_WORDS.COPY_NEW_PATH, false)}
+            </>
           )}
-          <PathParts path={file.path} />
         </span>
         <LinesChanged additions={file.additions} deletions={file.deletions} />
         {controls}
