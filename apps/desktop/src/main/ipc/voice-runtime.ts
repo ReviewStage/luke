@@ -1,8 +1,8 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics";
 import type { ActRows } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
-import { channels } from "@luke/host/bridge";
 import type { AppStateStore } from "@luke/host/client";
+import { PUSH } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { callInProgress, IDLE_VOICE_VIEW, VOICE_COMMAND } from "@luke/voice/voice-view";
@@ -10,6 +10,7 @@ import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
 import type { PanelManager } from "../window/panel-manager";
+import { windowPushes } from "../window/window-pushes";
 
 /** The hidden window the conversation lives in, as much of it as this file needs. */
 interface VoiceWindowSurface {
@@ -61,9 +62,12 @@ function stopLuke(dependencies: VoiceRuntimeDependencies, named: string | undefi
   const taskId = named ?? callTask ?? snapshot.tasks.activeTaskId;
   if (taskId === undefined) return Effect.void;
   if (callTask === taskId) {
-    dependencies.voiceWindow
-      .current()
-      ?.webContents.send(channels.onVoiceCommand, { command: VOICE_COMMAND.STOP_SPEAKING });
+    const voice = dependencies.voiceWindow.current();
+    if (voice) {
+      windowPushes.push(voice.webContents, PUSH.VOICE_COMMAND, {
+        command: VOICE_COMMAND.STOP_SPEAKING,
+      });
+    }
   }
   return dependencies.liveSession.tasksStopWork(taskId);
 }
@@ -78,7 +82,8 @@ export function voiceRuntimeActRows(
     // the two — the voice window does not command itself — and handed on.
     [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel, call }) => {
       if (!panel && !call) return;
-      voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
+      const voice = voiceWindow.current();
+      if (voice) windowPushes.push(voice.webContents, PUSH.VOICE_COMMAND, { command });
     },
     // The call card's way back, from the floating window or from a panel's
     // own card, names no task: the call's is read here, so it cannot bring
@@ -87,7 +92,7 @@ export function voiceRuntimeActRows(
       const taskId = state.snapshot().voice.view?.callTaskId;
       if ((!call && !panel) || taskId === undefined) return;
       panels.focusExpanded();
-      panels.broadcast(channels.onShowTask, { taskId });
+      panels.broadcast(PUSH.SHOW_TASK, { taskId });
     },
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.

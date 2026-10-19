@@ -6,6 +6,7 @@ import type {
 } from "@orpc/contract";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
+import { pushesContract } from "./pushes.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -19,14 +20,33 @@ import type { PortActKind } from "./kinds.js";
 
 export { ACT_ERROR } from "./base.js";
 export { ISSUE_ACT_KIND, type PortActKind } from "./kinds.js";
+export {
+  PUSH,
+  PUSH_GUARD,
+  PUSH_METHOD,
+  PUSH_PROCEDURE,
+  type PushEvent,
+  type PushName,
+  type PushPayload,
+} from "./pushes.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
-export const actContract = {
+const actContract = {
   ...issueActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
+/**
+ * Everything a window's act port answers: every act kind's procedure, and
+ * beside them the stream of what main pushes the window, under a key no act
+ * kind spells.
+ */
+export const actPortContract = {
+  ...actContract,
+  ...pushesContract,
+};
+
 /** The window's typed client of the act port. */
-export type ActPortClient = ContractRouterClient<typeof actContract>;
+export type ActPortClient = ContractRouterClient<typeof actPortContract>;
 
 /** What one port kind takes. */
 export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs<

@@ -3,7 +3,7 @@ import { createORPCErrorConstructorMap } from "@orpc/contract";
 import type { WithEffectContext } from "@orpc/experimental-effect";
 import { type AnyProcedure, implement, ORPCError } from "@orpc/server";
 import type { ActSender } from "../act-router/router.js";
-import { ACT_ERROR, actContract } from "../contract/index.js";
+import { ACT_ERROR, actPortContract } from "../contract/index.js";
 
 /**
  * base.ts -- the implementer every act procedure is built from: who asked, and the refusal of a sender this build does not trust.
@@ -42,11 +42,11 @@ export function isRefusal(error: unknown): error is ORPCError<string, unknown> {
 }
 
 /**
- * The act contract to implement. Every procedure first refuses a sender this
+ * The act port's contract to implement. Every procedure first refuses a sender this
  * build does not trust, in its own sentence, before its input is read or
  * its row asks anything.
  */
-export const actPort = implement(actContract)
+export const actPort = implement(actPortContract)
   .$context<ActPortContext>()
   .use(({ context, next, procedure }) => {
     if (!context.trusted) throw refusedBy(procedure);

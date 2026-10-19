@@ -44,6 +44,7 @@
     "@luke/wire": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
+    "@orpc/publisher": "catalog:",
     "@orpc/server": "catalog:",
     "@shikijs/langs": "4.5.0",
     "@shikijs/themes": "4.5.0",

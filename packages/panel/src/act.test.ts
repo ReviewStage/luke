@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createActPortHandler } from "@luke/host/act-port";
+import { createActPortHandler, WindowPushes } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -36,6 +36,7 @@ function openActPort(actor: ActSender): void {
         issueChange: unanswered,
       },
     },
+    pushes: new WindowPushes(),
   });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
