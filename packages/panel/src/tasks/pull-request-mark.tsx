@@ -14,15 +14,16 @@ import {
 import { pullRequestPillLabel } from "./coding-agent-model.js";
 
 /**
- * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, and red where its checks failed.
+ * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, whatever its checks say.
  *
  * A pull request is drawn on a sidebar task's row and its card, on the
  * row pinned over its agent's box, and on its Changes tab's card. Each
  * draws this one mark, so a pull request reads
  * the same in all of them: open in the success green, a draft in the
- * muted ink, merged in the merged purple, closed in the danger red, and
- * the danger red over any of them once its checks have failed, the one
- * result that asks for a look. The colour is the stylesheet's, keyed on
+ * muted ink, merged in the merged purple, and closed in the danger red.
+ * Its checks never change its colour: failed checks are said in its words
+ * for a reader who cannot see it, and drawn where the checks themselves
+ * are. The colour is the stylesheet's, keyed on
  * `data-pull-request-state` (`tasks.css`); a chip naming the pull request
  * says the same in the shared palette's tone for it (`PULL_REQUEST_TONE`).
  */
@@ -43,7 +44,7 @@ export const PULL_REQUEST_TONE = {
   [PULL_REQUEST_STATE.CLOSED]: CHIP_TONE.DANGER,
 } as const satisfies Record<PullRequestState, ChipTone>;
 
-/** What a failed check run adds to the mark's words for a reader who cannot see its colour. */
+/** What a failed check run adds to the mark's words for a reader who cannot see it. */
 const CHECKS_FAILING_WORDS = ", checks failing";
 
 /** A pull request's words for a reader who cannot see its mark: its number, where it stands, and that its checks failed where they did. */
@@ -57,7 +58,7 @@ function pullRequestMarkLabel(
 /** What a pull request's mark is drawn from: its number, where it stands, and how its checks went. */
 export type PullRequestMarked = Pick<CodingAgentPullRequest, "number" | "state" | "checks">;
 
-/** A pull request's mark: its glyph for where it stands, coloured for it, red where its checks failed, and named for a reader who cannot see it. */
+/** A pull request's mark: its glyph for where it stands, coloured for it alone, and named for a reader who cannot see it. */
 export function PullRequestMark({
   pullRequest,
   className,
@@ -66,13 +67,11 @@ export function PullRequestMark({
   className?: string;
 }): React.JSX.Element {
   const Glyph = PULL_REQUEST_GLYPH[pullRequest.state];
-  const failing = pullRequest.checks === CHECK_SUMMARY.FAILING;
   return (
     <Glyph
       className={className === undefined ? "pull-request-mark" : `pull-request-mark ${className}`}
       data-pull-request-mark=""
       data-pull-request-state={pullRequest.state}
-      data-failing={String(failing)}
       role="img"
       aria-label={pullRequestMarkLabel(pullRequest)}
     />

@@ -5502,7 +5502,7 @@ ol.transcript-list {
    the success green, a draft in the muted ink, merged in the merged purple,
    closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
    chip naming it wears the shared palette's tone for it
-   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
+   (`PULL_REQUEST_TONE`). Its checks never change its colour. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--luke-color-complete);
 }
@@ -5529,10 +5529,6 @@ ol.transcript-list {
    class of its own (`.task-mark-glyph`) does not take its colour too. */
 .pull-request-mark[data-pull-request-state] {
   color: var(--pull-request-tone);
-}
-
-.pull-request-mark[data-failing="true"] {
-  color: var(--luke-color-danger);
 }
 
 /* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
@@ -5571,7 +5567,8 @@ ol.transcript-list {
   gap: var(--luke-icon-gap);
 }
 
-/* Too narrow for the checks' word: the mark's red still says they failed. */
+/* Too narrow for the checks' word: it goes, and the mark's words for a
+   reader who cannot see it and the Pull request tab still say they failed. */
 @container published-row (max-width: 359px) {
   .agent-published-checks {
     display: none;

@@ -82,6 +82,22 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
   ]);
 }
 
+/** The pull request's mark as a place draws it; undefined where it draws none. */
+function markElementOf(place: ReactElement): Element | undefined {
+  const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
+  return page.querySelector("[data-pull-request-mark]") ?? undefined;
+}
+
+/** What the mark is styled by: its class and every attribute but its words. */
+function lookOf(mark: Element | undefined): string | undefined {
+  if (mark === undefined) return undefined;
+  return [...mark.attributes]
+    .filter((attribute) => attribute.name !== "aria-label")
+    .map((attribute) => `${attribute.name}=${attribute.value}`)
+    .toSorted()
+    .join(" ");
+}
+
 /** The words the pull request's mark says as a place draws it. */
 function markOf(place: ReactElement): string | null | undefined {
   const page = new DOMParser().parseFromString(renderToStaticMarkup(place), "text/html");
@@ -100,4 +116,20 @@ test("a merged pull request says so wherever it is drawn, its checks unsaid", ()
   const drawn = places(pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING));
   const expected = "Pull request #42, merged";
   for (const [place, element] of drawn) assert.equal(markOf(element), expected, place);
+});
+
+test("a pull request's mark wears the colour of where it stands whatever its checks say", () => {
+  for (const state of Object.values(PULL_REQUEST_STATE)) {
+    const failing = places(pullRequest(state, CHECK_SUMMARY.FAILING));
+    const passing = places(pullRequest(state, CHECK_SUMMARY.PASSING));
+    for (const [place, element] of failing) {
+      const look = lookOf(markElementOf(element));
+      assert.ok(look?.includes(`data-pull-request-state=${state}`), `${place}, ${state}`);
+      assert.equal(
+        look,
+        lookOf(markElementOf(passing.get(place) ?? element)),
+        `${place}, ${state}`,
+      );
+    }
+  }
 });
