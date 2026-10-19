@@ -463,16 +463,22 @@ const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(Acc
  * not a key holding `undefined` but no key at all, and a sync baseline and
  * the experiments are kept only for the account signed in, since one left by
  * another account would let that account's edits stand in for this one's.
+ * A store that keeps no account of its own (a browser's cookie session)
+ * keeps both as they are, each naming the account it is for, and reads one
+ * only for the account its session names.
  */
-function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
+function settledPersistedSettings(
+  persisted: PersistedSettings,
+  keepsOwnAccount = true,
+): PersistedSettings {
   const { account, accountPreferencesSync, experiments, ...settings } = persisted;
+  const keptFor = (section: { readonly accountEmail: string } | undefined) =>
+    section !== undefined && (!keepsOwnAccount || section.accountEmail === account?.email);
   return {
     ...settings,
     ...(account ? { account } : undefined),
-    ...(account && accountPreferencesSync?.accountEmail === account.email
-      ? { accountPreferencesSync }
-      : undefined),
-    ...(account && experiments?.accountEmail === account.email ? { experiments } : undefined),
+    ...(keptFor(accountPreferencesSync) ? { accountPreferencesSync } : undefined),
+    ...(keptFor(experiments) ? { experiments } : undefined),
   };
 }
 
@@ -550,9 +556,10 @@ function refusalReason(source: string, error: Schema.SchemaError): string {
  */
 function parsePersistedSettingsEither(
   source: string,
+  keepsOwnAccount: boolean,
 ): Result.Result<PersistedSettings, SettingsParseRefusal> {
   return decodePersistedSettingsFile(source).pipe(
-    Result.map(settledPersistedSettings),
+    Result.map((persisted) => settledPersistedSettings(persisted, keepsOwnAccount)),
     Result.mapError((error) => new SettingsParseRefusal({ reason: refusalReason(source, error) })),
   );
 }
@@ -624,8 +631,9 @@ export class SettingsStore {
   > {
     return Effect.gen({ self: this }, function* () {
       const changed: AccountPreferenceField[] = [];
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
+        if (expected && signedIn(persisted) !== expected.accountEmail) return undefined;
         const nextSettings = expected
           ? accountPreferencesWithLocalChanges(
               settings,
@@ -875,10 +883,16 @@ export class SettingsStore {
     });
   }
 
+  /**
+   * The account's departure: its record and everything kept for it go. A
+   * store that keeps no account of its own still drops what it kept for the
+   * session's account, since that account is the one leaving.
+   */
   clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
+    const keepsOwnAccount = this.#cipher !== undefined;
     return Effect.as(
       this.#mutate((persisted) => {
-        if (!persisted.account) return undefined;
+        if (keepsOwnAccount && !persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
         for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
@@ -888,6 +902,28 @@ export class SettingsStore {
       }),
       { status: ACCOUNT_STATUS.SIGNED_OUT },
     );
+  }
+
+  /**
+   * For a store that keeps no account of its own: the account its session
+   * names now. Where what the record keeps for an account (the sync baseline,
+   * the experiments) is someone else's, the account preferences beside it are
+   * theirs too and go with it, as `setAccount` drops them for another
+   * address, so one person's choices never stand in for the next one's. A
+   * store that keeps its own account settles this in `setAccount`.
+   */
+  settleSessionAccount(accountEmail: string): Effect.Effect<void, PlatformError> {
+    if (this.#cipher !== undefined) return Effect.void;
+    return this.#mutate((persisted) => {
+      const keptFor =
+        persisted.accountPreferencesSync?.accountEmail ?? persisted.experiments?.accountEmail;
+      if (keptFor === undefined || keptFor === accountEmail) return undefined;
+      const next: PersistedSettings = { ...persisted };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
+      delete next.accountPreferencesSync;
+      delete next.experiments;
+      return next;
+    });
   }
 
   /**
@@ -1045,7 +1081,7 @@ export class SettingsStore {
       // A corrupt settings file is replaced by the next write rather than
       // failing app start, so a refusal here falls back to defaults exactly
       // as an absent file does, and carries nothing.
-      const parsed = parsePersistedSettingsEither(source);
+      const parsed = parsePersistedSettingsEither(source, this.#cipher !== undefined);
       if (Result.isFailure(parsed)) return defaultPersistedSettings();
       this.#carried = carriedSettingsFields(source);
       return parsed.success;

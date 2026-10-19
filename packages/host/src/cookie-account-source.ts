@@ -37,6 +37,7 @@ import {
   Schedule,
   Schema,
   type Scope,
+  Semaphore,
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -185,8 +186,13 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   const changesPubSub = yield* PubSub.unbounded<AccountSnapshot>();
   let account: AccountSnapshot = SIGNED_OUT;
-  /** Moved by every press that decides the account, so a read begun before one settles nothing. */
+  /**
+   * Moved by every change of the account, a press's or a read's, so a read
+   * begun before one settles nothing and a gate move made for one is passed
+   * over once a later change stands.
+   */
   let generation = 0;
+  const gateMoves = yield* Semaphore.make(1);
 
   const send = (call: AccountCallEffects, request: CallRequest): Effect.Effect<CallAnswer> =>
     Effect.provideService(call.send(request), HttpClient.HttpClient, client);
@@ -198,6 +204,33 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? `${what}: the service answered ${answer.response.status}`
         : `${what}: ${answer.errorName ?? answer.fault}`,
     });
+
+  /**
+   * One move of the capability gate, taken in turn with every other, and
+   * passed over where a later change of the account superseded it, so a
+   * slow opening can never land after the closing a sign-out made.
+   */
+  const moveGate = (asOf: number, move: Effect.Effect<void>): Effect.Effect<void> =>
+    gateMoves.withPermits(1)(Effect.suspend(() => (asOf === generation ? move : Effect.void)));
+
+  /**
+   * What an account's departure does on this side: the gate closed, and what
+   * the settings kept for it (its synced preferences and experiments)
+   * dropped beside, so the next person on this browser starts from none of it.
+   */
+  const departure: Effect.Effect<void> = Effect.asVoid(
+    Effect.all(
+      [
+        Effect.catch(host.store.clearAccount(), (error) =>
+          Effect.sync(() => {
+            report(`Dropping the departed account's settings failed: ${error.message}`);
+          }),
+        ),
+        host.stopCapabilities,
+      ],
+      { concurrency: 2 },
+    ),
+  );
 
   const settleOn = (next: AccountSnapshot): Effect.Effect<void> =>
     Effect.suspend(() => {
@@ -243,9 +276,9 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
           const standing = signedInId(account);
           if (!read.signedIn) {
             if (standing === undefined) return undefined;
-            generation += 1;
+            const asOf = ++generation;
             yield* settleOn(SIGNED_OUT);
-            return yield* Effect.forkDetach(host.stopCapabilities);
+            return yield* Effect.forkDetach(moveGate(asOf, departure));
           }
           // The same person, drawn anew where anything of them changed.
           if (standing !== undefined && standing === signedInId(read.account)) {
@@ -254,15 +287,16 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
           }
           // Note that another person's session, such as a sign-in in another
           // tab, is a departure and an arrival, never a swap under the gate.
-          if (standing !== undefined) {
-            generation += 1;
-            yield* settleOn(SIGNED_OUT);
-          }
+          const asOf = ++generation;
+          if (standing !== undefined) yield* settleOn(SIGNED_OUT);
           yield* settleOn(read.account);
           return yield* Effect.forkDetach(
-            standing === undefined
-              ? host.startCapabilities
-              : Effect.andThen(host.stopCapabilities, host.startCapabilities),
+            moveGate(
+              asOf,
+              standing === undefined
+                ? host.startCapabilities
+                : Effect.andThen(departure, host.startCapabilities),
+            ),
           );
         }),
       );
@@ -288,12 +322,15 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     holder: () => Effect.sync(() => signedInId(account)),
   };
 
-  /** The departure as this tab keeps it: the account cleared and the gate closed together. */
+  /**
+   * The departure as this tab keeps it, waited for: the account cleared, then
+   * the gate closed in turn after any move still under way.
+   */
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
-      generation += 1;
+      const asOf = ++generation;
       yield* settleOn(SIGNED_OUT);
-      yield* host.stopCapabilities;
+      yield* moveGate(asOf, departure);
     }),
   );
 

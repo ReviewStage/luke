@@ -31,7 +31,7 @@ import {
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -140,8 +140,13 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       credentialsUsable: runMode.observesProviders,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
-      // Who is signed in where the source keeps no account here, as its session names them.
-      sessionAccountEmail: () => readAccountPreferenceAccountKey(),
+      // Who is signed in where the source keeps no account here, as its
+      // session names them. Peeked rather than awaited, so a settings read
+      // made before the merge links the account reads no one rather than waiting.
+      sessionAccountEmail: () =>
+        Effect.flatMap(late.peek, (links) =>
+          Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
+        ),
       overrides,
       fileSystem,
       path,
@@ -255,6 +260,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      // Note that a store keeping no account of its own learns here whose the
+      // local preferences are, before they are taken as this account's.
+      yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
       const preferences = yield* store.accountPreferences();
