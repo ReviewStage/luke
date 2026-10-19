@@ -18,7 +18,7 @@ import { task } from "../task.js";
 /**
  * The migration that moved a plan's pictures into `attachment` and left
  * `plan_attachment` as a view over it: a database from before it keeps every
- * picture, with its task's workspace, which this code serves, and every query
+ * picture, which this code serves, and every query
  * a deployment from before it runs against `plan_attachment`, spelled as that
  * deployment's code spelled it, reads and writes the pictures in `attachment`
  * that this code reads. Synthetic accounts, plans, and pictures throughout.
@@ -99,7 +99,7 @@ const keptFor = (taskId: string) =>
 
 it.layer(getTestDB())("plan_attachment as a view over attachment", (it) => {
   it.effect(
-    "a database from before the migration keeps every picture under its id, with its task's workspace, which this code serves, and running it again changes nothing",
+    "a database from before the migration keeps every picture under its id, which this code serves and a task's move gives its workspace, and running it again changes nothing",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -125,8 +125,8 @@ it.layer(getTestDB())("plan_attachment as a view over attachment", (it) => {
         assert.deepEqual(
           yield* keptFor(plan.taskId),
           [
-            { id: saved.id, organizationId: plan.organizationId, savedAt: plan.now },
-            { id: unsaved.id, organizationId: plan.organizationId, savedAt: null },
+            { id: saved.id, organizationId: null, savedAt: plan.now },
+            { id: unsaved.id, organizationId: null, savedAt: null },
           ].toSorted((a, b) => a.id.localeCompare(b.id)),
         );
         const served = Option.getOrThrow(
