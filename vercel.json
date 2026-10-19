@@ -290,6 +290,10 @@
           "dest": "/api/default.js?route=account/provider-keys"
         },
         {
+          "src": "/api/admin/cost",
+          "dest": "/api/default.js?route=admin/cost"
+        },
+        {
           "src": "/api/admin/day",
           "dest": "/api/default.js?route=admin/day"
         },

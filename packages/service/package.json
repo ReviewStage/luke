@@ -16,6 +16,7 @@
     "./admin/admin-account": "./src/admin/admin-account.js",
     "./admin/admin-account-wire": "./src/admin/admin-account-wire.js",
     "./admin/admin-app": "./src/admin/admin-app.js",
+    "./admin/admin-cost-wire": "./src/admin/admin-cost-wire.js",
     "./admin/admin-day": "./src/admin/admin-day.js",
     "./admin/admin-favorite": "./src/admin/admin-favorite.js",
     "./admin/admin-health": "./src/admin/admin-health.js",
