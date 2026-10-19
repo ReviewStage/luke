@@ -19,7 +19,12 @@ import {
   ACCOUNT_INBOX_QUERY,
   accountInboxAnswerSchema,
 } from "./account-inbox-wire.js";
-import { CHAT_QUERY, type ChatWriteRequest, chatWriteRequestSchema } from "./chat-wire.js";
+import {
+  CHAT_ATTACHMENT_QUERY,
+  CHAT_QUERY,
+  type ChatWriteRequest,
+  chatWriteRequestSchema,
+} from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -878,6 +883,40 @@ export class HostedCodingAgentClient {
     return hostedAnswer(
       askHosted(this.#hosted.messages.chat, { workspaceId, after }, HOSTED_DEADLINE.HELD),
       ROW_REFUSALS,
+    );
+  }
+
+  /**
+   * One picture a chat message carries, by the attachment its image block
+   * names, fetched under the account: its bytes in base64 under the media
+   * type the service sniffed and kept, as an inbox image is; not found
+   * where the account is not in the workspace or the message carries no
+   * such picture; unanswered for anything else.
+   */
+  chatAttachment(
+    workspaceId: string,
+    messageId: string,
+    attachmentId: string,
+  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CHAT_ATTACHMENT_QUERY.WORKSPACE_ID]: workspaceId,
+      [CHAT_ATTACHMENT_QUERY.MESSAGE_ID]: messageId,
+      [CHAT_ATTACHMENT_QUERY.ATTACHMENT_ID]: attachmentId,
+    });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT_ATTACHMENT}?${query}`,
+      }),
+      (answer) => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return readImage(answer.response);
+      },
     );
   }
 

@@ -113,6 +113,40 @@
               "minItems": 1,
               "maxItems": 8
             },
+            "attachments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "mediaType": {
+                    "type": "string",
+                    "enum": [
+                      "image/png",
+                      "image/jpeg",
+                      "image/webp",
+                      "application/pdf",
+                      "text/plain"
+                    ]
+                  },
+                  "data": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name",
+                  "mediaType",
+                  "data"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            },
             "to": {
               "type": "string",
               "maxLength": 81

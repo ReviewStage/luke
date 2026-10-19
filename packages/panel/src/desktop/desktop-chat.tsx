@@ -313,6 +313,7 @@ export function DesktopChat({
             <TopicActions channel={channel} dialogs={dialogs} shown={view.open} />
           ) : undefined
         }
+        readPicture={view.readPicture}
         lead={
           room === SHELL_ROOM.NARROW ? (
             <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
@@ -419,6 +420,7 @@ export function TaskChatTab({
       openLink={openLink}
       onPost={view.onPost}
       onAnswer={view.onAnswer}
+      readPicture={view.readPicture}
     />
   );
 }

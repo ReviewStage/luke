@@ -25,6 +25,12 @@ import { installActPort } from "./app-bridge.js";
 const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { account: {}, settings: {} } as unknown as Omit<
+  ActPortDependencies,
+  "accountAsks" | "issues"
+>;
+
 const opened: MessagePort[] = [];
 
 afterEach(() => {
@@ -47,6 +53,7 @@ function openActPort(actor: ActSender): void {
   } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
     {
+      ...UNREACHED,
       ...elsewhere,
       accountAsks: {
         host: {

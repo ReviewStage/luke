@@ -12,7 +12,7 @@
  * value, so the panel carries none of Mermaid.
  */
 
-/** The window's appearance a diagram is drawn in, as the system's `prefers-color-scheme` says. */
+/** The window's appearance a diagram is drawn in, as its root's theme says (`tokens/appearance.ts`). */
 export const DIAGRAM_APPEARANCE = {
   LIGHT: "light",
   DARK: "dark",

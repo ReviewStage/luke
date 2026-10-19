@@ -4,8 +4,8 @@
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -14,7 +14,7 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge.js";
 
 /** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
@@ -101,35 +101,31 @@ export function handCapabilities(capabilities: readonly HostCapability[]): void 
  * Hands the window main's document with its settings as given, and answers
  * each settings write as main does: stored, then the document delivered
  * again to every listener, so a surface draws the setting it wrote and the
- * next surface drawn reads it. Any other act goes to the bridge the window
- * held before, or is refused where it held none. The write is answered as
+ * next surface drawn reads it. Every other act and procedure is answered
+ * as the window's fakes answered it before. The write is answered as
  * accepted.
  */
 export function handSettings(settings: Partial<AppSettingsView> = {}): void {
   let view: AppSettingsView = Object.assign(settingsView(), settings);
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  const before = fakeAppBridgeCalls();
   fakeAppBridge({
-    ...before,
+    ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(snapshot()),
     onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-        return (
-          before.act?.(request) ??
-          Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." })
-        );
-      }
-      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: (payload) => {
+      view = Object.assign({ ...view }, { [payload.field]: payload.value });
       const next = snapshot();
       for (const listener of listeners) listener(next);
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(view),
       });
     },
   });

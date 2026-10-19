@@ -119,7 +119,7 @@ export const COMMENT_TOOLS = [
   REOPEN_THREAD_TOOL,
 ] as const;
 
-export type CommentTool = (typeof COMMENT_TOOLS)[number];
+type CommentTool = (typeof COMMENT_TOOLS)[number];
 export type CommentToolName = CommentTool["name"];
 
 /** A call that took nothing, and why. */

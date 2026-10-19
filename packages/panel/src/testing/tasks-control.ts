@@ -348,6 +348,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onPost: () => Promise.resolve(undefined),
       onAnswer: () => Promise.resolve(undefined),
       onChannel: () => Promise.resolve(undefined),
+      readPicture: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

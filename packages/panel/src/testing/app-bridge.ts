@@ -17,6 +17,7 @@ import { ORPCError } from "@orpc/client";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
 
 let answering: Partial<AppBridge> = {};
+let answeringPort: Partial<FakeActPort> = {};
 
 /** Installs a bridge answering only the calls given, in place of whatever the window held. */
 export function fakeAppBridge(calls: Partial<AppBridge>): void {
@@ -35,8 +36,14 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
  * kind, as a test's window calls them.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
+  answeringPort = procedures;
   // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
   installActPortClient(procedures as ActPortClient);
+}
+
+/** The procedures the fake act port answers now, for a test that answers one more beside them or puts them back. */
+export function fakeActPortCalls(): Partial<FakeActPort> {
+  return answeringPort;
 }
 
 /** A procedure's refusal as the act port answers it: the declared error, carrying `sentence`. */
@@ -70,7 +77,7 @@ export function openingLinks(
 }
 
 /** Each port kind's procedure as a test answers it: its payload in, its answer or a rejection out. */
-type FakeActPort = {
+export type FakeActPort = {
   readonly [Kind in PortActKind]: (payload: PortActPayload<Kind>) => Promise<PortActResult<Kind>>;
 };
 

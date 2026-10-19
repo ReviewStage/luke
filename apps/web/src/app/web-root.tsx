@@ -5,7 +5,8 @@
  * cookie session on this origin. This module is a runtime edge
  * (`tools/anti-slop/effect-edges.json`), as the desktop's `window-root.tsx`
  * is: it builds the tab's one runtime over the host's layer, which every act
- * runs on, and runs the panel's first read.
+ * runs on, and runs the panel's first read. The tab is drawn in the
+ * account's Theme setting beside the panel (`web-appearance.tsx`).
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -25,6 +26,7 @@ import { createRoot } from "react-dom/client";
 import { browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
 import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
+import { WebAppearance } from "./web-appearance";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
 
@@ -78,6 +80,7 @@ export async function mountWebApp(
   const root = createRoot(rootElement);
   root.render(
     <RegistryContext.Provider value={rendererRegistry}>
+      <WebAppearance />
       <App />
     </RegistryContext.Provider>,
   );

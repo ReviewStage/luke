@@ -135,6 +135,11 @@ function windowPort(
   const platform = {} as PlatformActProcedures<unknown>;
   // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
   const tasks = { host: {} } as TasksProceduresDependencies;
+  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
+  const unreached = { account: {}, settings: {} } as unknown as Pick<
+    ActPortDependencies,
+    "account" | "settings"
+  >;
   // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
   const elsewhere = {
     automations: { host: {} },
@@ -142,7 +147,7 @@ function windowPort(
     integrations: { host: {} },
   } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
-    { ...elsewhere, accountAsks: { host }, issues, tasks, workspaces },
+    { ...unreached, ...elsewhere, accountAsks: { host }, issues, tasks, workspaces },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

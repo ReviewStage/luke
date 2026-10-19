@@ -9,9 +9,11 @@ import {
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatAttachmentParams,
   type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
+  type CodingAgentInboxAttachmentView,
 } from "@luke/features/coding-agent-view";
 import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -41,6 +43,8 @@ import { messageFailureWords } from "./coding-agent-model.js";
  * While a channel is shown the developer has read to the newest message
  * held, which is told to the service once per place it moves to. For you
  * moves no cursor, since what waits there is what has not been read.
+ * A picture a message carries is read on its own, by the message and the
+ * attachment its block names, in the workspace read.
  */
 
 /** How one read is asked: the workspace and the cursor to read past, answered as the view hears it. */
@@ -50,6 +54,11 @@ export type ChatReader = (params: CodingAgentChatParams) => Promise<CodingAgentC
 export type ChatWriter = (
   params: CodingAgentChatPostParams,
 ) => Promise<CodingAgentChatWriteAnswerView>;
+
+/** How one picture a message carries is read: the workspace, the message, and the attachment, answered as the view hears it. */
+export type ChatPictureReader = (
+  params: CodingAgentChatAttachmentParams,
+) => Promise<CodingAgentInboxAttachmentView>;
 
 /** What Chat draws and presses of the service's chat. */
 export interface WorkspaceChatControl {
@@ -64,6 +73,11 @@ export interface WorkspaceChatControl {
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Reads one picture a message carries, by the message and the attachment its block names. */
+  readonly readPicture: (
+    messageId: string,
+    attachmentId: string,
+  ) => Promise<CodingAgentInboxAttachmentView>;
 }
 
 /** What a card says when its answer was not taken. */
@@ -217,6 +231,7 @@ export function useWorkspaceChat(input: {
   reading: string | undefined;
   readChat: ChatReader;
   writeChat: ChatWriter;
+  readPicture: ChatPictureReader;
 }): WorkspaceChatControl {
   const { account, workspaceId, active, reading } = input;
   const [held, setHeld] = useState<Held>(() => fresh(account, workspaceId));
@@ -323,6 +338,16 @@ export function useWorkspaceChat(input: {
     [write],
   );
 
+  const readPicture = useCallback(
+    (messageId: string, attachmentId: string): Promise<CodingAgentInboxAttachmentView> =>
+      workspaceId === undefined
+        ? Promise.resolve(UNANSWERED)
+        : latest.current
+            .readPicture({ workspaceId, messageId, attachmentId })
+            .catch((): CodingAgentInboxAttachmentView => UNANSWERED),
+    [workspaceId],
+  );
+
   // While a channel is shown, the developer has read it to the newest message it holds: told once per place, of that channel alone.
   const newest = reading === undefined ? 0 : newestSeqIn(held.chat, reading);
   const readSeq = reading === undefined ? 0 : readSeqIn(held.chat, reading);
@@ -349,5 +374,13 @@ export function useWorkspaceChat(input: {
     });
   }, [reading, newest, readSeq, account, workspaceId, write]);
 
-  return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer, onChannel };
+  return {
+    chat: held.chat,
+    failed: held.failed,
+    onRetry,
+    onPost,
+    onAnswer,
+    onChannel,
+    readPicture,
+  };
 }

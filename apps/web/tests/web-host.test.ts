@@ -2,10 +2,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { THEME } from "@luke/settings";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Context, Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
@@ -40,16 +41,16 @@ it.effect(
     Effect.gen(function* () {
       const first = yield* Effect.scoped(
         Effect.gen(function* () {
-          const { bridge } = yield* standingHost(fakeService({ signedIn: false }));
+          const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: false }));
+          installAppBridge(bridge);
+          installActPort(actPort);
           return yield* Effect.promise(() =>
-            bridge.act({
-              kind: ACT_KIND.SETTING_UPDATE,
-              payload: { field: "theme", value: THEME.DARK },
-            }),
+            askAct(ACT_KIND.SETTING_UPDATE, { field: "theme", value: THEME.DARK }),
           );
         }),
       );
-      assert.equal(first.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(first.settings.stored.theme, THEME.DARK);
 
       const reread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -139,13 +140,12 @@ it.effect(
           undefined,
         );
 
+        installAppBridge(writer.bridge);
+        installActPort(writer.actPort);
         const written = yield* Effect.promise(() =>
-          writer.bridge.act({
-            kind: ACT_KIND.SETTING_UPDATE,
-            payload: { field: "theme", value: THEME.DARK },
-          }),
+          askAct(ACT_KIND.SETTING_UPDATE, { field: "theme", value: THEME.DARK }),
         );
-        assert.equal(written.status, ACT_OUTCOME_STATUS.DONE);
+        assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
         // The browser tells every tab but the writer's; jsdom holds one window, so the event is
         // said here as the browser would, again until the reader has heard it.
         yield* Effect.promise(() =>

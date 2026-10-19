@@ -11,10 +11,15 @@
   /* The palette every shared component draws in, the inks, grounds, fills,
      edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
      (`tokens/palettes.css`), keyed on the root's `data-luke-profile` and
-     `data-luke-theme`, and its theme is `system`, so it follows the Mac's
-     appearance and Luke's own Theme setting through it. What stays here is
-     the window's own: whose voice is live, the code's and the terminal's
-     inks, a file icon's. */
+     `data-luke-theme`: the desktop's theme is `system`, so it follows the
+     Mac's appearance and Luke's own Theme setting through it, and the web's
+     is the account's Theme setting resolved (`@luke/ui`'s
+     `tokens/appearance.ts`). What stays here is the window's own: whose
+     voice is live, the code's and the terminal's inks, a file icon's. Each
+     colour of its own that differs by appearance is one `light-dark()` pair,
+     light first, which the root's theme picks through `color-scheme`, so no
+     sheet here asks the machine's appearance: a page drawn in a chosen theme
+     draws every ink in it whatever the machine says. */
 
   /* Whose voice is live, so a glance says who is talking. Your turn is the
      palette's green (`--luke-color-complete`); Luke answers in the blue the
@@ -29,12 +34,12 @@
   --surface-caption: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
-  --code-ground: #0d1117;
-  --code-text: #e6edf3;
-  --code-line-number: rgba(230, 237, 243, 0.32);
-  --code-line-number-pointed: rgba(230, 237, 243, 0.8);
-  --code-pointed: rgba(56, 139, 253, 0.16);
-  --code-pointed-edge: #388bfd;
+  --code-ground: light-dark(#fff, #0d1117);
+  --code-text: light-dark(#1f2328, #e6edf3);
+  --code-line-number: light-dark(rgba(31, 35, 40, 0.5), rgba(230, 237, 243, 0.32));
+  --code-line-number-pointed: light-dark(rgba(31, 35, 40, 0.85), rgba(230, 237, 243, 0.8));
+  --code-pointed: light-dark(rgba(9, 105, 218, 0.08), rgba(56, 139, 253, 0.16));
+  --code-pointed-edge: light-dark(#0969da, #388bfd);
   /* A diff's lines on the code's ground, wherever one is drawn: a line
      added tinted in the palette's green and one removed in its red, the
      words a changed line changed in a deeper tint of the same, and the mark
@@ -50,56 +55,56 @@
      ground, the code's ink for its words and cursor, its selection in the
      code's blue, and the sixteen ANSI colours a program prints in, from the
      same GitHub theme the code is coloured with. The terminal draws on a
-     canvas, which reads none of this itself, so the bundle reads each one
-     off the host and draws again when the appearance flips
+     canvas, which reads none of this itself, so the bundle reads the colour
+     each resolves to off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  /* The well's own colour in each appearance rather than `--luke-color-well`,
-     because xterm takes the property's text and cannot read a `light-dark()`. */
-  --terminal-ground: #0f0f12;
+  /* The well's own colour in each appearance, restated rather than read
+     through `--luke-color-well`, so every colour the canvas is handed is one
+     this sheet names. */
+  --terminal-ground: light-dark(#f8f8f9, #0f0f12);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
-  --terminal-selection: rgba(56, 139, 253, 0.4);
-  /* The scrollbar's ink, restated rather than read through `--luke-color-scrollbar`,
-     because the canvas is handed the token's computed text, and the shared
-     palette's is a `light-dark()` pair the terminal cannot parse. */
-  --terminal-scrollbar: rgba(255, 255, 255, 0.18);
-  --terminal-black: #484f58;
-  --terminal-red: #ff7b72;
-  --terminal-green: #3fb950;
-  --terminal-yellow: #d29922;
-  --terminal-blue: #58a6ff;
-  --terminal-magenta: #bc8cff;
-  --terminal-cyan: #39c5cf;
-  --terminal-white: #b1bac4;
-  --terminal-bright-black: #6e7681;
-  --terminal-bright-red: #ffa198;
-  --terminal-bright-green: #56d364;
-  --terminal-bright-yellow: #e3b341;
-  --terminal-bright-blue: #79c0ff;
-  --terminal-bright-magenta: #d2a8ff;
-  --terminal-bright-cyan: #56d4dd;
-  --terminal-bright-white: #ffffff;
+  --terminal-selection: light-dark(rgba(9, 105, 218, 0.2), rgba(56, 139, 253, 0.4));
+  /* The scrollbar's ink, restated rather than read through
+     `--luke-color-scrollbar` for the same reason. */
+  --terminal-scrollbar: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.18));
+  --terminal-black: light-dark(#24292f, #484f58);
+  --terminal-red: light-dark(#cf222e, #ff7b72);
+  --terminal-green: light-dark(#116329, #3fb950);
+  --terminal-yellow: light-dark(#4d2d00, #d29922);
+  --terminal-blue: light-dark(#0969da, #58a6ff);
+  --terminal-magenta: light-dark(#8250df, #bc8cff);
+  --terminal-cyan: light-dark(#1b7c83, #39c5cf);
+  --terminal-white: light-dark(#6e7781, #b1bac4);
+  --terminal-bright-black: light-dark(#57606a, #6e7681);
+  --terminal-bright-red: light-dark(#a40e26, #ffa198);
+  --terminal-bright-green: light-dark(#1a7f37, #56d364);
+  --terminal-bright-yellow: light-dark(#633c01, #e3b341);
+  --terminal-bright-blue: light-dark(#218bff, #79c0ff);
+  --terminal-bright-magenta: light-dark(#a475f9, #d2a8ff);
+  --terminal-bright-cyan: light-dark(#3192aa, #56d4dd);
+  --terminal-bright-white: light-dark(#8c959f, #ffffff);
   /* A find's tints in a terminal (`terminal-surface.ts`), opaque because
      the terminal blends no alpha into its cells: the browser find's yellow
      dimmed for every match, its orange for the one the find is at. */
-  --terminal-find-match: #5c4a00;
-  --terminal-find-current: #b36b00;
+  --terminal-find-match: light-dark(#fff0a3, #5c4a00);
+  --terminal-find-current: light-dark(#ffb547, #b36b00);
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
      outside the tree (`tasks.css`). */
-  --file-icon-gray: #adadb1;
-  --file-icon-red: #ff6762;
-  --file-icon-vermilion: #d5512f;
-  --file-icon-orange: #ffa359;
-  --file-icon-yellow: #ffd452;
-  --file-icon-green: #5ecc71;
-  --file-icon-teal: #64d1db;
-  --file-icon-cyan: #68cdf2;
-  --file-icon-blue: #69b1ff;
-  --file-icon-indigo: #9d6afb;
-  --file-icon-purple: #d568ea;
-  --file-icon-pink: #ff678d;
-  --file-icon-mauve: #79697b;
+  --file-icon-gray: light-dark(#84848a, #adadb1);
+  --file-icon-red: light-dark(#d52c36, #ff6762);
+  --file-icon-vermilion: light-dark(#ff8c5b, #d5512f);
+  --file-icon-orange: light-dark(#d47628, #ffa359);
+  --file-icon-yellow: light-dark(#d5a910, #ffd452);
+  --file-icon-green: light-dark(#199f43, #5ecc71);
+  --file-icon-teal: light-dark(#17a5af, #64d1db);
+  --file-icon-cyan: light-dark(#1ca1c7, #68cdf2);
+  --file-icon-blue: light-dark(#1a85d4, #69b1ff);
+  --file-icon-indigo: light-dark(#693acf, #9d6afb);
+  --file-icon-purple: light-dark(#a631be, #d568ea);
+  --file-icon-pink: light-dark(#d32a61, #ff678d);
+  --file-icon-mauve: light-dark(#594c5b, #79697b);
 
   /* Springs, durations, delays, and the row fan arrive from motion-tokens.css,
      imported by index.css, so the marketing mock cannot ship a different
@@ -123,66 +128,23 @@
      the words and an edge beneath them, both stronger while their thread is
      open or the pointer is on them, in an amber that is neither the blue of
      a selection, the yellow of a find, nor the orange of attention. */
-  --comment-mark: rgba(255, 200, 87, 0.13);
-  --comment-mark-edge: rgba(255, 200, 87, 0.5);
-  --comment-mark-active: rgba(255, 200, 87, 0.28);
-  --comment-mark-active-edge: rgba(255, 200, 87, 0.95);
+  --comment-mark: light-dark(rgba(245, 176, 0, 0.14), rgba(255, 200, 87, 0.13));
+  --comment-mark-edge: light-dark(rgba(196, 132, 0, 0.55), rgba(255, 200, 87, 0.5));
+  --comment-mark-active: light-dark(rgba(245, 176, 0, 0.3), rgba(255, 200, 87, 0.28));
+  --comment-mark-active-edge: light-dark(rgba(176, 112, 0, 1), rgba(255, 200, 87, 0.95));
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
 }
 
-/* The light appearance of the window's own colours, the palette's being
-   `light-dark()` pairs (`@luke/ui`'s `tokens/palettes.css`). Every colour
-   above is restated here and nowhere else, so a sheet that spends one flips
-   with the system's appearance (which Luke's own Theme setting drives through
-   `nativeTheme.themeSource`) on the frame it changes, without a re-render. */
-@media (prefers-color-scheme: light) {
-  :root {
-    --comment-mark: rgba(245, 176, 0, 0.14);
-    --comment-mark-edge: rgba(196, 132, 0, 0.55);
-    --comment-mark-active: rgba(245, 176, 0, 0.3);
-    --comment-mark-active-edge: rgba(176, 112, 0, 1);
-    --code-ground: #fff;
-    --code-text: #1f2328;
-    --code-line-number: rgba(31, 35, 40, 0.5);
-    --code-line-number-pointed: rgba(31, 35, 40, 0.85);
-    --code-pointed: rgba(9, 105, 218, 0.08);
-    --code-pointed-edge: #0969da;
-    --terminal-ground: #f8f8f9;
-    --terminal-selection: rgba(9, 105, 218, 0.2);
-    --terminal-scrollbar: rgba(0, 0, 0, 0.2);
-    --terminal-black: #24292f;
-    --terminal-red: #cf222e;
-    --terminal-green: #116329;
-    --terminal-yellow: #4d2d00;
-    --terminal-blue: #0969da;
-    --terminal-magenta: #8250df;
-    --terminal-cyan: #1b7c83;
-    --terminal-white: #6e7781;
-    --terminal-bright-black: #57606a;
-    --terminal-bright-red: #a40e26;
-    --terminal-bright-green: #1a7f37;
-    --terminal-bright-yellow: #633c01;
-    --terminal-bright-blue: #218bff;
-    --terminal-bright-magenta: #a475f9;
-    --terminal-bright-cyan: #3192aa;
-    --terminal-bright-white: #8c959f;
-    --terminal-find-match: #fff0a3;
-    --terminal-find-current: #ffb547;
-    --file-icon-gray: #84848a;
-    --file-icon-red: #d52c36;
-    --file-icon-vermilion: #ff8c5b;
-    --file-icon-orange: #d47628;
-    --file-icon-yellow: #d5a910;
-    --file-icon-green: #199f43;
-    --file-icon-teal: #17a5af;
-    --file-icon-cyan: #1ca1c7;
-    --file-icon-blue: #1a85d4;
-    --file-icon-indigo: #693acf;
-    --file-icon-purple: #a631be;
-    --file-icon-pink: #d32a61;
-    --file-icon-mauve: #594c5b;
-  }
+/* Pierre's diff and file tree each ask for `color-scheme: light dark` in
+   their own shadow roots, which follows the machine; each takes the root's
+   scheme instead, so a theme chosen on the web reaches the `light-dark()`
+   inks they keep for themselves. The desktop's root is `light dark`
+   already. Note that a rule on the host from outside its shadow root
+   outweighs the root's own `:host` rule. */
+diffs-container,
+file-tree-container {
+  color-scheme: inherit;
 }
 
 .app-stage {

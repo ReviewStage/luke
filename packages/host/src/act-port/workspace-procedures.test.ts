@@ -291,6 +291,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
   // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
   const tasks = { host: {} } as TasksProceduresDependencies;
+  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
+  const unreached = { account: {}, settings: {} } as unknown as Pick<
+    ActPortDependencies,
+    "account" | "settings"
+  >;
   // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
   const elsewhere = {
     automations: { host: {} },
@@ -299,6 +304,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
     {
+      ...unreached,
       ...elsewhere,
       accountAsks,
       issues: NO_ISSUES,

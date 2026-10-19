@@ -26,6 +26,7 @@ import {
   LUKE_MARK,
 } from "@luke/features/board-vocabulary";
 import type { Board, DrawingElement } from "@luke/features/board-wire";
+import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -68,19 +69,14 @@ import {
  * same drawing.
  */
 
-/** The appearance the window's stylesheet answers to, which the canvas follows too. */
-const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
-
-/** Excalidraw's theme for the window's appearance as it stands. */
+/** Excalidraw's theme for the window's appearance as it stands, the one its stylesheet is drawn in. */
 function appearanceTheme(): Theme {
-  return window.matchMedia(DARK_APPEARANCE).matches ? THEME.DARK : THEME.LIGHT;
+  return drawnDark() ? THEME.DARK : THEME.LIGHT;
 }
 
 /** Calls `changed` whenever the window's appearance changes, until the returned call. */
 function onAppearance(changed: () => void): () => void {
-  const query = window.matchMedia(DARK_APPEARANCE);
-  query.addEventListener("change", changed);
-  return () => query.removeEventListener("change", changed);
+  return onDrawnThemeChange(changed);
 }
 
 /** Excalidraw's buttons the board does not offer, since a board lives on the service and holds no file. */

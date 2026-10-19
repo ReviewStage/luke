@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.js",
     "./account-initials": "./src/account-initials.js",
+    "./appearance": "./src/tokens/appearance.js",
     "./actor-model": "./src/actor-model.js",
     "./choice-keys": "./src/components/choice/choice-keys.js",
     "./accounts-sort": "./src/accounts-sort.js",

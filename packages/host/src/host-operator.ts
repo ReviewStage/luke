@@ -28,6 +28,7 @@ import {
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatAttachmentParams,
   type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
@@ -671,6 +672,10 @@ export interface HostOperator {
   codingAgentChatPost(
     params: CodingAgentChatPostParams,
   ): Effect.Effect<CodingAgentChatWriteAnswerView>;
+  /** One picture a chat message carries, read under the account: its bytes in base64 under its type, or why there is none. */
+  codingAgentChatAttachment(
+    params: CodingAgentChatAttachmentParams,
+  ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -1874,6 +1879,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           write: params.write,
         }),
         codingAgentAnswer(codingAgentChatWriteAnswerViewSchema),
+      ),
+    codingAgentChatAttachment: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_ATTACHMENT, {
+          workspaceId: params.workspaceId,
+          messageId: params.messageId,
+          attachmentId: params.attachmentId,
+        }),
+        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(
