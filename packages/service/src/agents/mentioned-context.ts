@@ -80,6 +80,9 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * needs them. Their email is not handed, since nothing the agent does needs
  * it. Someone the send did not find among the members, who left or was never
  * in it, is named as not a member.
+ *
+ * An issue of the workspace is handed nothing beyond its link in the words,
+ * `https://tryluke.dev/<workspace>/issue/<issueId>`, which names it by its id.
  */
 
 export const MENTIONED_BOUNDS = {
@@ -316,6 +319,8 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.FOLDER:
     // Luke named in words is a comment's ask of him, which hands an agent nothing.
     case MENTION_KIND.LUKE:
+    // An issue is handed as its link in the words alone, which names it by its id.
+    case MENTION_KIND.ISSUE:
       return undefined;
   }
 }

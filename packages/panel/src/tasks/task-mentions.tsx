@@ -1,6 +1,8 @@
+import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import {
   createContext,
   type ReactNode,
@@ -14,13 +16,16 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
+import { useExperiment } from "../use-app-state.js";
 import { agentActor, agentTabLabel } from "./coding-agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type {
   MentionAgentsReader,
   MentionableAgent,
+  MentionableIssue,
   MentionablePage,
   MentionablePullRequest,
+  MentionIssuesReader,
 } from "./mention-picker.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useOpenTask } from "./use-open-link.js";
@@ -42,7 +47,9 @@ import { useOpenTask } from "./use-open-link.js";
  * New task's composer hands the same for its workspace, its repository's
  * once one is chosen on its chip (`new-task-composer.tsx`). Each
  * hands the workspace's coding agents too, read as an `@` list opens
- * through `useMentionAgentsReader`, each named by its task.
+ * through `useMentionAgentsReader`, each named by its task, and, while
+ * Issues is on (`EXPERIMENT.ISSUES`), the workspace's issues, read as the
+ * Issues page reads them, through `useMentionIssuesReader`.
  *
  * The page also carries a mention made elsewhere on it into the agent's
  * message box drawn there: the box drawn now takes it in (`useMentionBox`),
@@ -70,6 +77,8 @@ export interface TaskMentionsValue {
   readonly readAgents?: MentionAgentsReader | undefined;
   /** The pull requests the task's agents published, which an `@` offers; none off a task. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
+  /** Reads the workspace's issues, which an `@` offers; none while Issues is off. */
+  readonly readIssues?: MentionIssuesReader | undefined;
   readonly doors: MentionDoors;
 }
 
@@ -142,6 +151,7 @@ export function tasklessMentions(
   place: TasklessPlace,
   onOpenTask: MentionDoors["onOpenTask"],
   readAgents?: MentionAgentsReader,
+  readIssues?: MentionIssuesReader,
 ): TaskMentionsValue {
   const { workspace, workspaceId, repository } = place;
   return {
@@ -152,6 +162,7 @@ export function tasklessMentions(
     repository,
     text: () => "",
     readAgents,
+    readIssues,
     doors: {
       taskId: NO_TASK,
       place: { workspace, repository },
@@ -231,6 +242,40 @@ export function useMentionAgentsReader(
     [act, workspaceId],
   );
   return workspaceId === undefined ? undefined : read;
+}
+
+/** The issues of no read. */
+const NO_ISSUES: readonly MentionableIssue[] = [];
+
+/**
+ * Reads the workspace's issues as an `@` list offers them, as the Issues
+ * page reads them (`ACT_KIND.ISSUES_LIST`), the archived left out: each by
+ * its identifier, read off the workspace's name as the page draws it, and
+ * its title; none where the read failed. No reader while Issues is off or
+ * no workspace is known, so the list offers no issue.
+ */
+export function useMentionIssuesReader(
+  workspace: { readonly id: string; readonly name: string } | undefined,
+): MentionIssuesReader | undefined {
+  const { act } = useAct();
+  const on = useExperiment(EXPERIMENT.ISSUES);
+  const workspaceId = workspace?.id;
+  const workspaceName = workspace?.name ?? "";
+  const read = useCallback<MentionIssuesReader>(() => {
+    if (workspaceId === undefined) return Promise.resolve(NO_ISSUES);
+    return act(ACT_KIND.ISSUES_LIST, { workspaceId }).then(
+      (answer) =>
+        "failure" in answer
+          ? NO_ISSUES
+          : answer.issues.map((issue) => ({
+              id: issue.id,
+              identifier: issueIdentifier(workspaceName, issue.number),
+              title: issue.title,
+            })),
+      () => NO_ISSUES,
+    );
+  }, [act, workspaceId, workspaceName]);
+  return on && workspaceId !== undefined ? read : undefined;
 }
 
 /** A task a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */

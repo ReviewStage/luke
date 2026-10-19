@@ -53,6 +53,7 @@ import {
   type TasklessPlace,
   tasklessMentions,
   useMentionAgentsReader,
+  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
@@ -490,10 +491,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     [tasks.tasks, tasks.archived],
   );
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, mentionTasks, named.models);
+  const readMentionIssues = useMentionIssuesReader(
+    tasks.workspaces.find((each) => each.id === place?.workspaceId),
+  );
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
+      : tasklessMentions(place, tasks.onShowMention, readMentionAgents, readMentionIssues);
   const onRetry = () => {
     read.onRetry();
     archivedRead.onRetry();

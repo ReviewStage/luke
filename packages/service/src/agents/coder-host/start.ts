@@ -39,7 +39,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { TaskLinearIssue } from "@luke/features/linear-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { LINK_PLACE, linkOf, readLink } from "@luke/features/luke-link";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -199,7 +199,8 @@ function oneLine(words: string): string {
 
 /**
  * An issue a plan was started from, in the one shape an agent handed the
- * plan reads it after the plan: its heading; the issue as a mention; what
+ * plan reads it after the plan: its heading; the issue as a mention,
+ * written under the workspace its link names; what
  * the agent does about it beyond the plan, where anything; and the issue's
  * description as it reads, fenced as data, since whoever wrote it is not
  * the developer. What stands outside the fence is folded onto one line, and
@@ -231,7 +232,11 @@ function startingIssueBrief(issue: StartingIssue): string {
   const named =
     mention === undefined
       ? `${name} (${oneLine(issue.url)})`
-      : mentionMarkdown(mention, name, { workspace: "", repository: null });
+      : // Note that the mention is written under the workspace its link names, as the workspace's own issue's link names one.
+        mentionMarkdown(mention, name, {
+          workspace: readLink(issue.url)?.workspace ?? "",
+          repository: null,
+        });
   const description = issue.description.trim() === "" ? "" : issue.description.trimEnd();
   return [
     issue.heading,
