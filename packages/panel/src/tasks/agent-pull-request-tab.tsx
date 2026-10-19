@@ -170,11 +170,13 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
  * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its labels in their
- * GitHub colours (`pull-request-labels.tsx`); its branches, with the stack
- * it stands in beside them (`pull-request-stack.tsx`); who opened it and
- * when, as the Changes tab names them (`pull-request-people.tsx`), with its
- * reviewers' first faces wearing where each stands; and, while it is open,
+ * then GitHub and the ⋯); its title and number; its branches, with the
+ * stack it stands in beside them (`pull-request-stack.tsx`); who opened it
+ * and when, as the Changes tab names them (`pull-request-people.tsx`), with
+ * its reviewers' first faces wearing where each stands, the reviewer and
+ * label pickers, and its labels in their GitHub colours
+ * (`pull-request-labels.tsx`) at the line's end, so a pull request with no
+ * labels spends no line on them; and, while it is open,
  * whether it would merge as it stands, in
  * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
  * and a quiet count: Conversation, its description and its comments and
@@ -1063,7 +1065,7 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({
   parts,
   now,
@@ -1106,10 +1108,6 @@ function PullRequestHead({
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <div className="pull-request-label-row">
-        <PullRequestLabels labels={pullRequest.labels ?? []} />
-        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
-      </div>
       <div className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
           <p className="pull-request-branches">
@@ -1138,7 +1136,9 @@ function PullRequestHead({
               {...editing}
             />
           ) : null}
+          <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
         </span>
+        <PullRequestLabels labels={pullRequest.labels ?? []} />
       </div>
       {open ? (
         <MergeLine
