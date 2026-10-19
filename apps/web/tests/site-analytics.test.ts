@@ -48,7 +48,7 @@ const sent: URL[] = [];
 const captured: CaptureResult[] = [];
 let posthog: PostHog;
 /** The runtime's own `CompressionStream`, taken off the global while the file runs. */
-const compressionStream = Reflect.get(globalThis, "CompressionStream");
+const compressionStream = globalThis.CompressionStream;
 
 /** The file names of the scripts the client asked the browser to load. */
 function requestedScripts(): string[] {
