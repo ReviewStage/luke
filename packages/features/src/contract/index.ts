@@ -22,6 +22,7 @@ import { macCommandsContract } from "./mac-commands.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 import { planCommentsContract } from "./plan-comments.js";
+import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { repositoryPinsContract } from "./repository-pins.js";
 import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
@@ -58,6 +59,7 @@ export const hostedContract = {
   models: modelsContract,
   planComments: planCommentsContract,
   plans: tasksContract,
+  pullRequestChapters: pullRequestChaptersContract,
   repositoryPins: repositoryPinsContract,
   taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,

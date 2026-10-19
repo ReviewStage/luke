@@ -175,6 +175,10 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
+  CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
+  /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
   CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",

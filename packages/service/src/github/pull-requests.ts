@@ -106,6 +106,8 @@ export interface GitHubPullRequest {
   readonly comments?: number;
   /** How many commits it holds, where GitHub counted them. */
   readonly commits?: number;
+  /** Its description as its author wrote it, in Markdown, where it has one. */
+  readonly body?: string;
 }
 
 /** A label as GitHub names it: its name and its colour, six hex digits with no `#`. */
@@ -197,6 +199,7 @@ const PullRequestSchema = Schema.Struct({
   comments: Schema.optional(Schema.Number),
   review_comments: Schema.optional(Schema.Number),
   commits: Schema.optional(Schema.Number),
+  body: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 /** A pull request as a listing spells it, read for its number alone: the listing carries no sizes. */
@@ -364,6 +367,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     ...(record.labels === undefined ? undefined : { labels: record.labels }),
     ...(comments === undefined ? undefined : { comments }),
     ...(record.commits === undefined ? undefined : { commits: record.commits }),
+    ...(record.body == null || record.body === "" ? undefined : { body: record.body }),
   };
 }
 
@@ -567,6 +571,33 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   const kept = files.slice(0, CHANGES_BOUNDS.MAX_FILES);
   return { files: kept, truncated: pullRequest.changedFiles > kept.length };
 });
+
+/** A pull request's commits as GitHub lists them, read for their messages alone. */
+const PullRequestCommitsSchema = Schema.Array(
+  Schema.Struct({ commit: Schema.Struct({ message: Schema.String }) }),
+);
+
+/** The most commits a pull request's messages are read for: GitHub's one page. */
+const MAX_COMMIT_MESSAGES = 100;
+
+/**
+ * The messages of a pull request's commits, oldest first, as far as its
+ * first page of them; none where the repository has no such pull request.
+ * Note that one page is read and no more, because a pull request's own
+ * words and its diff tell most of its story, and the messages only help.
+ */
+export function pullRequestCommitMessages(
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Read<readonly string[]> {
+  const request = githubRead(`${repositoryPath(fullName)}/pulls/${number}/commits`, token).pipe(
+    HttpClientRequest.setUrlParams({ per_page: String(MAX_COMMIT_MESSAGES) }),
+  );
+  return Effect.map(readOptional(request, PullRequestCommitsSchema), (read) =>
+    Option.getOrElse(read, () => []).map(({ commit }) => commit.message),
+  );
+}
 
 /** Two commits compared, as far as where they part. */
 const CompareSchema = Schema.Struct({ merge_base_commit: Schema.Struct({ sha: Schema.String }) });

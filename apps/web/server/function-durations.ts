@@ -1,6 +1,10 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import {
+  PULL_REQUEST_CHAPTERS_FUNCTION,
+  PULL_REQUEST_CHAPTERS_ROUTE_PATH,
+} from "@luke/service/chapters/chapters-function";
+import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@luke/service/maintenance/maintenance-bounds";
@@ -32,6 +36,7 @@ function routeKeyOf(path: string): string {
 const FUNCTION_GROUP = {
   DEFAULT: "default",
   MAINTENANCE_SWEEP: "maintenance-sweep",
+  PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -62,6 +67,12 @@ const GROUPS: readonly GroupDefinition[] = [
     file: FUNCTION_GROUP.MAINTENANCE_SWEEP,
     maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
+  },
+  // A Generate runs one model call of up to three minutes, past the platform's default duration.
+  {
+    file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
+    maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(PULL_REQUEST_CHAPTERS_ROUTE_PATH)],
   },
 ];
 

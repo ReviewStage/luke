@@ -42,6 +42,7 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
@@ -136,6 +137,16 @@ const PUBLISHED = {
 };
 
 /** The agent's changes, as the service answers them. */
+/** A pull request's chapters as the service answers them: none made yet for its head. */
+const CHAPTERS = {
+  pullRequest: {
+    number: 11,
+    headSha: "c0ffee1",
+    generatable: true,
+    chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+  },
+} as const;
+
 const CHANGES = {
   pullRequest: {
     url: "https://github.com/acme/relay/pull/123",
@@ -333,6 +344,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
+      }),
+    chapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
+      }),
+    generateChapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
       }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
@@ -953,6 +974,17 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID }),
+      CHAPTERS,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE, {
+        agentId: AGENT_ID,
+        number: 11,
+      }),
+      CHAPTERS,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
       OVERVIEW.pullRequest,
     );
@@ -1126,6 +1158,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
+      `chapters:${AGENT_ID}`,
+      `chapters-generate:${AGENT_ID}#11`,
       `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,

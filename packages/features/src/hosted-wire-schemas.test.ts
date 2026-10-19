@@ -31,6 +31,8 @@ import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
 import * as pullRequestArea from "./pull-request-area.js";
+import * as pullRequestChaptersView from "./pull-request-chapters-view.js";
+import * as pullRequestChaptersWire from "./pull-request-chapters-wire.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
@@ -453,6 +455,16 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
+  "pull-request-chapters-wire": {
+    pullRequestChaptersStateSchema: pullRequestChaptersWire.pullRequestChaptersStateSchema,
+    pullRequestChaptersRequestSchema: pullRequestChaptersWire.pullRequestChaptersRequestSchema,
+    pullRequestChaptersAnswerSchema: pullRequestChaptersWire.pullRequestChaptersAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestChaptersWire>,
+  "pull-request-chapters-view": {
+    pullRequestChaptersParamsSchema: pullRequestChaptersView.pullRequestChaptersParamsSchema,
+    pullRequestChaptersAnswerViewSchema:
+      pullRequestChaptersView.pullRequestChaptersAnswerViewSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestChaptersView>,
   "pull-request-write-wire": {
     mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,

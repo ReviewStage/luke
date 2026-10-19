@@ -20,6 +20,7 @@ import {
   automationProcedures,
 } from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
+import { type ChaptersProceduresDependencies, chaptersProcedures } from "./chapters-procedures.js";
 import { type FactoryProceduresDependencies, factoryProcedures } from "./factory-procedures.js";
 import {
   type IntegrationProceduresDependencies,
@@ -97,6 +98,7 @@ export interface ActPortDependencies {
   readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
+  readonly chapters: ChaptersProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
   /** What main pushes each window, which the push stream reads. */
@@ -128,6 +130,7 @@ export function createActPortHandler<Sender>(
     ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
+    ...chaptersProcedures(dependencies.chapters),
     ...factoryProcedures(dependencies.factory),
     ...integrationProcedures(dependencies.integrations),
     ...settingsProcedures(dependencies.settings),

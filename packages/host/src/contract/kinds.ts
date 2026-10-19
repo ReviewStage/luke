@@ -180,6 +180,17 @@ export const BROWSER_ACT_KIND = {
   BROWSER_CLOSE: "browser.close",
 } as const;
 
+/**
+ * A coding agent's Pull request tab's Chapters: a pull request's chapters
+ * read as its workspace keeps them, and generated for its head on Luke's own
+ * model key when the developer presses Generate, the generation answered
+ * once it lands, which may take minutes.
+ */
+export const CHAPTERS_ACT_KIND = {
+  CHAPTERS_READ: "chapters.read",
+  CHAPTERS_GENERATE: "chapters.generate",
+} as const;
+
 /** The Factory page's ask: a workspace's Factory world, read whole as it stands now. */
 export const FACTORY_ACT_KIND = {
   FACTORY_WORLD: "factory.world",
@@ -457,6 +468,7 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...BROWSER_ACT_KIND,
+  ...CHAPTERS_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,

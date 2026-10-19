@@ -66,6 +66,10 @@ import {
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
+  type PullRequestChaptersAnswerView,
+  pullRequestChaptersParamsSchema,
+} from "@luke/features/pull-request-chapters-view";
+import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -107,6 +111,8 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the agents, as this concern asks it. */
 export type CodingAgentClient = Pick<
   HostedCodingAgentClient,
+  | "chapters"
+  | "generateChapters"
   | "models"
   | "readDefault"
   | "writeDefault"
@@ -447,6 +453,26 @@ function composed(
         );
         const answer = yield* asked(client.changes(agentId, number));
         return carried<CodingAgentChangesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, number } = yield* read(
+          pullRequestChaptersParamsSchema,
+          params,
+          "reading a pull request's chapters names one agent",
+        );
+        const answer = yield* asked(client.chapters(agentId, number));
+        return carried<PullRequestChaptersAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, number } = yield* read(
+          pullRequestChaptersParamsSchema,
+          params,
+          "generating a pull request's chapters names one agent",
+        );
+        const answer = yield* asked(client.generateChapters(agentId, number));
+        return carried<PullRequestChaptersAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {

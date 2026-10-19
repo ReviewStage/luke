@@ -392,7 +392,6 @@ function unseen(each: ChapterHunk): boolean {
  * The model chapters are told on, on Luke's own Anthropic key and never the
  * account's meter, or nothing where the deployment holds no key, as the
  * hosted route reads it from `HostedEnvironment`'s `anthropicKey`.
- * @public
  */
 export function chaptersModelOf(
   anthropicKey: Redacted.Redacted | undefined,

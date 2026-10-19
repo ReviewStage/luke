@@ -107,6 +107,10 @@ import {
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
 import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
 import {
+  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
+  type PullRequestChaptersAnswerView,
+} from "./pull-request-chapters-view.js";
+import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
 } from "./pull-request-write-wire.js";
@@ -206,6 +210,39 @@ const CHOOSE_REFUSALS = {
   ...ROW_REFUSALS,
   ...DEFAULT_REFUSALS,
 } satisfies NamedRefusals;
+
+/** The chapters failures a refusal may stand for, by the service's own word for each. */
+type ChaptersRefusals = Readonly<
+  Partial<
+    Record<
+      HostedApiError,
+      (typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE)[keyof typeof PULL_REQUEST_CHAPTERS_CALL_FAILURE]
+    >
+  >
+>;
+
+/** The refusals a read or a Generate of a pull request's chapters can answer with. */
+const CHAPTERS_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]:
+    PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED,
+  [HOSTED_API_ERROR.UNAVAILABLE]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE,
+} satisfies ChaptersRefusals;
+
+/** A chapters procedure's answer, or the refusal it failed with where it is one the tab acts on; unanswered for everything else. */
+function chaptersAnswer(
+  asked: Effect.Effect<PullRequestChaptersAnswerView, HostedFailure, HttpClient.HttpClient>,
+  named: ChaptersRefusals = CHAPTERS_REFUSALS,
+): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) =>
+    Effect.succeed({
+      failure:
+        (failed._tag === "HostedRefused" ? named[failed.refusal] : undefined) ??
+        PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
+    }),
+  );
+}
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
@@ -691,6 +728,36 @@ export class HostedCodingAgentClient {
     return hostedAnswer(
       askHosted(this.#hosted.agents.reviewOptions, { id: agentId }),
       ROW_REFUSALS,
+    );
+  }
+
+  /** The workspace's newest chapters of one agent's pull request, or of its repository's by the number given, with its head as GitHub holds it now. */
+  chapters(
+    agentId: string,
+    number?: number,
+  ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
+    return chaptersAnswer(
+      askHosted(this.#hosted.pullRequestChapters.read, {
+        id: agentId,
+        ...(number === undefined ? undefined : { number: String(number) }),
+      }),
+    );
+  }
+
+  /** One agent's pull request's chapters generated for its head now, or the generation already under way, answered as `chapters` answers; held for as long as a generation may take. */
+  generateChapters(
+    agentId: string,
+    number?: number,
+  ): Effect.Effect<PullRequestChaptersAnswerView, never, HttpClient.HttpClient> {
+    return chaptersAnswer(
+      askHosted(
+        this.#hosted.pullRequestChapters.generate,
+        {
+          params: { id: agentId },
+          ...(number === undefined ? undefined : { query: { number: String(number) } }),
+        },
+        HOSTED_DEADLINE.CHAPTERS,
+      ),
     );
   }
 

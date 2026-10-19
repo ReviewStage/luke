@@ -1,0 +1,237 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "generating"
+          ]
+        },
+        "headSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "status",
+        "headSha",
+        "baseSha",
+        "startedAt"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "failed"
+          ]
+        },
+        "headSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "failureKind": {
+          "type": "string",
+          "enum": [
+            "too_large",
+            "timeout",
+            "model_refused",
+            "invalid_answer",
+            "unexpected"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "headSha",
+        "baseSha",
+        "failureKind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        },
+        "headSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "story",
+                  "other"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "hunkRefs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "oldStart": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "oldStart"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "keyChanges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "lineRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "side": {
+                            "type": "string",
+                            "enum": [
+                              "additions",
+                              "deletions"
+                            ]
+                          },
+                          "startLine": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "endLine": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "side",
+                          "startLine",
+                          "endLine"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "lineRefs"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "risk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "high",
+                      "medium",
+                      "low"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "riskReasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "summary",
+              "hunkRefs",
+              "keyChanges",
+              "risk",
+              "riskReasons"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "status",
+        "headSha",
+        "baseSha",
+        "model",
+        "chapters"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

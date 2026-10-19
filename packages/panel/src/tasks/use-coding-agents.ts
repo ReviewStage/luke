@@ -21,6 +21,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import {
+  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
+  type PullRequestChaptersAnswerView,
+} from "@luke/features/pull-request-chapters-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -71,6 +75,11 @@ import type {
   InboxMessenger,
   InboxReader,
 } from "./use-task-inbox.js";
+
+/** A pull request's chapters the port refused to answer, as the tab hears any answer that never came. */
+const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
+  failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
+};
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -304,6 +313,20 @@ export interface CodingAgentsControl {
   readNumberedPullRequest: (agentId: string, number: number) => Promise<boolean>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<CodingAgentChangesAnswerView>;
+  /**
+   * One read of a pull request's chapters, as its Chapters tab asks it: the
+   * agent's own pull request, or the one of its repository by the number
+   * given (`pull-request-number.ts`). Answers its head now, whether chapters
+   * can be generated, and the workspace's newest chapters, whatever head they
+   * were made for; or why there are none, a port that refused included.
+   */
+  readChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
+  /**
+   * The same pull request's chapters generated for its head now, or the
+   * generation already under way; answers once the generation lands, which
+   * may take minutes, as `readChapters` answers.
+   */
+  generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
@@ -1204,6 +1227,22 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readChapters = useCallback<CodingAgentsControl["readChapters"]>(
+    (agentId, number) =>
+      act(ACT_KIND.CHAPTERS_READ, pullRequestAsked(agentId, number)).catch(
+        (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
+      ),
+    [act],
+  );
+
+  const generateChapters = useCallback<CodingAgentsControl["generateChapters"]>(
+    (agentId, number) =>
+      act(ACT_KIND.CHAPTERS_GENERATE, pullRequestAsked(agentId, number)).catch(
+        (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
+      ),
+    [act],
+  );
+
   const readOverviewPullRequest = useCallback<CodingAgentsControl["readOverviewPullRequest"]>(
     (agentId, number) =>
       act(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
@@ -1332,6 +1371,8 @@ export function useCodingAgents(input: {
     readNumberedPullRequest,
     readChanges,
     changesPeople,
+    readChapters,
+    generateChapters,
     readOverviewPullRequest,
     readReviewOptions,
     readOverviewChecks,
