@@ -71,3 +71,8 @@ export const macCommandSettleRequestSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   result: macCommandResultSchema,
 });
+
+/** A result the service kept (POST). */
+export const macCommandSettledAnswerSchema = EffectSchema.Struct({
+  settled: EffectSchema.Literal(true),
+});
