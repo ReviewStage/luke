@@ -1,7 +1,11 @@
 /* sources.css -- what an app's stylesheet takes on when it mounts the panel.
 
    Tailwind generates only the utilities it finds in the sources it reads, and
-   an app's own sources stop at its own directory. This line is resolved
+   an app's own sources stop at its own directory. These lines are resolved
    against this file, so an app that imports it reads the panel's sources as
-   well as its own, and a utility a panel module spells is not dropped. */
+   well as its own, and a utility a panel module spells is not dropped. The
+   second is the markdown renderer the panel draws a reply with, Streamdown,
+   whose own components are written in the same utilities and live in the
+   panel's dependencies, not the app's. */
 @source "./";
+@source "../node_modules/streamdown/dist/*.js";

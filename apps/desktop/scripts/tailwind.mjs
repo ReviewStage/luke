@@ -16,23 +16,27 @@ import { Scanner } from "@tailwindcss/oxide";
 // regular expression.
 const TAILWIND_ENTRY = /[\\/]tailwind\.css$/;
 
+/** The renderer's Tailwind entry, compiled over its own directory; `watchFiles` collects what it imported. */
+export async function compileTailwindEntry(file, watchFiles = []) {
+  return compile(await fs.readFile(file, "utf8"), {
+    base: path.dirname(file),
+    from: file,
+    onDependency: (dependency) => watchFiles.push(dependency),
+  });
+}
+
 export function tailwindPlugin() {
   return {
     name: "tailwind",
     setup(build) {
       build.onLoad({ filter: TAILWIND_ENTRY }, async (args) => {
-        const base = path.dirname(args.path);
         const watchFiles = [];
-        const compiler = await compile(await fs.readFile(args.path, "utf8"), {
-          base,
-          from: args.path,
-          onDependency: (file) => watchFiles.push(file),
-        });
+        const compiler = await compileTailwindEntry(args.path, watchFiles);
         const scanner = new Scanner({ sources: compiler.sources });
         return {
           contents: compiler.build(scanner.scan()),
           loader: "css",
-          resolveDir: base,
+          resolveDir: path.dirname(args.path),
           watchFiles,
         };
       });
