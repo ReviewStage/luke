@@ -12,7 +12,6 @@ import { openTargetOf } from "@luke/features/open-address";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
-import { applyWebSessionReplay } from "./web-session-replay";
 
 /**
  * Where the web serves the panel's static files, Excalidraw's fonts and the
@@ -57,6 +56,29 @@ function macAppLink(): string {
 }
 
 /**
+ * The tab's session replay, whose controller and masking
+ * (`web-session-replay.ts`) are a chunk of their own that the entry leaves
+ * out, loaded the first time the host lets the tab record. Each word on
+ * recording is handed on in the order it came, so one that stands recording
+ * down while the chunk loads still lands after the one that started it; a
+ * word before that, which can only be no, has nothing to stand down. A chunk
+ * that fails to load is tried again on the next word that lets the tab record.
+ */
+function lazySessionReplay(): AppPlatform["applySessionReplay"] {
+  let recording: Promise<AppPlatform["applySessionReplay"]> | undefined;
+  return (bootstrap) => {
+    if (recording === undefined && !bootstrap.permitted) return;
+    recording ??= import("./web-session-replay").then((module) => module.applyWebSessionReplay);
+    void recording.then(
+      (apply) => apply(bootstrap),
+      () => {
+        recording = undefined;
+      },
+    );
+  };
+}
+
+/**
  * The tab's platform. A browser has no menu bar and no global keys, so those
  * answer nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
@@ -76,7 +98,7 @@ export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): 
     recordSurfaceEvent: counting.recordSurfaceEvent,
     openGitHub: openTab,
     openWeb: openTab,
-    applySessionReplay: applyWebSessionReplay,
+    applySessionReplay: lazySessionReplay(),
     macAppLink,
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
   };

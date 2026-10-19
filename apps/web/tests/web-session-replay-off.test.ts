@@ -38,6 +38,8 @@ test("a tab the host does not let record, or a build without the site's key, loa
   vi.useFakeTimers();
   vi.stubEnv("PROD", true);
   vi.stubEnv("VITE_POSTHOG_PROJECT_API_KEY", "phc_test");
+  // The recording's chunk, already loaded, so the tab's own import of it lands at once.
+  await import("../src/app/web-session-replay");
   const platform = webPlatform({ recordSurfaceEvent: () => undefined });
 
   // The host's word is no: a deleted account, until the next sign-in.

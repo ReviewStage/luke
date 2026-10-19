@@ -92,6 +92,8 @@ test("a production build with the site's key records the tab under the desktop's
   drawPage();
   // The recorder's chunk, already run, so the tab's own import of it lands at once.
   await import("../src/app/session-recorder");
+  // The recording's chunk, already loaded, so the tab's own import of it lands at once.
+  await import("../src/app/web-session-replay");
   const platform = webPlatform({ recordSurfaceEvent: () => undefined });
   const sent: CaptureResult[] = [];
   posthog.on("eventCaptured", (event) => sent.push(event));
