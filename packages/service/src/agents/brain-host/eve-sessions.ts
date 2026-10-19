@@ -5,35 +5,21 @@
 import { failureKind } from "@luke/runtime/effect";
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
-import {
-  Data,
-  Duration,
-  Effect,
-  Schema as EffectSchema,
-  Redacted,
-  Result,
-  Schedule,
-  Stream,
-} from "effect";
+import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/http";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
-import {
-  EXCESS_KEYS,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "../../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
  * developer's behalf: open the conversation's session with a first message,
  * follow up on the session it runs in, cancel one turn by eve's own id
- * for it, retire the session for good once Luke lets go of it, and listen to
- * the session's live event stream from its tail. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
+ * for it, and retire the session for good once Luke lets go of it. eve's
+ * `Client` would make the same requests, but its session handle keeps the delivery id an accepted
  * follow-up answers to itself, and that id is what ties an ask to the turn
  * eve later starts, so the requests are made here as eve's own routes
  * document them. The caller is the deployment acting for an account it
@@ -158,28 +144,6 @@ const resetAnswer = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(EVE_RESET_STATUS)),
 });
 
-/**
- * One line of eve's session stream as a follower reads it: the event's type
- * and the turn it names, where it names one. Nothing else of the event is
- * read, so no word the model wrote is held here; a line that is no event (a
- * heartbeat, a lease control) reads as nothing.
- */
-const streamedEvent = EffectSchema.Struct({
-  type: trimmedText,
-  data: EffectSchema.optional(
-    EffectSchema.Struct({ turnId: EffectSchema.optional(EffectSchema.String) }),
-  ),
-});
-
-/** What a follower hears of one event on a session's stream. */
-interface EveStreamEvent {
-  readonly type: string;
-  readonly turnId: string | undefined;
-}
-
-/** eve's stream route reads from the tail with a negative start: `-1` is the latest event, so a follower hears only what comes after it attached. */
-const STREAM_FROM_TAIL = "-1";
-
 /** Every answer eve hands back is read with the keys this build does not name dropped. */
 const DROPPING_EXCESS = { excess: EXCESS_KEYS.DROP } as const;
 
@@ -294,14 +258,6 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
    * inbox; a session it no longer runs answers `no_active_session`.
    */
   reset(sessionId: string): Effect.Effect<EveReset, EveUnreachable>;
-  /**
-   * The session's live events from its tail on, each as its type and turn,
-   * for as long as eve keeps the response open. A stream eve refuses (the
-   * door has not seen the session recorded yet, or the caller does not reach
-   * it) is empty, and one that drops ends; a follower that wants more
-   * attaches again.
-   */
-  stream(sessionId: string): Stream.Stream<EveStreamEvent, EveUnreachable>;
 }
 
 /**
@@ -407,46 +363,6 @@ function postToEve(
     );
 }
 
-/** One stream line as an event, or nothing for a line that is not one. */
-function readStreamLine(line: string): EveStreamEvent | undefined {
-  if (line.trim().length === 0) return undefined;
-  let parsed: WireBoundaryInput;
-  try {
-    // SAFETY: a line eve wrote as JSON; the schema read that follows is what holds it to a shape.
-    parsed = JSON.parse(line) as WireBoundaryInput;
-  } catch {
-    return undefined;
-  }
-  const event = readEither(streamedEvent, DROPPING_EXCESS)(unparsedWire(parsed));
-  if (Result.isFailure(event)) return undefined;
-  return { type: event.success.type, turnId: event.success.data?.turnId };
-}
-
-/** One GET of a session's stream from its tail, as the lines eve writes; a refusal is no line at all. */
-function streamFromEve(
-  client: HttpClient.HttpClient,
-  url: URL,
-  headers: Readonly<Record<string, string>>,
-): Stream.Stream<EveStreamEvent, EveUnreachable> {
-  url.searchParams.set("startIndex", STREAM_FROM_TAIL);
-  const response = client
-    .execute(HttpClientRequest.get(url, { headers }))
-    .pipe(Effect.provideService(FetchHttpClient.RequestInit, EVE_REQUEST_INIT));
-  return Stream.unwrap(
-    Effect.map(response, (answered) =>
-      answered.status < OK_STATUS.FIRST || answered.status > OK_STATUS.LAST
-        ? Stream.empty
-        : answered.stream,
-    ),
-  ).pipe(
-    Stream.decodeText,
-    Stream.splitLines,
-    Stream.map(readStreamLine),
-    Stream.filter((event): event is EveStreamEvent => event !== undefined),
-    Stream.mapError((cause) => new EveUnreachable({ cause })),
-  );
-}
-
 function readOpened({ status, body }: EveAnswer): EveOpened {
   const opened = readEither(openedSession, DROPPING_EXCESS)(body);
   if (status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
@@ -540,10 +456,6 @@ function sessionsOver<Turn extends BrainHostTurn>(
       ),
     reset: (sessionId) =>
       Effect.map(post(`${sessionPath(mount, sessionId)}/reset`, {}, {}), readReset),
-    stream: (sessionId) =>
-      streamFromEve(client, new URL(`${sessionPath(mount, sessionId)}/stream`, options.origin), {
-        ...identity,
-      }),
   };
 }
 

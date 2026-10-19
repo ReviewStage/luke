@@ -44,7 +44,7 @@ import {
 import { quietLiveWake } from "@luke/service/testing/live-wake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, type Context, Effect, Layer, Option, Result, Stream } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
@@ -113,7 +113,6 @@ const fakeEve = (): EveSessions => ({
     }),
   cancel: () => Effect.die(new Error("this suite cancels nothing")),
   reset: () => Effect.die(new Error("this suite retires no session")),
-  stream: () => Stream.empty,
 });
 
 /** The comments' route group, or the plans' procedures behind the hosted oRPC router, over the test's own database, answering one request. */

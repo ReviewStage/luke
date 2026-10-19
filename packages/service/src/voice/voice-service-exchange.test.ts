@@ -26,7 +26,7 @@ import {
   sessionInstructions,
 } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
-import { Duration, Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
+import { Duration, Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
@@ -173,9 +173,6 @@ function fakeEve(): FakeEve {
     },
     reset() {
       return Effect.die(new Error("this suite retires no session"));
-    },
-    stream() {
-      return Stream.empty;
     },
   };
   return eve;

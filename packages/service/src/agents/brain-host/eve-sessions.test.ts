@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Effect, Redacted, Stream } from "effect";
+import { Effect, Redacted } from "effect";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
   EVE_MOUNT,
@@ -162,72 +162,5 @@ it.effect(
         assert.equal(request.headers.get("authorization"), "Bearer developer-token-1");
         assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), null);
       }
-    }),
-);
-
-/** eve's client over a fake `HttpClient` that answers every request with the status and NDJSON body given, recording each URL and bearer. */
-function streaming(status: number, lines: readonly string[]) {
-  const seen: {
-    readonly url: string;
-    readonly method: string;
-    readonly authorization: string | null;
-  }[] = [];
-  const client = fakeHttpClientLayer(async (url, init) => {
-    seen.push({
-      url,
-      method: init.method ?? "GET",
-      authorization: new Headers(init.headers).get("authorization"),
-    });
-    return new Response(lines.join("\n"), { status });
-  });
-  const sessions: Effect.Effect<EveSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller: CALLER }),
-    client,
-  );
-  return { seen, sessions };
-}
-
-it.effect(
-  "a session's stream is read from its tail under the deployment's bearer, as each event's type and turn, with a line that is no event skipped",
-  () =>
-    Effect.gen(function* () {
-      const { seen, sessions } = streaming(200, [
-        JSON.stringify({
-          type: "message.appended",
-          data: { turnId: "turn_1", messageDelta: "Hi" },
-        }),
-        "not json",
-        JSON.stringify({ $eve: "stream.lease-ended", version: 1 }),
-        "",
-        JSON.stringify({ type: "turn.completed", data: { turnId: "turn_1" }, meta: { id: "e1" } }),
-        JSON.stringify({ type: "session.waiting", data: {} }),
-      ]);
-      const events = yield* Effect.flatMap(sessions, (eve) =>
-        Stream.runCollect(eve.stream(SESSION)),
-      );
-      assert.deepEqual(events, [
-        { type: "message.appended", turnId: "turn_1" },
-        { type: "turn.completed", turnId: "turn_1" },
-        { type: "session.waiting", turnId: undefined },
-      ]);
-      assert.deepEqual(seen, [
-        {
-          url: `${ORIGIN}/eve/v1/session/${SESSION}/stream?startIndex=-1`,
-          method: "GET",
-          authorization: `Bearer ${CRON_SECRET}`,
-        },
-      ]);
-    }),
-);
-
-it.effect(
-  "a stream eve refuses is no event at all, so the follower falls back to reading the record",
-  () =>
-    Effect.gen(function* () {
-      const { sessions } = streaming(403, [JSON.stringify({ error: "not_owner" })]);
-      const events = yield* Effect.flatMap(sessions, (eve) =>
-        Stream.runCollect(eve.stream(SESSION)),
-      );
-      assert.deepEqual(events, []);
     }),
 );

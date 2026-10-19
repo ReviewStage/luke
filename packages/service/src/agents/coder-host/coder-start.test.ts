@@ -9,7 +9,7 @@ import { ISSUE_STATUS } from "@luke/features/issue-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import {
@@ -72,7 +72,6 @@ function fakeEve() {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { opened, eve: Effect.succeed(sessions) };
 }

@@ -20,7 +20,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
+import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -546,7 +546,6 @@ const EVE_UNREACHED: EveSessions = {
       outcome: EVE_RESET_OUTCOME.FAILED,
       status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
     }),
-  stream: () => Stream.empty,
 };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */

@@ -18,7 +18,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Option } from "effect";
 import { test } from "vitest";
 import {
   EVE_CANCEL_OUTCOME,
@@ -145,7 +145,6 @@ function fakeEve() {
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
-    stream: () => Stream.empty,
   };
   return { sent, eveFor: () => Effect.succeed(sessions) };
 }

@@ -35,7 +35,6 @@ import {
   Queue,
   Redacted,
   Scope,
-  Stream,
 } from "effect";
 import { SqlError, UnknownError } from "effect/sql/SqlError";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
@@ -195,7 +194,6 @@ function fakeEve(): FakeEve {
     reset() {
       return Effect.die(new Error("this suite retires no session"));
     },
-    stream: () => Stream.empty,
   };
   return eve;
 }
