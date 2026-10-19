@@ -18,7 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -146,13 +146,9 @@ async function drawn(
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        reads(request) ??
-          (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
-      ),
+      Promise.resolve(reads(request) ?? { status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const words = createElement(MemberDirectory, {

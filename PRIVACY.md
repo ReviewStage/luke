@@ -620,7 +620,14 @@ one of your integrations stands expired, or a workspace you belong to has its
 GitHub installation suspended or removed, the page lists your account with
 which provider or integration it is and that status, when it last changed,
 and how many of your coding agents failed in the past week; that list names
-no workspace and no repository. Past those names, nothing you
+no workspace and no repository. The same page shows the service's use at
+public list prices, a figure for comparison and not what we are billed,
+from the model tokens each turn recorded and the seconds of voice,
+dictation, and video avatar it metered: mostly as totals across every
+account, and, for the accounts whose use comes to the most at those prices
+over the days chosen, what each one's use comes to, how many tokens of it
+no price was known for, and how many of its coding agents' pull requests
+merged. Past those names, nothing you
 type, say, or run appears on it: no task's title, plan, prompt, or message,
 no pull request's title, no key, and no error's own words.
 

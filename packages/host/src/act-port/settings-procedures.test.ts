@@ -49,7 +49,7 @@ const NO_SIDE_EFFECTS: ClientSettingSideEffects = {
 };
 
 // SAFETY: these tests call the settings procedures alone, and building the others reads none of these.
-const UNREACHED = { accountAsks: {}, account: {}, issues: {} } as unknown as Omit<
+const UNREACHED = { accountAsks: {}, workspaces: {}, account: {}, issues: {} } as unknown as Omit<
   ActPortDependencies,
   "settings"
 >;

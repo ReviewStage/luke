@@ -126,10 +126,10 @@ function windowPort(
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
   // SAFETY: no issue act is called here, so the issues' host is never reached.
   const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
+  // SAFETY: no account, settings, or workspace act is called here, so none of their dependencies is reached.
+  const unreached = { account: {}, settings: {}, workspaces: {} } as unknown as Pick<
     ActPortDependencies,
-    "account" | "settings"
+    "account" | "settings" | "workspaces"
   >;
   const handler = createActPortHandler({ ...unreached, accountAsks: { host }, issues });
   const { port1, port2 } = new MessageChannel();

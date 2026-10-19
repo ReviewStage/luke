@@ -358,30 +358,6 @@ export function taskWorkPath(taskId: string, before?: string): string {
   return `${path}?${query}`;
 }
 
-/**
- * One task's conversation as a coding agent's transcript is read
- * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
- * open while a turn runs; with no cursor, its newest turns; with `before`,
- * the turns queued before that one.
- */
-export function taskMessagesPath(
-  taskId: string,
-  page: { after?: string; before?: string },
-): string {
-  const path = `${taskPath(taskId)}/messages`;
-  const query = new URLSearchParams({
-    ...(page.after === undefined ? undefined : { after: page.after }),
-    ...(page.before === undefined ? undefined : { before: page.before }),
-  });
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `taskMessagesPath`'s read. */
-export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
-}
-
 /** Every code Luke showed on one task, oldest first (GET). */
 export function taskCodePath(taskId: string): string {
   return `${taskPath(taskId)}/code`;
@@ -580,24 +556,6 @@ export function workspacePhotoPath(workspaceId: string): string {
 /** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
 export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
   return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
-}
-
-/**
- * One agent's messages: its transcript past a cursor (GET), held open while
- * the agent runs, or, with no cursor, a message sent to it (POST).
- * `coding-agent-wire.ts` declares the answer and the request.
- */
-export function agentMessagesPath(agentId: string, after?: string): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One worker's transcript past a cursor (GET), under the agent and the delegation call that started it, held open while the worker runs as the agent's own is; the same answer as `agentMessagesPath`'s read. */
-export function agentSubagentMessagesPath(agentId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
 /** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */

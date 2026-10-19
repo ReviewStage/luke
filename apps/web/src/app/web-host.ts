@@ -303,6 +303,7 @@ function portDependencies(operator: OperatorClient, reporter: string): ActPortDe
       // A tab claims no global key, so no chord is ever held.
       stopChordHolder: () => undefined,
     },
+    workspaces: { host, openExternal: async (url) => openTab(url) },
   };
 }
 

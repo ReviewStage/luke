@@ -57,7 +57,7 @@ import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   copyingInto,
   DESKTOP_LINKS,
@@ -318,12 +318,6 @@ beforeEach(() => {
           },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
@@ -379,6 +373,10 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(members),
   });
 });
 

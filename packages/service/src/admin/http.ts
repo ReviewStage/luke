@@ -25,6 +25,7 @@ export const ADMIN_HTTP_STATUS = {
  */
 export const ADMIN_ROUTE_PATH = {
   METRICS: "/api/admin/metrics",
+  COST: "/api/admin/cost",
   USERS: "/api/admin/users",
   USER: "/api/admin/user",
   FAVORITE: "/api/admin/favorite",

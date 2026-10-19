@@ -27,7 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -167,10 +167,6 @@ afterEach(() => {
 });
 
 function answer(request: Act): ActOutcome {
-  if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-    const beta = request.payload.workspaceId === BETA.id;
-    return { status: ACT_OUTCOME_STATUS.DONE, value: beta ? BETA_MEMBERS : MEMBERS };
-  }
   if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
     const beta = request.payload.workspaceId === BETA.id;
     return { status: ACT_OUTCOME_STATUS.DONE, value: { automations: beta ? [AUDIT] : [SWEEP] } };
@@ -219,6 +215,10 @@ async function drawn(text: string): Promise<HTMLElement> {
       told.push(request);
       return Promise.resolve(answer(request));
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
+      Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
   });
   fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));

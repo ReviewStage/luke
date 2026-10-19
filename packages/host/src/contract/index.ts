@@ -9,6 +9,7 @@ import { accountAskActsContract } from "./account-asks.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { settingsActsContract } from "./settings.js";
+import { workspaceActsContract } from "./workspaces.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -27,6 +28,7 @@ export {
   ISSUE_ACT_KIND,
   type PortActKind,
   SETTINGS_ACT_KIND,
+  WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 export type { SettingUpdatePayload } from "./settings.js";
 
@@ -36,6 +38,7 @@ export const actContract = {
   ...accountAskActsContract,
   ...issueActsContract,
   ...settingsActsContract,
+  ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
 /** The window's typed client of the act port. */

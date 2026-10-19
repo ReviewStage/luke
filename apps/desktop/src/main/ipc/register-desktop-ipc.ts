@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
@@ -9,7 +10,7 @@ import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
-import { startMacTerminal } from "@luke/host/node";
+import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
@@ -114,6 +115,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...avatarActRows({ avatar }),
     ...macTerminalActRows({
       host: operator.host,
+      worktreesRoot: worktreesRoot(os.homedir()),
       stateRoot: config.stateRoot,
       ports: {
         open: (sender, ticket) => {
@@ -257,6 +259,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         stopChordHolder: (chord) =>
           hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
       },
+      workspaces: { host: operator.host, openExternal: config.openExternal },
     }),
     services: effectServices,
     reports,

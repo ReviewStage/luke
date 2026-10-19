@@ -23,7 +23,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -421,13 +421,10 @@ function seen(ref: Element | null): readonly (string | undefined)[] | undefined 
 
 test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
   const drawn = async (caller: PlanEditor | undefined) => {
     const page = mounted(
       createElement(MemberDirectory, {

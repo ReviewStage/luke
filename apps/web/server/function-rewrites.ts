@@ -81,8 +81,9 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/plans/([^/]+)/subagents/([^/]+)/messages",
     route: "plans/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/code", route: "plans/code", query: "id=$1" },
   { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1" },
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
@@ -131,6 +132,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -142,7 +144,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/picture",
     query: "id=$1&picture=$2",
   },
-  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1", orpc: true },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   {

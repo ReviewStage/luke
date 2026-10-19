@@ -19,7 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { AutomationDirectory } from "../automation-directory.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import { agentActor } from "./coding-agent-model.js";
@@ -100,11 +100,11 @@ beforeEach(() => {
           value: { automations },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
   });
 });
 

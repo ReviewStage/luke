@@ -41,7 +41,7 @@ const REFUSAL = {
 } as const;
 
 // SAFETY: these tests call the account procedures alone, and building the others reads none of these.
-const UNREACHED = { accountAsks: {}, issues: {}, settings: {} } as unknown as Omit<
+const UNREACHED = { accountAsks: {}, workspaces: {}, issues: {}, settings: {} } as unknown as Omit<
   ActPortDependencies,
   "account"
 >;

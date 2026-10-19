@@ -17,6 +17,7 @@ import {
   type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type WorkspaceProceduresDependencies,
 } from "./index.js";
 
 /**
@@ -64,6 +65,13 @@ const UNREACHED = { accountAsks: {}, account: {}, settings: {} } as unknown as O
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
+/** The workspace procedures' host, never asked here. */
+const NO_WORKSPACES: WorkspaceProceduresDependencies = {
+  // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
+  host: {} as WorkspaceProceduresDependencies["host"],
+  openExternal: () => Promise.resolve(),
+};
+
 const opened: MessagePort[] = [];
 
 afterEach(() => {
@@ -93,7 +101,11 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  const handler = createActPortHandler({ ...UNREACHED, issues: { host } });
+  const handler = createActPortHandler({
+    ...UNREACHED,
+    issues: { host },
+    workspaces: NO_WORKSPACES,
+  });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

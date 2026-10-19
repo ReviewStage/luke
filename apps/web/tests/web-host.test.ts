@@ -11,7 +11,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Context, Effect, Layer, Schema } from "effect";
 import { afterEach } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
-import { fakeService } from "./support/fake-service";
+import { fakeService, WORKSPACE_MEMBER } from "./support/fake-service";
 
 /**
  * The shared host as a browser tab composes it, with no panel drawn: what it
@@ -97,6 +97,22 @@ it.effect("an act that rides the act port reaches the service through the tab's 
       );
 
       assert.deepEqual(listed, { issues: [] });
+    }),
+  ),
+);
+
+it.effect("a workspace act rides the tab's act port to the service and back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installAppBridge(bridge);
+      installActPort(actPort);
+
+      const members = yield* Effect.promise(() =>
+        askAct(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId: "workspace-ada" }),
+      );
+
+      assert.deepEqual(members, [WORKSPACE_MEMBER]);
     }),
   ),
 );

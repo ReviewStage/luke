@@ -8,6 +8,10 @@ import { type AccountProceduresDependencies, accountProcedures } from "./account
 import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
+import {
+  type WorkspaceProceduresDependencies,
+  workspaceProcedures,
+} from "./workspace-procedures.js";
 
 /**
  * index.ts -- the act port's server: every procedure of `@luke/host/contract`, served over a window's `MessagePort`.
@@ -24,6 +28,7 @@ export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
+export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler = RPCHandler<ActPortContext>;
@@ -34,6 +39,7 @@ export interface ActPortDependencies {
   readonly accountAsks: AccountAskProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
   readonly settings: SettingsProceduresDependencies;
+  readonly workspaces: WorkspaceProceduresDependencies;
 }
 
 /**
@@ -50,6 +56,7 @@ export function createActPortHandler(dependencies: ActPortDependencies): ActPort
     ...accountAskProcedures(dependencies.accountAsks),
     ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
+    ...workspaceProcedures(dependencies.workspaces),
   };
   return new RPCHandler<ActPortContext>(router, {
     interceptors: [

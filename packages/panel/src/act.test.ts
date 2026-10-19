@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { type ActPortDependencies, createActPortHandler } from "@luke/host/act-port";
+import {
+  type ActPortDependencies,
+  createActPortHandler,
+  type WorkspaceProceduresDependencies,
+} from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -58,6 +62,11 @@ function openActPort(actor: ActSender): void {
         issueCreate: unanswered,
         issueChange: unanswered,
       },
+    },
+    // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
+    workspaces: {
+      host: {} as WorkspaceProceduresDependencies["host"],
+      openExternal: () => Promise.resolve(),
     },
   });
   const { port1, port2 } = new MessageChannel();

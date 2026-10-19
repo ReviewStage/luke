@@ -15,45 +15,33 @@ import {
   resolveAsk,
 } from "@luke/database/models/chat-store";
 import { storeWriter } from "@luke/database/models/writer";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_CURSOR_START,
-  CHAT_QUERY,
   CHAT_TARGET_SIGIL,
+  type ChatAnswer,
   type ChatBlock,
   type ChatReply,
+  type ChatWriteAnswer,
+  type ChatWriteRequest,
   chatCursorSchema,
-  chatWriteRequestSchema,
   MEMBER_KIND,
   replyRefusal,
 } from "@luke/features/chat-wire";
 import { workspaceIdSchema } from "@luke/features/task-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result, Schema } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
+import { Effect, Option, Result, Schema } from "effect";
+import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
   hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
 } from "../http/http-effect.js";
-import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 import { type ChatNamed, namedIn } from "./coder-host/chat-ask.js";
 import {
@@ -67,7 +55,7 @@ import { messageOnWire, readsOf, workspaceChatPast } from "./coder-host/chat-pag
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
- * chat-app.ts -- a workspace's chat as the window reads it and writes to it.
+ * workspace-chat.ts -- a workspace's chat as the window reads it and writes to it.
  *
  * `GET /api/workspaces/chat?workspaceId=&after=` answers what a person in
  * the workspace sees of its chat past the cursor, held open while nothing
@@ -91,31 +79,22 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * teammate started.
  */
 
-const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
-
 /** A cursor as the window hands it back: the next place in the workspace's sequence it has yet to read, in decimal. */
 const seqCursorSchema = chatCursorSchema.check(Schema.isPattern(/^(0|[1-9][0-9]{0,14})$/u));
 
 /** A write is at most a post's blocks at JSON's widest escape, and room for the keys around them. */
-const MAXIMUM_WRITE_BODY_BYTES =
+export const MAXIMUM_CHAT_WRITE_BODY_BYTES =
   6 * CHAT_BOUNDS.MAX_BLOCKS * CHAT_BOUNDS.MAX_MARKDOWN_CHARS + 4_096;
 
-export interface ChatAppSeams {
-  resolveUserId: UserIdResolver;
+export interface ChatSeams {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for the account an agent was started by; a test hands a fake, and the deployment composes eve's client under its own secret. */
   eveAs?: (starterUserId: string) => EveSessions;
 }
 
-/** What the routes may require of the function that stands them. */
-export type ChatAppServices =
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | HostedEnvironment;
-
-type ChatServices = ChatAppServices | HttpServerRequest.HttpServerRequest;
+/** What a read or a write of the chat may require. */
+type ChatServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | HostedEnvironment;
 
 /** Who writes, where: the account, the workspace, and the account's own member of it. */
 interface Writer {
@@ -124,65 +103,42 @@ interface Writer {
   readonly self: ChatMemberRow;
 }
 
-/** The one value the query names under the name; none or two is refused. */
-const queryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-  name: string,
-  absent?: string,
+/** The workspace a query names, refused where it names none or one that is no workspace's id. */
+export const workspaceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  named: string | undefined,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const named = new URL(request.url).searchParams.getAll(name);
-  if (named.length === 0 && absent !== undefined) return absent;
-  const [value] = named;
-  if (value === undefined || named.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  return value;
-});
-
-/** The workspace the query names, refused where it names none or one that is no workspace's id. */
-const workspaceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const workspace = readEither(workspaceIdSchema)(
-    unparsedWire(yield* queryOf(request, CHAT_QUERY.WORKSPACE_ID)),
-  );
+  const workspace = readEither(workspaceIdSchema)(unparsedWire(named ?? ""));
   if (Result.isFailure(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return workspace.success;
 });
 
 /**
- * The bearer's account, or the invalid-token refusal; an account that has
- * not turned on the Chat experiment is answered as one in no workspace,
- * because Chat is off for it.
+ * The account, refused as one in no workspace where it has not turned on
+ * the Chat experiment, because Chat is off for it.
  */
-const accountOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: ChatAppSeams,
-  request: Request,
+const chatAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
 ): Effect.fn.Return<string, HostedRefusal, DatabaseServices> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  if (!(yield* hostedStoreOrUnavailable(chatEnabledFor(account.value)))) {
+  if (!(yield* hostedStoreOrUnavailable(chatEnabledFor(userId)))) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
-  return account.value;
+  return userId;
 });
 
-/** GET reads the workspace's chat past the cursor, held open while nothing moved. */
-const readChat = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: ChatAppSeams,
-  request: Request,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, ChatServices> {
-  const workspace = yield* workspaceOf(request);
-  const after = readEither(seqCursorSchema)(
-    unparsedWire(yield* queryOf(request, CHAT_QUERY.AFTER, CHAT_CURSOR_START)),
-  );
+/** The workspace's chat past the cursor as the account reads it, held open while nothing moved. */
+export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  query: { readonly workspaceId?: string; readonly after?: string },
+): Effect.fn.Return<ChatAnswer, HostedRefusal, ChatServices> {
+  const workspace = yield* workspaceOf(query.workspaceId);
+  const after = readEither(seqCursorSchema)(unparsedWire(query.after ?? CHAT_CURSOR_START));
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const userId = yield* accountOf(seams, request);
+  const reader = yield* chatAccount(userId);
   const page = yield* hostedStoreOrUnavailable(
-    workspaceChatPast(userId, workspace, Number(after.success)),
+    workspaceChatPast(reader, workspace, Number(after.success)),
   );
   if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page.value);
+  return page.value;
 });
 
 /**
@@ -192,7 +148,7 @@ const readChat = /* @__PURE__ */ Effect.fnUntraced(function* (
  * bearer; unavailable where the deployment names no secret or no origin.
  */
 const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: ChatAppSeams,
+  seams: ChatSeams,
 ): Effect.fn.Return<
   (starterUserId: string) => EveSessions,
   HostedRefusal,
@@ -210,7 +166,7 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** What a door needs to tell the members a person's message addresses. */
 const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: ChatAppSeams,
+  seams: ChatSeams,
   writer: Writer,
 ): Effect.fn.Return<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment> {
   return {
@@ -267,7 +223,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly replyTo?: number;
     readonly clientKey: string;
   },
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, ChatServices> {
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
   const blocks =
     post.blocks ??
     (post.text === undefined ? [] : [{ type: CHAT_BLOCK.MARKDOWN, text: post.text }]);
@@ -285,10 +241,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
       is_reply: post.replyTo !== undefined,
     });
   }
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    posted: messageOnWire(told.message),
-    receipt: told.receipt,
-  });
+  return { posted: messageOnWire(told.message), receipt: told.receipt };
 });
 
 /**
@@ -305,7 +258,7 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly answer: { readonly seq: number; readonly revision: number; readonly reply: ChatReply };
     readonly clientKey: string;
   },
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, ChatServices> {
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
   const { userId, organizationId, self } = writer;
   const { seq, revision, reply } = asked.answer;
   const message = yield* hostedStoreOrUnavailable(messageAt(userId, organizationId, self.id, seq));
@@ -339,7 +292,7 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* tellMessage(yield* telling, posted.value, []);
   }
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { ask: messageOnWire(now), taken });
+  return { ask: messageOnWire(now), taken };
 });
 
 /** A person's own ask resolved with why; not found where the place holds no ask of theirs. */
@@ -347,7 +300,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
   seq: number,
   reason: string,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
   const message = yield* hostedStoreOrUnavailable(messageAt(userId, organizationId, self.id, seq));
   const key = Option.flatMap(
@@ -359,7 +312,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     resolveAsk(userId, organizationId, self.id, key.value, reason),
   );
   if (Option.isNone(resolved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { resolved: messageOnWire(resolved.value) });
+  return { resolved: messageOnWire(resolved.value) };
 });
 
 /**
@@ -371,7 +324,7 @@ const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
   seq: number,
   channelId: string | undefined,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
   if (channelId === undefined) {
     const moved = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
@@ -383,26 +336,24 @@ const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (!read) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const read = yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, read);
+  return read;
 });
 
-/** POST writes to the workspace's chat as the account's own member of it: a post, an answer, a resolve, or a read. */
-const writeChat = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: ChatAppSeams,
-  request: Request,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, ChatServices> {
-  const organizationId = yield* workspaceOf(request);
-  const userId = yield* accountOf(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_WRITE_BODY_BYTES);
-  const asked = readEither(chatWriteRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+/** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, or a read. */
+export const writeWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: ChatSeams,
+  userId: string,
+  workspaceId: string,
+  write: ChatWriteRequest,
+): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
+  const organizationId = workspaceId;
+  const writerId = yield* chatAccount(userId);
   const self = yield* hostedStoreOrUnavailable(
-    ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
+    ensureMember(writerId, organizationId, { kind: MEMBER_KIND.HUMAN, userId: writerId }),
   );
   if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const writer = { userId, organizationId, self: self.value };
+  const writer = { userId: writerId, organizationId, self: self.value };
   const telling = tellingOf(seams, writer);
-  const write = asked.success;
   if ("readTo" in write) return yield* readToAsPerson(writer, write.readTo, write.channelId);
   if ("resolve" in write) {
     return yield* resolveAsPerson(writer, write.resolve.seq, write.resolve.reason);
@@ -410,28 +361,3 @@ const writeChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   if ("answer" in write) return yield* answerAsPerson(telling, writer, write);
   return yield* postAsPerson(telling, writer, write);
 });
-
-/** The chat's one path: GET reads it, POST writes to it. */
-const chatEndpoint = /* @__PURE__ */ Effect.fn("web/chatEndpoint")(function* (
-  seams: ChatAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, ChatServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  if (incoming.method === HTTP_METHOD.POST) return yield* writeChat(seams, request);
-  return yield* readChat(seams, request);
-});
-
-/** The group: the chat's path, and the hosted vocabulary's own refusal for any other. */
-export function chatApp(seams: ChatAppSeams): WebRoutes<ChatAppServices> {
-  return Layer.mergeAll(
-    HttpRouter.add(
-      ANY_METHOD,
-      HOSTED_SERVICE_PATH.WORKSPACES_CHAT,
-      hostedRefusing(chatEndpoint(seams)),
-    ),
-    hostedNotFoundRoute,
-  );
-}

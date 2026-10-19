@@ -23,19 +23,21 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Queue, Result } from "effect";
-import { HttpRouter } from "effect/http";
+import { Clock, type Context, Duration, Effect, Fiber, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import { githubReaching } from "../testing/github-app-fake.js";
-import { chatApp } from "./chat-app.js";
 import { CODER } from "./coder-host/bounds.js";
+import { messagesProcedures } from "./messages-procedures.js";
 
 /**
- * The window's read of a workspace's chat, answered by the group the way a
- * function answers it, over a real dialect: held while nothing moved past
+ * The window's read of a workspace's chat, answered by the hosted oRPC
+ * router the way the web route answers it, over a real dialect: held while nothing moved past
  * the reader's cursor and answered once a post lands, answered at once
  * where something already has, a changed ask read again, and a workspace
  * the account is not in answered as nothing. The clock is the test's, each
@@ -101,8 +103,12 @@ const openRoom = Effect.gen(function* () {
     githubReaching([]).layer,
     Layer.succeed(HostedEnvironment, NO_KEYS),
   );
-  const handler = HttpRouter.toWebHandler(
-    chatApp({
+  // SAFETY: the chat's procedures yield the store, GitHub, the clock, and the environment alone, which is all a test provides of the web runtime's services.
+  const webServices = (yield* Effect.context<never>().pipe(
+    Effect.provide(services),
+  )) as Context.Context<WebServices>;
+  const handle = hostedFetch({
+    messages: messagesProcedures({
       eveOrigin: () => undefined,
       resolveUserId: (incoming: Request) =>
         Effect.succeed(
@@ -112,20 +118,19 @@ const openRoom = Effect.gen(function* () {
             ),
           ),
         ),
-    }).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
-  yield* Effect.addFinalizer(() => Effect.promise(() => handler.dispose()));
+    }),
+  });
   const ask = (bearer: string | undefined, query: Record<string, string>, method = "GET") =>
     Effect.gen(function* () {
       const url = new URL(CHAT, ORIGIN);
       for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
       const response = yield* Effect.promise(() =>
-        handler.handler(
+        handle(
           new Request(url, {
             method,
             headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
           }),
+          webServices,
         ),
       );
       // SAFETY: the group answers JSON; the test compares it as the wire value it is.
@@ -212,6 +217,32 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
       const answered = yield* driven({ fiber: held, asleep: room.asleep }, CODER.MESSAGES_HOLD);
       assert.deepEqual([answered.messages, answered.cursor], [[], cursor]);
     }),
+  );
+
+  it.effect(
+    "a held read is let go exactly at the store's hold, not a poll before, and the oRPC route adds no deadline of its own",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        yield* room.post("Morning.");
+        const { cursor } = yield* room.read(CHAT_CURSOR_START);
+        yield* Queue.clear(room.asleep);
+        const start = yield* Clock.currentTimeMillis;
+        const held = yield* Effect.forkChild(room.read(cursor));
+        const hold = Duration.toMillis(CODER.MESSAGES_HOLD);
+        // Each poll the read sleeps is moved one poll on, never past a wait it has not made yet.
+        while ((yield* Clock.currentTimeMillis) - start < hold) {
+          const answeredEarly = yield* Effect.raceFirst(
+            Effect.as(Fiber.await(held), true),
+            Effect.as(Queue.take(room.asleep), false),
+          );
+          assert.equal(answeredEarly, false, "answered before the hold");
+          yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        }
+        const answered = yield* Fiber.join(held);
+        assert.equal((yield* Clock.currentTimeMillis) - start, hold);
+        assert.deepEqual([answered.messages, answered.cursor], [[], cursor]);
+      }),
   );
 
   it.effect(
