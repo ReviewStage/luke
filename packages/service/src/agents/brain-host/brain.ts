@@ -66,10 +66,12 @@ import {
   runStartAgent,
   runStopAgent,
   runUnarchiveAgent,
+  runUpdateAgent,
   runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
@@ -272,6 +274,8 @@ On a request to put tasks away or change one ("archive the tasks of the finished
 
 On a request to stop an agent ("stop the agent", "it's going the wrong way, stop it"), stop_agent stops the turn under way of the one the developer means, as their Stop button would: the agent stays, with its transcript and branch, and a message to it later starts a new turn. Stop only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent already idle is answered as idle and nothing changes. Then say in your return which agent you stopped.
 
+On a request to change an agent ("rename it Billing export", "switch it to Sonnet", "pin that agent"), update_agent makes the change the developer means, as their own menu or model chip would; where they named a model in their own words, list_models first for its id and an effort it lists. Change only what they asked for, then say in your return what changed.
+
 ### The sidebar's sections
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, never on your own, then say in your return what you changed.
@@ -308,6 +312,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
 - stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
+- update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
 - update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
@@ -645,6 +650,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...STOP_AGENT_TOOL,
     run: (call, input) => runStopAgent(call.agents, input),
+  },
+  {
+    ...UPDATE_AGENT_TOOL,
+    run: (call, input) => runUpdateAgent(call.agents, input),
   },
   {
     ...LIST_TASKS_TOOL,

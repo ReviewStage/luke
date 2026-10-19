@@ -754,85 +754,147 @@ node --input-type=module -e '
   }
 ' "$LUKE_REPO_ROOT"
 
-# A box that scrolls up and down scrolls sideways too unless it says
-# otherwise: `overflow-y: auto` alone computes `overflow-x` to `auto`, so a
-# pixel of a ring, a negative margin, or a row being dragged past its edge
-# hands the box a sideways scroll a trackpad swipe drifts it along, and a
-# find or a column kept in view counts it a sideways scroller. So every rule
-# in a tracked sheet under apps/ and packages/ that scrolls on one value
-# (`overflow-y: auto|scroll`, or `overflow: auto|scroll`) names its
-# `overflow-x` in the same rule: `hidden` where nothing should scroll
-# sideways, `auto` where something should. A Tailwind class list does the
-# same with `overflow-x-*` beside `overflow-y-auto` or `overflow-auto`.
+# A screen gets its scrolling from `@luke/ui` (`ScrollArea`, the coupled
+# scrollers, the page patterns, `ComboboxListBox`), never from an overflow
+# of its own: a box that scrolls written by hand is how 37 boxes came to
+# scroll sideways unasked, because `overflow-y: auto` alone computes
+# `overflow-x` to `auto`. So a rule in a tracked sheet under apps/ and
+# packages/ that makes a box scroll (`overflow`, `overflow-x` or
+# `overflow-y` at `auto` or `scroll`, read in order, since a later
+# `overflow` resets both axes) stands only under packages/ui/src/, or in
+# the allowlist below: a box meant to scroll sideways whose own box is what
+# scrolls, or one an engine owns, each with its reason. A Tailwind class
+# list outside packages/ui is held the same, an `overflow-*-auto|scroll`
+# class standing only where its file is listed with that class. An entry
+# that names nothing any more fails too, so the list stays as short as the
+# code allows. Where a box may scroll, it still names its `overflow-x`
+# beside a scroll up and down, `hidden` where nothing should scroll
+# sideways and `auto` where something should, and a class list the same
+# with `overflow-x-*`.
 node --input-type=module -e '
   import { execFileSync } from "node:child_process";
   import { readFileSync } from "node:fs";
   import path from "node:path";
 
   const root = process.argv[1];
+  const UI = "packages/ui/src/";
+  // [file, the rule'"'"'s selector (or, in a .tsx, its class), why it scrolls itself].
+  const ALLOWED = [
+    ["packages/panel/src/styles/markdown.css", ".markdown pre", "code keeps each line whole and scrolls sideways in the element the Markdown engine draws"],
+    ["packages/panel/src/styles/markdown.css", ".markdown table", "a table'"'"'s own box scrolls sideways, as the engine draws it, with its edge fade on its own timeline"],
+    ["packages/panel/src/styles/tasks.css", ".transcript-code-body", "a transcript'"'"'s code keeps each line whole and scrolls sideways in its own pre"],
+    ["packages/panel/src/styles/tasks.css", ".transcript-table", "a transcript'"'"'s table'"'"'s own box scrolls sideways, as a Markdown table does"],
+    ["packages/panel/src/styles/desktop.css", ".tab-strip", "the strip scrolls sideways itself, its chosen tab sticky and its fades drawn on its own scroll"],
+    ["packages/panel/src/styles/tasks.css", ".agent-composer-input", "the composer'"'"'s contenteditable, owned by its editor, grows to eight lines and scrolls itself"],
+  ];
   const SCROLLING = /^(?:auto|scroll)$/;
   // A sideways value that stands beside a scroll; `visible` and the resets
   // compute to `auto` there, so they name nothing.
   const KEEPS_X = /^(?:hidden|clip|auto|scroll)$/;
-  const CLASS_SCROLLS = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
+  const CLASS_SCROLLS_ANY = /(?<![\w-])overflow-(?:[xy]-)?(?:auto|scroll)(?![\w-])/g;
+  const CLASS_SCROLLS_Y = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
   const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
-  // Whether a block scrolls up and down with its sideways overflow left to
-  // compute to `auto`, read in order, since a later `overflow` resets both
-  // axes. Note that a one-value `overflow: auto` counts as naming no axis,
-  // since it is the very spelling that scrolls sideways unasked.
-  const scrollsUnnamed = (body) => {
-    let scrollsY = false;
+  // What a block'"'"'s overflow declarations leave each axis at, read in order.
+  const axes = (body) => {
     let x;
+    let y;
+    let named = false;
     for (const declaration of body.split(";")) {
       const match = declaration.match(/(?:^|\s)(overflow(?:-x|-y)?)\s*:\s*(.+)$/s);
       if (match === null) continue;
       const values = match[2].trim().split(/\s+/);
-      if (match[1] === "overflow-x") x = values[0];
-      else if (match[1] === "overflow-y") scrollsY = SCROLLING.test(values[0]);
+      if (match[1] === "overflow-x") {
+        x = values[0];
+        named = true;
+      } else if (match[1] === "overflow-y") y = values[0];
       else {
-        scrollsY = SCROLLING.test(values[values.length - 1]);
-        x = values.length > 1 || !SCROLLING.test(values[0]) ? values[0] : undefined;
+        x = values[0];
+        y = values[values.length - 1];
+        // Note that a one-value `overflow: auto` names no axis, since it is
+        // the very spelling that scrolls sideways unasked.
+        named = values.length > 1 || !SCROLLING.test(values[0]);
       }
     }
-    return scrollsY && (x === undefined || !KEEPS_X.test(x));
+    return { x, y, named };
   };
+  const scrolls = ({ x, y }) => SCROLLING.test(x ?? "") || SCROLLING.test(y ?? "");
+  const scrollsUnnamed = ({ x, y, named }) =>
+    SCROLLING.test(y ?? "") && (!named || x === undefined || !KEEPS_X.test(x));
+  const allowed = (file, selector) =>
+    ALLOWED.some(([each, rule]) => each === file && rule === selector);
+  const used = new Set();
   const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
     encoding: "utf8",
   })
     .split("\0")
     .filter((file) => /\.(css|tsx)$/.test(file) && !/\.test\.tsx$/.test(file));
-  const found = [];
+  const outside = [];
+  const unnamed = [];
   for (const file of files) {
     const source = readFileSync(path.join(root, file), "utf8");
+    const inUi = file.startsWith(UI);
     if (file.endsWith(".tsx")) {
       source.split("\n").forEach((line, index) => {
-        if (CLASS_SCROLLS.test(line) && !CLASS_NAMES_X.test(line)) found.push(`  ${file}:${index + 1}`);
+        const at = `  ${file}:${index + 1}`;
+        for (const [scrolling] of line.matchAll(CLASS_SCROLLS_ANY)) {
+          if (inUi) continue;
+          if (allowed(file, scrolling)) used.add(`${file}\0${scrolling}`);
+          else outside.push(`${at}: ${scrolling}`);
+        }
+        if (CLASS_SCROLLS_Y.test(line) && !CLASS_NAMES_X.test(line)) unnamed.push(at);
       });
       continue;
     }
     // Blank comments, keeping every newline, so a line number still points home.
     const text = source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
     // Note that each block collects only its own declarations, the text of
-    // a nested block going to that block, so a nested rule is read alone.
+    // a nested block going to that block, so a nested rule is read alone;
+    // its selector is what stood since the last brace or semicolon.
     const open = [];
     let line = 1;
+    let prelude = "";
     for (const character of text) {
       if (character === "\n") line += 1;
-      if (character === "{") open.push({ line, body: "" });
-      else if (character === "}") {
+      if (character === "{") {
+        open.push({ line, selector: prelude.trim().replace(/\s+/g, " "), body: "" });
+        prelude = "";
+        continue;
+      }
+      if (character === "}") {
+        prelude = "";
         const block = open.pop();
-        if (block !== undefined && scrollsUnnamed(block.body)) {
-          found.push(`  ${file}:${block.line}`);
-        }
-      } else if (open.length > 0) open[open.length - 1].body += character;
+        if (block === undefined) continue;
+        const read = axes(block.body);
+        const at = `  ${file}:${block.line}`;
+        if (scrollsUnnamed(read)) unnamed.push(at);
+        if (inUi || !scrolls(read)) continue;
+        if (allowed(file, block.selector)) used.add(`${file}\0${block.selector}`);
+        else outside.push(`${at}: ${block.selector}`);
+        continue;
+      }
+      prelude = character === ";" ? "" : prelude + character;
+      if (open.length > 0) open[open.length - 1].body += character;
     }
   }
-  if (found.length > 0) {
+  const stale = ALLOWED.filter(([file, rule]) => !used.has(`${file}\0${rule}`)).map(
+    ([file, rule]) => `  ${file}: ${rule}`,
+  );
+  if (outside.length > 0) {
     process.stderr.write(
-      `error: a rule scrolls up and down without naming overflow-x, which then computes to auto and scrolls sideways too; add overflow-x: hidden, or auto where it should scroll sideways:\n${found.join("\n")}\n`,
+      `error: a box outside @luke/ui scrolls by an overflow of its own; scroll it in @luke/ui'"'"'s ScrollArea (or the shared component that fits), or, for a box that must scroll itself, add it with its reason to the allowlist in scripts/repository-checks.sh:\n${outside.join("\n")}\n`,
     );
-    process.exit(1);
   }
+  if (unnamed.length > 0) {
+    process.stderr.write(
+      `error: a rule scrolls up and down without naming overflow-x, which then computes to auto and scrolls sideways too; add overflow-x: hidden, or auto where it should scroll sideways:\n${unnamed.join("\n")}\n`,
+    );
+  }
+  if (stale.length > 0) {
+    process.stderr.write(
+      `error: an entry of the scrolling allowlist in scripts/repository-checks.sh names no rule that scrolls any more; delete it:\n${stale.join("\n")}\n`,
+    );
+  }
+  if (outside.length + unnamed.length + stale.length > 0) process.exit(1);
 ' "$LUKE_REPO_ROOT"
 
 # The unit of work is a task and a plan is the document inside it. The rename

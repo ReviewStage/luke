@@ -7,11 +7,15 @@ import {
   continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
+  pinCodingAgent,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
+  renameCodingAgent,
   taskNamesOf,
   unarchiveCodingAgentFrom,
+  updateCodingAgentChoice,
+  updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import {
   listJournals,
@@ -42,6 +46,8 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStartFrom,
   type CodingAgentStatus,
+  contextWindowSchema,
+  disabledServersSchema,
 } from "@luke/features/coding-agent-wire";
 import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -50,8 +56,9 @@ import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire"
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -848,6 +855,105 @@ export const READ_PAGE_TOOL = {
   inputSchema: READ_PAGE_INPUT,
 } as const;
 
+/** Why a change to an agent changed nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
+export const UPDATE_AGENT_REFUSAL = {
+  UNREADABLE:
+    `Not changed: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered and at least one ` +
+    `change: a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} characters (empty clears ` +
+    "it), a model with its effort, both or neither, a contextWindow only with them, pinned, or " +
+    "disabledServers as connection names.",
+  UNAVAILABLE: "Not changed: the models could not be read just now. The call may be made again.",
+  PIN_ON_TASK:
+    "Not changed: only an agent on no task is pinned in the sidebar; an agent on a task stands in " +
+    "its task's tabs, so leave pinned out.",
+} as const;
+
+/** The lead a refused choice of a change is said under. */
+const UPDATE_CHOICE_LEAD = "Not changed";
+
+/** Whether a change names anything to change, and a model only with its effort and a window only with them. */
+function updateNamesAChange(update: {
+  readonly title?: string;
+  readonly model?: string;
+  readonly effort?: string;
+  readonly contextWindow?: string;
+  readonly pinned?: boolean;
+  readonly disabledServers?: readonly string[];
+}): boolean {
+  const { title, model, effort, contextWindow, pinned, disabledServers } = update;
+  if ((model === undefined) !== (effort === undefined)) return false;
+  if (contextWindow !== undefined && model === undefined) return false;
+  return [title, model, pinned, disabledServers].some((field) => field !== undefined);
+}
+
+/**
+ * A change names the agent and at least one of: a title, the model with its
+ * effort and, at most, its context window, which the catalog then checks,
+ * whether the member pins it, and the MCP servers switched off for it, the
+ * whole list. Each is the change a member makes from the agent's own menu,
+ * model chip, or composer.
+ */
+const UPDATE_AGENT_INPUT = Schema.Struct({
+  agentId: AGENT_ID,
+  title: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+      "The agent's title as its tab shows it; empty clears it, so the tab shows the model's name.",
+    ),
+  ),
+  model: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.model,
+      `The model it runs on from its next step, by its catalog id as ${AGENT_TOOL.LIST_MODELS} ` +
+        "answers it; given with the effort or not at all.",
+    ),
+  ),
+  effort: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.effort,
+      "The reasoning effort, as the model lists it; given with the model or not at all.",
+    ),
+  ),
+  contextWindow: Schema.optionalKey(
+    describeWire(
+      contextWindowSchema,
+      "The context window it runs on, standard or long; only with a model, and the model's " +
+        "whole window where left out.",
+    ),
+  ),
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "Whether the developer you work for keeps it pinned in their sidebar, the pin theirs alone; " +
+        "only an agent on no task is pinned, one on a task standing in its task's tabs.",
+    ),
+  ),
+  disabledServers: Schema.optionalKey(
+    describeWire(
+      disabledServersSchema,
+      "The MCP servers switched off for the agent, by connection name, the whole list, which " +
+        "replaces the one standing; empty switches every server back on. Its next turn reads it.",
+    ),
+  ),
+}).check(Schema.makeFilter(updateNamesAChange));
+
+const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AGENT_INPUT);
+
+export const UPDATE_AGENT_TOOL = {
+  name: AGENT_TOOL.UPDATE_AGENT,
+  description:
+    "Change a coding agent of your workspace by its id, as the developer's own menu, model " +
+    "chip, and composer would, for the developer you work for: rename it (empty clears the " +
+    "title), move it to another model and effort, and context window, from its next step, as " +
+    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin an agent on no task in that developer's sidebar, or ` +
+    "replace the list of MCP servers switched off for it. Name at least one change; the changes " +
+    "land together or not at all. Change an " +
+    "agent when the developer asks for it, never a teammate's agent's model unless they asked. " +
+    "Answers `accepted` with the agent as it then stands, or `rejected` and why; a rejected model " +
+    "or effort lists the choices.",
+  inputSchema: UPDATE_AGENT_INPUT,
+} as const;
+
 /** A list of tasks names its words to look for at most, how many of the matching tasks to pass over, and whether the archived ones are listed too. */
 const LIST_TASKS_INPUT = Schema.Struct({
   includeArchived: Schema.optionalKey(
@@ -1082,13 +1188,17 @@ function startRefusalWords(refusal: HostedRefusal): string {
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
-function choiceRefusal(choice: ModelChoice | undefined, offered: readonly OfferedModel[]): string {
+function choiceRefusal(
+  choice: ModelChoice | undefined,
+  offered: readonly OfferedModel[],
+  lead = "Not started",
+): string {
   const refused =
     choice === undefined
       ? "the member's default model is no longer offered"
       : `no offered model is ${choice.model} at effort ${choice.effort}`;
   const choices = offered.map((model) => `${model.id} (${model.efforts.join(", ")})`).join("; ");
-  return `Not started: ${refused}. The choices are: ${choices}.`;
+  return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
 /** An agent by the name its tab shows: its title, or its model's id where it has none yet. */
@@ -1982,6 +2092,121 @@ export function runStopAgent(
           status,
         },
         stopped,
+      };
+    }),
+  );
+}
+
+/** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
+class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
+
+/** The changes a call asks of an agent, each already read and its choice already the catalog's. */
+interface AgentChanges {
+  readonly title: string | undefined;
+  readonly choice: ModelChoice | undefined;
+  readonly pinned: boolean | undefined;
+  readonly disabledServers: readonly string[] | undefined;
+}
+
+/**
+ * Writes every change asked of an agent in one transaction and answers the
+ * agent as the last write left it, nothing where none was asked; a write that
+ * finds no row fails it, so either every change stands or none does.
+ */
+const changedAgent = (userId: string, agentId: string, changes: AgentChanges) =>
+  Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const kept = (changed: Option.Option<CodingAgent>) =>
+          Option.isSome(changed) ? Effect.succeed(changed) : Effect.fail(new AgentChangeLost());
+        const { title, choice, pinned, disabledServers } = changes;
+        let last = Option.none<CodingAgent>();
+        if (title !== undefined) {
+          last = yield* kept(
+            yield* renameCodingAgent(userId, agentId, title.length === 0 ? null : title),
+          );
+        }
+        if (choice !== undefined)
+          last = yield* kept(yield* updateCodingAgentChoice(userId, agentId, choice));
+        if (pinned !== undefined)
+          last = yield* kept(yield* pinCodingAgent(userId, agentId, pinned));
+        if (disabledServers !== undefined) {
+          last = yield* kept(yield* updateCodingAgentServers(userId, agentId, disabledServers));
+        }
+        return last;
+      }),
+    ),
+  );
+
+/**
+ * One call of `update_agent`: an agent of the caller's workspace renamed,
+ * moved to another choice the catalog takes, pinned or unpinned for the
+ * caller's member, or given another list of servers switched off, each by
+ * the store's own write the agent's menu, chip, and composer make. A choice
+ * is checked before anything is written, so one refused changes nothing, and
+ * every change asked is written in one transaction, so none stands where
+ * another failed.
+ */
+export function runUpdateAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readUpdateAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { agentId, title, model, effort, contextWindow, pinned, disabledServers } = asked.success;
+  const { caller } = call;
+  const userId = callerUserId(caller);
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(caller, agentId);
+      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const { task, workspaceId } = found.value;
+      const choices = yield* Effect.result(accountModelChoices(userId));
+      if (Result.isFailure(choices)) return agentToolRejected(UPDATE_AGENT_REFUSAL.UNAVAILABLE);
+      const { offered } = choices.success;
+      const asked =
+        model === undefined || effort === undefined
+          ? undefined
+          : { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) };
+      const accepted = asked === undefined ? undefined : validateModelChoice(offered, asked);
+      if (asked !== undefined && accepted !== undefined && Result.isFailure(accepted)) {
+        return agentToolRejected(choiceRefusal(asked, offered, UPDATE_CHOICE_LEAD));
+      }
+      // The catalog's own reading of the choice is written, a window the model does not offer apart dropped.
+      const choice = accepted === undefined ? undefined : Result.getOrUndefined(accepted);
+      // A pin stands only on an agent with no task, in the sidebar's list of them; one on a task lives in its task's tabs.
+      if (pinned !== undefined && found.value.agent.taskId !== null) {
+        return agentToolRejected(UPDATE_AGENT_REFUSAL.PIN_ON_TASK);
+      }
+      const written = yield* changedAgent(userId, agentId, {
+        title,
+        choice,
+        pinned,
+        disabledServers,
+      }).pipe(
+        Effect.map(Result.succeed),
+        Effect.catchTag("AgentChangeLost", () => Effect.succeed(Result.fail(undefined))),
+      );
+      if (Result.isFailure(written)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const agent = Option.getOrElse(written.success, () => found.value.agent);
+      const step = yield* workspaceStepOf(userId, workspaceId);
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agent: {
+          id: agent.id,
+          title: agentName(agent),
+          model: agent.model,
+          modelName: modelLabel(agent.model, offered),
+          effort: agent.effort,
+          contextWindow: agent.contextWindow,
+          disabledServers: [...agent.disabledServers],
+          task: task.task === null ? null : { ...task.task },
+          onYourTask: task.onYourTask,
+          mention: agentMention(agent, step),
+          ...(pinned === undefined ? undefined : { pinned }),
+        },
       };
     }),
   );

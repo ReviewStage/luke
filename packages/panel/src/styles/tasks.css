@@ -1968,19 +1968,26 @@
   gap: var(--luke-space-8);
 }
 
+/* The box is the preview's frame, its words scrolling inside it in
+   `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
+   as the box that scrolled itself did. */
 .markdown-field-preview {
   box-sizing: border-box;
+  display: flex;
   width: 100%;
   min-height: 96px;
   max-height: 240px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-8) var(--luke-space-12);
+  flex-direction: column;
+  overflow: clip;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
 }
 
-.markdown-field-preview > p:only-child {
+.markdown-field-preview-words {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+.markdown-field-preview-words > p:only-child {
   margin: 0;
 }
 
@@ -2927,13 +2934,17 @@ ol.transcript-list {
 
 /* A tool call's input or output (../ai-elements/code-block.tsx): its words
    as they are, in mono, wrapping anywhere rather than widening the
-   transcript, and scrolling inside the block past its height. */
+   transcript, and scrolling inside the block past its height, in the
+   block's `ScrollArea` (`@luke/ui`). */
 .code-block {
+  display: flex;
   max-height: 256px; /* off-scale: a block's tallest before it scrolls */
+  flex-direction: column;
+}
+
+.code-block-words {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
@@ -4819,12 +4830,15 @@ ol.transcript-list {
    popover's size, and never taller than the window leaves above the
    composer once the field and the foot are drawn, so the field stays on
    screen in the shortest window. */
-.agent-servers-list {
+.agent-servers-scroll {
+  display: flex;
   max-height: clamp(160px, 100vh - 320px, 400px);
+  flex-direction: column;
+}
+
+/* The rows, inside the list's `ScrollArea` (`@luke/ui`), at the menu's inset. */
+.agent-servers-list {
   padding: var(--luke-menu-inset);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 /* A section's heading over its rows, inset as a row's words are, and what
@@ -6027,7 +6041,8 @@ button.picture-frame {
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
 /* The Comments tab: its head over a list that scrolls under it, fading at
-   its ends as every scroller in the window does. */
+   its ends as every scroller in the window does (`@luke/ui`'s `ScrollArea`,
+   which holds the list's own padded element). */
 .comments-tab {
   display: flex;
   height: 100%;
@@ -6057,15 +6072,13 @@ button.picture-frame {
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
 .comments-list:has(.luke-empty-state) {
   display: flex;
+  min-height: 100%;
   flex-direction: column;
 }
 
 .comments-list {
-  min-height: 0;
-  flex: 1;
+  box-sizing: border-box;
   padding: 0 var(--luke-space-16) var(--luke-space-24);
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 .comments-row + .comments-row {

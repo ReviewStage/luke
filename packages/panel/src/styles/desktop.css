@@ -1428,11 +1428,11 @@ ul.actor-stack {
   outline-offset: 1px;
 }
 
+/* The grid's room, which its `ScrollArea` (`@luke/ui`) scrolls. */
 .section-icon-scroll {
+  display: flex;
   height: 220px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  flex-direction: column;
 }
 
 .section-icon-grid {

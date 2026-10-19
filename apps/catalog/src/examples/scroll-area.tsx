@@ -5,6 +5,7 @@ import {
   SCROLL_FADE,
   SCROLL_FADE_INSET,
   SCROLL_GUTTER,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   type ScrollAxis,
@@ -22,8 +23,10 @@ import { CatalogSection } from "../section";
  * down; a short list as tall as it holds and a long one shrinking to the
  * room; a log whose groups' bands stick at its top, its fade beginning
  * beneath them; a short page keeping its scroll bar's room beside a long
- * one; a row of columns that scrolls sideways; and a table that scrolls
- * both ways. Each room is a fixed size so the area has something to scroll.
+ * one; a row of columns that scrolls sideways; a table that scrolls both
+ * ways; and a short list that holds a swipe past its end beside one that
+ * hands it on to the page. Each room is a fixed size so the area has
+ * something to scroll.
  */
 
 const ROWS = Array.from({ length: 24 }, (_, index) => `Review pull request #${3600 + index}`);
@@ -150,6 +153,25 @@ function ScrollAreas(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="scroll-area-both" title="Both ways">
         <Board axis={SCROLL_AXIS.BOTH} />
+      </CatalogSection>
+      <CatalogSection
+        id="scroll-area-overscroll"
+        title="A swipe past the end, held or handed on to the page"
+      >
+        <Inline gap={GAP.SECTION}>
+          {Object.values(SCROLL_OVERSCROLL).map((overscroll) => (
+            <div key={overscroll} className="catalog-scroll-room">
+              <div className="catalog-scroll-bar">
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  {overscroll}
+                </Text>
+              </div>
+              <ScrollArea overscroll={overscroll}>
+                <Rows count={ROWS.length} />
+              </ScrollArea>
+            </div>
+          ))}
+        </Inline>
       </CatalogSection>
     </>
   );

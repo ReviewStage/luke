@@ -26,6 +26,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  SCROLL_FADE,
+  ScrollArea,
   SUBMIT_STATE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -86,6 +88,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
@@ -1135,6 +1138,8 @@ export function PlanCommentLayer({
   const [pointed, setPointed] = useState<string | undefined>(undefined);
   // Whether the open thread was opened by the editor's caret standing in its words, which closes it as the caret leaves them.
   const caretOpened = useRef(false);
+  // Whether a pointer is down, whose press moves the focus before its own rule says what becomes of the thread.
+  const pressing = useRef(false);
   const [bubble, setBubble] = useState<
     { top: number; left: number; start: () => void } | undefined
   >(undefined);
@@ -1301,13 +1306,15 @@ export function PlanCommentLayer({
       const next = event.relatedTarget;
       // Note that a press on words that take no focus, a card's say, lets the focus go to nothing, and the press's own rule says whether it closes the thread.
       if (next === null) return;
-      if (
-        next instanceof Element &&
-        (element.contains(next) || next.closest(THREAD_ITSELF) !== null)
-      ) {
-        if (next.closest(THREAD_ITSELF) !== null) caretOpened.current = false;
+      if (next instanceof Element && next.closest(THREAD_ITSELF) !== null) {
+        caretOpened.current = false;
         return;
       }
+      // Note that a press on a control, a line's count say, focuses it before its click, and the press's own rule, the count's toggle say, settles the thread.
+      if (pressing.current) return;
+      // Note that the focus staying is the editor's room holding it, not the plan's body, whose title and buttons are Tab stops of their own.
+      const room = element.querySelector(`.${EDITOR_ROOM_CLASS}`);
+      if (next instanceof Node && room?.contains(next) === true) return;
       letCaretGo();
     };
     const selected = () => {
@@ -1370,9 +1377,20 @@ export function PlanCommentLayer({
       onActive(thread);
     };
     const left = () => setPointed(undefined);
+    const down = () => {
+      pressing.current = true;
+    };
+    const up = () => {
+      pressing.current = false;
+    };
     element.addEventListener("pointerover", over);
     element.addEventListener("pointerleave", left);
     element.addEventListener("focusout", blurred);
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointerup", up, true);
+    document.addEventListener("pointercancel", up, true);
+    // Note that a key pressed ends any press whose pointerup the window missed, so the Tab after it is the keyboard's.
+    document.addEventListener("keydown", up, true);
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
@@ -1380,6 +1398,10 @@ export function PlanCommentLayer({
       element.removeEventListener("pointerover", over);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointerup", up, true);
+      document.removeEventListener("pointercancel", up, true);
+      document.removeEventListener("keydown", up, true);
       element.removeEventListener("click", pressed);
       document.removeEventListener("selectionchange", selected);
     };
@@ -1730,39 +1752,41 @@ export function PlanCommentsTab({
           }}
         />
       </div>
-      <div ref={list} className="comments-list scroll-fade">
-        {control.failed ? (
-          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
-            The comments could not be read.
-          </ErrorState>
-        ) : listed.length === 0 ? (
-          control.read ? (
-            <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
-              {NO_COMMENTS[filter].line}
-            </EmptyState>
-          ) : null
-        ) : (
-          listed.map((thread) => (
-            <div key={thread.id} className="comments-row">
-              {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
-              <ThreadCard
-                thread={thread}
-                open
-                quote
-                doors={full}
-                onShowWords={
-                  openThread(thread)
-                    ? () => {
-                        onShowDocument();
-                        reveal(thread.id);
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          ))
-        )}
-      </div>
+      <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+        <div className="comments-list">
+          {control.failed ? (
+            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+              The comments could not be read.
+            </ErrorState>
+          ) : listed.length === 0 ? (
+            control.read ? (
+              <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
+                {NO_COMMENTS[filter].line}
+              </EmptyState>
+            ) : null
+          ) : (
+            listed.map((thread) => (
+              <div key={thread.id} className="comments-row">
+                {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
+                <ThreadCard
+                  thread={thread}
+                  open
+                  quote
+                  doors={full}
+                  onShowWords={
+                    openThread(thread)
+                      ? () => {
+                          onShowDocument();
+                          reveal(thread.id);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
