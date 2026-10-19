@@ -11,9 +11,11 @@ import {
   applySectionWrite,
   entryMoveWrites,
   NO_TASK_SECTIONS,
+  placeAllWrites,
   placeWrites,
   sectionMoveWrites,
   sectionOrder,
+  unplaceAllWrites,
   workspaceSections,
 } from "./task-sections-model.js";
 
@@ -100,6 +102,46 @@ describe("a task dropped into a section", () => {
       21,
     );
     assert.deepEqual(tasksIn(twice, LAUNCH), [TASK(1), TASK(2), TASK(3)]);
+  });
+});
+
+describe("tasks moved together", () => {
+  it("stand on top of the section chosen in their order, even stamped in one instant", () => {
+    const state = applyAll(launchWithThree(), placeWrites([], TASK(9), LATER, 0, 15), 15);
+    const writes = placeAllWrites(state, [TASK(1), TASK(2), TASK(3)], LATER, 20);
+    const moved = applyAll(state, writes, 20);
+    assert.deepEqual(tasksIn(moved, LATER), [TASK(1), TASK(2), TASK(3), TASK(9)]);
+    assert.deepEqual(tasksIn(moved, LAUNCH), []);
+  });
+
+  it("stand above a section's dragged tasks as well as its loose ones", () => {
+    const later = applyAll(launchWithThree(), placeWrites([], TASK(8), LATER, 0, 14), 14);
+    const loose = applyAll(
+      later,
+      placeWrites(sectionOrder(later, LATER), TASK(9), LATER, 1, 15),
+      15,
+    );
+    const dragged = applyAll(loose, entryMoveWrites(sectionOrder(loose, LATER), LATER, 0, 1), 16);
+    const moved = applyAll(dragged, placeAllWrites(dragged, [TASK(3), TASK(1)], LATER, 20), 20);
+    assert.deepEqual(tasksIn(moved, LATER), [TASK(3), TASK(1), TASK(9), TASK(8)]);
+    assert.deepEqual(tasksIn(moved, LAUNCH), [TASK(2)]);
+  });
+
+  it("into a section made with them stand there in their order", () => {
+    const NEW = "0a1b2c3d-0000-4000-8000-000000000003";
+    const state = launchWithThree();
+    const writes = [create(NEW, "New"), ...placeAllWrites(state, [TASK(2), TASK(1)], NEW, 20)];
+    assert.deepEqual(tasksIn(applyAll(state, writes, 20), NEW), [TASK(2), TASK(1)]);
+  });
+
+  it("taken out of their section stand in none, and the others stay", () => {
+    const state = launchWithThree();
+    const out = applyAll(state, unplaceAllWrites([TASK(1), TASK(3)]), 20);
+    assert.deepEqual(tasksIn(out, LAUNCH), [TASK(2)]);
+    assert.deepEqual(
+      out.entries.map((entry) => entry.taskId),
+      [TASK(2)],
+    );
   });
 });
 
