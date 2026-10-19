@@ -17,7 +17,7 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Effect, Fiber, Layer } from "effect";
+import { ConfigProvider, Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Path from "effect/Path";
@@ -25,9 +25,14 @@ import { TestClock } from "effect/testing";
 import type { AccountSourceHost } from "./account-source.js";
 import { composeAccount } from "./compose-account.js";
 import { composeSettings } from "./compose-settings.js";
-import { type CookieSessionDoor, cookieAccountSourceLayer } from "./cookie-account-source.js";
+import {
+  type CookieSessionDoor,
+  CookieSessionFailed,
+  cookieAccountSourceLayer,
+} from "./cookie-account-source.js";
 import { HostKernelTag } from "./effect/kernel.js";
 import { AccountSource, AppIdentity, Environment } from "./effect/seams.js";
+import { EXPERIMENT_ACCOUNT_CHANGED } from "./experiment-write.js";
 import { hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import { SettingsStore } from "./settings-store.js";
@@ -62,6 +67,8 @@ interface ServiceState {
   /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
+  /** Whether the service's sign-out is unreachable. */
+  signOutDown?: boolean;
 }
 
 /** The service's routes over `state`, answered as Better Auth and Luke's routes answer them. */
@@ -80,6 +87,7 @@ function respond(
     case "/api/auth/link-social":
       return jsonResponse({ url: PROVIDER_CONSENT, redirect: true });
     case "/api/auth/sign-out":
+      if (state.signOutDown) return new Response(null, { status: 503 });
       state.user = undefined;
       return jsonResponse({ success: true });
     case HOSTED_SERVICE_PATH.ACCOUNT_DELETE:
@@ -122,10 +130,18 @@ function scene(initial: Partial<ServiceState> = {}) {
   const gate: string[] = [];
   /** Held open where a test wants the gate's opening still under way. */
   let opening: Effect.Effect<void> = Effect.void;
+  let revisitQueue: Queue.Queue<void> | undefined;
+  const revisits = Effect.gen(function* () {
+    revisitQueue ??= yield* Queue.unbounded<void>();
+    return revisitQueue;
+  });
   const door: CookieSessionDoor = {
     currentAddress: () => "/plan/task-1?tab=inbox",
     navigate: (url) => Effect.sync(() => void navigated.push(url)),
+    revisits: Stream.unwrap(Effect.map(revisits, Stream.fromQueue)),
   };
+  /** The person coming back to the tab. */
+  const revisit = Effect.flatMap(revisits, (queue) => Queue.offer(queue, undefined));
   const host: AccountSourceHost = {
     // The cookie source keeps no account in the settings file, so it never reads one.
     store: {
@@ -161,7 +177,7 @@ function scene(initial: Partial<ServiceState> = {}) {
   const holdOpening = (until: Effect.Effect<void>) => {
     opening = until;
   };
-  return { state, service, navigated, gate, open, sent, holdOpening };
+  return { state, service, navigated, gate, open, sent, holdOpening, revisit };
 }
 
 /** Advances the test clock a second at a time, letting each read land, until `fiber` ends. */
@@ -244,6 +260,37 @@ describe("the cookie account source", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("stays signed in where the service could not end the session", () =>
+    Effect.gen(function* () {
+      const { open, gate } = scene({ signOutDown: true });
+      const session = yield* open;
+      const signedIn = yield* session.initialize;
+
+      const failure = yield* Effect.flip(session.signOut({ revokeRemote: true }));
+
+      assert.ok(failure instanceof CookieSessionFailed);
+      assert.deepEqual(session.snapshot(), signedIn);
+      assert.deepEqual(gate, [`settle ${USER.email}`]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("settles on another person's session when the tab is revisited", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, revisit } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+
+      // Another tab signs in as someone else; this one hears of it on the person's return.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* revisit;
+      while (gate.at(-1) !== "open") yield* Effect.promise(() => nextTurn());
+
+      const account = session.snapshot();
+      assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.id, "user-2");
+      assert.deepEqual(gate.slice(1), ["forget", "settle other@example.com", "close", "open"]);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("signs out once a hosted call is refused and the session is gone", () =>
     Effect.gen(function* () {
       const { open, state, service, sent } = scene();
@@ -270,7 +317,7 @@ describe("the cookie account source", () => {
 
   it.effect("deletes the account on the service, then stands signed out", () =>
     Effect.gen(function* () {
-      const { open, sent } = scene();
+      const { open, sent, gate } = scene();
       const session = yield* open;
       yield* session.initialize;
 
@@ -278,6 +325,8 @@ describe("the cookie account source", () => {
 
       assert.deepEqual(account, { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.equal(sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE)[0]?.method, HTTP_METHOD.POST);
+      // The account's settings are dropped and its gate closed, in that order.
+      assert.deepEqual(gate.slice(1), ["forget", "close"]);
     }).pipe(Effect.scoped),
   );
 
@@ -385,7 +434,11 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
   };
   return Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-settings-");
-    const door: CookieSessionDoor = { currentAddress: () => "/", navigate: () => Effect.void };
+    const door: CookieSessionDoor = {
+      currentAddress: () => "/",
+      navigate: () => Effect.void,
+      revisits: Stream.never,
+    };
     const machine = Layer.mergeAll(
       Layer.succeed(
         HostKernelTag,
@@ -415,6 +468,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     yield* settings.link({
       credential: account.credential,
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
+      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
       setVoice: () => Effect.void,
       endLiveSession: Effect.void,
     });
@@ -444,6 +498,18 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
     assert.equal((yield* experiments)[EXPERIMENT.FACTORY], true);
     assert.equal(state.experiments[EXPERIMENT.FACTORY], true);
+
+    // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
+    state.user = { ...USER, id: "user-2", email: "other@example.com" };
+    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.BROWSER, on: true }, CONTEXT));
+    assert.ok(isRecord(stale));
+    assert.equal(stale.status, ACTION_RESULT_STATUS.REJECTED);
+    assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
+    assert.equal(state.experiments[EXPERIMENT.BROWSER], undefined);
+    assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
+    // The first account's choices are no longer drawn for the one now signed in.
+    assert.equal((yield* experiments)[EXPERIMENT.FACTORY], undefined);
+    assert.equal(yield* voice, undefined);
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
@@ -562,6 +628,7 @@ it.effect(
       yield* settings.link({
         credential: NO_CREDENTIAL,
         readAccountKey: () => Effect.succeed(BOB),
+        confirmAccount: () => Effect.void,
         setVoice: () => Effect.void,
         endLiveSession: Effect.void,
       });

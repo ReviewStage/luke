@@ -99,6 +99,13 @@ export interface CookieSessionDoor {
   readonly currentAddress: () => string;
   /** Takes the tab to an address, such as the provider's consent a sign-in leaves for. */
   readonly navigate: (url: string) => Effect.Effect<void>;
+  /**
+   * Each return to the tab (shown again, or focused), built by the shell from
+   * the page's own events. The session is read again on each, because the
+   * cookie is the browser's: another tab may have signed out, or in as
+   * someone else, and no call of this one need be refused to show it.
+   */
+  readonly revisits: Stream.Stream<void>;
 }
 
 /** A session step the service did not carry, worded by status or by the kind of fault, never by a body. */
@@ -394,6 +401,19 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       return account;
     });
 
+  const refreshOnce = (): Effect.Effect<void> =>
+    reread.pipe(
+      Effect.retry({
+        schedule: Schedule.exponential(LAUNCH_REREAD.FIRST),
+        times: LAUNCH_REREAD.TIMES,
+      }),
+      Effect.flatMap((moved) => (moved === undefined ? Effect.void : Fiber.await(moved))),
+      Effect.ignore,
+    );
+
+  // Every return to the tab reads the session again, for as long as the session stands open.
+  yield* Effect.forkScoped(Stream.runForEach(door.revisits, refreshOnce));
+
   return {
     snapshot: () => account,
     changes: PubSub.subscribe(changesPubSub).pipe(Effect.map(Stream.fromSubscription)),
@@ -428,19 +448,25 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
       account = SIGNED_OUT;
       PubSub.publishUnsafe(changesPubSub, account);
     },
+    // Note that the service is asked first, because the cookie is the whole
+    // credential and only the service ends it: a tab that left on its own
+    // would read the same live session back on its next load.
     signOut: (options) =>
       Effect.gen(function* () {
-        yield* leave;
-        if (!options.revokeRemote) return account;
-        const answer = yield* send(authCall, {
-          method: HTTP_METHOD.POST,
-          path: AUTH_PATH.SIGN_OUT,
-          body: "{}",
-        });
-        // An account that could not tell the service it was leaving still leaves this tab.
-        if (!callAnswered(answer) || !answer.response.ok) {
-          report(failed("Browser session sign-out failed", answer).message);
+        if (options.revokeRemote) {
+          // A read under way when the sign-out was pressed settles nothing over it.
+          generation += 1;
+          const answer = yield* send(authCall, {
+            method: HTTP_METHOD.POST,
+            path: AUTH_PATH.SIGN_OUT,
+            body: "{}",
+          });
+          const ended =
+            callAnswered(answer) &&
+            (answer.response.ok || answer.response.status === HTTP_STATUS.UNAUTHORIZED);
+          if (!ended) return yield* failed("Signing out of the browser session failed", answer);
         }
+        yield* leave;
         return account;
       }),
     deleteEverywhere: () =>
@@ -456,15 +482,8 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         yield* leave;
         return account;
       }),
-    refreshOnce: () =>
-      reread.pipe(
-        Effect.retry({
-          schedule: Schedule.exponential(LAUNCH_REREAD.FIRST),
-          times: LAUNCH_REREAD.TIMES,
-        }),
-        Effect.flatMap((moved) => (moved === undefined ? Effect.void : Fiber.await(moved))),
-        Effect.ignore,
-      ),
+    refreshOnce,
+    confirmAccount: () => Effect.ignore(reread),
     token,
     credential,
     sessionCredential: credential,

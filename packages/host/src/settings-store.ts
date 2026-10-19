@@ -987,12 +987,6 @@ export class SettingsStore {
   }
 
   /**
-   * The one settings write: serialize, load, mutate, stamp, write, and cache.
-   * A mutator answering nothing means the stored value is already the one
-   * asked for, so nothing is written. It runs exactly once per call, so it
-   * may record what it decided for its caller to read afterwards.
-   */
-  /**
    * Who the account's experiments and synced preferences are kept for: the
    * account this store keeps, or, for a store that keeps none, the account
    * the session names, read once before the record it is compared with.
@@ -1004,6 +998,12 @@ export class SettingsStore {
     return Effect.map(read(), (email) => () => email);
   }
 
+  /**
+   * The one settings write: serialize, load, mutate, stamp, write, and cache.
+   * A mutator answering nothing means the stored value is already the one
+   * asked for, so nothing is written. It runs exactly once per call, so it
+   * may record what it decided for its caller to read afterwards.
+   */
   #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
   ): Effect.Effect<void, PlatformError> {

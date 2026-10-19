@@ -67,6 +67,8 @@ interface SettingsLinks {
    * while no account is signed in.
    */
   readonly readAccountKey: () => Effect.Effect<string | undefined>;
+  /** Settles on the account the service names now, before a write keyed on the account. */
+  readonly confirmAccount: () => Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -198,6 +200,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       client: accountPreferencesClient,
       store,
       readAccountKey: () => readAccountPreferenceAccountKey(),
+      confirmAccount: () => confirmAccount(),
     });
 
     /**
@@ -245,6 +248,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
       linked((links) => links.readAccountKey());
 
+    // Note that a write keyed on the account first settles on the one the service names, because another tab may have signed in as someone else.
+    const confirmAccount = (): Effect.Effect<void> => linked((links) => links.confirmAccount());
+
     function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
       return Object.keys(preferences).length === 0;
     }
@@ -291,6 +297,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const hydrateAccountPreferences = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountKey: string,
     ): Effect.fn.Return<boolean, PlatformError> {
+      yield* confirmAccount();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const writesBefore = experiments.writesSent();
@@ -349,6 +357,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           ) {
             return;
           }
+          yield* confirmAccount();
           const preferences = yield* store.accountPreferences();
           if (
             (yield* readAccountPreferenceAccountKey()) !== accountKey ||

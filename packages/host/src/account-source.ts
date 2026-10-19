@@ -42,13 +42,25 @@ export interface AccountSession {
   /** Signs the same account in again; answers whether a session landed. */
   readonly signInAgain: (provider: AccountProvider) => Effect.Effect<boolean, Error>;
   readonly cancelSignIn: () => void;
+  /**
+   * Signs the account out. A source whose sign-out only the service can carry
+   * out (a cookie session) fails where the service did not, and the account
+   * then stands as it was.
+   */
   readonly signOut: (options: {
     readonly revokeRemote?: boolean;
-  }) => Effect.Effect<AccountSnapshot>;
+  }) => Effect.Effect<AccountSnapshot, Error>;
   /** Deletes the account on the service, then signs out. */
   readonly deleteEverywhere: () => Effect.Effect<AccountSnapshot, Error>;
   /** Checks the account against the service once, however many ask at once. */
   readonly refreshOnce: () => Effect.Effect<void>;
+  /**
+   * Settles on the account the service names now, right before a write keyed
+   * on the account, for a source whose account can change without this host
+   * hearing of it (a cookie another tab signed in under). A source whose
+   * account changes only through this host omits it.
+   */
+  readonly confirmAccount?: (() => Effect.Effect<void>) | undefined;
   /**
    * The account's own token reads, where the source holds a token: the
    * terminal socket's bearer and the voice credential's renewal read them. A

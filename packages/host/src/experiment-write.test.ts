@@ -90,11 +90,12 @@ test("the service's answer is what the store keeps and the settings carry", asyn
   const { client, bodies } = serviceAnswering(async () => holding({ [EXPERIMENT.FACTORY]: true }));
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store, readAccountKey: storedAccountKey(store) }).write(
-      ACCOUNT.email,
-      EXPERIMENT.FACTORY,
-      true,
-    ),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -114,7 +115,12 @@ test("two presses land in the order they were made, however slowly the first is 
     held = { ...held, ...body.experiments };
     return holding(held);
   });
-  const writer = experimentWriter({ client, store, readAccountKey: storedAccountKey(store) });
+  const writer = experimentWriter({
+    client,
+    store,
+    readAccountKey: storedAccountKey(store),
+    confirmAccount: () => Effect.void,
+  });
 
   const turnedOn = Effect.runPromise(writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, true));
   const turnedOff = Effect.runPromise(writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, false));
@@ -137,11 +143,12 @@ test("a write the service did not answer leaves the switch where it stood", asyn
   const { client } = serviceAnswering(async () => new Response("unavailable", { status: 503 }));
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store, readAccountKey: storedAccountKey(store) }).write(
-      ACCOUNT.email,
-      EXPERIMENT.FACTORY,
-      true,
-    ),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);
@@ -157,11 +164,12 @@ test("an answer that arrives after the account signed out is refused, not report
   });
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store, readAccountKey: storedAccountKey(store) }).write(
-      ACCOUNT.email,
-      EXPERIMENT.FACTORY,
-      true,
-    ),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);

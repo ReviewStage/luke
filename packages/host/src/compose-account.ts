@@ -271,7 +271,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         // authenticated with; queued behind the sign-out it would wait for the
         // next sign-in.
         yield* settings.flushProductEvents;
-        const snapshot = yield* session.signOut({ revokeRemote: true });
+        const snapshot = yield* Effect.orDie(session.signOut({ revokeRemote: true }));
         return { account: carried(snapshot) };
       }),
     [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
