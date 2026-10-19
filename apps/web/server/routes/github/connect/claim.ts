@@ -1,15 +1,7 @@
-import { auth } from "@luke/service/auth/auth";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
-import { githubConnectionApp } from "@luke/service/github/github-connection-app";
-import { githubUnlink } from "@luke/service/github/github-unlink";
-import { routeFromHttpRouter } from "../../../route-effect.js";
+import { orpcRoute } from "../../../orpc-route.js";
 
-/** The connect page claims a connect intent on the browser's own session (POST). */
-export default routeFromHttpRouter(
-  githubConnectionApp({
-    resolveUserId: resolveHostedUserId,
-    resolveSessionUserId: resolveBrowserSessionUserId,
-    unlinkGitHub: githubUnlink(auth.api),
-  }),
-);
+/**
+ * The connect page's claim of an intent on the browser's own session (POST), answered by the hosted oRPC router
+ * (`packages/service/src/github/github-procedures.ts`).
+ */
+export default orpcRoute;
