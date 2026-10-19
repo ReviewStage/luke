@@ -162,18 +162,28 @@ const channel = new BroadcastChannel(RECORDING_CHANNEL);
 
 channel.addEventListener("message", (event) => {
   if (event.data !== RECORDING_NOTICE.ACCOUNT_DELETED) return;
-  held = { signedOutSince: false };
+  // A tab already signed out has seen the sign-out a sign-in must follow.
+  held = { signedOutSince: latest !== undefined && latest.accountId === undefined };
   if (latest !== undefined) recording({ ...latest, permitted: false });
 });
 
 /**
+ * Whether the host's word is the one a deletion that landed leaves: no
+ * recording, and no account. A tab's host says no for one other reason, the
+ * halt it holds while a sign-out or a deletion is under way, and that word
+ * still names the account; a sign-out that lands then says yes, signed out,
+ * and a deletion that failed says yes, still signed in.
+ */
+function deletionLanded(bootstrap: SessionReplayBootstrap): boolean {
+  return !bootstrap.permitted && bootstrap.accountId === undefined;
+}
+
+/**
  * The tab's recording, which `web-platform.ts` answers the panel's platform
- * with. A host here says recording may not go on only once the account is
- * deleted, so its word turning from yes to no is a deletion, which every
- * other tab hears of.
+ * with. A deletion that lands here is told to every other tab, once.
  */
 export const applyWebSessionReplay: ApplySessionReplay = (bootstrap, importRecorder) => {
-  if (latest?.permitted && !bootstrap.permitted) {
+  if (deletionLanded(bootstrap) && (latest === undefined || !deletionLanded(latest))) {
     channel.postMessage(RECORDING_NOTICE.ACCOUNT_DELETED);
   }
   latest = bootstrap;

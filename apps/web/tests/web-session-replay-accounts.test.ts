@@ -99,12 +99,44 @@ test("an account deleted in another tab stands this tab's recording down until i
   assert.notEqual(identifiedAs("user-8")?.properties.$anon_distinct_id, "user-7");
 });
 
-test("an account deleted in this tab is told to every other tab", async () => {
+test("an account deleted in this tab is told to every other tab once it lands, and a sign-out or a deletion that failed is told to none", async () => {
   const otherTab = new BroadcastChannel(RECORDING_CHANNEL);
   const heard: unknown[] = [];
   otherTab.addEventListener("message", (event) => heard.push(event.data));
   applyWebSessionReplay(signedIn("user-9"));
+  // A sign-out: the host halts recording while it runs, then says yes, signed out.
   applyWebSessionReplay(signedIn("user-9", false));
+  applyWebSessionReplay(signedOut());
+  // A deletion that failed: the halt, then yes, still signed in.
+  applyWebSessionReplay(signedIn("user-10"));
+  applyWebSessionReplay(signedIn("user-10", false));
+  applyWebSessionReplay(signedIn("user-10"));
+  // A deletion that landed: the halt, then no, signed out, said twice.
+  applyWebSessionReplay(signedIn("user-10", false));
+  applyWebSessionReplay(signedOut(false));
+  applyWebSessionReplay(signedOut(false));
   await vi.waitFor(() => assert.deepEqual(heard, ["account-deleted"]));
+  // Nothing else follows it.
+  const settled = new BroadcastChannel(RECORDING_CHANNEL);
+  const marker: unknown[] = [];
+  otherTab.addEventListener("message", (event) => marker.push(event.data));
+  settled.postMessage("settled");
+  await vi.waitFor(() => assert.deepEqual(marker, ["settled"]));
+  assert.deepEqual(heard, ["account-deleted", "settled"]);
+  settled.close();
   otherTab.close();
+});
+
+test("a tab already signed out when another tab deletes the account records again at its next sign-in", async () => {
+  applyWebSessionReplay(signedOut());
+  await vi.waitFor(() => assert.equal(posthog.sessionRecordingStarted(), true));
+
+  const otherTab = new BroadcastChannel(RECORDING_CHANNEL);
+  otherTab.postMessage("account-deleted");
+  await vi.waitFor(() => assert.equal(posthog.sessionRecordingStarted(), false));
+  otherTab.close();
+
+  applyWebSessionReplay(signedIn("user-11"));
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  assert.equal(posthog.get_distinct_id(), "user-11");
 });
