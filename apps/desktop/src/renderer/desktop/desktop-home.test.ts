@@ -16,22 +16,33 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
+import { NewTaskDialog } from "../tasks/new-task-dialog";
+import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
 
@@ -155,12 +166,23 @@ const MEMBERS: readonly WorkspaceMember[] = [
   },
 ];
 
+/** The workspace Home lists, which its composer starts a task in. */
+const LISTED_WORKSPACE = "workspace-personal";
+
+/** The account's default model, which the composer's chip starts on. */
+const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+
 let root: Root | undefined;
 /** Every workspace whose automations were read, in order. */
 let automationReads: string[] = [];
 
+// Landed before any page renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   automationReads = [];
+  installScrollIntoView();
+  installEditorLayout();
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
@@ -195,20 +217,54 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  window.localStorage.clear();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
 });
+
+/** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
+interface Started {
+  readonly name: string;
+  readonly repository: string | null;
+  readonly workspaceId: string | undefined;
+  readonly planning: boolean;
+  readonly agent: NewTaskAgent | undefined;
+  readonly brief: string | undefined;
+}
 
 /** Every door the page opens, in order. */
 interface Opened {
   readonly tasks: string[];
   readonly inbox: (InboxChoice | "inbox")[];
   newTasks: number;
+  readonly started: Started[];
+}
+
+/** The tab's New task control as Home's composer meets it, each start written to `started`. */
+function newTaskControl(started: Started[]): TasksControl["newTask"] {
+  const control = tasksControl().newTask;
+  return {
+    ...control,
+    workspaceId: LISTED_WORKSPACE,
+    repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
+    readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
+    start: (name, repository, workspaceId, planning, from) => {
+      started.push({
+        name,
+        repository,
+        workspaceId,
+        planning,
+        agent: from?.handed,
+        brief: from?.brief,
+      });
+      return Promise.resolve(undefined);
+    },
+  };
 }
 
 /** The home page over `overrides`, every door it opens recorded. */
 function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Stratakos") {
-  const opened: Opened = { tasks: [], inbox: [], newTasks: 0 };
+  const opened: Opened = { tasks: [], inbox: [], newTasks: 0, started: [] };
   const tasks = tasksControl({
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
@@ -217,6 +273,7 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
     onNewTask: () => {
       opened.newTasks += 1;
     },
+    newTask: newTaskControl(opened.started),
     inboxView: {
       open: false,
       chosen: undefined,
@@ -236,7 +293,7 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
       onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, accountName })),
     ),
   );
-  return { page: container, opened };
+  return { page: container, opened, tasks };
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -274,10 +331,10 @@ function waits(page: HTMLElement): string[] {
   );
 }
 
-test("while the task list is unread, Home stands in its own shape: New task, and placeholder rows under the Inbox and Recent, saying no greeting", () => {
+test("while the task list is unread, Home stands in its own shape: New task's composer, and placeholder rows under the Inbox and Recent, saying no greeting", () => {
   const { page } = mount({ listRead: false });
 
-  assert.ok(button(page, "New task"));
+  assert.ok(composerEditor(page), "the composer stands, hanging on no list");
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
   assert.ok(page.querySelectorAll(".luke-list-row .luke-skeleton").length > 0, "rows of blocks");
   assert.doesNotMatch(page.textContent ?? "", /Welcome back|Nothing needs you/u);
@@ -339,7 +396,7 @@ test("the home page greets the account, lists what needs it with each item's pla
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
-  assert.ok(button(page, "New task"));
+  assert.ok(composerEditor(page), "New task's composer stands under the greeting");
   assert.deepEqual(rows(page, "home-inbox"), [
     "Email the invitee when an invite is withdrawn? · Teammate invitations",
     "Which billing account does the export read? · Billing export",
@@ -364,17 +421,15 @@ test("Home offers no line to search every task, though Recent lists fewer than t
   assert.equal(page.querySelector(`[aria-keyshortcuts="${palette}"]`), null);
 });
 
-test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
+test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {
   const { page, opened } = mount();
   await settle();
 
   button(page, "Email the invitee").click();
   button(page, "Usage alerts").click();
-  button(page, "New task").click();
 
   assert.deepEqual(opened.inbox, ["inbox", { taskId: INVITES.id, itemId: EMAIL.id }]);
   assert.deepEqual(opened.tasks, [TASKS[0]?.id]);
-  assert.equal(opened.newTasks, 1);
 });
 
 test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no unread dot on an item read", async () => {
@@ -436,16 +491,26 @@ test("a refused read of the task list says so under Recent, with Retry, which as
   assert.equal(retries, 1);
 });
 
-test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
-  const { page } = mount({
+test("an account with no plan yet is welcomed with New task's composer under Luke's line, and nothing the page says names the sidebar", async () => {
+  const { page, opened } = mount({
     tasks: [],
     listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
     inbox: [],
     inboxTasks: [],
   });
 
+  await settle();
+  typeInComposer(page, "Set up the repository");
+  pressInComposer(page, "Enter");
+  await settle();
+
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
-  assert.ok(button(page, "New task"));
+  assert.ok(page.querySelector("[aria-label='Welcome']"), "the welcome stands");
+  assert.deepEqual(
+    opened.started.map((each) => each.agent?.prompt),
+    ["Set up the repository"],
+    "its composer starts the first task",
+  );
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
 });
 
@@ -476,9 +541,11 @@ test("an account with no plan yet whose only waiting question is a teammate's ag
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
 });
 
-test("↑ and ↓ move the focus through the rows from the window, and leave a key pressed elsewhere alone", async () => {
-  mount();
+test("↑ and ↓ move the focus through the rows from the window, once Escape lets go of the composer, and leave a key pressed elsewhere alone", async () => {
+  const { page } = mount();
   await settle();
+  pressInComposer(page, "Escape");
+  assert.ok(document.activeElement === document.body, "Escape lets go of the composer's words");
   const field = document.createElement("input");
   document.body.append(field);
   const press = (key: string) =>
@@ -515,17 +582,139 @@ test("a workspace with no plan of its own, in an account with plans elsewhere, w
   assert.equal(page.querySelector('section[aria-labelledby="home-recent"]'), null);
 });
 
-test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
+test("Home's composer takes the caret as the page shows, and ↑, ↓, and Return typed in it are the composer's, moving none of Home's rows", async () => {
+  const { page, opened } = mount();
+  await settle();
+  const editor = composerEditor(page);
+  assert.ok(document.activeElement === editor, "the words take the caret");
+
+  typeInComposer(page, "Fix the refresh");
+  const down = pressInComposer(page, "ArrowDown");
+  const up = pressInComposer(page, "ArrowUp");
+
+  assert.ok(document.activeElement === editor, "the caret stays in the words");
+  assert.equal(down.defaultPrevented || up.defaultPrevented, false, "Home takes neither arrow");
+  pressInComposer(page, "Enter");
+  await settle();
+  assert.deepEqual(opened.tasks, [], "Return opened no row");
+  assert.equal(opened.started.length, 1, "Return started the composer's task");
+});
+
+test("Home's composer leaves the caret in a field the developer is typing in as the page shows", async () => {
+  const field = document.createElement("input");
+  document.body.append(field);
+  field.focus();
   const { page } = mount();
   await settle();
-  const newTask = button(page, "New task");
-  newTask.focus();
-  act(() => {
-    newTask.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
-    );
+
+  assert.ok(composerEditor(page));
+  assert.ok(document.activeElement === field, "the field keeps the caret");
+});
+
+test("Agent mode: Return in Home's composer starts the task in the workspace Home lists, without planning, and an agent on the words with the chip's model", async () => {
+  const { page, opened } = mount();
+  await settle();
+  typeInComposer(page, "Make the sidebar keep its folds.");
+  pressInComposer(page, "Enter");
+  await settle();
+
+  const [{ agent, ...task } = assert.fail("a task started")] = opened.started;
+  const { idempotencyKey, ...handed } = agent ?? assert.fail("an agent was asked for");
+  assert.deepEqual(task, {
+    name: "",
+    repository: "acme/relay",
+    workspaceId: LISTED_WORKSPACE,
+    planning: false,
+    brief: undefined,
   });
-  assert.ok(document.activeElement === newTask, "New plan keeps the focus");
+  assert.deepEqual(handed, {
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: DEFAULT_CHOICE,
+  });
+  assert.ok(idempotencyKey, "the agent's start carries the card's key");
+  assert.equal(opened.started.length, 1);
+  assert.equal(opened.newTasks, 0, "no dialog is asked for");
+});
+
+test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the plan and its call in the workspace Home lists, Untitled, handing Luke the words as its brief, with no agent", async () => {
+  const { page, opened } = mount();
+  await settle();
+  pressInComposer(page, "Tab", { shiftKey: true });
+  typeInComposer(page, "Rethink automations");
+  pressInComposer(page, "Enter");
+  await settle();
+
+  assert.deepEqual(opened.started, [
+    {
+      name: "",
+      repository: "acme/relay",
+      workspaceId: LISTED_WORKSPACE,
+      planning: true,
+      agent: undefined,
+      brief: "Rethink automations",
+    },
+  ]);
+});
+
+test("words typed in the composer while the task list is read are still there once it lands", async () => {
+  const { page, opened, tasks } = mount({ listRead: false });
+  await settle();
+  typeInComposer(page, "Speed up the build");
+
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, { tasks: { ...tasks, listRead: true }, accountName: "Dean" }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  pressInComposer(page, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    opened.started.map((each) => each.agent?.prompt),
+    ["Speed up the build"],
+  );
+});
+
+test("words typed in the composer while the task list is read are still there once it lands as a new account's welcome", async () => {
+  const none = { tasks: [], archived: [], inbox: [], inboxTasks: [] };
+  const { page, opened, tasks } = mount({
+    listRead: false,
+    tasks: [],
+    listed: none,
+    inbox: [],
+    inboxTasks: [],
+  });
+  await settle();
+  typeInComposer(page, "Create my first app");
+
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, { tasks: { ...tasks, listRead: true }, accountName: "Dean" }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
+  assert.ok(
+    page.querySelector("[aria-label='Welcome'] .new-task-composer"),
+    "the composer stands under Luke's line",
+  );
+  assert.ok(document.activeElement === composerEditor(page), "the caret stays in the words");
+  pressInComposer(page, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    opened.started.map((each) => each.agent?.prompt),
+    ["Create my first app"],
+  );
 });
 
 test("Home lists every open item of the listed plans, a teammate's agent's included, though main counts only the account's own as waiting on it", async () => {
@@ -780,4 +969,69 @@ test("a recent task a teammate created wears their face before its time, and the
     return face === null ? [] : [[row.querySelector(NAME)?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});
+
+/**
+ * Home with New task's dialog open over it, as ⌘N opens it, each start
+ * written down. Escape in the dialog's words puts it away.
+ */
+async function mountUnderDialog() {
+  const started: Started[] = [];
+  const newTask = newTaskControl(started);
+  const tasks = tasksControl({
+    tasks: TASKS,
+    listed: { tasks: TASKS, archived: [], ...HOLDING },
+    ...HOLDING,
+  });
+  function Window() {
+    const [open, setOpen] = useState(true);
+    const control = { ...newTask, open, onClose: () => setOpen(false) };
+    return createElement(
+      "div",
+      null,
+      createElement(DesktopHome, {
+        tasks: { ...tasks, newTask: control },
+        accountName: "Dean Stratakos",
+      }),
+      createElement(NewTaskDialog, { newTask: control }),
+    );
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
+  await settle();
+  const dialog = () =>
+    document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]') ??
+    assert.fail("the dialog stands");
+  const home = () =>
+    container.querySelector<HTMLElement>(".home-composer") ?? assert.fail("Home's composer stands");
+  return {
+    started,
+    dialog,
+    home,
+    /** Puts the dialog away with nothing started, as Escape in its words does. */
+    closeDialog: async () => {
+      pressInComposer(dialog(), "Escape");
+      await settle();
+      assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
+    },
+  };
+}
+
+test("Plan turned on in the dialog over Home and the dialog put away, Home's composer is in Plan mode too, and starts the plan and its call", async () => {
+  const page = await mountUnderDialog();
+  pressInComposer(page.dialog(), "Tab", { shiftKey: true });
+  await page.closeDialog();
+
+  const toggle = page.home().querySelector('button[aria-label="Plan with Luke first"]');
+  assert.equal(toggle?.getAttribute("aria-pressed"), "true", "Home's card shows Plan mode");
+  typeInComposer(page.home(), "Rethink automations");
+  pressInComposer(page.home(), "Enter");
+  await settle();
+
+  assert.deepEqual(
+    page.started.map(({ planning, agent }) => ({ planning, agent })),
+    [{ planning: true, agent: undefined }],
+  );
 });

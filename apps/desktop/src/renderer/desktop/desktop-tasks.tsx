@@ -1004,7 +1004,7 @@ export function DesktopTasks({
           {secondCall}
         </SkillFiles>
       );
-    // With no task open the column says so and offers New task, whose
+    // With no task open the column opens on New task's composer, and ⌘N's
     // dialog stands over it as it stands over a task.
     case TASKS_PAGE.HOME:
       // A launch reopening the task last open draws the window's ground

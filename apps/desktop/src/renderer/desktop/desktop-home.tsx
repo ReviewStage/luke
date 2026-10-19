@@ -3,7 +3,6 @@ import { ACTOR_SIZE, ActorMark, CreatorHeard } from "@luke/panel/actor-ref";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
-import { Shortcut } from "@luke/panel/shortcut";
 import {
   holderName,
   INBOX_HOLDER,
@@ -14,11 +13,7 @@ import {
 } from "@luke/panel/tasks/inbox-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
-import { commandKeyshortcuts } from "@luke/panel/tooltip";
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
-  Button,
   DetailPage,
   ErrorState,
   FolderIcon,
@@ -36,30 +31,49 @@ import {
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
+import { NewTaskComposer } from "../tasks/new-task-composer";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { TaskStatusMark } from "./task-card";
 
 /**
- * desktop-home.tsx -- the home page: the column the window rests on with no task open, saying what needs the developer and the tasks saved latest, and offering New task.
+ * desktop-home.tsx -- the home page: the column the window rests on with no task open, opening on New task's composer and saying what needs the developer and the tasks saved latest.
  *
  * It is one page (`DetailPage`), as a chat app's empty page is: a greeting
- * with New task at its end standing still over the scroll, then Inbox, every open Inbox item of the
- * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
- * task it is about after its title, a press opening the Inbox on it; then
- * Recent, the tasks of the workspace listed saved latest, each a `ListRow`
- * with its repository at its end before its time, a press opening it. Nothing waiting says so in the Inbox's own words. An account with no plan
- * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
- * task. Nothing here names the sidebar, which may be folded away.
+ * standing still over the scroll, and at the top of the scroll New task's
+ * composer card (`new-task-composer.tsx`) in place of a New task button, so
+ * the page opens on a prompt box the way Codex's and ChatGPT's do; then
+ * Inbox, every open Inbox item of the workspace listed, a teammate's
+ * agent's among them, as the Inbox's own row draws it, the task it is about
+ * after its title, a press opening the Inbox on it; then Recent, the tasks
+ * of the workspace listed saved latest, each a `ListRow` with its
+ * repository at its end before its time, a press opening it. Nothing
+ * waiting says so in the Inbox's own words. An account with no plan yet in
+ * any workspace is welcomed instead: Luke's face, one line, and the
+ * composer under them. Nothing here names the sidebar, which may be folded
+ * away.
+ *
+ * The composer starts the task in the workspace Home lists, as the dialog
+ * would: in Agent mode a task with a coding agent on the words, opened on
+ * its tab, and in Plan mode the plan and a call with Luke. The dialog stays
+ * for ⌘N and every other New task press; only Home holds the card inline.
+ * Its words take the caret as the page shows, unless the developer is
+ * typing in a field elsewhere, as an agent's box decides; a key pressed in
+ * the card is the card's, and Escape there with nothing in it to close lets
+ * go of the words. Note that its words, files, and issue are the card's own
+ * state, kept in no draft store, so leaving Home lets them go.
  *
  * ↑ and ↓ move through its rows, a launcher's way, from the window itself
  * as well as from a row, and Return opens the row reached, so a launch is a
- * key or two from a task; a key pressed anywhere else, the sidebar or a
- * field, is left to it. Until the task list is read the page stands in its
- * own shape: New task, which the welcome offers too, and blocks where the
- * greeting, the sections' headings, and their rows will stand. It says no
+ * key or two from a task; a key pressed anywhere else, the composer, the
+ * sidebar, or a field, is left to it. Until the task list is read the page
+ * stands in its own shape: the composer, which hangs on no list, and blocks
+ * where the greeting, the sections' headings, and their rows will stand.
+ * The composer stands in the one place while the list is read and once it
+ * lands, so the list landing keeps what was typed meanwhile. It says no
  * word that hangs on the list, so a new account's welcome replaces it
  * without having claimed otherwise. A read refused says so under Recent,
  * with Retry, over whatever an earlier read listed.
@@ -105,21 +119,6 @@ function greeting(name: string | undefined): string {
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
 function recentTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
   return orderTasks(tasks, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
-}
-
-/** New task, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
-function NewTaskButton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  return (
-    <Button
-      variant={BUTTON_VARIANT.PRIMARY}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
-      disabled={!tasks.signedIn}
-      onClick={tasks.onNewTask}
-    >
-      New task
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="button-chord" />
-    </Button>
-  );
 }
 
 /** A plan as a `ListRow`: the owner's picture, the name, and at its end the repository, its creator's face where a teammate created it, and its mark and time. */
@@ -265,8 +264,74 @@ function HomeRecent({
   );
 }
 
-/** A new account's welcome: Luke's face and New task. */
-function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+/**
+ * New task's composer, at the top of the page as a chat app's empty page
+ * opens on its prompt box, starting the task in the workspace Home lists;
+ * nothing while signed out, where nothing could start. Note that the press
+ * that opens the dialog chooses its repository for the dialog alone, so
+ * this card starts on none of it. Escape with nothing in the card to close
+ * lets go of the words, so ↑ and ↓ reach the rows again.
+ */
+function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
+  if (!tasks.signedIn) return null;
+  return (
+    <NewTaskComposer
+      newTask={{ ...tasks.newTask, preset: undefined }}
+      workspaceId={tasks.newTask.workspaceId}
+      from={undefined}
+      onLeave={letGoOfFocus}
+    />
+  );
+}
+
+/** Where the page lays the composer: a box of its own, which the composer's one box is moved into. */
+type ComposerSlot = (slot: HTMLElement | null) => void;
+
+/**
+ * One composer for every state of the page, drawn into a box of the page's
+ * own that whichever state stands, the page or the welcome, takes into its
+ * place, so the list landing as a new account's welcome moves the composer
+ * rather than mounting it afresh, and the words typed while it was read
+ * stand, the caret in them where it was. Note that the composer is drawn after the page, so its place is
+ * taken before its words decide whether to take the caret.
+ */
+function useComposerSlot(composer: ReactNode): readonly [ReactNode, ComposerSlot] {
+  const [box] = useState(() => {
+    const made = document.createElement("div");
+    made.className = "home-composer ph-no-capture";
+    return made;
+  });
+  // What held the focus inside the box as its place went, given it back in the new one.
+  const held = useRef<HTMLElement | null>(null);
+  const place = useCallback<ComposerSlot>(
+    (slot) => {
+      // Note that a place going is told before it leaves the page, while
+      // what holds the focus still holds it; the page drops the focus as the
+      // box leaves with it.
+      if (slot === null) {
+        const active = document.activeElement;
+        held.current = active instanceof HTMLElement && box.contains(active) ? active : null;
+        return;
+      }
+      if (box.parentNode !== slot) slot.append(box);
+      const was = held.current;
+      held.current = null;
+      const unfocused = document.activeElement === null || document.activeElement === document.body;
+      if (was !== null && unfocused && box.contains(was)) was.focus();
+    },
+    [box],
+  );
+  return [createPortal(composer, box), place];
+}
+
+/** Hands the focus back to the page from whatever holds it, as Escape from an agent's box does. */
+function letGoOfFocus(): void {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) active.blur();
+}
+
+/** A new account's welcome: Luke's face and the line over the composer. */
+function Welcome({ place }: { place: ComposerSlot }): React.JSX.Element {
   return (
     <section className="home-welcome" aria-label="Welcome">
       <span className="home-welcome-face" aria-hidden="true">
@@ -275,7 +340,7 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
         Start your first task
       </Text>
-      <NewTaskButton tasks={tasks} />
+      <div className="home-composer-slot" ref={place} />
     </section>
   );
 }
@@ -317,17 +382,13 @@ function RecentSkeleton(): React.JSX.Element {
 }
 
 /**
- * The page while the task list is first read, in the shape of the page an
- * account with tasks lands on: the greeting's block beside New task, then
- * the Inbox's and Recent's heading blocks over rows of blocks, so the page
- * lands where the blocks stood.
+ * The sections while the task list is first read, in the shape of the page
+ * an account with tasks lands on: the Inbox's and Recent's heading blocks
+ * over rows of blocks, so the page lands where the blocks stood.
  */
-function HomeSkeleton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+function SectionsSkeleton(): React.JSX.Element {
   return (
-    <DetailPage
-      title={<Skeleton width={SKELETON_GREETING} />}
-      actions={<NewTaskButton tasks={tasks} />}
-    >
+    <>
       <section className="home-section">
         <HeadingSkeleton width={SKELETON_HEADING.INBOX} />
         <InboxListSkeleton rows={INBOX_SKELETON_ROWS} context />
@@ -336,7 +397,7 @@ function HomeSkeleton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
         <HeadingSkeleton width={SKELETON_HEADING.RECENT} />
         <RecentSkeleton />
       </section>
-    </DetailPage>
+    </>
   );
 }
 
@@ -352,7 +413,7 @@ export function DesktopHome({
   const now = useMinute();
   const [rows, setRows] = useState<HTMLDivElement | null>(null);
   useRowKeys(rows, tasks.shown);
-  if (!tasks.listRead && !tasks.listFailed) return <HomeSkeleton tasks={tasks} />;
+  const reading = !tasks.listRead && !tasks.listFailed;
   // Only an account with no task in any workspace, and nothing an agent with
   // no task waits on it for, is new; a workspace of its own with none still
   // says what needs it elsewhere, while a teammate's agent's question, which
@@ -361,18 +422,39 @@ export function DesktopHome({
     tasks.tasks.length === 0 &&
     tasks.archived.length === 0 &&
     !tasks.inboxTaskless.some((each) => waitsOnReader(each, tasks.me));
-  if (!tasks.listFailed && fresh) return <Welcome tasks={tasks} />;
+  const [composer, place] = useComposerSlot(<HomeComposer tasks={tasks} />);
+  if (!reading && !tasks.listFailed && fresh) {
+    return (
+      <>
+        <Welcome place={place} />
+        {composer}
+      </>
+    );
+  }
+  // Note that the composer stands in one place while the list is read and
+  // once it lands, so the list landing keeps the words typed while it was
+  // read and the caret in them.
   return (
-    // The Inbox's agent cards name who started each agent, and Recent's rows
-    // who created each teammate's task, read against the listed workspace's members.
-    <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+    <>
       {/* Note that the rows the arrow keys move through are found inside this box, which lays nothing out. */}
       <div className="home-rows" ref={setRows}>
-        <DetailPage title={greeting(accountName)} actions={<NewTaskButton tasks={tasks} />}>
-          <HomeInbox tasks={tasks} now={now} />
-          <HomeRecent tasks={tasks} now={now} />
+        <DetailPage
+          title={reading ? <Skeleton width={SKELETON_GREETING} /> : greeting(accountName)}
+        >
+          <div className="home-composer-slot" ref={place} />
+          {reading ? (
+            <SectionsSkeleton />
+          ) : (
+            // The Inbox's agent cards name who started each agent, and Recent's rows
+            // who created each teammate's task, read against the listed workspace's members.
+            <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+              <HomeInbox tasks={tasks} now={now} />
+              <HomeRecent tasks={tasks} now={now} />
+            </MemberDirectory>
+          )}
         </DetailPage>
       </div>
-    </MemberDirectory>
+      {composer}
+    </>
   );
 }
