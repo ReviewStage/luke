@@ -13,7 +13,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -21,7 +21,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -85,15 +85,12 @@ afterEach(() => {
 /** The agent's turn as the tab draws it, over a page of the task and that turn, for an agent of `status`. */
 async function drawnTurn(status: CodingAgentStatus): Promise<HTMLElement> {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }],
-            }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
   });
   const messages = [TASK, turn(status !== CODING_AGENT_STATUS.RUNNING)];
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.

@@ -243,32 +243,31 @@ beforeEach(() => {
                   ],
                 },
               }
-            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: {
+                    agents: workspaceAnswer(request.payload),
+                  },
+                }
+              : request.kind === ACT_KIND.TASKS_TREE
                 ? {
                     status: ACT_OUTCOME_STATUS.DONE,
                     value: {
-                      agents: workspaceAnswer(request.payload),
+                      folder: {
+                        path: "",
+                        repository: standing,
+                        branch: "main",
+                        entries: TREES.get(standing) ?? [],
+                        truncated: false,
+                      },
                     },
                   }
-                : request.kind === ACT_KIND.TASKS_TREE
-                  ? {
-                      status: ACT_OUTCOME_STATUS.DONE,
-                      value: {
-                        folder: {
-                          path: "",
-                          repository: standing,
-                          branch: "main",
-                          entries: TREES.get(standing) ?? [],
-                          truncated: false,
-                        },
-                      },
-                    }
-                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+                : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       );
     },
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
 });
 
 afterEach(() => {
@@ -1483,6 +1482,7 @@ const issuesRead: string[] = [];
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
   issuesRead.length = 0;
   fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.ISSUES_LIST]: (payload) => {
       issuesRead.push(payload.workspaceId);
       return Promise.resolve({ issues: [...standing] });

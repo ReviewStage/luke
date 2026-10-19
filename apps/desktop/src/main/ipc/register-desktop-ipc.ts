@@ -253,6 +253,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     actPort: createActPortHandler({
       accountAsks: { host: operator.host },
       issues: { host: operator.host },
+      workspaces: { host: operator.host, openExternal: config.openExternal },
     }),
     services: effectServices,
     reports,

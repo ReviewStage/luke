@@ -308,6 +308,7 @@ const servedActPort = (operator: OperatorClient, services: Context.Context<never
       createActPortHandler({
         accountAsks: { host: operator.host },
         issues: { host: operator.host },
+        workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
       }).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },
