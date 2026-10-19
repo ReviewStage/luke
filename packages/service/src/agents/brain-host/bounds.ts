@@ -62,7 +62,7 @@ export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
-  /** Who carried a message minted as the account's own principal: the deployment, named on the coder channel's voice steer and never laid over from a request. */
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;
 
