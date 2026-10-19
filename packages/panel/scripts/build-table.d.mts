@@ -13,8 +13,39 @@ export const EXCALIDRAW_UNUSED_MODULE: string;
 export function excalidrawLeftOut(specifier: string, importer: string | undefined): boolean;
 export const LUCIDE_WHOLE: string;
 export function lucideWholeModule(file: string): string;
-/** esbuild's options, left untyped here so the panel takes no dependency on esbuild for them. */
-export const HIGHLIGHT_WORKER_BUILD: Readonly<Record<string, unknown>>;
-export function panelDefines(highlightWorkerText: string): Readonly<Record<string, string>>;
+/**
+ * The highlight worker's esbuild options, spelled out here so the panel takes
+ * no dependency on esbuild for their type: its one plugin is typed by the
+ * part of esbuild's build object it calls.
+ */
+interface WorkerPluginBuild {
+  onResolve(
+    options: { filter: RegExp },
+    callback: (args: { path: string }) => { path: string; namespace: string },
+  ): void;
+  onLoad(
+    options: { filter: RegExp; namespace: string },
+    callback: () => { contents: string; loader: "js" },
+  ): void;
+}
+
+export interface HighlightWorkerBuild {
+  readonly entryPoints: string[];
+  readonly bundle: true;
+  readonly write: false;
+  readonly platform: "browser";
+  readonly format: "iife";
+  readonly target: string;
+  readonly minify: true;
+  readonly conditions: string[];
+  readonly plugins: { readonly name: string; setup: (build: WorkerPluginBuild) => void }[];
+  readonly define: { readonly [identifier: string]: string };
+  readonly logLevel: "info";
+}
+
+export const HIGHLIGHT_WORKER_BUILD: HighlightWorkerBuild;
+export function panelDefines(highlightWorkerText: string): {
+  readonly [identifier: string]: string;
+};
 export const EXCALIDRAW_STYLESHEET: string;
 export function panelStaticDirectories(): readonly PanelStaticDirectory[];

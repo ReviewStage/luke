@@ -59,11 +59,11 @@ const FIXTURE_STATE: AppStateSnapshot = {
 
 /**
  * The fixture bridge: the document above on the one read, every act refused,
- * any other invoke rejected, every send dropped, and every subscription silent, so the table stays total
- * as the bridge contract grows.
+ * any other invoke rejected, every send dropped, and every subscription
+ * silent, so the table stays total as the bridge contract grows.
  */
 function fixtureBridge(): AppBridge {
-  const quiet: Record<string, unknown> = Object.fromEntries(
+  const quiet = Object.fromEntries(
     bridgeEntries().map(([method, entry]) => [
       method,
       entry.kind === "subscribe"
@@ -77,8 +77,9 @@ function fixtureBridge(): AppBridge {
     requestAppState: () => Promise.resolve(FIXTURE_STATE),
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: FIXTURE_REFUSAL }),
   };
-  // SAFETY: every method of the contract is answered above by its kind's shape, and the two invokes the panel reads by their own types.
-  return { ...quiet, ...answering } as AppBridge;
+  // SAFETY: the map derives every method of the contract from BRIDGE by its kind's shape, and the two the panel reads are typed above.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest map proves the dynamically keyed object is the derived bridge, as the preload's does.
+  return { ...quiet, ...answering } as unknown as AppBridge;
 }
 
 /**
