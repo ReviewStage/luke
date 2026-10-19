@@ -2925,13 +2925,17 @@ ol.transcript-list {
 
 /* A tool call's input or output (../ai-elements/code-block.tsx): its words
    as they are, in mono, wrapping anywhere rather than widening the
-   transcript, and scrolling inside the block past its height. */
+   transcript, and scrolling inside the block past its height, in the
+   block's `ScrollArea` (`@luke/ui`). */
 .code-block {
+  display: flex;
   max-height: 256px; /* off-scale: a block's tallest before it scrolls */
+  flex-direction: column;
+}
+
+.code-block-words {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  overflow-x: hidden;
-  overflow-y: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);

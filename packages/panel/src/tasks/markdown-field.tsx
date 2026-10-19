@@ -1,5 +1,5 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
-import { SCROLL_SIZE, ScrollArea, TextArea } from "@luke/ui";
+import { SCROLL_OVERSCROLL, SCROLL_SIZE, ScrollArea, TextArea } from "@luke/ui";
 import { type Ref, useState } from "react";
 import { Segmented } from "../segmented.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -77,7 +77,7 @@ export function MarkdownField({
         />
       ) : (
         <div className="markdown-field-preview">
-          <ScrollArea size={SCROLL_SIZE.CONTENT}>
+          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
             <div className="markdown-field-preview-words pull-request-words">
               {value.trim() === "" ? (
                 <p className="pull-request-quiet">{FIELD_WORDS.NOTHING}</p>

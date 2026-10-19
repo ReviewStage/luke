@@ -783,11 +783,9 @@ node --input-type=module -e '
     ["apps/desktop/src/renderer/styles/markdown.css", ".markdown pre", "code keeps each line whole and scrolls sideways in the element the Markdown engine draws"],
     ["apps/desktop/src/renderer/styles/markdown.css", ".markdown table", "a table'"'"'s own box scrolls sideways, as the engine draws it, with its edge fade on its own timeline"],
     ["apps/desktop/src/renderer/styles/tasks.css", ".transcript-code-body", "a transcript'"'"'s code keeps each line whole and scrolls sideways in its own pre"],
-    ["apps/desktop/src/renderer/styles/tasks.css", ".code-block", "a tool call'"'"'s block in the transcript hands a swipe past its end on to the transcript, which a ScrollArea'"'"'s held overscroll would not"],
     ["apps/desktop/src/renderer/styles/tasks.css", ".transcript-table", "a transcript'"'"'s table'"'"'s own box scrolls sideways, as a Markdown table does"],
     ["apps/desktop/src/renderer/styles/desktop.css", ".tab-strip", "the strip scrolls sideways itself, its chosen tab sticky and its fades drawn on its own scroll"],
     ["apps/desktop/src/renderer/styles/tasks.css", ".agent-composer-input", "the composer'"'"'s contenteditable, owned by its editor, grows to eight lines and scrolls itself"],
-    ["apps/web/src/admin/charts/retention-grid.tsx", "overflow-x-auto", "the grid scrolls sideways and hands a swipe up or down on to the page, which a sideways ScrollArea'"'"'s held overscroll would not"],
   ];
   const SCROLLING = /^(?:auto|scroll)$/;
   // A sideways value that stands beside a scroll; `visible` and the resets

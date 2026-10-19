@@ -1,5 +1,15 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
-import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  SCROLL_AXIS,
+  SCROLL_OVERSCROLL,
+  SCROLL_SIZE,
+  ScrollArea,
+  TEXT_ELEMENT,
+  TEXT_FONT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { Fragment } from "react";
 import { ChartEmpty, ChartFrame } from "./chart-frame";
@@ -106,44 +116,54 @@ export function RetentionGrid({
   return (
     <ChartFrame>
       {/* Note that the scroller bleeds across the card's inset, because cells
-      scrolled out of a narrow card should pass under its edge, not stop short of it. */}
-      <div className="-mx-5 overflow-x-auto px-5">
-        <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
-          <div
-            className="grid min-w-160 gap-1 tabular-nums"
-            style={{
-              gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
-            }}
-          >
-            <div className="flex items-center uppercase">
-              <HeaderWords>Cohort</HeaderWords>
-            </div>
-            <div className="flex items-center justify-end uppercase">
-              <HeaderWords>Accounts</HeaderWords>
-            </div>
-            {offsets.map((offset) => (
-              <div key={offset} className="flex items-center justify-center uppercase">
-                <HeaderWords>Wk {offset}</HeaderWords>
-              </div>
-            ))}
-            {retention.cohorts.map((cohort) => (
-              <Fragment key={cohort.weekStart}>
-                <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
-                <div className="flex items-center justify-end pr-1 text-(--luke-color-text-muted)">
-                  {formatNumber(cohort.size)}
+      scrolled out of a narrow card should pass under its edge, not stop short of it.
+      The inset comes back on the grid's own box, which stands as wide as the grid,
+      so it pads both ends of the scroll; a swipe up or down over it moves the page. */}
+      <div className="-mx-5">
+        <ScrollArea
+          axis={SCROLL_AXIS.HORIZONTAL}
+          size={SCROLL_SIZE.CONTENT}
+          overscroll={SCROLL_OVERSCROLL.CHAIN}
+        >
+          <div className="w-fit min-w-full px-5">
+            <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
+              <div
+                className="grid min-w-160 gap-1 tabular-nums"
+                style={{
+                  gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
+                }}
+              >
+                <div className="flex items-center uppercase">
+                  <HeaderWords>Cohort</HeaderWords>
                 </div>
-                {offsets.map((offset) => {
-                  const cell = cohort.cells[offset];
-                  return cell ? (
-                    <RetentionCell key={offset} cell={cell} />
-                  ) : (
-                    <div key={offset} aria-hidden="true" />
-                  );
-                })}
-              </Fragment>
-            ))}
+                <div className="flex items-center justify-end uppercase">
+                  <HeaderWords>Accounts</HeaderWords>
+                </div>
+                {offsets.map((offset) => (
+                  <div key={offset} className="flex items-center justify-center uppercase">
+                    <HeaderWords>Wk {offset}</HeaderWords>
+                  </div>
+                ))}
+                {retention.cohorts.map((cohort) => (
+                  <Fragment key={cohort.weekStart}>
+                    <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
+                    <div className="flex items-center justify-end pr-1 text-(--luke-color-text-muted)">
+                      {formatNumber(cohort.size)}
+                    </div>
+                    {offsets.map((offset) => {
+                      const cell = cohort.cells[offset];
+                      return cell ? (
+                        <RetentionCell key={offset} cell={cell} />
+                      ) : (
+                        <div key={offset} aria-hidden="true" />
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+            </Text>
           </div>
-        </Text>
+        </ScrollArea>
       </div>
     </ChartFrame>
   );
