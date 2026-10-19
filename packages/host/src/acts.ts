@@ -160,6 +160,8 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
@@ -179,6 +181,11 @@ import {
   type TasksWorkspacePhotoAnswer,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksCommentActParamsSchema,
+  tasksCommentAnswerSchema,
+  tasksCommentStartParamsSchema,
+  tasksCommentsAnswerSchema,
+  tasksCommentsParamsSchema,
   tasksEditAnswerSchema,
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
@@ -412,6 +419,14 @@ export const ACT_KIND = {
   TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
+  /**
+   * The open plan's comment threads: read past a cursor (held open by the
+   * service while nothing changed), one started on words of the plan, and
+   * one thing done to one thread. The window holds what it draws.
+   */
+  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENT_START: "tasks.commentStart",
+  TASKS_COMMENT_ACT: "tasks.commentAct",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -1190,6 +1205,21 @@ export const ACT = {
     payload: actSchema(tasksPictureParamsSchema),
     result: wireResult<TasksPictureAnswer>(isReadable(tasksPictureAnswerSchema)),
     refusal: "Could not read that picture on this system.",
+  },
+  [ACT_KIND.TASKS_COMMENTS]: {
+    payload: actSchema(tasksCommentsParamsSchema),
+    result: wireResult<TasksCommentsAnswer>(isReadable(tasksCommentsAnswerSchema)),
+    refusal: "Could not read the task's comments on this system.",
+  },
+  [ACT_KIND.TASKS_COMMENT_START]: {
+    payload: actSchema(tasksCommentStartParamsSchema),
+    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
+    refusal: "Could not comment on the task on this system.",
+  },
+  [ACT_KIND.TASKS_COMMENT_ACT]: {
+    payload: actSchema(tasksCommentActParamsSchema),
+    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
+    refusal: "Could not change the task's comment on this system.",
   },
   [ACT_KIND.TASKS_PICTURE_KEEP]: {
     payload: actSchema(tasksPictureKeepParamsSchema),

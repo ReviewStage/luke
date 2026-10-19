@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
+import { BoardIcon, CallIcon, CodeIcon, CommentsIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type BrowserStripTab,
@@ -158,11 +158,13 @@ import { MAIN_TAB } from "./use-main-tabs.js";
  * holds the window's focus, which stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   CALL: "call",
+  /** The plan's comment threads, open and resolved (`plan-comments.tsx`). */
+  COMMENTS: "comments",
 } as const;
 
 /**
@@ -263,6 +265,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", icon: BoardIcon },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", icon: CodeIcon },
   [SIDE_PANEL_TAB.CALL]: { label: "Call", icon: CallIcon },
+  [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a task whose order holds none of them stands them in. */

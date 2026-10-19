@@ -146,6 +146,8 @@ const EDITOR_STAND_IN: PlanEditorModule = {
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
+      selectionSpan: () => undefined,
+      blockSpan: () => undefined,
       destroy: () => {
         editor.destroyed = true;
         element.remove();

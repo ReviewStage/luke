@@ -5564,3 +5564,489 @@ button.picture-frame {
   outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
   outline-offset: 2px;
 }
+
+/* Comments on the plan (`plan-comments.tsx`) -------------------------------- */
+
+/* The words a thread is on: a wash under them and an edge beneath, stronger
+   while its thread is open or the pointer is on them. A thread on a whole
+   block washes nothing and marks the block by a bar at its end instead, which
+   the margin draws. */
+.plan-comment-mark {
+  padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
+  border-bottom: 1.5px solid var(--comment-mark-edge);
+  border-radius: 2px;
+  background: var(--comment-mark);
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--duration-hover) ease;
+}
+
+.plan-comment-mark:hover,
+.plan-comment-mark[data-active="true"] {
+  border-bottom-color: var(--comment-mark-active-edge);
+  background: var(--comment-mark-active);
+}
+
+.plan-comment-mark[data-block="true"] {
+  padding-bottom: 0;
+  border-bottom: 0;
+  background: none;
+}
+
+.plan-comment-mark[data-block="true"][data-active="true"] {
+  background: var(--comment-mark);
+}
+
+/* The body is the room its comments are measured and stood in. */
+.desktop-document .plan-body {
+  position: relative;
+}
+
+/* With a margin, the reading column steps left by half the margin's room,
+   so the words and the margin stand centred together, as a document's
+   margin comments do. */
+.desktop-document
+  .plan-document-scroll[data-comments="margin"]
+  :is(.plan-body, .plan-crumb, .plan-edit-note, .plan-changed-note) {
+  margin-left: max(0px, calc((100% - var(--luke-page-measure) - var(--comment-margin-room)) / 2));
+}
+
+/* Everything the comments draw over the body, one box laid over it whole, so the
+   gap the body opens between its children opens none here, and only what is
+   drawn in it takes the pointer. */
+.desktop-document .plan-body > .comment-layer {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.comment-layer > * {
+  pointer-events: auto;
+}
+
+.comment-layer > .comment-block-edge {
+  pointer-events: none;
+}
+
+.comment-margin {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--comment-margin-gap));
+  width: var(--comment-card-width);
+}
+
+.comment-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+}
+
+/* A card already in the margin travels to its next place, as threads above
+   it open, grow, or arrive, on the spring every move rides; one arriving
+   lands where it belongs and fades in. */
+.comment-slot[data-moves="true"] {
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+@keyframes comment-slot-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The bar at the end of a block a thread is on whole, stronger while it is open. */
+.comment-block-edge {
+  position: absolute;
+  right: calc(var(--luke-space-12) * -1);
+  width: 3px; /* off-scale: a bar, as the summary's selected row wears */
+  border-radius: 2px;
+  background: var(--comment-mark-edge);
+  pointer-events: none;
+}
+
+.comment-block-edge[data-active="true"] {
+  background: var(--comment-mark-active-edge);
+}
+
+/* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
+.comment-block-button {
+  position: absolute;
+  right: calc((var(--luke-control-height) + var(--luke-space-6)) * -1);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+/* Folded, the line's count stands where the button would, so the button steps one further out. */
+.comment-block-button[data-folded="true"] {
+  right: calc((var(--luke-control-height) + var(--luke-space-6)) * -2);
+}
+
+.plan-body:hover .comment-block-button,
+.comment-block-button:focus-within {
+  opacity: 1;
+}
+
+/* The bubble that rises over words selected, one button in a menu's surface. */
+.comment-bubble {
+  position: absolute;
+  z-index: 3;
+  transform: translateY(calc(-100% - var(--luke-space-6)));
+}
+
+/* Where the margin folds: a count at the end of a line holding marks, and the open thread floating under it. */
+.comment-count {
+  position: absolute;
+  right: calc((var(--luke-control-height) + var(--luke-space-6)) * -1);
+  display: inline-flex;
+  height: 24px; /* off-scale: a count is a size under a control's, as a row's mark is */
+  align-items: center;
+  gap: var(--luke-space-2);
+  padding: 0 var(--luke-space-6);
+  border-radius: var(--luke-menu-row-radius);
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.comment-count svg {
+  width: 13px;
+  height: 13px;
+}
+
+.comment-count:hover,
+.comment-count[aria-expanded="true"] {
+  background: var(--luke-color-fill-selected);
+  color: var(--luke-color-text);
+}
+
+.comment-float {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--luke-space-6) * -1);
+  width: var(--comment-card-width);
+}
+
+/* A thread: at rest its words on the column's ground, open on a menu's surface. */
+.comment-card {
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
+  border: 1px solid transparent;
+  border-radius: var(--luke-menu-radius);
+  color: var(--luke-color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.comment-card[data-open="false"]:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.comment-card[data-open="true"] {
+  padding-top: var(--luke-space-8);
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.comment-float .comment-card,
+.side-panel .comment-card[data-open="true"] {
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.comment-entry {
+  position: relative;
+  padding: var(--luke-space-4) 0;
+}
+
+.comment-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-6);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.comment-time {
+  color: var(--luke-color-text-subtle);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.comment-words {
+  display: block;
+  margin-left: calc(
+    16px +
+    5px
+  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
+  color: var(--luke-color-text-body);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.comment-words[data-clamped="true"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* A thread at rest is one press over its words and replies. */
+.comment-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.comment-replies {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-2) 0 0 calc(16px + 5px); /* off-scale: under the words */
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+}
+
+.comment-faces {
+  display: inline-flex;
+}
+
+/* A comment's tools stand at its corner under the pointer or the keyboard. */
+.comment-tools {
+  position: absolute;
+  top: 0;
+  right: calc(var(--luke-space-6) * -1);
+  display: flex;
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-overlay);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.comment-entry:hover > .comment-tools,
+.comment-tools:focus-within,
+.comment-tools:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+.comment-tools .icon-button {
+  width: 26px; /* off-scale: a thread's tools stand smaller than a page's, as a row's marks do */
+  height: 26px;
+}
+
+.comment-event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+}
+
+.comment-event-time {
+  margin-left: var(--luke-space-4);
+}
+
+/* Who sent a thread to whom: the line wraps between its names rather than
+   cutting the first one short, and a name cut at all is cut alone, within
+   the card's width. */
+.comment-event > .actor-words {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-2);
+}
+
+.comment-event > .actor-words > * {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.comment-note {
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-danger-text);
+  font-size: 12px;
+}
+
+.comment-gone {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  margin-bottom: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+.comment-gone svg {
+  width: 13px;
+  height: 13px;
+}
+
+.comment-quote {
+  display: -webkit-box;
+  margin: 0 0 var(--luke-space-8);
+  padding-left: var(--luke-space-8);
+  overflow: hidden;
+  border-left: 2px solid var(--comment-mark-edge);
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.comment-quote[data-gone="true"] {
+  border-left-color: var(--luke-color-border-strong);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* The field that answers a thread, or starts one, in the composer's well. */
+.comment-field {
+  margin-top: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}
+
+.comment-text {
+  display: block;
+  width: 100%;
+  min-height: 36px; /* off-scale: one line and its padding */
+  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-2);
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none; /* no ring: the well rings for it (`.field-well`) */
+  resize: none;
+}
+
+.comment-text::placeholder {
+  color: var(--luke-color-text-muted);
+}
+
+.comment-field-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
+}
+
+/* Send to, at the field's start, as the composer's model chip stands at its foot. */
+.comment-send-to {
+  height: 26px; /* off-scale: a chip in a field's foot stands a size under a control */
+  padding: 0 var(--luke-space-8);
+  color: var(--luke-color-text-body);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.comment-send-to svg {
+  width: 12px;
+  height: 12px;
+  color: var(--luke-color-text-subtle);
+}
+
+/* Send, as the composer's: a disc in the primary ink. */
+.comment-send {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--luke-color-text);
+  color: var(--luke-color-ground);
+  cursor: pointer;
+}
+
+.comment-send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.comment-send:disabled {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
+  cursor: default;
+}
+
+.comment-editing {
+  margin-left: calc(16px + 5px); /* off-scale: under the name */
+}
+
+.comment-save {
+  height: 26px;
+}
+
+/* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
+.comments-tab {
+  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-24);
+}
+
+.comments-filters {
+  display: flex;
+  gap: var(--luke-space-4);
+  margin-bottom: var(--luke-space-12);
+}
+
+.comments-filter {
+  display: inline-flex;
+  height: 26px; /* off-scale: a filter chip stands a size under a control */
+  align-items: center;
+  gap: var(--luke-space-6);
+  padding: 0 var(--luke-space-12);
+  border: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.comments-filter:hover {
+  color: var(--luke-color-text);
+}
+
+.comments-filter[aria-pressed="true"] {
+  background: var(--luke-color-fill-selected);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  color: var(--luke-color-text);
+}
+
+.comments-filter-count {
+  color: var(--luke-color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.comments-empty {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
+}
+
+.comments-row + .comments-row {
+  margin-top: var(--luke-space-8);
+}
+
+.comments-row-section {
+  padding: 0 var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
+  font-size: 11.5px;
+}

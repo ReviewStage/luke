@@ -149,6 +149,7 @@ import { CodePane, centreWithin } from "../tasks/code-pane";
 import { FileView } from "../tasks/file-view";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
+import { PlanCommentsTab } from "../tasks/plan-comments";
 import { TaskCall } from "../tasks/task-call";
 import { useOpenTerminal } from "../tasks/terminal-commands";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells";
@@ -1608,6 +1609,19 @@ function TabContent({
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
           video={<CallTabVideo taskId={taskId} />}
+        />
+      );
+    case SIDE_PANEL_TAB.COMMENTS:
+      return (
+        <PlanCommentsTab
+          doors={{
+            agents: {
+              control: agents,
+              onOpen: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
+            },
+            me: agents.me,
+          }}
+          onShowDocument={() => onOpenTarget({ kind: TOOL_TARGET.PLAN })}
         />
       );
   }

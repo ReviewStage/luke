@@ -5,6 +5,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { PLAN_COMMENT_ACTION, PLAN_COMMENT_REFUSAL } from "@luke/features/plan-comment-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
@@ -31,6 +32,9 @@ import { type ActRows, type ActSender, createActRouter } from "./router.js";
 import { tasksActRows } from "./tasks-acts.js";
 
 /** The one picture the fake host holds. */
+/** A comment thread's id, as the service spells one. */
+const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+
 const PICTURE_ID = "picture-1";
 
 // The platform's handle on the window that asked, which no row here reads.
@@ -259,6 +263,21 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`keep:${params.planId}`);
           return { id: PICTURE_ID };
+        }),
+      tasksComments: (params) =>
+        Effect.sync(() => {
+          asked.push(`comments:${params.planId}:${params.after}`);
+          return { threads: [], cursor: "c1" };
+        }),
+      tasksCommentStart: (params) =>
+        Effect.sync(() => {
+          asked.push(`comment:${params.planId}`);
+          return { refused: PLAN_COMMENT_REFUSAL.TOO_MANY };
+        }),
+      tasksCommentAct: (params) =>
+        Effect.sync(() => {
+          asked.push(`act:${params.threadId}:${params.action.action}`);
+          return { deleted: params.threadId };
         }),
       tasksPicture: (params) =>
         Effect.sync(() => {
@@ -763,6 +782,38 @@ it.effect(
         value: { failure: TASK_CALL_FAILURE.NOT_FOUND },
       });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+    }),
+);
+
+it.effect(
+  "a plan's comments are read and written through the host from a panel alone, never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const read = { kind: ACT_KIND.TASKS_COMMENTS, payload: { planId: "plan-1", after: "0" } };
+      const act = {
+        kind: ACT_KIND.TASKS_COMMENT_ACT,
+        payload: {
+          planId: "plan-1",
+          threadId: THREAD_ID,
+          action: { action: PLAN_COMMENT_ACTION.RESOLVE },
+        },
+      };
+
+      const readFromPanel = yield* f.router.performAct(read, PANEL);
+      const actFromPanel = yield* f.router.performAct(act, PANEL);
+      const readFromVoice = yield* f.router.performAct(read, VOICE);
+
+      assert.deepEqual(readFromPanel, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { threads: [], cursor: "c1" },
+      });
+      assert.deepEqual(actFromPanel, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { deleted: THREAD_ID },
+      });
+      assert.equal(readFromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, ["comments:plan-1:0", `act:${THREAD_ID}:resolve`]);
     }),
 );
 

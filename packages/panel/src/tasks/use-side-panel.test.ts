@@ -409,6 +409,7 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   assert.deepEqual(panel().strip, [
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.CALL,
+    SIDE_PANEL_TAB.COMMENTS,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);

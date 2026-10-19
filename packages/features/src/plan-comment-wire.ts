@@ -106,6 +106,8 @@ export const planCommentWriterSchema = EffectSchema.Struct({
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+export type PlanCommentWriter = typeof planCommentWriterSchema.Type;
+
 /** Who a thread was sent to: Luke, or a coding agent by its id. */
 export const planCommentAskedSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([PLAN_COMMENT_ACTOR.LUKE, PLAN_COMMENT_ACTOR.AGENT]),
@@ -194,6 +196,8 @@ export const PLAN_COMMENT_ACTION = {
   RESOLVE: "resolve",
   REOPEN: "reopen",
   DELETE_THREAD: "delete-thread",
+  /** Sends the thread to Luke or one of the task's coding agents, to read with the plan and answer in the thread. */
+  ASK: "ask",
 } as const;
 
 export const planCommentActionRequestSchema = EffectSchema.Union([
@@ -214,6 +218,11 @@ export const planCommentActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.RESOLVE) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.REOPEN) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PLAN_COMMENT_ACTION.DELETE_THREAD) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PLAN_COMMENT_ACTION.ASK),
+    clientKey: planCommentClientKeySchema,
+    to: planCommentAskedSchema,
+  }),
 ]);
 
 export type PlanCommentActionRequest = typeof planCommentActionRequestSchema.Type;
@@ -230,6 +239,10 @@ export const PLAN_COMMENT_REFUSAL = {
   NO_ENTRY: "no-entry",
   /** The key the reply was sent under already wrote to another thread of the plan. */
   KEY_TAKEN: "key-taken",
+  /** The agent asked is not one of the task's, or is archived. */
+  NO_AGENT: "no-agent",
+  /** The agent asked is the task's, but its session is not running to take the thread: ended, or not yet up. */
+  AGENT_AWAY: "agent-away",
 } as const;
 
 export type PlanCommentRefusal = (typeof PLAN_COMMENT_REFUSAL)[keyof typeof PLAN_COMMENT_REFUSAL];
@@ -260,3 +273,11 @@ export const planCommentAnchorsSchema = EffectSchema.Struct({
 });
 
 export type PlanCommentAnchors = typeof planCommentAnchorsSchema.Type;
+
+/** The tools Luke and every coding agent on the task read and answer the plan's comments with, by the name the model calls each. */
+export const PLAN_COMMENT_TOOL = {
+  READ: "read_comments",
+  REPLY: "reply_to_comment",
+  RESOLVE: "resolve_thread",
+  REOPEN: "reopen_thread",
+} as const;
