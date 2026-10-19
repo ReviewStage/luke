@@ -126,7 +126,7 @@ export const SESSION_REPLAY_APP = {
   /** The web app's tab. */
   WEB: "web",
 } as const;
-export type SessionReplayApp = (typeof SESSION_REPLAY_APP)[keyof typeof SESSION_REPLAY_APP];
+type SessionReplayApp = (typeof SESSION_REPLAY_APP)[keyof typeof SESSION_REPLAY_APP];
 
 /** What a shell that records answers for itself; everything else is decided here. */
 export interface SessionReplayShell {
