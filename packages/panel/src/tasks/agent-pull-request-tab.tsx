@@ -39,6 +39,7 @@ import {
   Avatar,
   Badge,
   Button,
+  CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceItem,
@@ -1999,6 +2000,7 @@ function PullRequestTabBody({
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
+                    fold={CHOICE_BAR_FOLD.TOGETHER}
                     panels={ids}
                   />
                   {reviewable ? (

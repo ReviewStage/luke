@@ -2134,6 +2134,11 @@
    pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
+  /* Note that the tab isolates its stacking, so its header, raised over its
+     own rows, rises over nothing outside the tab; and answers its own width,
+     so its tabs' row folds by the room the tab has wherever it stands. */
+  isolation: isolate;
+  container: pull-request-tab / inline-size;
 }
 
 /* The tab shown fills the room under the header and the tabs, the others
@@ -2174,12 +2179,21 @@
   flex: none;
 }
 
-/* Too narrow for the tabs' names beside Review's word, Review draws its
-   glyph and its count alone, its word left to its hint, so the tabs keep
-   their names a little longer. */
-@container side-panel (width < 650px) {
+/* The row gives way in steps as the tab narrows, so every tab keeps its
+   name for as long as it can and none is named while the others are not:
+   first Review draws its glyph and its count alone, its word left to its
+   hint; then the tabs take in their room; and only once their names no
+   longer fit do they fold, every one to its glyph at once
+   (`CHOICE_BAR_FOLD.TOGETHER`), about 480px with counts of a usual size. */
+@container pull-request-tab (width < 650px) {
   .pull-request-tabs .pull-request-review-words {
     display: none;
+  }
+}
+
+@container pull-request-tab (width < 560px) {
+  .pull-request-tabs {
+    --luke-fold: tight;
   }
 }
 
@@ -2188,6 +2202,11 @@
    standing put while the tab under it scrolls. It answers its own width,
    so a narrow header shortens the merge control's words. */
 .pull-request-header {
+  /* Note that the container makes the header a stacking context of its
+     own, so it stands over the rows after it, or the merge control's panel
+     hung from it would pass under the tabs. */
+  position: relative;
+  z-index: 1;
   flex: none;
   container: pull-request-header / inline-size;
   padding: var(--luke-space-8) var(--column-inset);
