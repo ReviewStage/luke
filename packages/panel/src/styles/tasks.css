@@ -293,6 +293,15 @@
   opacity: 1;
 }
 
+/* A screen with no hover shows a section's byline and its ⋯ at rest, in
+   the room they keep. */
+@media (hover: none) {
+  .plan-unit-attributed .plan-unit-byline,
+  .plan-unit-attributed .plan-unit-more {
+    opacity: 1;
+  }
+}
+
 /* A chip held with its punctuation (`.link-glued`, markdown.css) is capped
    by its length alone, because the box it stands in is the one held to the
    column, and the chip in it already gives way before it would push its
@@ -764,6 +773,16 @@
 
   @media (hover: hover) {
     .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A screen with no hover shows a sent message's actions at rest, in the
+     line they keep under its bubble; a floating bar stays hidden, so a
+     transcript is not a column of buttons. */
+  @media (hover: none) {
+    .message-actions[data-placement="inline"] {
       opacity: 1;
       pointer-events: auto;
     }
@@ -6020,6 +6039,14 @@ button.picture-frame {
   opacity: 1;
 }
 
+/* A screen with no hover shows the button at rest, by the block last
+   pressed, since a press is what names the block there. */
+@media (hover: none) {
+  .comment-block-button {
+    opacity: 1;
+  }
+}
+
 /* The bubble that rises over words selected, one button in a menu's surface. */
 .comment-bubble {
   position: absolute;
@@ -6226,6 +6253,19 @@ button.picture-frame {
 .comment-head-end:has(.comment-tools:focus-within) > .comment-time,
 .comment-head-end:has([aria-expanded="true"]) > .comment-time {
   opacity: 0;
+}
+
+/* A screen with no hover stands the tools in the time's place at rest, as
+   under the pointer; a thread's event line, offering no tools, keeps it. */
+@media (hover: none) {
+  .comment-tools {
+    opacity: 1;
+  }
+
+  .comment-head-end:has(> .comment-tools) > .comment-time {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* What happened to a thread, a line drawn as a comment's head: its writer

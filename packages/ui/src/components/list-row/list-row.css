@@ -459,6 +459,41 @@
     display: none;
   }
 
+  /* A screen with no hover never has a row in hand, so each row there keeps
+     its metadata at rest, its acts offered by its menu on a long press
+     (`menu.tsx`), and the open row alone shows its acts in the room the
+     row in hand gives them. */
+  @media (hover: none) {
+    .luke-list-row[data-actions="hover"][data-current="true"] .luke-list-row-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"]:has(.luke-list-row-actions)
+      .luke-list-row-meta {
+      visibility: hidden;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"])
+      .luke-list-row-actions {
+      position: static;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"]):has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-main {
+      padding-inline-end: 0;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"]:not([data-meta="title"]):has(
+        .luke-list-row-actions
+      )
+      .luke-list-row-meta {
+      display: none;
+    }
+  }
+
   /* Note that the row holding the keyboard stands over its neighbours,
      because its ring reaches past the list's gap and the next row's fill
      would otherwise paint over the ring's foot. */

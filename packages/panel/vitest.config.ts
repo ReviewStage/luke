@@ -13,11 +13,13 @@ const MARKDOWN_HTML_PARSER = fileURLToPath(
 );
 
 /**
- * The panel's own stylesheets, which vitest answers as their text where a test
- * imports one `?raw` (`testing/container-width.ts`), rather than as the empty
- * module it answers any other stylesheet with.
+ * The panel's own stylesheets, and the shared components' one sheet, which
+ * vitest answers as their text where a test imports one `?raw`, or that one
+ * `?inline` (`testing/container-width.ts`), rather than as the empty module it
+ * answers any other stylesheet with.
  */
-const PANEL_STYLESHEETS = /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$/;
+const PANEL_STYLESHEETS =
+  /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$|\/ui\/src\/styles\.css\?inline$/;
 
 export default defineConfig({
   plugins: [
