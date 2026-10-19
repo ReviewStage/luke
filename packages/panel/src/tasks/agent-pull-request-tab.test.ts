@@ -1354,8 +1354,11 @@ test("opened on its files, as a link to its changes opens it, the header stands 
     }),
     PULL_REQUEST_VIEW.FILES,
   );
+  // The views' own panels, not the Write and Preview panel of a comment box inside one.
   const shownPanel = () =>
-    [...tab.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((each) => !each.hidden);
+    [...tab.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter(
+      (each) => !each.hidden && each.parentElement?.closest('[role="tabpanel"]') === null,
+    );
   const header = () =>
     tab.querySelector<HTMLElement>(".pull-request-header") ?? assert.fail("the header stands");
   assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
@@ -3587,7 +3590,7 @@ test("a comment on the head's lines offers a suggestion, which writes them as th
   );
   act(() =>
     (
-      [...comment.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      [...comment.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
         (each) => each.textContent === "Preview",
       ) ?? assert.fail("the comment offers Preview")
     ).click(),

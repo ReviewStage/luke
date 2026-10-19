@@ -1850,6 +1850,16 @@
   justify-content: center;
 }
 
+/* The panel the comparison chosen shows, the sides centred in it as they
+   were in the image's own column. */
+.image-diff-panel {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
 .image-diff-sides {
   display: flex;
   width: 100%;
@@ -2258,6 +2268,15 @@
 /* The box is the preview's frame, its words scrolling inside it in
    `@luke/ui`'s `ScrollArea`; the frame clips the scroll bar to its corners,
    as the box that scrolled itself did. */
+/* The panel Write and Preview show, as wide as the field so the words
+   and their preview fill it as they did before the tabs held them. */
+.markdown-field-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-self: stretch;
+}
+
 .markdown-field-preview {
   box-sizing: border-box;
   display: flex;

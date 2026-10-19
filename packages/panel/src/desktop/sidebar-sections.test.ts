@@ -713,6 +713,45 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
 });
 
+test("Icons and Emoji are tabs over the picker's panel, which the tab shown names, its search following the kind", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const kinds =
+    document.querySelector<HTMLElement>('[role="tablist"][aria-label="Icon kind"]') ??
+    assert.fail("the icon kinds are tabs");
+  const tab = (label: string) =>
+    [...kinds.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`no ${label} tab`);
+  const shown = (label: string) => {
+    const panel =
+      document.getElementById(tab(label).getAttribute("aria-controls") ?? "") ??
+      assert.fail(`${label} controls no panel`);
+    assert.equal(panel.getAttribute("role"), "tabpanel");
+    assert.equal(panel.getAttribute("aria-labelledby"), tab(label).id);
+    return panel;
+  };
+  assert.equal(tab("Icons").getAttribute("aria-selected"), "true");
+  assert.ok(shown("Icons").querySelector('input[aria-label="Search icons"]'));
+
+  act(() => tab("Emoji").click());
+  await settleLoaded();
+
+  assert.equal(tab("Emoji").getAttribute("aria-selected"), "true");
+  const emoji = shown("Emoji");
+  assert.ok(emoji.querySelector('input[aria-label="Search emoji"]'));
+  assert.ok(emoji.querySelector('input[aria-label="Any emoji"]'));
+  assert.equal(
+    emoji.contains(dialogButton("No icon")),
+    false,
+    "No icon stands beside the tabs, whichever is shown",
+  );
+});
+
 test("Shift-Enter in the icon search chooses the first glyph it found, as Enter does", async () => {
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const writes: TaskSectionWrite[] = [];
