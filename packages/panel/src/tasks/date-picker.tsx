@@ -233,34 +233,49 @@ function ordered(wall: DateWall): DateWall {
 }
 
 /**
- * A moment typed into one end's date field: its day, and its time while
- * Include time is on, the end's own time kept where the words named none.
+ * A moment typed into one end's date field: its day, and its time where
+ * the words named one or Include time is on, the end's own time kept where
+ * they named none. Note that words naming a time switch Include time on,
+ * the other end taking its default time, as the switch gives it.
  */
 function typedInto(draft: Draft, which: DateEnd, moment: DateWallMoment): Draft {
   const { start, end } = draft.wall;
-  const timed = start.time !== undefined;
-  const at = (was: DateWallMoment) => ({
+  const timed = start.time !== undefined || moment.time !== undefined;
+  const timeOf = (was: DateWallMoment, fallback: string) =>
+    timed ? (was.time ?? fallback) : undefined;
+  const typed = (was: DateWallMoment, fallback: string) => ({
     day: moment.day,
-    time: timed ? (moment.time ?? was.time) : undefined,
+    time: moment.time ?? timeOf(was, fallback),
+  });
+  const kept = (was: DateWallMoment, fallback: string) => ({
+    day: was.day,
+    time: timeOf(was, fallback),
   });
   const wall =
-    which === DATE_END.START ? { start: at(start), end } : { start, end: end && at(end) };
+    which === DATE_END.START
+      ? { start: typed(start, DEFAULT_TIME.START), end: end && kept(end, DEFAULT_TIME.END) }
+      : { start: kept(start, DEFAULT_TIME.START), end: end && typed(end, DEFAULT_TIME.END) };
   return changedTo(ordered(wall), false);
 }
 
 /**
- * The draft with its typed words read as `dateOfWords` reads an `@` word:
- * words naming a range set both ends, and words naming one moment set the
- * end typed into; nothing where they name no date.
+ * The draft with its typed words read as `dateOfWords` reads an `@` word,
+ * and the day they named, whose month the calendar then shows: words
+ * naming a range set both ends, and words naming one moment set the end
+ * typed into; nothing where they name no date.
  */
-function wordsRead(draft: Draft, now: number, zone: string): Draft | undefined {
+function wordsRead(
+  draft: Draft,
+  now: number,
+  zone: string,
+): { readonly draft: Draft; readonly day: string } | undefined {
   const { typing } = draft;
-  if (typing === undefined) return draft;
+  if (typing === undefined) return { draft, day: draft.wall.start.day };
   const named = dateOfWords(typing.words, now, zone);
   const wall = named === undefined ? undefined : dateWall(named, zone);
   if (wall === undefined) return undefined;
-  if (wall.end !== undefined) return changedTo(wall, false);
-  return typedInto(draft, typing.end, wall.start);
+  if (wall.end !== undefined) return { draft: changedTo(wall, false), day: wall.start.day };
+  return { draft: typedInto(draft, typing.end, wall.start), day: wall.start.day };
 }
 
 /** End date switched: on, an end just after the start (`endAfter`), which the next pick moves; off, the start alone. */
@@ -360,7 +375,7 @@ function DatePickerPanel({
   const finish = (how: DatePickerClose) => {
     if (done.current) return;
     done.current = true;
-    const closing = wordsRead(latest.current, Date.now(), zone) ?? latest.current;
+    const closing = wordsRead(latest.current, Date.now(), zone)?.draft ?? latest.current;
     onClose({ date: dateOfWall(closing.wall, zone), changed: closing.changed, how });
   };
   // Typed words are read as the field is left, the month shown moving to the end they set; words that name no date are marked and kept.
@@ -372,9 +387,8 @@ function DatePickerPanel({
       update({ ...latest.current, typing: { ...typing, invalid: true } });
       return false;
     }
-    update(next);
-    const moved = typing.end === DATE_END.END ? next.wall.end : next.wall.start;
-    setMonth((moved ?? next.wall.start).day.slice(0, 7));
+    update(next.draft);
+    setMonth(next.day.slice(0, 7));
     return true;
   };
   const dateField = (which: DateEnd, moment: DateWallMoment) => {

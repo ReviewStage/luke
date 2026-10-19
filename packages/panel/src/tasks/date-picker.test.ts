@@ -375,6 +375,35 @@ test("with a time each end's date stands beside its time, the end's row under th
   );
 });
 
+test("words naming a time typed into a day's field put the time on, the date written with it", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  typeWords(dialog, "Start", "oct 28 3pm");
+  await pressKey(dialog, "Enter");
+  const [mention] = mentionsIn(editor);
+
+  assert.match(mention?.target ?? "", /^luke:\/\/date\/2026-10-28T15:00[+-]\d\d:\d\d$/u);
+  assert.equal(chipIn(container).textContent, "Oct 28 3:00 PM");
+});
+
+test("a day typed into the end's field before the start shows its own month as the ends swap", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  act(() => fieldOf(dialog, "End").focus());
+  typeWords(dialog, "End", "sep 20 2026");
+  act(() => fieldOf(dialog, "Start").focus());
+  const month = dialog.textContent ?? "";
+  await pressKey(dialog, "Escape");
+
+  assert.match(month, /September 2026/u);
+  assert.deepEqual(mentionsIn(editor), [
+    { name: "Sep 20, 2026 → Oct 23, 2026", target: "luke://date/2026-09-20/2026-10-23" },
+  ]);
+});
+
 test("words typed in the picker that name no date are marked and change nothing", async () => {
   const { container, editor } = await opened();
 
