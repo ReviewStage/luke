@@ -45,16 +45,16 @@ import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
 /**
- * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line under the bar where GitHub would not take one.
+ * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line over the header where GitHub would not take one.
  *
  * Every change is one act (`CODING_AGENTS_PULL_REQUEST_ACTION`), which the
  * service makes on GitHub as the member pressing it, on their own GitHub
  * sign-in and never as the Luke GitHub App (`pull-request-write-wire.ts`).
  * One is out at a time; while it is, the controls that would send another
  * stand disabled. Once GitHub took it, or refused it, the tab's reads are
- * asked again (`onWritten`), so the bar and the page say where the pull
+ * asked again (`onWritten`), so the header and the page say where the pull
  * request stands now rather than what the press assumed. A refusal stands
- * on its own line under the bar until it is dismissed or the next change
+ * on its own line over the header until it is dismissed or the next change
  * is sent: GitHub's own words where GitHub refused the change, an offer to
  * sign in with GitHub again where it would not take the member's sign-in,
  * and Luke's own words where the change never reached GitHub.
@@ -128,7 +128,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What the line under the bar says of the last change, where GitHub did not take it. */
+/** What the line over the header says of the last change, where GitHub did not take it. */
 export const WRITE_NOTE = {
   SIGN_IN: "sign-in",
   WORDS: "words",
@@ -315,8 +315,8 @@ export function PullRequestStateMenu({
 
 /**
  * The line where GitHub did not take the last change: why, the sign-in
- * that mends it where that is why, and its dismissal. It stands under the
- * bar unless the control that sent the change draws it in its own place
+ * that mends it where that is why, and its dismissal. It stands over the
+ * header unless the control that sent the change draws it in its own place
  * (`className`), as the review panel does.
  */
 export function PullRequestWriteNote({
@@ -349,6 +349,7 @@ export function PullRequestWriteNote({
 /** The title's own words. */
 const TITLE_WORDS = {
   EDIT: "Edit title",
+  OPEN: "⌘-click the title to open on GitHub",
   FIELD: "Pull request title",
 } as const;
 
@@ -363,11 +364,14 @@ export function PullRequestTitle({
   title,
   number,
   writes,
+  onOpen,
 }: {
   title: string;
   /** The pull request's number as the header says it. */
   number: string;
   writes: PullRequestWrites;
+  /** Opens the pull request on GitHub, which a ⌘-click on the title asks. */
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
   const busy = writes.pending !== undefined;
@@ -390,12 +394,25 @@ export function PullRequestTitle({
       </h2>
     );
   }
+  // Note that only a ⌘-click (Ctrl elsewhere) opens it, so a plain press still selects the title's words, and one on the pencil is the pencil's.
+  const open = (event: React.MouseEvent<HTMLHeadingElement>) => {
+    if (onOpen === undefined || !(event.metaKey || event.ctrlKey)) return;
+    if (event.target instanceof Element && event.target.closest("button") !== null) return;
+    event.preventDefault();
+    onOpen();
+  };
+  const numberWords = <span className="pull-request-number">{number}</span>;
   return (
-    <h2 className="pull-request-title pull-request-title-editable">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the ⌘-click is a pointer's shortcut alone; the header's ⋯ offers Open on GitHub to the keyboard.
+    <h2 className="pull-request-title pull-request-title-editable" onClick={open}>
       {title}{" "}
       {/* Note that the number and the pencil wrap as one, because a pencil wrapped alone would spend a line of its own. */}
       <span className="pull-request-title-end">
-        <span className="pull-request-number">{number}</span>
+        {onOpen === undefined ? (
+          numberWords
+        ) : (
+          <Tooltip label={TITLE_WORDS.OPEN}>{numberWords}</Tooltip>
+        )}
         <span className="pull-request-title-edit">
           <Tooltip label={TITLE_WORDS.EDIT}>
             <IconButton
