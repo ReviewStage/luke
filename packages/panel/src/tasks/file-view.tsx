@@ -9,7 +9,16 @@ import {
   SidePanelIcon,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FILE_TREE_WIDTH, type FileTreeWidth } from "../desktop/folded-groups.js";
 import {
   type FloatingBox,
@@ -512,6 +521,16 @@ interface TabRead {
   readonly read: FileRead;
 }
 
+/** The end of a File tab's bar: View settings, offering the two settings its lines follow, then its ⋯. */
+export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
+  return (
+    <>
+      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+      <FileMenu {...props} />
+    </>
+  );
+}
+
 /** What the tab is keyed by while it reads the default branch's head rather than a commit. */
 const HEAD_READ = "head";
 
@@ -644,10 +663,11 @@ export function FileView({
         }
         onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
         menu={
-          <>
-            <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
-            <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
-          </>
+          <FileViewMenu
+            path={file.path}
+            ready={read.kind === FILE_READ.READY}
+            readText={readText}
+          />
         }
         tree={browsing ? tree.toggles : undefined}
       />
