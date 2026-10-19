@@ -579,6 +579,33 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
       }),
   );
   it.effect(
+    "an agent handed a prompt on a task takes notes on its plan, as New task starts every agent",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const brief = { planSnapshot: null, prompt: "Let invites expire." } as const;
+        const { userId, agent, admitted } = yield* openAgent(host, undefined, undefined, brief);
+        assert.ok(agent.taskId !== null);
+        const note = { kind: "add", section: "Approach", text: "- Invites expire after 7 days." };
+
+        const answer = yield* host.editPlan(
+          admitted,
+          unparsedWire({ notes: [note] }),
+          0,
+          noSandbox,
+        );
+
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
+        const stored = Option.getOrThrow(yield* readTask(userId, agent.taskId));
+        assert.deepEqual(
+          stored.agentEdits.map((edit) => edit.agentId),
+          [agent.id],
+        );
+        assert.ok(stored.text.includes("- Invites expire after 7 days."));
+      }),
+  );
+
+  it.effect(
     "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
     () =>
       Effect.gen(function* () {

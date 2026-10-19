@@ -24,8 +24,9 @@ import { planNotesTaken } from "../session-prompt.js";
  * once, and each must see the other's reservation. A picture's file is
  * read from the session's sandbox through the same door eve hands every
  * file tool, opened on first use, so notes alone open none. It is offered at each
- * turn's start only to an agent handed its plan (`planToolsOf`), so one on
- * no plan, or handed a prompt, is never offered a tool it would be refused.
+ * turn's start only to an agent on a task (`taskToolsOf`), whether it was
+ * handed the plan or a prompt, so one on no plan is never offered a tool it
+ * would be refused.
  */
 export default defineDynamic({
   events: {
