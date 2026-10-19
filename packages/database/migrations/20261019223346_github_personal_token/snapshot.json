@@ -1,12 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "2ceab489-9615-4cbe-8860-b7769d604b03",
-  "prevIds": [
-    "03ecc65b-6234-48a1-8b8c-af0fdc8c30b9",
-    "348c8862-4642-4470-aa89-e3f03ba2ac61",
-    "fea6d6f4-19c6-4c28-92eb-eedc25f8c9be"
-  ],
+  "id": "d6d8b4e2-bc83-47a2-b8aa-e1ef5575540f",
+  "prevIds": ["a79158a8-0a13-4c3d-a04e-b93631d78cb5"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -167,12 +163,6 @@
     {
       "isRlsEnabled": false,
       "name": "coding_agent_delegation",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "conversation_attachment",
       "entityType": "tables",
       "schema": "public"
     },
@@ -684,6 +674,19 @@
       "table": "attachment"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "conversation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -731,6 +734,45 @@
       "generated": null,
       "identity": null,
       "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "width",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "height",
       "entityType": "columns",
       "schema": "public",
       "table": "attachment"
@@ -4400,136 +4442,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent_delegation"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "conversation_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sha256",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "width",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "height",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "byte_count",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "bytea",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "bytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversation_attachment"
     },
     {
       "type": "text",
@@ -9026,6 +8938,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "conversation_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "sha256",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attachment_conversation_sha256",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "task_id",
           "isExpression": false,
           "asc": true,
@@ -9055,7 +8995,7 @@
         }
       ],
       "isUnique": false,
-      "where": "(\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\") = 0) and \"saved_at\" is null",
+      "where": "(\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\") = 0) and \"saved_at\" is null",
       "with": "",
       "method": "btree",
       "concurrently": false,
@@ -10267,34 +10207,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "coding_agent"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "conversation_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "sha256",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "conversation_attachment_conversation_sha256",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "conversation_attachment"
     },
     {
       "nameExplicit": true,
@@ -11675,6 +11587,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["conversation_id"],
+      "schemaTo": "public",
+      "tableTo": "conversations",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "attachment_conversation_id_conversations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -12322,32 +12247,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "coding_agent_delegation"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "conversation_attachment_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "conversation_attachment"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["conversation_id"],
-      "schemaTo": "public",
-      "tableTo": "conversations",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "conversation_attachment_conversation_id_conversations_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "conversation_attachment"
     },
     {
       "nameExplicit": false,
@@ -13537,14 +13436,6 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "conversation_attachment_pkey",
-      "schema": "public",
-      "table": "conversation_attachment",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
       "name": "github_connect_intent_pkey",
       "schema": "public",
       "table": "github_connect_intent",
@@ -13900,15 +13791,22 @@
       "entityType": "uniques"
     },
     {
-      "value": "(num_nonnulls(\"chat_message_id\", \"inbox_item_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
+      "value": "(num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\") = 1 or (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\") = 0)) and (\"inbox_message_id\" is null or \"inbox_item_id\" is not null)",
       "name": "attachment_one_owner",
       "entityType": "checks",
       "schema": "public",
       "table": "attachment"
     },
     {
-      "value": "(\"chat_message_id\" is null or octet_length(\"bytes\") <= 1500000) and (not (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\") = 0) or octet_length(\"bytes\") <= 1500000)",
+      "value": "(\"chat_message_id\" is null or octet_length(\"bytes\") <= 1500000) and (\"conversation_id\" is null or octet_length(\"bytes\") <= 4000000) and (not (\"task_id\" is not null and num_nonnulls(\"chat_message_id\", \"inbox_item_id\", \"conversation_id\") = 0) or octet_length(\"bytes\") <= 1500000)",
       "name": "attachment_bytes_bound",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attachment"
+    },
+    {
+      "value": "\"conversation_id\" is null or (\"sha256\" is not null and \"width\" is not null and \"height\" is not null)",
+      "name": "attachment_conversation_picture",
       "entityType": "checks",
       "schema": "public",
       "table": "attachment"
@@ -13940,13 +13838,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "chat_message"
-    },
-    {
-      "value": "octet_length(\"bytes\") <= 4000000",
-      "name": "conversation_attachment_bytes_bound",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "conversation_attachment"
     }
   ],
   "renames": []
