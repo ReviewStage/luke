@@ -28,9 +28,9 @@ import { type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
-import { hostedRouter } from "../orpc/router.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
+import { modelsProcedures } from "./models-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const MODELS = "/api/models";
@@ -115,8 +115,8 @@ const fetchOver = (catalog: Layer.Layer<ModelCatalog>) =>
         ),
       ),
     );
-    const handle = hostedFetch(
-      hostedRouter({
+    const handle = hostedFetch({
+      models: modelsProcedures({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(
@@ -124,7 +124,7 @@ const fetchOver = (catalog: Layer.Layer<ModelCatalog>) =>
             ),
           ),
       }),
-    );
+    });
     // SAFETY: the models procedure yields the catalog and the database alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
     return (request: Request) => Effect.promise(() => handle(request, webServices));
