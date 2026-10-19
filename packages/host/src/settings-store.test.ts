@@ -537,6 +537,32 @@ test("a Mac takes the web's newer link choice over the one it last synced, and k
   assert.equal(await changed.get("linkOpen"), LINK_OPEN.BROWSER);
 });
 
+test("a first link choice made before the first sync is kept to be written, whether or not a voice was synced", async (t) => {
+  for (const sharedWritten of [false, true]) {
+    const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+    await mac.setAccount(TEST_ACCOUNT);
+    await mac.set("linkOpen", LINK_OPEN.MAC_APP);
+    // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
+    const baseline = await mac.accountPreferences();
+
+    const remote = sharedWritten ? { voice: LIVE_VOICE.CEDAR } : {};
+    await mac.applyAccountPreferences(
+      snapshotAccountPreferences(remote, sharedWritten, await mac.accountPreferences()),
+      { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
+    );
+
+    assert.equal(
+      await mac.get("linkOpen"),
+      LINK_OPEN.MAC_APP,
+      `shared part written: ${sharedWritten}`,
+    );
+    assert.deepEqual(
+      accountPreferencesParts(await mac.accountPreferences()).linkOpen,
+      LINK_OPEN.MAC_APP,
+    );
+  }
+});
+
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);

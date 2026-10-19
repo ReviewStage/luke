@@ -171,18 +171,22 @@ export function accountPreferencesFromParts(
  * The preferences a snapshot stands for, as a device merges them over its
  * own. Note that the shared part counts only once written (`updatedAt`): a
  * device takes no unwritten shared part over its own, so its own shared
- * preferences stand in for it; the link part is written apart, so it is
- * the snapshot's either way, and a choice made on the web reaches a Mac
- * before any voice was ever synced.
+ * preferences stand in for it. The link part is written apart and never
+ * cleared on the service, only chosen again, so one the snapshot holds is
+ * taken either way, and a choice made on the web reaches a Mac before any
+ * voice was synced; one it lacks was never written by anyone, so the
+ * device's own stands in for it, and a first choice made before the first
+ * sync is kept to be written rather than merged away.
  */
 export function snapshotAccountPreferences(
   remote: AccountPreferences,
   sharedWritten: boolean,
   local: AccountPreferences,
 ): AccountPreferences {
-  if (sharedWritten) return remote;
-  const { preferences: shared } = accountPreferencesParts(local);
-  const { linkOpen } = accountPreferencesParts(remote);
+  const remoteParts = accountPreferencesParts(remote);
+  const localParts = accountPreferencesParts(local);
+  const shared = sharedWritten ? remoteParts.preferences : localParts.preferences;
+  const linkOpen = remoteParts.linkOpen ?? localParts.linkOpen;
   return { ...shared, ...(linkOpen === undefined ? undefined : { [LINK_OPEN_PART]: linkOpen }) };
 }
 
