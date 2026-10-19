@@ -124,7 +124,7 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     numberedPullRequests: new Map(),
-    readNumberedPullRequest: () => Promise.resolve(),
+    readNumberedPullRequest: () => Promise.resolve(false),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readOverviewPullRequest: () =>
       Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -216,7 +216,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       terminals: [],
       lastTerminal: undefined,
       browsers: [],
-      pullRequestViews: {},
+      pullRequestViews: new Map(),
       onPullRequestView: () => undefined,
       strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,

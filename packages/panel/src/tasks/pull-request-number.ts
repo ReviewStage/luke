@@ -1,4 +1,3 @@
-import { tabKey } from "@luke/ui/tab-strip-model";
 import { createContext, useContext } from "react";
 
 /**
@@ -31,7 +30,32 @@ export function pullRequestAsked(
   return number === undefined ? { agentId } : { agentId, number };
 }
 
-/** The key a pull request a tab names by its number is kept under, the tab's own (`tabKey`). */
-export function numberedKey(agentId: string, number: number): string {
-  return tabKey({ changes: agentId, number });
+/**
+ * Values kept for each Pull request tab, by its agent and then by the number
+ * of the pull request it names, none for the agent's own: as each tab's
+ * chosen view is kept, and each pull request a tab names by its number.
+ */
+export type ByPullRequestTab<V> = ReadonlyMap<string, ReadonlyMap<number | undefined, V>>;
+
+/** The value kept for the tab given; none where none is. */
+export function ofPullRequestTab<V>(
+  kept: ByPullRequestTab<V>,
+  tab: { readonly changes: string; readonly number?: number | undefined },
+): V | undefined {
+  return kept.get(tab.changes)?.get(tab.number);
+}
+
+/** What is kept with the tab given keeping `value`, or kept no more where it is none. */
+export function withPullRequestTab<V>(
+  kept: ByPullRequestTab<V>,
+  tab: { readonly changes: string; readonly number?: number | undefined },
+  value: V | undefined,
+): ByPullRequestTab<V> {
+  const ofAgent = new Map(kept.get(tab.changes));
+  if (value === undefined) ofAgent.delete(tab.number);
+  else ofAgent.set(tab.number, value);
+  const next = new Map(kept);
+  if (ofAgent.size === 0) next.delete(tab.changes);
+  else next.set(tab.changes, ofAgent);
+  return next;
 }

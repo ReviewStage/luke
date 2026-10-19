@@ -92,6 +92,7 @@ import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
 import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
+import { ofPullRequestTab } from "../tasks/pull-request-number.js";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { TaskCall } from "../tasks/task-call.js";
@@ -432,7 +433,7 @@ export function showPullRequest(
   number?: number,
 ): void {
   const tab = changesTabOf(agents, agentId, panel.changes, number);
-  panel.onPullRequestView(tabKey(tab), view);
+  panel.onPullRequestView(tab, view);
   panel.onChoose(tab);
 }
 
@@ -1402,7 +1403,7 @@ function TabContent({
   onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
-  /** What each agent's Pull request tab shows, by agent (`SidePanelControl.pullRequestViews`). */
+  /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
   pullRequestViews: SidePanelControl["pullRequestViews"];
   /** Chooses what an agent's Pull request tab shows. */
   onPullRequestView: SidePanelControl["onPullRequestView"];
@@ -1472,8 +1473,8 @@ function TabContent({
           shown={shown}
           repository={repository}
           tree={fileTree}
-          view={pullRequestViews[tabKey(tab)] ?? PULL_REQUEST_VIEW.CONVERSATION}
-          onView={(view) => onPullRequestView(tabKey(tab), view)}
+          view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
+          onView={(view) => onPullRequestView(tab, view)}
         />
       </PullRequestsOnGitHub>
     );
@@ -1880,14 +1881,23 @@ export function SidePanel({
   // that pull request, read once for each such tab the strip draws, since
   // only the tab shown reads it on its own.
   const { readNumberedPullRequest, numberedPullRequests } = agents;
-  const numberedRead = useRef(new Set<string>());
+  // Note that a read that named none, or failed, is let go, so the tab opened again, or another
+  // change of the open tabs, asks again, while the tab standing open asks nothing more.
+  const numberedRead = useRef(new Map<string, Set<number>>());
   useEffect(() => {
     for (const each of panel.changes) {
-      if (each.number === undefined) continue;
-      const key = tabKey(each);
-      if (numberedRead.current.has(key) || numberedPullRequests.has(key)) continue;
-      numberedRead.current.add(key);
-      readNumberedPullRequest(each.changes, each.number).catch(() => undefined);
+      const { changes: agentId, number } = each;
+      if (number === undefined || ofPullRequestTab(numberedPullRequests, each) !== undefined) {
+        continue;
+      }
+      const asked = numberedRead.current.get(agentId) ?? new Set<number>();
+      if (asked.has(number)) continue;
+      numberedRead.current.set(agentId, asked.add(number));
+      const forget = () => numberedRead.current.get(agentId)?.delete(number);
+      readNumberedPullRequest(agentId, number).then(
+        (found) => (found ? undefined : forget()),
+        forget,
+      );
     }
   }, [panel.changes, numberedPullRequests, readNumberedPullRequest]);
   // Whether a File or Changes tab's tree is open, for every one of them

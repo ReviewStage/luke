@@ -51,7 +51,11 @@ import {
   withAgentRun,
 } from "./coding-agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
-import { numberedKey, pullRequestAsked } from "./pull-request-number.js";
+import {
+  type ByPullRequestTab,
+  pullRequestAsked,
+  withPullRequestTab,
+} from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { MessageSender } from "./use-agent-composer.js";
@@ -292,10 +296,10 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
   pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
-  /** Each pull request a Pull request tab names by its number, by the tab's key (`numberedKey`), as `readNumberedPullRequest` last read it. */
-  numberedPullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
-  /** One read of the pull request of an agent's repository by its number, its answer kept in `numberedPullRequests`. */
-  readNumberedPullRequest: (agentId: string, number: number) => Promise<void>;
+  /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as `readNumberedPullRequest` last read it. */
+  numberedPullRequests: ByPullRequestTab<CodingAgentPullRequest>;
+  /** One read of the pull request of an agent's repository by its number, its answer kept in `numberedPullRequests`; whether it named one. */
+  readNumberedPullRequest: (agentId: string, number: number) => Promise<boolean>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<CodingAgentChangesAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
@@ -1130,23 +1134,33 @@ export function useCodingAgents(input: {
   );
   const published = useTaskPullRequests(taskId, agents, readPullRequestOnce);
 
-  // A pull request a tab names by its number is kept by the tab's key, apart
-  // from the agents' own, so it never stands for what an agent published.
+  // A pull request a tab names by its number is kept by agent and number,
+  // apart from the agents' own, so it never stands for what an agent
+  // published. Each read of one is numbered, so only the latest one's answer
+  // is kept, and an older read landing late never takes back a newer one.
   const [numberedPullRequests, setNumberedPullRequests] = useState<
-    ReadonlyMap<string, CodingAgentPullRequest>
+    ByPullRequestTab<CodingAgentPullRequest>
   >(() => new Map());
+  const numberedAsks = useRef(new Map<string, Map<number, number>>());
   const readNumberedPullRequest = useCallback<CodingAgentsControl["readNumberedPullRequest"]>(
-    (agentId, number) =>
-      act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) => {
-        if ("failure" in answer) return;
-        const key = numberedKey(agentId, number);
-        setNumberedPullRequests((was) => {
-          const next = new Map(was);
-          if (answer.pullRequest === null) next.delete(key);
-          else next.set(key, answer.pullRequest);
-          return next;
-        });
-      }),
+    (agentId, number) => {
+      const ofAgent = numberedAsks.current.get(agentId) ?? new Map<number, number>();
+      numberedAsks.current.set(agentId, ofAgent);
+      const ask = (ofAgent.get(number) ?? 0) + 1;
+      ofAgent.set(number, ask);
+      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
+        (answer) => {
+          if ("failure" in answer) return false;
+          if (ofAgent.get(number) === ask) {
+            const tab = { changes: agentId, number };
+            setNumberedPullRequests((was) =>
+              withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
+            );
+          }
+          return answer.pullRequest !== null;
+        },
+      );
+    },
     [act],
   );
 

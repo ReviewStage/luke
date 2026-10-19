@@ -1561,9 +1561,17 @@ export function useTasksTab(input: {
         (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
       ),
       pullRequests: new Map(
-        [...agents.pullRequests, ...agents.numberedPullRequests].map(([key, pullRequest]) => [
-          key,
+        [...agents.pullRequests].map(([agentId, pullRequest]) => [
+          agentId,
           pullRequestLabelOf(pullRequest),
+        ]),
+      ),
+      numbered: new Map(
+        [...agents.numberedPullRequests].map(([agentId, numbered]) => [
+          agentId,
+          new Map(
+            [...numbered].map(([number, pullRequest]) => [number, pullRequestLabelOf(pullRequest)]),
+          ),
         ]),
       ),
     }),

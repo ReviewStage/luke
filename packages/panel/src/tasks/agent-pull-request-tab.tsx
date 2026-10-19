@@ -111,7 +111,7 @@ import {
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
-import { numberedKey, PullRequestNumberProvider } from "./pull-request-number.js";
+import { ofPullRequestTab, PullRequestNumberProvider } from "./pull-request-number.js";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people.js";
 import {
   LabelPicker,
@@ -1849,5 +1849,5 @@ export function pullRequestOfTab(
 ): CodingAgentPullRequest | undefined {
   return tab.number === undefined
     ? control.pullRequests.get(tab.changes)
-    : control.numberedPullRequests.get(numberedKey(tab.changes, tab.number));
+    : ofPullRequestTab(control.numberedPullRequests, tab);
 }

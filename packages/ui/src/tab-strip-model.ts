@@ -236,11 +236,29 @@ function terminalKey(agentId: string): string {
 }
 
 /**
+ * The key each Pull request tab naming a pull request by its number is
+ * drawn under, by agent and then by number, made the first time it is asked
+ * for. Note that it is not the agent's id, which the agent's own Pull
+ * request tab is keyed by in the same strip.
+ */
+const numberedKeys = new Map<string, Map<number, string>>();
+
+function numberedKey(agentId: string, number: number): string {
+  const ofAgent = numberedKeys.get(agentId) ?? new Map<number, string>();
+  numberedKeys.set(agentId, ofAgent);
+  const held = ofAgent.get(number);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  ofAgent.set(number, made);
+  return made;
+}
+
+/**
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, with the
- * number of the pull request it names where it names one, a Terminal tab
+ * of the side panel, the one strip it stands in, is keyed by, one naming a
+ * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
  * by a key made for its agent (`terminalKey`), a page's by the page's
  * own id, and a Browser tab's by the id it was opened under.
  */
@@ -250,8 +268,9 @@ export function tabKey(tab: StripTab): string {
   if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
-  if (isChangesTab(tab))
-    return tab.number === undefined ? tab.changes : `${tab.changes}#${tab.number}`;
+  if (isChangesTab(tab)) {
+    return tab.number === undefined ? tab.changes : numberedKey(tab.changes, tab.number);
+  }
   if (isPageTab(tab)) return tab.page;
   if (isBrowserTab(tab)) return tab.browser;
   return isSubagentTab(tab) ? tab.subagent : tab;

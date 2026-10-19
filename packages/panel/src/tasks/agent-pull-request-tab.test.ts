@@ -2787,7 +2787,7 @@ test("a tab naming another pull request of the agent's repository by its number 
       }),
       conversation: recorded("conversation", { pullRequest: CONVERSATION }),
     }),
-    numberedPullRequests: new Map([[`${AGENT.id}#41`, earlier]]),
+    numberedPullRequests: new Map([[AGENT.id, new Map([[41, earlier]])]]),
   };
   const tab = await drawn(
     createElement(AgentPullRequestTab, {

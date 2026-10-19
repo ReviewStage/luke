@@ -439,6 +439,56 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
 });
 
+test("a pull request a tab names by its number is read with its number and kept by agent and number apart from the agent's own; an older read landing last keeps the newer, and one naming none lets it go", async () => {
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  const named = (title: string) => ({
+    repository: "acme/relay",
+    branch: "luke/base",
+    pullRequest: {
+      number: 41,
+      title,
+      url: "https://github.com/acme/relay/pull/41",
+      state: "open",
+      checks: "passing",
+      additions: 9,
+      deletions: 2,
+      changedFiles: 3,
+    },
+  });
+  let land: (answer: ReturnType<typeof named>) => void = () => undefined;
+  const older = new Promise<ReturnType<typeof named>>((resolve) => {
+    land = resolve;
+  });
+  await tab.mount();
+  tab.answer(ACT_KIND.CODING_AGENTS_PULL_REQUEST, older, named("Lay the base, retitled"), {
+    repository: "acme/relay",
+    branch: null,
+    pullRequest: null,
+  });
+
+  const first = tab.control().readNumberedPullRequest(AGENT, 41);
+  assert.equal(await act(() => tab.control().readNumberedPullRequest(AGENT, 41)), true);
+  land(named("Lay the base"));
+  await act(() => first);
+  assert.equal(
+    tab.control().numberedPullRequests.get(AGENT)?.get(41)?.title,
+    "Lay the base, retitled",
+  );
+  assert.equal(tab.control().pullRequests.get(AGENT), undefined, "the agent's own stands apart");
+  assert.deepEqual(
+    tab.asked
+      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST)
+      .map((each) => each.payload),
+    [
+      { agentId: AGENT, number: 41 },
+      { agentId: AGENT, number: 41 },
+    ],
+  );
+
+  assert.equal(await act(() => tab.control().readNumberedPullRequest(AGENT, 41)), false);
+  assert.equal(tab.control().numberedPullRequests.get(AGENT), undefined);
+});
+
 test("a fork joins the task's draft under a key of its own, its words kept and its chips on the source's servers, holds while another task is open, and starts from the source at the message with the box's words and files as a note and its servers named even where none is off; an empty box forks alone", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";

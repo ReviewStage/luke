@@ -750,7 +750,7 @@ test("a plan's document opens on its title, with who created it and last edited 
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, and another pull request's, or an archived agent's, opens on GitHub", () => {
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
   const agent: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -770,6 +770,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
     archivedAt: 4,
   };
   const archivedUrl = "https://github.com/acme/relay/pull/9";
+  const elsewhere = "https://github.com/acme/billing/pull/3";
   const opened: unknown[] = [];
   const onGitHub: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
@@ -783,7 +784,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
     ...TASK,
     repository: "acme/relay",
     document: {
-      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}).\n`,
+      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}), beside [@billing#3](${elsewhere}).\n`,
       assumptions: [],
     },
   };
@@ -803,7 +804,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
             region: { kind: DOCUMENT_REGION.READY, task },
             sidePanel: {
               ...base.sidePanel,
-              onPullRequestView: (agentId, view) => opened.push({ agentId, view }),
+              onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
               onChoose: (tab) => opened.push(tab),
             },
             agents: codingAgentsControl({
@@ -858,13 +859,21 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
+  // Another pull request of the task's repository opens in a Pull request tab of its own, by its number.
   act(() => chip("relay#7")?.click());
-  assert.deepEqual(onGitHub, [other]);
-
-  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens on GitHub.
+  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens by its number too.
   act(() => chip("relay#9")?.click());
-  assert.deepEqual(onGitHub, [other, archivedUrl]);
-  assert.equal(opened.length, 2, "no tab was asked for");
+  assert.deepEqual(opened.slice(2), [
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id, number: 7 },
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id, number: 9 },
+  ]);
+  assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
+
+  act(() => chip("billing#3")?.click());
+  assert.deepEqual(onGitHub, [elsewhere]);
+  assert.equal(opened.length, 6, "no tab was asked for");
   act(() => root.unmount());
   container.remove();
 });
