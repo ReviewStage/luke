@@ -108,7 +108,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&attachment=$2",
   },
   { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
@@ -160,7 +160,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1", orpc: true },
-  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1", orpc: true },
   {
     src: "/api/agents/([^/]+)/pull-request",
     route: "agents/pull-request",
@@ -179,7 +179,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1",
     orpc: true,
   },
-  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1", orpc: true },
   {
     src: "/api/agents/([^/]+)/overview/pull-request",
     route: "agents/overview-pull-request",
@@ -203,16 +203,23 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/agents/([^/]+)/review-options",
     route: "agents/review-options",
     query: "id=$1",
+    orpc: true,
   },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",
     route: "agents/terminal",
     query: "id=$1&terminal=$2",
+    orpc: true,
   },
-  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1" },
-  { src: "/api/agents/([^/]+)/sandbox/resume", route: "agents/sandbox-resume", query: "id=$1" },
-  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1", orpc: true },
+  {
+    src: "/api/agents/([^/]+)/sandbox/resume",
+    route: "agents/sandbox-resume",
+    query: "id=$1",
+    orpc: true,
+  },
+  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1", orpc: true },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
     route: "inbox/attachment",

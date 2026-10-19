@@ -332,3 +332,25 @@ test("an agent's Pull request tab is reached at its public paths through the com
     assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
   }
 });
+
+test("an agent's shells refuse an unsigned caller through the committed table, the dispatcher and the deployed route at their public path", async () => {
+  const routes = new Map([
+    ["agents/terminals", orpcRoute],
+    ["agents/terminal", orpcRoute],
+  ]);
+  const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const shell = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
+  for (const path of [
+    `/api/agents/${agent}/terminals`,
+    `/api/agents/${agent}/terminals/${shell}`,
+  ]) {
+    const unsigned = await dispatched(
+      new Request(`${ORIGIN}${path}`, { method: HTTP_METHOD.DELETE }),
+      routes,
+    );
+    const expected = path.endsWith(shell)
+      ? { status: HOSTED_HTTP_STATUS.UNAUTHORIZED, text: '{"error":"invalid-token"}' }
+      : { status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, text: '{"error":"method-not-allowed"}' };
+    assert.deepEqual({ status: unsigned.status, text: await unsigned.text() }, expected, path);
+  }
+});

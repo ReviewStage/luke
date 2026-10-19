@@ -1,33 +1,14 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  archiveCodingAgent,
-  listCodingAgents,
-  listWorkspaceCodingAgents,
-  pinCodingAgent,
-  readCodingAgent,
-  renameCodingAgent,
-  updateCodingAgentChoice,
-  updateCodingAgentServers,
-} from "@luke/database/models/coding-agent-store";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
-import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { ACCOUNT_INBOX_ARCHIVED, ACCOUNT_INBOX_QUERY } from "@luke/features/account-inbox-wire";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_LIST_ARCHIVED,
-  CODING_AGENT_LIST_QUERY,
-  CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentAttachment,
-  codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
-  codingAgentPinRequestSchema,
-  codingAgentRenameRequestSchema,
-  codingAgentServersRequestSchema,
-  codingAgentStartRequestSchema,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import {
@@ -47,23 +28,15 @@ import {
   inboxReplyRefusal,
   inboxThreadMessage,
 } from "@luke/features/inbox-wire";
-import { modelChoiceSchema } from "@luke/features/models-wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
-import { HostedEnvironment } from "../environment.js";
+import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
-import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
-import {
-  imageCommits,
-  pullRequestByNumber,
-  pullRequestFiles,
-  pullRequestReviewOptions,
-} from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -93,43 +66,24 @@ import {
   withdrawInboxClose,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
-import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
+import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
-import { askedPullRequest, pullRequestNumberOf } from "./asked-pull-request.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./coder-host/inbox-page.js";
-import {
-  agentPullRequestReach,
-  type PublishedCache,
-  withPublishedCache,
-} from "./coder-host/published.js";
-import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
-import {
-  acceptedAgentChoice,
-  MAXIMUM_ATTACHMENTS_BODY_BYTES,
-  MAXIMUM_START_BODY_BYTES,
-  startRequestedAgent,
-} from "./coder-host/start.js";
-import {
-  codingAgentPage,
-  codingAgentSummary,
-  pageAccounts,
-  summaryAccounts,
-} from "./coder-host/status.js";
+import { agentPullRequestReach } from "./coder-host/published.js";
+import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import {
-  continuedByOf,
-  type EveReach,
-  eveFor,
-  standingsOf,
-  stoppedForGood,
-  stoppedTurn,
-  summaryOf,
-} from "./coder-host/stop.js";
+import { type EveReach, eveFor } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 /**
  * coding-agents-app.ts -- a task's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
+ *
+ * The Start, both lists, an agent's own page and the PATCH that changes
+ * it, a Stop, its changes, and its review options now answer through the
+ * hosted oRPC router (`agents-procedures.ts`), on the terms said of them
+ * here.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one of a workspace the bearer's account is a member of: a
@@ -190,16 +144,6 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  */
 
 const AGENTS_PATH = {
-  /** GET lists the task's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's task id into the `id` query. */
-  OF_TASK: "/api/plans/agents",
-  /** GET reads the agent as its own page, on a plan or with none; PATCH changes the agent's model, effort, and context window, renames it, archives it, or pins it for the asking member; the rewrite moves the path's agent id into the `id` query. */
-  AGENT: "/api/agents/agent",
-  /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
-  STOP: "/api/agents/stop",
-  /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
-  CHANGES: "/api/agents/changes",
-  /** GET reads what the reviewer and label pickers of the agent's Pull request tab offer; the rewrite moves the path's agent id into the `id` query. */
-  REVIEW_OPTIONS: "/api/agents/review-options",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads the task's inbox past `after`; the rewrite moves the path's task id into the `id` query. */
@@ -220,12 +164,7 @@ const AGENTS_PATH = {
   INBOX_ATTACHMENT: "/api/inbox/attachment",
   /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
   PICTURE: "/api/agents/picture",
-  /** GET lists a workspace's agents, newest started first, on one repository where the query names one. */
-  OF_WORKSPACE: "/api/agents",
 } as const;
-
-/** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
-const WORKSPACE_AGENTS_LIMIT = 50;
 
 const HTTP_METHOD = {
   GET: "GET",
@@ -254,9 +193,6 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
-
-/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
-const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -291,318 +227,6 @@ const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
-});
-
-/** A choice the catalog refused is an invalid request, on the wire. */
-const choiceOrInvalid = <A, E, R>(
-  effect: Effect.Effect<A, E | ModelChoiceRefused, R>,
-): Effect.Effect<A, E | HostedRefusal, R> =>
-  Effect.catchTag(effect, "ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST));
-
-/**
- * POST: an agent started on the task, or the one a retry under the same key
- * already started, on the one start path (`packages/service/src/agents/coder-host/start.ts`),
- * reaching eve as the developer.
- */
-const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  request: Request,
-  userId: string,
-  taskId: string,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
-  const asked = readEither(codingAgentStartRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const environment = yield* HostedEnvironment;
-  const summaryModel: SummaryModelOf =
-    seams.summaryModel ??
-    ((owner, chosen, effort) =>
-      productionSummaryModel(owner, chosen, effort).pipe(
-        Effect.provideService(HostedEnvironment, environment),
-      ));
-  const { agent, created } = yield* startRequestedAgent(
-    eveFor(seams, request, userId),
-    userId,
-    taskId,
-    asked.success,
-    summaryModel,
-  );
-  return hostedJsonResponse(created ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK, {
-    agent,
-  });
-});
-
-/** Whether a list read asks for the archived agents too; a build from before archiving never does. */
-function listsArchived(request: Request): boolean {
-  const asked = new URL(request.url).searchParams.get(CODING_AGENT_LIST_QUERY.ARCHIVED);
-  return asked === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
-}
-
-/** GET lists the task's agents with their status; POST starts one. */
-const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* idOf(request);
-  const userId = yield* resolvedUserId(seams, request);
-  if (incoming.method === HTTP_METHOD.POST) {
-    return yield* startEndpoint(seams, request, userId, taskId);
-  }
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const agents = yield* hostedStoreOrUnavailable(
-    listCodingAgents(userId, taskId, { includeArchived: listsArchived(request) }),
-  );
-  const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
-  const continuedBy = yield* continuedByOf(
-    userId,
-    agents.map((agent) => agent.id),
-  );
-  const now = yield* Clock.currentTimeMillis;
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
-    ),
-  });
-});
-
-/**
- * GET lists a workspace's agents, on a task or with none, newest started
- * first, the archived ones left out unless `archived=include` asks,
- * narrowed to one repository where the query names one and to agents whose
- * title or task's name holds the query's words where it names some, as the plan list
- * answers them; a workspace the account is not in is not found, as a plan
- * is.
- */
-const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const query = new URL(request.url).searchParams;
-  const workspaceId = query.get(CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID) ?? "";
-  const repository = query.get(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY) ?? undefined;
-  const words = query.get(CODING_AGENT_WORKSPACE_QUERY.WORDS)?.trim();
-  if (
-    workspaceId === "" ||
-    repository === "" ||
-    words === "" ||
-    (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const userId = yield* resolvedUserId(seams, request);
-  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, workspaceId));
-  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const agents = yield* hostedStoreOrUnavailable(
-    listWorkspaceCodingAgents(userId, workspaceId, {
-      ...(repository === undefined ? undefined : { repository }),
-      ...(words === undefined ? undefined : { words }),
-      includeArchived: listsArchived(request),
-      limit: WORKSPACE_AGENTS_LIMIT,
-    }),
-  );
-  const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
-  const continuedBy = yield* continuedByOf(
-    userId,
-    agents.map((agent) => agent.id),
-  );
-  const now = yield* Clock.currentTimeMillis;
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
-    ),
-  });
-});
-
-/**
- * PATCH changes the agent for what follows, and answers it as it then
- * stands. A body naming a title renames it: the title written whole on the
- * row, or cleared where the title is empty, so the tab falls back to the
- * model's name. A body naming a model and effort, and the standard context
- * window where it is chosen, changes what its next step runs on, a body
- * naming no window putting the agent back on the model's whole one: the choice checked
- * against the catalog as a Start checks its own,
- * written on the row the steps read; the account's default is untouched.
- * A body naming `archived` archives the agent, stopping a turn still
- * running first as a Stop does, or brings it back. A body naming `pinned`
- * pins the agent for the asking member alone, or unpins it, which the plan
- * list's agents with no plan then carry as that member's. A body naming
- * `disabledServers` replaces the list of MCP servers switched off for the
- * agent, which its next turn reads as it starts.
- */
-const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.PATCH) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
-  const rename = readEither(codingAgentRenameRequestSchema)(body);
-  if (Result.isSuccess(rename)) {
-    const { title } = rename.success;
-    const renamed = yield* hostedStoreOrUnavailable(
-      renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
-    );
-    if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, renamed.value),
-    });
-  }
-  const archive = readEither(codingAgentArchiveRequestSchema)(body);
-  if (Result.isSuccess(archive)) {
-    const { archived } = archive.success;
-    if (archived) {
-      // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedForGood(seams, writer, request, userId, agent);
-    }
-    const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
-    if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, changed.value),
-    });
-  }
-  const pin = readEither(codingAgentPinRequestSchema)(body);
-  if (Result.isSuccess(pin)) {
-    const pinned = yield* hostedStoreOrUnavailable(
-      pinCodingAgent(userId, agent.id, pin.success.pinned, pin.success.position),
-    );
-    if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, pinned.value),
-    });
-  }
-  const servers = readEither(codingAgentServersRequestSchema)(body);
-  if (Result.isSuccess(servers)) {
-    const changed = yield* hostedStoreOrUnavailable(
-      updateCodingAgentServers(userId, agent.id, servers.success.disabledServers),
-    );
-    if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, changed.value),
-    });
-  }
-  const asked = readEither(modelChoiceSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, asked.success));
-  const changed = yield* hostedStoreOrUnavailable(
-    updateCodingAgentChoice(userId, agent.id, choice),
-  );
-  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: yield* summaryOf(userId, changed.value),
-  });
-});
-
-/** GET reads the agent as its own page, an agent with no task as much as one on a task; PATCH changes it as `changeEndpoint` does. */
-const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) return yield* changeEndpoint(seams, writer);
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const standing = yield* standingsOf([agent.conversationId]);
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
-  const continuedBy = yield* continuedByOf(userId, [agent.id]);
-  const now = yield* Clock.currentTimeMillis;
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: codingAgentPage(
-      agent,
-      standing(agent.conversationId),
-      now,
-      names,
-      continuedBy(agent.id),
-    ),
-  });
-});
-
-/** POST stops the agent: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
-const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, userId, agent);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
-});
-
-/**
- * GET reads the agent's changes: the files of the pull request its kept
- * published answer names, who it names (`github-people.ts`), and the
- * commits its changed images are read at (`imageCommits`), read from
- * GitHub afresh on a token minted for the agent's repository on its task's
- * workspace installation, with who its row says it writes as, or none
- * where it names no pull request yet.
- */
-const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-  published: PublishedCache,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
-  const number = yield* pullRequestNumberOf(new URL(request.url).searchParams.getAll(QUERY.NUMBER));
-  const pullRequest = yield* askedPullRequest(published, userId, agent, number);
-  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
-  const listed = yield* Effect.gen(function* () {
-    const { token } = yield* agentPullRequestReach(userId, agent);
-    // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
-    const [files, people, whole] = yield* Effect.all(
-      [
-        pullRequestFiles(token, agent.repository, pullRequest),
-        changesPeople(token, agent, pullRequest.number),
-        Effect.orElseSucceed(pullRequestByNumber(token, agent.repository, pullRequest.number), () =>
-          Option.none(),
-        ),
-      ],
-      { concurrency: "unbounded" },
-    );
-    const commits = yield* imageCommits(token, agent.repository, whole, files.files);
-    return { ...commits, ...files, ...people };
-  }).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    pullRequest: {
-      url: pullRequest.url,
-      ...listed,
-      ...(agent.author === null ? undefined : { writtenAs: agent.author }),
-    },
-  });
 });
 
 /**
@@ -649,46 +273,6 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
     headers: HOSTED_BYTES_HEADERS,
   });
 });
-
-/**
- * GET reads what the reviewer and label pickers offer, of the agent's
- * repository rather than its pull request, on a token minted for it: its
- * labels, its collaborators named against the workspace's members, and the
- * teams that reach it.
- */
-const reviewOptionsEndpoint = /* @__PURE__ */ Effect.fn("web/agentReviewOptionsEndpoint")(
-  function* (
-    seams: CodingAgentsAppSeams,
-  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    if (incoming.method !== HTTP_METHOD.GET) {
-      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    }
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const { userId, agent } = yield* reachedAgent(seams, request);
-    const options = yield* Effect.gen(function* () {
-      const { token } = yield* agentPullRequestReach(userId, agent);
-      return yield* namedReviewOptions(
-        agent,
-        yield* pullRequestReviewOptions(token, agent.repository),
-      );
-    }).pipe(
-      Effect.catch((failure) => {
-        switch (failure._tag) {
-          case "RepositoryNotReachable":
-            return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-          case "SqlError":
-          case "EffectDrizzleQueryError":
-          case "SchemaError":
-            return hostedStoreOrUnavailable(Effect.fail(failure));
-          default:
-            return githubReadOrRefusal(Effect.fail(failure));
-        }
-      }),
-    );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, options);
-  },
-);
 
 /** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */
 const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -1140,71 +724,41 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The group: its paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
-  return Layer.unwrap(
-    withPublishedCache((published) =>
-      Layer.mergeAll(
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_TASK, hostedRefusing(taskAgentsEndpoint(seams))),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.OF_WORKSPACE,
-          hostedRefusing(workspaceAgentsEndpoint(seams)),
-        ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(agentEndpoint(seams, writer))),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.CHANGES,
-          hostedRefusing(changesEndpoint(seams, published)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.GITHUB_IMAGE,
-          hostedRefusing(githubImageEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.REVIEW_OPTIONS,
-          hostedRefusing(reviewOptionsEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_OF_TASK,
-          hostedRefusing(taskInboxEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_OF_AGENT,
-          hostedRefusing(agentInboxEndpoint(seams)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_ITEM,
-          hostedRefusing(inboxAnswerEndpoint(seams, writer)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_CLOSE,
-          hostedRefusing(inboxCloseEndpoint(seams, writer)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_MESSAGES,
-          hostedRefusing(inboxMessageEndpoint(seams, writer)),
-        ),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_READ,
-          hostedRefusing(inboxReadEndpoint(seams)),
-        ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
-        HttpRouter.add(
-          ANY_METHOD,
-          AGENTS_PATH.INBOX_ATTACHMENT,
-          hostedRefusing(inboxAttachmentEndpoint(seams)),
-        ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.PICTURE, hostedRefusing(pictureEndpoint(seams))),
-        hostedNotFoundRoute,
-      ),
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.GITHUB_IMAGE,
+      hostedRefusing(githubImageEndpoint(seams)),
     ),
+    HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX_OF_TASK, hostedRefusing(taskInboxEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.INBOX_OF_AGENT,
+      hostedRefusing(agentInboxEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.INBOX_ITEM,
+      hostedRefusing(inboxAnswerEndpoint(seams, writer)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.INBOX_CLOSE,
+      hostedRefusing(inboxCloseEndpoint(seams, writer)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.INBOX_MESSAGES,
+      hostedRefusing(inboxMessageEndpoint(seams, writer)),
+    ),
+    HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX_READ, hostedRefusing(inboxReadEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.INBOX_ATTACHMENT,
+      hostedRefusing(inboxAttachmentEndpoint(seams)),
+    ),
+    HttpRouter.add(ANY_METHOD, AGENTS_PATH.PICTURE, hostedRefusing(pictureEndpoint(seams))),
+    hostedNotFoundRoute,
   );
 }

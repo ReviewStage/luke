@@ -73,16 +73,12 @@ import {
   type CodingAgentRenameRequest,
   type CodingAgentServersRequest,
   type CodingAgentStartRequest,
-  codingAgentAnswerSchema,
-  codingAgentChangesAnswerSchema,
-  codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
-  codingAgentPageAnswerSchema,
   codingAgentRenameRequestSchema,
-  codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
+import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
 import {
   askHosted,
@@ -122,20 +118,15 @@ import {
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
-  agentChangesPath,
   agentGitHubImagePath,
   agentInboxPath,
-  agentPath,
   agentPicturePath,
-  agentReviewOptionsPath,
-  agentStopPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxClosePath,
   inboxItemPath,
   inboxItemReadPath,
   inboxMessagesPath,
-  taskAgentsPath,
   taskInboxPath,
 } from "./service-paths.js";
 import {
@@ -166,14 +157,6 @@ import type { TaskAgentRefusal } from "./task-wire.js";
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
-
-/**
- * How long a Start may stand: a Start from another agent copies its work,
- * summarizing what does not fit, before the new agent's session opens,
- * which can run well past the usual deadline; a Start that outlasts it is
- * asked again under the same key and answered with the agent it made.
- */
-const START_TIMEOUT_MS = 120_000;
 
 export interface HostedCodingAgentClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
@@ -345,7 +328,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefa
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
   readonly #held: AccountCallEffects;
-  readonly #start: AccountCallEffects;
 
   readonly #hosted: HostedClient;
 
@@ -365,11 +347,6 @@ export class HostedCodingAgentClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: HELD_READ_TIMEOUT_MS,
-    });
-    this.#start = accountCall({
-      baseUrl: options.serviceBaseUrl,
-      credential,
-      requestTimeoutMs: START_TIMEOUT_MS,
     });
   }
 
@@ -499,12 +476,14 @@ export class HostedCodingAgentClient {
     taskId: string,
     includeArchived = false,
   ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
-    const query = new URLSearchParams({
-      [CODING_AGENT_LIST_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE,
-    });
-    const path = includeArchived ? `${taskAgentsPath(taskId)}?${query}` : taskAgentsPath(taskId);
-    return Effect.flatMap(this.#call.send({ method: HTTP_METHOD.GET, path }), (answer) =>
-      readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.listOfTask, {
+        id: taskId,
+        ...(includeArchived
+          ? { [CODING_AGENT_LIST_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE }
+          : undefined),
+      }),
+      ROW_REFUSALS,
     );
   }
 
@@ -512,19 +491,20 @@ export class HostedCodingAgentClient {
   listWorkspace(
     params: CodingAgentWorkspaceListParams,
   ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
-    const query = new URLSearchParams({
-      [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
-    });
-    if (params.repository !== undefined) {
-      query.set(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY, params.repository);
-    }
-    if (params.words !== undefined) query.set(CODING_AGENT_WORKSPACE_QUERY.WORDS, params.words);
-    if (params.includeArchived === true) {
-      query.set(CODING_AGENT_WORKSPACE_QUERY.ARCHIVED, CODING_AGENT_LIST_ARCHIVED.INCLUDE);
-    }
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}?${query}` }),
-      (answer) => readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.listOfWorkspace, {
+        [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
+        ...(params.repository === undefined
+          ? undefined
+          : { [CODING_AGENT_WORKSPACE_QUERY.REPOSITORY]: params.repository }),
+        ...(params.words === undefined
+          ? undefined
+          : { [CODING_AGENT_WORKSPACE_QUERY.WORDS]: params.words }),
+        ...(params.includeArchived === true
+          ? { [CODING_AGENT_WORKSPACE_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE }
+          : undefined),
+      }),
+      ROW_REFUSALS,
     );
   }
 
@@ -539,13 +519,16 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#start.send({
-        method: HTTP_METHOD.POST,
-        path: taskAgentsPath(taskId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, START_REFUSALS),
+    return hostedAnswer(
+      Effect.map(
+        askHosted(
+          this.#hosted.agents.start,
+          { params: { id: taskId }, body: admitted },
+          HOSTED_DEADLINE.START,
+        ),
+        (started) => started.body,
+      ),
+      START_REFUSALS,
     );
   }
 
@@ -621,14 +604,7 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(modelChoiceSchema)(choice));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentPath(agentId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, CHOOSE_REFUSALS),
-    );
+    return this.#change(agentId, admitted, CHOOSE_REFUSALS);
   }
 
   /** Renames one agent, or clears its title with an empty one, answering it as it then stands; a title past the bound is refused here without traveling. */
@@ -638,14 +614,7 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentPath(agentId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
-    );
+    return this.#change(agentId, admitted, ROW_REFUSALS);
   }
 
   /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
@@ -655,14 +624,7 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentServersRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentPath(agentId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
-    );
+    return this.#change(agentId, admitted, ROW_REFUSALS);
   }
 
   /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */
@@ -670,14 +632,7 @@ export class HostedCodingAgentClient {
     agentId: string,
     request: CodingAgentArchiveRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentPath(agentId),
-        body: JSON.stringify({ archived: request.archived }),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, ARCHIVE_REFUSALS),
-    );
+    return this.#change(agentId, { archived: request.archived }, ARCHIVE_REFUSALS);
   }
 
   /** Pins one agent for the account alone, or unpins it, answering it as it then stands. */
@@ -685,34 +640,35 @@ export class HostedCodingAgentClient {
     agentId: string,
     request: CodingAgentPinRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentPath(agentId),
-        body: JSON.stringify(
-          request.position === undefined
-            ? { pinned: request.pinned }
-            : { pinned: request.pinned, position: request.position },
-        ),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    return this.#change(
+      agentId,
+      request.position === undefined
+        ? { pinned: request.pinned }
+        : { pinned: request.pinned, position: request.position },
+      ROW_REFUSALS,
+    );
+  }
+
+  /** One change of an agent, answering it as it then stands. */
+  #change(
+    agentId: string,
+    body: CodingAgentChangeRequest,
+    named: NamedRefusals,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.change, { params: { id: agentId }, body }),
+      named,
     );
   }
 
   /** Stops one agent, answering it as it then stands. */
   stop(agentId: string): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: agentStopPath(agentId) }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
-    );
+    return hostedAnswer(askHosted(this.#hosted.agents.stop, { id: agentId }), ROW_REFUSALS);
   }
 
   /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentPath(agentId) }),
-      (answer) => readAnswer(answer, codingAgentPageAnswerSchema, ROW_REFUSALS),
-    );
+    return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
   }
 
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
@@ -731,9 +687,12 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentChangesAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId, number) }),
-      (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.changes, {
+        id: agentId,
+        ...(number === undefined ? undefined : { number: String(number) }),
+      }),
+      ROW_REFUSALS,
     );
   }
 
@@ -755,9 +714,9 @@ export class HostedCodingAgentClient {
   reviewOptions(
     agentId: string,
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentReviewOptionsPath(agentId) }),
-      (answer) => readAnswer(answer, codingAgentReviewOptionsAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agents.reviewOptions, { id: agentId }),
+      ROW_REFUSALS,
     );
   }
 
