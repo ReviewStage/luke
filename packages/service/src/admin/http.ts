@@ -29,6 +29,7 @@ export const ADMIN_ROUTE_PATH = {
   USER: "/api/admin/user",
   FAVORITE: "/api/admin/favorite",
   DAY: "/api/admin/day",
+  WORKSPACES: "/api/admin/workspaces",
 } as const;
 
 export const ADMIN_ERROR = {
@@ -140,6 +141,33 @@ export function adminUsersSearch(url: string): { term: string | undefined } | un
   if (value.length > ADMIN_USERS_SEARCH_MAX_LENGTH) return undefined;
   const term = value.trim();
   return { term: term.length === 0 ? undefined : term };
+}
+
+/**
+ * Which workspaces the Workspaces table lists: the shared ones alone, or
+ * every workspace, each account's personal one included. The headline
+ * counts read shared workspaces either way.
+ */
+export const ADMIN_WORKSPACES_KIND = {
+  SHARED: "shared",
+  ALL: "all",
+} as const;
+
+export type AdminWorkspacesKind =
+  (typeof ADMIN_WORKSPACES_KIND)[keyof typeof ADMIN_WORKSPACES_KIND];
+
+export const ADMIN_WORKSPACES_KIND_PARAM = "kind";
+
+/**
+ * The kind a Workspaces read asked for. Like the scope, anything but the
+ * explicit `all` falls to the narrower default: a misread list leaves out
+ * personal workspaces rather than burying the shared ones among them.
+ */
+export function adminWorkspacesKind(url: string): AdminWorkspacesKind {
+  const value = new URL(url).searchParams.get(ADMIN_WORKSPACES_KIND_PARAM);
+  return value === ADMIN_WORKSPACES_KIND.ALL
+    ? ADMIN_WORKSPACES_KIND.ALL
+    : ADMIN_WORKSPACES_KIND.SHARED;
 }
 
 export const ADMIN_DAY_PARAM = "date";

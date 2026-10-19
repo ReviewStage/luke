@@ -296,6 +296,10 @@
     "dest": "/api/default.js?route=admin/users"
   },
   {
+    "src": "/api/admin/workspaces",
+    "dest": "/api/default.js?route=admin/workspaces"
+  },
+  {
     "src": "/api/agents",
     "dest": "/api/default.js?route=agents"
   },

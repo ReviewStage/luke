@@ -600,9 +600,12 @@ beside it, how many seconds you dictated.
 
 Luke's own maintainers can see your name, email address, profile picture,
 sign-in method, whether you are an administrator, when you joined and were
-last active, and your daily counts, on an admin page of our site that only an
-account we have marked as an administrator can open; nothing you type, say,
-or run appears on it.
+last active, and your daily counts, and the names of your workspaces and
+their members, roles, invitations, connected integrations, GitHub
+installation, and activity counts, on an admin page of our site that only an
+account we have marked as an administrator can open. Past those names,
+nothing you type, say, or run appears on it: no task's title, plan, prompt,
+or message.
 
 Every account also gets a first workspace on our service when it signs in, a
 record named with your name and holding you as its owner, which is otherwise
