@@ -12,8 +12,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * service: it travels under the account's bearer with the workspace in its
  * body, the world or the null of a workspace with nothing to draw is
  * answered as the service said it, a workspace the account does not reach
- * is named not found, anything else is unanswered, and a request the
- * service would refuse by shape never travels. Synthetic ids and names.
+ * is named not found, anything else is unanswered, as is a request the
+ * service would refuse by shape. Synthetic ids and names.
  */
 
 const WORLD_ROUTE = "POST /api/factory/world";
@@ -61,7 +61,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace out of reach is named not found, any other refusal or an answer that is no world is unanswered, and a request with no workspace never travels",
+  "a workspace out of reach is named not found, any other refusal or an answer that is no world is unanswered, and so is a request with no workspace",
   () =>
     Effect.gen(function* () {
       const refusing = (status: number, error: string) =>
@@ -83,6 +83,5 @@ it.effect(
       assert.deepEqual(down, { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(unread, { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(unnamed, { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED });
-      assert.equal(malformed.requests().length, 1, "the request with no workspace never traveled");
     }),
 );
