@@ -167,9 +167,9 @@ import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq } from "drizzle-orm";
-import type { Context } from "effect";
 import {
   Clock,
+  type Context,
   DateTime,
   Deferred,
   Duration,
@@ -212,7 +212,7 @@ import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
-import { tasksApp } from "../tasks/tasks-app.js";
+import { tasksProcedures } from "../tasks/tasks-procedures.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -293,12 +293,15 @@ const AGENT_OVERVIEW = [
   "/api/agents/overview-checks",
   "/api/agents/overview-conversation",
 ] as const;
-/** One task, served by the tasks group, whose delete stops the task's agents through the same Stop. */
-const TASK = "/api/plans/plan";
-/** The account's tasks, served by the tasks group, each naming its agents in brief. */
+/** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
 const TASKS = "/api/plans";
-/** Luke's Stop on a task, served by the tasks group, which reaches the brain's eve as the request's caller. */
-const TASK_STOP = "/api/plans/stop";
+/** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
+const TASK = (taskId: string) => `${TASKS}/${taskId}`;
+/** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
+const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
+/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+const TASK_PATH =
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 
@@ -562,19 +565,16 @@ const standing = (
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const tasks = HttpRouter.toWebHandler(
-      tasksApp(seams).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    // SAFETY: the messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
-    const messages = hostedFetch({ messages: messagesProcedures(seams) });
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose()])),
-    );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, the transcript and the chat on the hosted oRPC router at their public paths, as their rewrites carry them. */
+    const routed = hostedFetch({
+      messages: messagesProcedures(seams),
+      plans: tasksProcedures(seams),
+    });
+    yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript and the chat land on the hosted oRPC router. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const url = new URL(request.url);
@@ -582,11 +582,11 @@ const standing = (
         const id = url.searchParams.get("id");
         if (pathname === AGENT_MESSAGES && id !== null) {
           url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
-          return messages(new Request(url, request), webServices);
+          return routed(new Request(url, request), webServices);
         }
-        if (pathname === CHAT) return messages(request, webServices);
-        return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
-          ? tasks.handler(request)
+        if (pathname === CHAT) return routed(request, webServices);
+        return pathname === TASKS || TASK_PATH.test(pathname)
+          ? routed(request, webServices)
           : agents.handler(request);
       });
     const ask = (request: Request) =>
@@ -863,7 +863,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
         yield* joinWorkspace(task.workspaceId, other);
 
-        const deleted = yield* ask(request(TASK, other, { method: "DELETE", id: task.id }));
+        const deleted = yield* ask(request(TASK(task.id), other, { method: "DELETE" }));
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
@@ -1191,7 +1191,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             }),
           ),
         );
-        const opened = yield* ask(request(TASK, owner, { id: started.plan.id }));
+        const opened = yield* ask(request(TASK(started.plan.id), owner));
 
         assert.equal(started.agent, undefined);
         assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
@@ -3555,9 +3555,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const taskArchive = yield* withTask.ask(
-          request(TASK, undefined, {
+          request(TASK(withTask.task.id), undefined, {
             method: "PATCH",
-            id: withTask.task.id,
             cookie: sessionCookieOf(withTask.owner),
             body: { archived: true },
           }),
@@ -3587,9 +3586,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const deleted = yield* ask(
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "DELETE",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3612,9 +3610,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const taskSession = yield* lukeRunning(owner, task.id);
 
         const stopped = yield* ask(
-          request(TASK_STOP, undefined, {
+          request(TASK_STOP(task.id), undefined, {
             method: "POST",
-            id: task.id,
             cookie: sessionCookieOf(owner),
           }),
         );
@@ -3654,10 +3651,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         );
         const lukeStop = yield* stopped.ask(
-          request(TASK_STOP, undefined, { method: "POST", id: stopped.task.id, cookie: teammate }),
+          request(TASK_STOP(stopped.task.id), undefined, { method: "POST", cookie: teammate }),
         );
         const deleted = yield* stopped.ask(
-          request(TASK, undefined, { method: "DELETE", id: stopped.task.id, cookie: teammate }),
+          request(TASK(stopped.task.id), undefined, { method: "DELETE", cookie: teammate }),
         );
 
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
@@ -3710,14 +3707,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, {
+          request(TASK(task.id), undefined, {
             method: "PATCH",
-            id: task.id,
             cookie,
             body: { archived: true },
           }),
-          request(TASK, undefined, { method: "DELETE", id: task.id, cookie }),
-          request(TASK_STOP, undefined, { method: "POST", id: task.id, cookie }),
+          request(TASK(task.id), undefined, { method: "DELETE", cookie }),
+          request(TASK_STOP(task.id), undefined, { method: "POST", cookie }),
         ]) {
           const { pathname } = new URL(asked.url);
           assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
@@ -3764,7 +3760,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         const marked = (archived: boolean) =>
           Effect.map(
-            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            ask(request(TASK(task.id), other, { method: "PATCH", body: { archived } })),
             (answered) => answered.status,
           );
         const archiveNow = () =>
@@ -3799,9 +3795,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* sent("Rename the subject line too.");
 
         assert.deepEqual(
-          yield* ask(
-            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
-          ),
+          yield* ask(request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);

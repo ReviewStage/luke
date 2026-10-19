@@ -187,6 +187,7 @@
     "./tasks/task-file": "./src/tasks/task-file.js",
     "./tasks/task-sections-app": "./src/tasks/task-sections-app.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",
+    "./tasks/tasks-procedures": "./src/tasks/tasks-procedures.js",
     "./tasks/task-skills": "./src/tasks/task-skills.js",
     "./tasks/task-tree": "./src/tasks/task-tree.js",
     "./tasks/task-work": "./src/tasks/task-work.js",

@@ -39,15 +39,15 @@
         },
         {
           "src": "/api/plans/([^/]+)/board",
-          "dest": "/api/default.js?route=plans/board&id=$1"
+          "dest": "/api/default.js?route=plans/board&route-path=plans/$1/board&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/transcript",
-          "dest": "/api/default.js?route=plans/transcript&id=$1"
+          "dest": "/api/default.js?route=plans/transcript&route-path=plans/$1/transcript&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/work",
-          "dest": "/api/default.js?route=plans/work&id=$1"
+          "dest": "/api/default.js?route=plans/work&route-path=plans/$1/work&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
@@ -75,11 +75,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/edit",
-          "dest": "/api/default.js?route=plans/edit&id=$1"
+          "dest": "/api/default.js?route=plans/edit&route-path=plans/$1/edit&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/stop",
-          "dest": "/api/default.js?route=plans/stop&id=$1"
+          "dest": "/api/default.js?route=plans/stop&route-path=plans/$1/stop&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/comments/([^/]+)",
@@ -107,15 +107,15 @@
         },
         {
           "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
-          "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
+          "dest": "/api/default.js?route=plans/restore&route-path=plans/$1/revisions/$2/restore&id=$1&seq=$2"
         },
         {
           "src": "/api/plans/([^/]+)/revisions/([^/]+)",
-          "dest": "/api/default.js?route=plans/revision&id=$1&seq=$2"
+          "dest": "/api/default.js?route=plans/revision&route-path=plans/$1/revisions/$2&id=$1&seq=$2"
         },
         {
           "src": "/api/plans/([^/]+)/revisions",
-          "dest": "/api/default.js?route=plans/revisions&id=$1"
+          "dest": "/api/default.js?route=plans/revisions&route-path=plans/$1/revisions&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
@@ -127,7 +127,7 @@
         },
         {
           "src": "/api/plans/([^/]+)",
-          "dest": "/api/default.js?route=plans/plan&id=$1"
+          "dest": "/api/default.js?route=plans/plan&route-path=plans/$1&id=$1"
         },
         {
           "src": "/api/account/plan-template/revisions/([^/]+)/restore",

@@ -300,38 +300,6 @@ export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** One task's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
-export function taskBoardPath(taskId: string): string {
-  return `${taskPath(taskId)}/board`;
-}
-
-/** The developer's edit of one task's document (POST). */
-/** Stops the turn Luke is running on one task (POST). */
-export function taskStopPath(taskId: string): string {
-  return `${taskPath(taskId)}/stop`;
-}
-
-export function planEditPath(taskId: string): string {
-  return `${taskPath(taskId)}/edit`;
-}
-
-/** What was said on one task's calls (GET). */
-export function taskTranscriptPath(taskId: string): string {
-  return `${taskPath(taskId)}/transcript`;
-}
-
-/**
- * One task's work (GET): a page of the brain turns of its calls, the
- * newest of all or, with `before`, the newest queued before that turn, and
- * on the newest page every code Luke showed on it.
- */
-export function taskWorkPath(taskId: string, before?: string): string {
-  const path = `${taskPath(taskId)}/work`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before });
-  return `${path}?${query}`;
-}
-
 /** Every code Luke showed on one task, oldest first (GET). */
 export function taskCodePath(taskId: string): string {
   return `${taskPath(taskId)}/code`;
@@ -417,24 +385,6 @@ export function repositoryIssuePath(place: RepositoryPlace, number: number): str
   const query = repositoryPlaceQuery(place);
   query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
-}
-
-/** One task's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
-export function planRevisionsPath(taskId: string, before?: number): string {
-  const path = `${taskPath(taskId)}/revisions`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before: String(before) });
-  return `${path}?${query}`;
-}
-
-/** One revision of one plan: its content beside the content before it (GET). */
-export function planRevisionPath(taskId: string, seq: number): string {
-  return `${planRevisionsPath(taskId)}/${seq}`;
-}
-
-/** One revision of one plan put back as its content (POST). */
-export function taskRestorePath(taskId: string, seq: number): string {
-  return `${planRevisionPath(taskId, seq)}/restore`;
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
