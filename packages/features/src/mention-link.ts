@@ -450,7 +450,7 @@ function decodedPath(pathname: string): string | undefined {
 
 /**
  * A target read as an address, or nothing where it is none. Note that it is
- * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * `new URL` caught rather than `URL.parse`, because the web app
  * reads a link in whatever browser opened it, and Safari before 18 has no
  * `URL.parse`.
  */

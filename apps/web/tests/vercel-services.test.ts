@@ -162,22 +162,48 @@ test("no workspace's slug can be the first step of a page the web app serves und
   );
 });
 
-test("a link to any place in Luke, a plan's, a section's and a picture's among them, is served the Open in Luke page, and no page of Luke's own is", () => {
-  const opens = (vercel.services[SERVICE.WEB].routes ?? []).flatMap((route) =>
-    "dest" in route && route.dest === "/open.html" ? [new RegExp(`^${route.src}$`, "u")] : [],
-  );
-  const served = (path: string) => opens.some((route) => route.test(path));
+/** A route of the web service as the platform reads it: the file it serves and the headers sent beside it, or a redirect's status and `Location`. */
+interface WebRoute {
+  readonly src: string;
+  readonly dest?: string;
+  readonly status?: number;
+  readonly headers?: Readonly<Record<string, string>>;
+}
 
-  assert.equal(opens.length, 1);
-  assert.equal(served("/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b"), true);
-  assert.equal(served("/personal-u_1/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/"), true);
-  assert.equal(
-    served(
-      "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01",
-    ),
-    true,
-  );
+/** What the web service answers a path with: a file of the build, by the route that served it, or a redirect. */
+type Served =
+  | { readonly file: string; readonly route: WebRoute }
+  | { readonly status: number; readonly location: string };
+
+/**
+ * What the web service answers a path with: by the first of its routes whose
+ * pattern matches the whole path, as Vercel reads them, the pattern's groups
+ * written into the destination; nothing where no route does, which leaves
+ * the path to the build's own files.
+ */
+function servedBy(path: string): Served | undefined {
+  // SAFETY: the web service's routes as this repository's vercel.json writes them, which the generator's schema holds to these two shapes.
+  for (const route of (vercel.services[SERVICE.WEB].routes ?? []) as readonly WebRoute[]) {
+    const pattern = new RegExp(`^${route.src}$`, "u");
+    if (!pattern.test(path)) continue;
+    if (route.dest !== undefined) return { file: path.replace(pattern, route.dest), route };
+    return { status: route.status ?? 0, location: route.headers?.Location ?? "" };
+  }
+  return undefined;
+}
+
+const servedFile = (path: string) => {
+  const served = servedBy(path);
+  return served !== undefined && "file" in served ? served.file : undefined;
+};
+
+test("a link to any place in Luke, a plan's, a section's and a picture's among them, and the app's own path are served the web app, and no page of Luke's own is", () => {
   for (const path of [
+    "/app",
+    "/app/",
+    "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+    "/personal-u_1/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/",
+    "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01",
     "/acme/plan/p1/agent/a1/worker/toolu_1",
     "/acme/task/p1/version/3",
     "/acme/agent/a1",
@@ -190,19 +216,67 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/person/user_9Fq2-x",
     "/acme/issue/i1",
   ]) {
-    assert.equal(served(path), true, path);
+    assert.equal(servedFile(path), "/app.html", path);
   }
+  // The build's file name is never an address: it sends the browser to the app's own, for good, and the browser keeps the fragment.
+  assert.deepEqual(servedBy("/app.html"), { status: 308, location: "/app" });
+  assert.equal(servedFile("/about"), "/about.html");
+  assert.equal(servedFile("/privacy"), "/privacy.html");
+  assert.equal(servedFile("/changelog"), "/changelog.html");
+  assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
+  assert.equal(servedFile("/admin"), "/admin.html");
+  // An API path still reaches its function's route with the id it names, however its rewrite spells the rest.
+  for (const [path, route] of [
+    ["/api/plans/x/board", "plans/board"],
+    ["/api/inbox/i1", "inbox/item"],
+    ["/api/automations/x1/runs", "automations/runs"],
+    ["/api/agents/a1", "agents/agent"],
+  ] as const) {
+    const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
+    assert.match(served.pathname, /^\/api\//u, path);
+    assert.equal(served.searchParams.get("route"), route, path);
+    assert.equal(served.searchParams.get("id"), path.split("/")[3], path);
+  }
+  // The landing page, the sign-in, a static file, and a path naming no place are the build's own files.
   for (const path of [
-    "/about",
-    "/changelog/page/2",
-    "/api/plans/x/board",
-    "/api/inbox/i1",
-    "/api/automations/x1/runs",
-    "/api/agents/a1",
+    "/",
+    "/sign-in.html",
+    "/favicon.svg",
+    "/app/fonts/x.woff2",
     "/acme/plans/x",
     "/acme",
-    "/",
+    "/application",
   ]) {
-    assert.equal(served(path), false, path);
+    assert.equal(servedFile(path), undefined, path);
+  }
+});
+
+test("every path the web app is served at sends its Content Security Policy, refuses to be framed, and is never sniffed; no other page is held to them", () => {
+  const routes = vercel.services[SERVICE.WEB].routes ?? [];
+  const app = routes.filter(
+    (route): route is WebRoute => "dest" in route && route.dest === "/app.html",
+  );
+  assert.ok(app.length > 0);
+  for (const route of app) {
+    const policy = route.headers?.["Content-Security-Policy"] ?? "";
+    const directives = new Map(
+      policy.split(";").map((directive) => {
+        const [name = "", ...sources] = directive.trim().split(/\s+/u);
+        return [name, sources];
+      }),
+    );
+    assert.deepEqual(directives.get("default-src"), ["'self'"], route.src);
+    assert.deepEqual(directives.get("script-src"), ["'self'"], route.src);
+    assert.deepEqual(directives.get("object-src"), ["'none'"], route.src);
+    assert.deepEqual(directives.get("base-uri"), ["'self'"], route.src);
+    assert.deepEqual(directives.get("form-action"), ["'self'"], route.src);
+    assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], route.src);
+    assert.equal(route.headers?.["X-Content-Type-Options"], "nosniff", route.src);
+    assert.equal(route.headers?.["Referrer-Policy"], "strict-origin-when-cross-origin", route.src);
+  }
+  for (const path of ["/about", "/changelog/page/2", "/admin", "/api/plans/x/board"]) {
+    const served = servedBy(path);
+    assert.ok(served !== undefined && "route" in served, path);
+    assert.equal(served.route.headers, undefined, path);
   }
 });

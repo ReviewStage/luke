@@ -526,8 +526,29 @@
           "dest": "/admin.html"
         },
         {
+          "src": "/app\\.html",
+          "status": 308,
+          "headers": {
+            "Location": "/app"
+          }
+        },
+        {
+          "src": "/app/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
+          }
+        },
+        {
           "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
-          "dest": "/open.html"
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
+          }
         }
       ]
     },
