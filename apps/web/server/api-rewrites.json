@@ -380,6 +380,10 @@
     "dest": "/api/default.js?route=github/repositories/tree"
   },
   {
+    "src": "/api/github/token",
+    "dest": "/api/default.js?route=github/token"
+  },
+  {
     "src": "/api/github/webhook",
     "dest": "/api/default.js?route=github/webhook"
   },
