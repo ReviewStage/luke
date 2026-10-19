@@ -11,9 +11,11 @@ import {
 } from "@luke/credentials/snapshot";
 import {
   AccountRefreshFailed,
-  type AccountSessionToken,
   type AccountToken,
+  accountBearer,
+  type CallCredential,
   hostedVoiceServiceOrigin,
+  sessionBearer,
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@luke/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
@@ -56,18 +58,19 @@ export interface AccountComposer extends Composer {
   signedIn: () => boolean;
   capabilitiesActive: () => boolean;
   /**
-   * The signed-in account as a hosted client is handed it. A run that sends
-   * nothing reads no token, so every call made under it refuses on its own
-   * before anything travels, which is what keeps a fixture or evidence run
-   * off the network.
+   * The signed-in account's tokens. A run that sends nothing reads no token,
+   * so every call made under it refuses on its own before anything travels,
+   * which is what keeps a fixture or evidence run off the network.
    */
   readonly token: AccountToken;
+  /** The signed-in account's bearer over `token`, as a hosted client's call carries it. */
+  readonly credential: CallCredential;
   /**
    * The Mac's own Better Auth session, for the calls that write through
    * Better Auth's organization endpoints. A run that sends nothing reads
    * none, as it reads no token.
    */
-  readonly sessionToken: AccountSessionToken;
+  readonly sessionCredential: CallCredential;
   applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
   link: (links: AccountLinks) => Effect.Effect<void>;
@@ -212,7 +215,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   // Note that a hand-off that did not land is no failure of the call that
   // asked for it: the call retries on whatever session stands, and its
   // second refusal is what gets reported.
-  const sessionToken: AccountSessionToken = {
+  const sessionCredential = sessionBearer({
+    ...token,
     readSessionToken: () =>
       runMode.sendsNetwork
         ? Effect.map(readStoredAccount(), (account) => account?.sessionToken)
@@ -222,7 +226,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         Effect.asVoid,
         Effect.mapError((failed) => new AccountRefreshFailed({ message: failed.message })),
       ),
-  };
+  });
 
   const voiceCapabilities = new VoiceCapabilityAssembler({
     settings: settings.store,
@@ -350,7 +354,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
     capabilitiesActive,
     token,
-    sessionToken,
+    credential: accountBearer(token),
+    sessionCredential,
     applyVoiceCredential,
     sessionReplayState,
     link: (next) => Effect.asVoid(late.set(next)),

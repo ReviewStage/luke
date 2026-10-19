@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer } from "./account-call.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import {
   HostedTerminalClient,
@@ -28,8 +29,10 @@ const LISTED = { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] };
 function client(): HostedTerminalClient {
   return new HostedTerminalClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+    }),
   });
 }
 

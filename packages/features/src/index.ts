@@ -7,6 +7,7 @@ export {
   callAnswered,
   fixedBearer,
   NO_CREDENTIAL,
+  sessionBearer,
 } from "./account-call.js";
 export {
   AccountRefreshFailed,
