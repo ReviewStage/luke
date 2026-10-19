@@ -1613,11 +1613,31 @@
    files cards on the panel's ground, inset from its edges by the room between
    two of them (diff-view/index.ts's LIST_FILE_GAP). */
 .diff-list {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   background: var(--luke-color-ground);
+}
+
+/* The Comment press floating over code selected as text (diff-list.tsx):
+   above the words' middle, or under them where the list's top leaves no
+   room, on the overlay's face so it stands apart from the code. */
+.diff-list-offer {
+  position: absolute;
+  z-index: 3;
+  top: var(--diff-offer-y);
+  left: var(--diff-offer-x);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: var(--luke-menu-shadow);
+  transform: translate(-50%, calc(-100% - var(--luke-space-4)));
+}
+
+.diff-list-offer[data-below] {
+  transform: translate(-50%, var(--luke-space-4));
 }
 
 .diff-list > .luke-scroll-area > :first-child {

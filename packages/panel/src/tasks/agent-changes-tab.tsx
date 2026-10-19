@@ -40,7 +40,7 @@ import {
   ImageIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -69,6 +69,7 @@ import {
   changedFolders,
   changeMarks,
   commentLines,
+  commentLinesLabel,
   EXPANSION_REFUSAL,
   EXPANSION_REFUSED_WORDS,
   type ExpansionRefusal,
@@ -87,6 +88,15 @@ import {
 } from "./changes-model.js";
 import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
+import {
+  type CommentDrafts,
+  closeDraft,
+  lightDraft,
+  NO_DRAFTS,
+  openDraft,
+  withWords,
+  wordsOf,
+} from "./comment-drafts.js";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list.js";
 import { DiffSettingsButton } from "./diff-settings.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
@@ -155,6 +165,14 @@ import { useViewedFiles } from "./viewed-files.js";
  * the count of unchanged lines between two hunks, which open twenty at a
  * time or all at once, read from the file at the pull request's head the
  * first time one of its gaps is opened (`useFileTexts`).
+ *
+ * Where the Pull request tab lets the member comment, lines picked with
+ * the gutter's +, or code selected as text over them, open a comment under
+ * the last of them (`line-comment.tsx`), several at once across lines and
+ * files, each keeping its words while it is scrolled out of the list
+ * (`useListCommenting`). The pointer resting on a review thread lights the
+ * lines it is on (`useThreadHover`), over those of the comment written in
+ * last.
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
@@ -347,6 +365,32 @@ function AboveThreads({
   );
 }
 
+/** What lights the lines a review thread is on while the pointer rests on it, and lets them go as it leaves. */
+type ThreadHover = (thread: ReviewThread, resting: boolean) => void;
+
+/**
+ * A review thread on its line, which lights the lines it is on while the
+ * pointer rests on it, as stage-cli's threads do; drawn as it is where
+ * nothing lights them.
+ */
+function ThreadLines({
+  thread,
+  hover,
+  children,
+}: {
+  thread: ReviewThread;
+  hover: ThreadHover | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  if (hover === undefined) return <>{children}</>;
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread only lights the lines it is on; nothing is pressed.
+    <div onMouseEnter={() => hover(thread, true)} onMouseLeave={() => hover(thread, false)}>
+      {children}
+    </div>
+  );
+}
+
 /** Which of a file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one line's. */
 interface FileMinimized {
   readonly shown: (side: DiffSelection["side"], line: number) => boolean;
@@ -365,7 +409,8 @@ function minimizedNotes(
   placed: ReturnType<typeof threadsOn>["placed"],
   draw: ChangesThreads["draw"] | undefined,
   minimized: FileMinimized,
-  comment: DiffNote | undefined,
+  comments: readonly DiffNote[],
+  hover: ThreadHover | undefined,
 ): DiffNote[] {
   const lines = new Map<DiffSelection["side"], Map<number, typeof placed>>();
   for (const each of placed) {
@@ -375,12 +420,14 @@ function minimizedNotes(
   return [...lines].flatMap(([side, onSide]) =>
     [...onSide].flatMap(([line, threads]) => {
       const drawn = threads.map((each) => (
-        <Fragment key={each.key}>{draw?.(each.thread, THREAD_PLACE.ON_LINE)}</Fragment>
+        <ThreadLines key={each.key} thread={each.thread} hover={hover}>
+          {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
+        </ThreadLines>
       ));
       const [first] = threads;
       if (first === undefined) return [];
       // A line a comment is being written on shows its threads as they are, the comment among them.
-      const writing = comment?.side === side && comment.line === line;
+      const writing = comments.some((comment) => comment.side === side && comment.line === line);
       return writing
         ? threads.map((each, at) => ({ key: each.key, side, line, content: drawn[at] }))
         : [
@@ -411,8 +458,9 @@ function minimizedNotes(
  * draw, or a changed image drawn as its pictures (`image-diff.tsx`), stands
  * as what is drawn in the place of its lines alone (`lead`), across its
  * width: why it has none, or the pictures, and every one of its review
- * threads. A comment being written on its lines stands under the last of
- * them.
+ * threads. Each comment being written on its lines stands under the last
+ * of them, and each thread on a line lights its lines while the pointer
+ * rests on it.
  */
 function entryOf(
   file: CodingAgentChangedFile,
@@ -421,11 +469,12 @@ function entryOf(
   threads: readonly ReviewThread[],
   draw: ChangesThreads["draw"] | undefined,
   images: ImageSides | undefined,
-  comment: DiffNote | undefined,
+  comments: readonly DiffNote[],
   /** Whether the lines between its hunks may be opened, and why they could not be where a read was refused. */
   gaps: { readonly open: boolean; readonly refused: ExpansionRefusal | undefined },
   /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
   minimized: FileMinimized | undefined,
+  hover: ThreadHover | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -441,9 +490,13 @@ function entryOf(
           key: each.key,
           side: each.side,
           line: each.line,
-          content: draw?.(each.thread, THREAD_PLACE.ON_LINE),
+          content: (
+            <ThreadLines thread={each.thread} hover={hover}>
+              {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
+            </ThreadLines>
+          ),
         }))
-      : minimizedNotes(placed, draw, minimized, comment);
+      : minimizedNotes(placed, draw, minimized, comments, hover);
   // The threads above the diff, as one list, or minimized to a chip of their own.
   const aboveOf = (unplaced: typeof above, side: DiffSelection["side"]) => {
     const list = <AboveThreads above={unplaced} draw={draw} />;
@@ -498,7 +551,7 @@ function entryOf(
       content: <p className="diff-list-refused">{EXPANSION_REFUSED_WORDS[gaps.refused]}</p>,
     });
   }
-  if (comment !== undefined) notes.push(comment);
+  notes.push(...comments);
   const collapsed = list.collapsed(path);
   return {
     path,
@@ -537,7 +590,7 @@ function entryInputs(
   threads: readonly ReviewThread[],
   draw: ChangesThreads["draw"] | undefined,
   images: ImageSides | undefined,
-  comment: DiffNote | undefined,
+  comments: readonly DiffNote[],
 ): readonly unknown[] {
   const path = file.path;
   return [
@@ -552,7 +605,8 @@ function entryInputs(
     list.toggleSource,
     list.markViewed,
     images,
-    comment,
+    comments.length,
+    ...comments,
     // Note that the door drawing a thread matters only to a file a thread is on.
     threads.length === 0 ? undefined : draw,
     ...threads,
@@ -578,25 +632,27 @@ function useEntries(
   commenting: ListCommenting | undefined,
   texts: FileTexts,
   minimizedOf: (path: string) => FileMinimized | undefined,
+  hover: ThreadHover | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
   const entries = list.kept.map((file) => {
     const own = threads?.list.filter((thread) => thread.path === file.path) ?? [];
-    const comment = commenting?.note?.path === file.path ? commenting.note.content : undefined;
+    const comments = commenting?.notes.get(file.path) ?? NO_NOTES;
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
     const inputs = [
-      ...entryInputs(file, list, own, threads?.draw, images, comment),
+      ...entryInputs(file, list, own, threads?.draw, images, comments),
       gaps.open,
       gaps.refused,
       minimized,
+      own.length === 0 ? undefined : hover,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comment, gaps, minimized);
+        : entryOf(file, list, own, threads?.draw, images, comments, gaps, minimized, hover);
     next.set(file.path, { inputs, entry });
     return entry;
   });
@@ -655,8 +711,8 @@ function useMinimizedLines(minimize: boolean): (path: string) => FileMinimized |
   };
 }
 
-/** The key a comment being written stands under its lines by; a review thread's note is keyed by its page, which this never is. */
-const COMMENT_KEY = "line-comment";
+/** No comment being written on a file's lines. */
+const NO_NOTES: readonly DiffNote[] = [];
 
 /** Where the lines a comment is on are lit and its note drawn: under the last of them, on the side that one counts on. */
 const COMMENT_SIDE = {
@@ -664,12 +720,31 @@ const COMMENT_SIDE = {
   [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
 } as const;
 
-/** What the list is handed of commenting: where the gutter's + opens a comment, and the one open, its lines lit and its note. */
+/** The lines a review thread is on now, as the list lights them; none for a thread on no line of the head. */
+function threadLines(thread: ReviewThread): DiffListSelection | undefined {
+  if (thread.line === null) return undefined;
+  return {
+    path: thread.path,
+    selection: {
+      start: thread.startLine ?? thread.line,
+      side: COMMENT_SIDE[thread.startSide ?? thread.side],
+      end: thread.line,
+      endSide: COMMENT_SIDE[thread.side],
+    },
+  };
+}
+
+/**
+ * What the list is handed of commenting: what opens a comment on lines
+ * picked, what those lines are called where GitHub would take a comment on
+ * them, each file's comments being written, and the lines of the one
+ * opened or written in last, lit.
+ */
 interface ListCommenting {
   readonly open: (picked: DiffListSelection) => void;
-  readonly note:
-    | { readonly path: string; readonly picked: DiffListSelection; readonly content: DiffNote }
-    | undefined;
+  readonly commentOn: (picked: DiffListSelection) => string | undefined;
+  readonly notes: ReadonlyMap<string, readonly DiffNote[]>;
+  readonly lit: DiffListSelection | undefined;
 }
 
 /** How Files changed comments on lines, where its Pull request tab lets it: the member's pending review, which names the offers, and what reads the tab again once GitHub answered. */
@@ -679,10 +754,13 @@ export interface LineComments {
 }
 
 /**
- * The comment being written on lines of the files, one at a time as
- * GitHub's own diff opens one, and each file's words kept for it while the
- * tab stands; none open until the gutter's + picks lines GitHub would take
- * a comment on (`commentLines`).
+ * The comments being written on lines of the files, several at once
+ * across lines and files, held above the list with their words
+ * (`comment-drafts.ts`) for as long as the tab stands, so one scrolled out
+ * of the list and back loses nothing; one opens where the gutter's + or a
+ * selection of code picks lines GitHub would take a comment on
+ * (`commentLines`). A comment whose lines a read of the files no longer
+ * holds is not drawn.
  */
 function useListCommenting(
   agentId: string,
@@ -691,44 +769,91 @@ function useListCommenting(
   comments: LineComments | undefined,
   onRefresh: () => void,
 ): ListCommenting | undefined {
-  const [picked, setPicked] = useState<DiffListSelection | undefined>(undefined);
-  const [words, setWords] = useState<ReadonlyMap<string, string>>(new Map());
-  const open = useCallback(
-    (next: DiffListSelection) => {
-      const file = files.find((each) => each.path === next.path);
-      if (file !== undefined && commentLines(file, next.selection) !== undefined) setPicked(next);
+  const [drafts, setDrafts] = useState<CommentDrafts>(NO_DRAFTS);
+  // Each comment's own key, counted, which its note stands under.
+  const opened = useRef(0);
+  const linesOf = useCallback(
+    (picked: DiffListSelection) => {
+      const file = files.find((each) => each.path === picked.path);
+      return file === undefined ? undefined : commentLines(file, picked.selection);
     },
     [files],
   );
+  const open = useCallback(
+    (picked: DiffListSelection) => {
+      const lines = linesOf(picked);
+      if (lines === undefined) return;
+      opened.current += 1;
+      const id = String(opened.current);
+      setDrafts((was) => openDraft(was, picked, lines, id));
+    },
+    [linesOf],
+  );
+  const commentOn = useCallback(
+    (picked: DiffListSelection) => {
+      const lines = linesOf(picked);
+      return lines === undefined ? undefined : commentLinesLabel(lines);
+    },
+    [linesOf],
+  );
   if (comments === undefined) return undefined;
-  const file = picked === undefined ? undefined : files.find((each) => each.path === picked.path);
-  const lines =
-    file === undefined || picked === undefined ? undefined : commentLines(file, picked.selection);
-  if (file === undefined || picked === undefined || lines === undefined) {
-    return { open, note: undefined };
+  const notes = new Map<string, DiffNote[]>();
+  let lit: DiffListSelection | undefined;
+  for (const draft of drafts.open) {
+    const { path } = draft.picked;
+    const file = files.find((each) => each.path === path);
+    const lines = file === undefined ? undefined : commentLines(file, draft.picked.selection);
+    if (file === undefined || lines === undefined) continue;
+    if (draft.id === drafts.lit) lit = draft.picked;
+    notes.set(path, [
+      ...(notes.get(path) ?? []),
+      {
+        key: draft.id,
+        side: COMMENT_SIDE[lines.side],
+        line: lines.line,
+        content: (
+          <LineComment
+            agentId={agentId}
+            path={path}
+            lines={lines}
+            headSha={headSha}
+            pending={comments.pending}
+            body={wordsOf(drafts, draft)}
+            onBody={(body) => setDrafts((was) => withWords(was, draft, body))}
+            suggestion={suggestedLines(file, lines)}
+            onActive={() => setDrafts((was) => lightDraft(was, draft.id))}
+            onClose={() => setDrafts((was) => closeDraft(was, draft.id))}
+            onWritten={comments.onWritten}
+            onRefresh={onRefresh}
+          />
+        ),
+      },
+    ]);
   }
-  const { path } = picked;
-  const content: DiffNote = {
-    key: COMMENT_KEY,
-    side: COMMENT_SIDE[lines.side],
-    line: lines.line,
-    content: (
-      <LineComment
-        agentId={agentId}
-        path={path}
-        lines={lines}
-        headSha={headSha}
-        pending={comments.pending}
-        body={words.get(path) ?? ""}
-        onBody={(body) => setWords((was) => new Map(was).set(path, body))}
-        suggestion={suggestedLines(file, lines)}
-        onClose={() => setPicked(undefined)}
-        onWritten={comments.onWritten}
-        onRefresh={onRefresh}
-      />
-    ),
-  };
-  return { open, note: { path, picked, content } };
+  return { open, commentOn, notes, lit };
+}
+
+/** The lines of the thread the pointer rests on, and the door that sets them. */
+interface RestingThread {
+  readonly lines: DiffListSelection | undefined;
+  readonly hover: ThreadHover;
+}
+
+/**
+ * The lines of the review thread the pointer rests on, which the list
+ * lights over those of the comment being written while it does, and the
+ * door that sets them; the door stays the same, so a file's entry is kept.
+ */
+function useThreadHover(): RestingThread {
+  const [lines, setLines] = useState<{ thread: ReviewThread; lines: DiffListSelection }>();
+  const hover = useCallback<ThreadHover>((thread, resting) => {
+    const on = threadLines(thread);
+    setLines((was) => {
+      if (resting) return on === undefined ? was : { thread, lines: on };
+      return was?.thread === thread ? undefined : was;
+    });
+  }, []);
+  return { lines: lines?.lines, hover };
 }
 
 /** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
@@ -954,7 +1079,7 @@ function FilesList({
   threads: ChangesThreads | undefined;
   /** Where the pull request's changed images are read, drawn as pictures; none draws them as binary files. */
   images: ImageSides | undefined;
-  /** The comment being written, and where the gutter's + opens one; none offers no +. */
+  /** The comments being written, and what opens one; none offers no +. */
   commenting: ListCommenting | undefined;
   /** How the lines between a file's hunks are opened, and why a file's could not be. */
   texts: FileTexts;
@@ -966,7 +1091,8 @@ function FilesList({
   const look = useDiffLook(roomy);
   const { settings } = useFileViewSettings();
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
-  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf);
+  const resting = useThreadHover();
+  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf, resting.hover);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -988,7 +1114,8 @@ function FilesList({
           onTopFile={list.onTopFile}
           boxRef={boxRef}
           onComment={commenting?.open}
-          selected={commenting?.note?.picked}
+          commentOn={commenting?.commentOn}
+          selected={resting.lines ?? commenting?.lit}
           readTexts={texts.read}
         />
       )}

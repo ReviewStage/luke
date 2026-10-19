@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
-import { ScrollArea, TooltipPill } from "@luke/ui";
+import { Button, cssCustomProperties, ScrollArea, TooltipPill } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { MessageSquarePlusIcon } from "lucide-react";
 import {
   Fragment,
   type ReactNode,
@@ -21,6 +22,7 @@ import {
   type DiffListProps,
   type DiffListSelection,
   type DiffLook,
+  type DiffTextSelection,
   GAP_LINES,
   sameListSelection,
   sameLook,
@@ -40,7 +42,11 @@ import {
  * the top as the list scrolls, and scrolls the list to a file through
  * `door`. Where the view comments on lines, the gutter's + tells it the
  * lines picked (`onComment`), and the lines it is commenting on stand lit
- * (`selected`).
+ * (`selected`). Code selected as text on lines a comment may be on
+ * (`commentOn`) is offered a comment too, by a Comment press floating over
+ * the selection, as stage-cli offers one; the press opens the comment on
+ * those lines and lets the selection go. A press anywhere else, or a
+ * scroll, lets the offer go, since it stands where the selection stood.
  */
 
 /** A note drawn in a file of the list, a review thread's under its line or what stands above the file's first hunk: where it stands, and what it says. */
@@ -100,6 +106,43 @@ function gapHintOf(path: readonly EventTarget[]): GapHint | undefined {
   return long
     ? { anchor, label: GAP_WORDS.MORE, chord: GAP_WORDS.ALL_CHORD }
     : { anchor, label: GAP_WORDS.THESE, chord: undefined };
+}
+
+/** What the floating Comment press says it does. */
+const OFFER_WORDS = {
+  COMMENT: "Comment",
+  /** Its name, naming the lines it comments on. */
+  on: (lines: string) => `Comment on ${lines}`,
+} as const;
+
+/** How far from the box's ends the floating press's middle stands at least, in pixels, so it is never cut by them. */
+const OFFER_INSET = 64;
+
+/** How far below the box's top a selection must stand for the press to float above it rather than under it, in pixels. */
+const OFFER_ROOM = 40;
+
+/** The floating press over code selected as text: the lines it comments on, what they are called, and where it stands in the box. */
+interface TextOffer {
+  readonly picked: DiffListSelection;
+  readonly lines: string;
+  readonly x: number;
+  readonly y: number;
+  readonly below: boolean;
+}
+
+/** Where the press over a selection stands in `box`: above the words' middle, or under them where the box's top leaves no room above. */
+function offerAt(selected: DiffTextSelection, lines: string, box: DOMRect): TextOffer {
+  const { rect } = selected;
+  const middle = (rect.left + rect.right) / 2 - box.left;
+  const x = Math.min(Math.max(middle, OFFER_INSET), Math.max(OFFER_INSET, box.width - OFFER_INSET));
+  const below = rect.top - box.top < OFFER_ROOM;
+  return {
+    picked: selected.picked,
+    lines,
+    x,
+    y: (below ? rect.bottom : rect.top) - box.top,
+    below,
+  };
 }
 
 /** A note's place alone, which is all the bundle is handed of it. */
@@ -173,6 +216,7 @@ export function PierreDiffList({
   onTopFile,
   boxRef,
   onComment,
+  commentOn,
   selected,
   readTexts,
 }: {
@@ -186,6 +230,8 @@ export function PierreDiffList({
   boxRef: (element: HTMLDivElement | null) => void;
   /** Told the lines a press of the gutter's + picked; none offers no +. */
   onComment?: ((picked: DiffListSelection) => void) | undefined;
+  /** What the lines picked are called where a comment may be on them, as its head names them; none where GitHub would take none there, which offers none over code selected on them. */
+  commentOn?: ((picked: DiffListSelection) => string | undefined) | undefined;
   /** The lines being commented on, lit. */
   selected?: DiffListSelection | undefined;
   /** Reads a file whole, the first time the lines between its hunks are asked for; none offers none. */
@@ -197,6 +243,28 @@ export function PierreDiffList({
   const hintId = useId();
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  const holdBox = useCallback(
+    (element: HTMLDivElement | null) => {
+      box.current = element;
+      boxRef(element);
+    },
+    [boxRef],
+  );
+  // The press floating over code selected as text, where a comment may be on its lines.
+  const [offer, setOffer] = useState<TextOffer | undefined>(undefined);
+  const offerBox = useRef<HTMLDivElement>(null);
+  const commentable = useRef(commentOn);
+  commentable.current = commentOn;
+  const tellText = useCallback((selected: DiffTextSelection | undefined) => {
+    const lines = selected === undefined ? undefined : commentable.current?.(selected.picked);
+    const area = box.current?.getBoundingClientRect();
+    setOffer(
+      selected === undefined || lines === undefined || area === undefined
+        ? undefined
+        : offerAt(selected, lines, area),
+    );
+  }, []);
   const handle = useRef<DiffListHandle | undefined>(undefined);
   // Note that each header and note is drawn into an element of its own, kept
   // for the list's life, because Pierre stands the same element again when
@@ -232,6 +300,7 @@ export function PierreDiffList({
     renderAnnotation,
     onTopFile: tellTop,
     onComment: onComment === undefined ? undefined : tellComment,
+    onSelectText: onComment === undefined ? undefined : tellText,
     selected,
     readTexts: readTexts === undefined ? undefined : askTexts,
   };
@@ -268,6 +337,19 @@ export function PierreDiffList({
     handle.current.update(latest.current);
   });
 
+  // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.
+  const offered = offer !== undefined;
+  useEffect(() => {
+    if (!offered) return undefined;
+    const press = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || offerBox.current?.contains(event.target) !== true) {
+        setOffer(undefined);
+      }
+    };
+    document.addEventListener("pointerdown", press, true);
+    return () => document.removeEventListener("pointerdown", press, true);
+  }, [offered]);
+
   if (AsyncResult.isFailure(loaded)) {
     return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
   }
@@ -276,7 +358,7 @@ export function PierreDiffList({
   // taken down; the headers and notes reach their slots through portals.
   return (
     <div
-      ref={boxRef}
+      ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
       onPointerOver={(event) => {
@@ -287,6 +369,30 @@ export function PierreDiffList({
       onPointerDown={() => setHint(undefined)}
     >
       <ScrollArea ref={host}>{null}</ScrollArea>
+      {offer === undefined || onComment === undefined ? null : (
+        <div
+          ref={offerBox}
+          className="diff-list-offer"
+          data-below={offer.below || undefined}
+          style={cssCustomProperties({
+            "--diff-offer-x": `${offer.x}px`,
+            "--diff-offer-y": `${offer.y}px`,
+          })}
+        >
+          <Button
+            icon={<MessageSquarePlusIcon aria-hidden="true" />}
+            label={OFFER_WORDS.on(offer.lines)}
+            keepFocus
+            onClick={() => {
+              setOffer(undefined);
+              document.getSelection()?.removeAllRanges();
+              onComment(offer.picked);
+            }}
+          >
+            {OFFER_WORDS.COMMENT}
+          </Button>
+        </div>
+      )}
       {hint === undefined ? null : (
         <TooltipPill
           id={hintId}
