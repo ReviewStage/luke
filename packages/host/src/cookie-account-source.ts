@@ -213,24 +213,38 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   const moveGate = (asOf: number, move: Effect.Effect<void>): Effect.Effect<void> =>
     gateMoves.withPermits(1)(Effect.suspend(() => (asOf === generation ? move : Effect.void)));
 
+  /** A settings step of an account change, whose failure is reported and never holds the change up. */
+  const settingsStep = (step: Effect.Effect<unknown, Error>, what: string): Effect.Effect<void> =>
+    Effect.catch(Effect.asVoid(step), (error) =>
+      Effect.sync(() => {
+        report(`${what} failed: ${error.message}`);
+      }),
+    );
+
   /**
-   * What an account's departure does on this side: the gate closed, and what
-   * the settings kept for it (its synced preferences and experiments)
-   * dropped beside, so the next person on this browser starts from none of it.
+   * What the settings kept for a departed account (its synced preferences and
+   * experiments) dropped, so the next person on this browser starts from
+   * none of it. Run once the departure is published, so no write for the one
+   * leaving lands after it, and before the gate's closing, whose settings
+   * snapshot then carries the cleared choices.
    */
-  const departure: Effect.Effect<void> = Effect.asVoid(
-    Effect.all(
-      [
-        Effect.catch(host.store.clearAccount(), (error) =>
-          Effect.sync(() => {
-            report(`Dropping the departed account's settings failed: ${error.message}`);
-          }),
-        ),
-        host.stopCapabilities,
-      ],
-      { concurrency: 2 },
-    ),
+  const forgetDeparted = settingsStep(
+    host.store.clearAccount(),
+    "Dropping the departed account's settings",
   );
+
+  /**
+   * What the settings learn of an arriving account before it is published:
+   * where what they keep is someone else's, it goes, so no choice of a
+   * person who never signed out here stands in for the arrival's.
+   */
+  const settleArrival = (arriving: AccountSnapshot): Effect.Effect<void> =>
+    arriving.status === ACCOUNT_STATUS.SIGNED_IN
+      ? settingsStep(
+          host.store.settleSessionAccount(arriving.email),
+          "Settling the settings on the signed-in account",
+        )
+      : Effect.void;
 
   const settleOn = (next: AccountSnapshot): Effect.Effect<void> =>
     Effect.suspend(() => {
@@ -278,7 +292,8 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
             if (standing === undefined) return undefined;
             const asOf = ++generation;
             yield* settleOn(SIGNED_OUT);
-            return yield* Effect.forkDetach(moveGate(asOf, departure));
+            yield* forgetDeparted;
+            return yield* Effect.forkDetach(moveGate(asOf, host.stopCapabilities));
           }
           // The same person, drawn anew where anything of them changed.
           if (standing !== undefined && standing === signedInId(read.account)) {
@@ -288,14 +303,18 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
           // Note that another person's session, such as a sign-in in another
           // tab, is a departure and an arrival, never a swap under the gate.
           const asOf = ++generation;
-          if (standing !== undefined) yield* settleOn(SIGNED_OUT);
+          if (standing !== undefined) {
+            yield* settleOn(SIGNED_OUT);
+            yield* forgetDeparted;
+          }
+          yield* settleArrival(read.account);
           yield* settleOn(read.account);
           return yield* Effect.forkDetach(
             moveGate(
               asOf,
               standing === undefined
                 ? host.startCapabilities
-                : Effect.andThen(departure, host.startCapabilities),
+                : Effect.andThen(host.stopCapabilities, host.startCapabilities),
             ),
           );
         }),
@@ -323,14 +342,16 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 
   /**
-   * The departure as this tab keeps it, waited for: the account cleared, then
-   * the gate closed in turn after any move still under way.
+   * The departure as this tab keeps it, waited for: the account cleared and
+   * its settings dropped, then the gate closed in turn after any move still
+   * under way.
    */
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
       const asOf = ++generation;
       yield* settleOn(SIGNED_OUT);
-      yield* moveGate(asOf, departure);
+      yield* forgetDeparted;
+      yield* moveGate(asOf, host.stopCapabilities);
     }),
   );
 
@@ -384,10 +405,12 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
           ? readSession
           : Effect.succeed({ signedIn: false } as const),
       );
-      account =
+      const initial =
         Result.isSuccess(settled) && settled.success.signedIn
           ? settled.success.account
           : SIGNED_OUT;
+      yield* settleArrival(initial);
+      account = initial;
       return account;
     }),
     beginSignIn,

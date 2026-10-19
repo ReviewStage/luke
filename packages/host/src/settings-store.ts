@@ -909,7 +909,8 @@ export class SettingsStore {
    * names now. Where what the record keeps for an account (the sync baseline,
    * the experiments) is someone else's, the account preferences beside it are
    * theirs too and go with it, as `setAccount` drops them for another
-   * address, so one person's choices never stand in for the next one's. A
+   * address, so one person's choices never stand in for the next one's.
+   * Asked as the account arrives, before anything is written for it. A
    * store that keeps its own account settles this in `setAccount`.
    */
   settleSessionAccount(accountEmail: string): Effect.Effect<void, PlatformError> {

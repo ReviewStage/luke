@@ -17,7 +17,7 @@ export interface AccountSourceHost {
   /** The settings file's account record, for a source that keeps its account there. */
   readonly store: Pick<
     SettingsStore,
-    "readAccount" | "setAccount" | "clearAccount" | "accountSnapshot"
+    "readAccount" | "setAccount" | "clearAccount" | "accountSnapshot" | "settleSessionAccount"
   >;
   readonly accountBaseUrl: string;
   readonly hostedServiceBaseUrl: string;

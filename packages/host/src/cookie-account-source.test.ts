@@ -137,6 +137,8 @@ function scene(initial: Partial<ServiceState> = {}) {
           return { status: ACCOUNT_STATUS.SIGNED_OUT } as const;
         }),
       accountSnapshot: () => Effect.die("the cookie source reads no stored account"),
+      // An arrival settles the settings on whoever arrives.
+      settleSessionAccount: (email) => Effect.sync(() => void gate.push(`settle ${email}`)),
     },
     accountBaseUrl: ACCOUNT_BASE_URL,
     hostedServiceBaseUrl: ORIGIN,
@@ -174,7 +176,7 @@ const runOut = <A, E>(fiber: Fiber.Fiber<A, E>) =>
 describe("the cookie account source", () => {
   it.effect("is signed in as the user get-session names", () =>
     Effect.gen(function* () {
-      const { open, service } = scene();
+      const { open, service, gate } = scene();
       const session = yield* open;
 
       const account = yield* session.initialize;
@@ -188,6 +190,7 @@ describe("the cookie account source", () => {
         provider: ACCOUNT_PROVIDER.GITHUB,
       });
       assert.deepEqual(session.snapshot(), account);
+      assert.deepEqual(gate, [`settle ${USER.email}`]);
       assert.equal(yield* session.token.readAccessToken(), undefined);
       assert.equal(yield* session.token.readAccountKey?.() ?? Effect.void, USER.email);
       assert.ok(service.requests.every((request) => request.authorization === undefined));
@@ -234,7 +237,8 @@ describe("the cookie account source", () => {
       assert.deepEqual(account, { status: ACCOUNT_STATUS.SIGNED_OUT });
       assert.deepEqual(session.snapshot(), account);
       assert.equal(sent("/api/auth/sign-out")[0]?.method, HTTP_METHOD.POST);
-      assert.deepEqual(gate.toSorted(), ["close", "forget"]);
+      // The settings are dropped before the gate's closing publishes them.
+      assert.deepEqual(gate.slice(1), ["forget", "close"]);
       assert.equal(yield* session.token.readAccountKey?.() ?? Effect.void, undefined);
     }).pipe(Effect.scoped),
   );
@@ -289,7 +293,7 @@ describe("the cookie account source", () => {
       yield* runOut(refreshed);
 
       assert.equal(session.snapshot().status, ACCOUNT_STATUS.SIGNED_IN);
-      assert.deepEqual(gate, ["open"]);
+      assert.deepEqual(gate, [`settle ${USER.email}`, "open"]);
     }).pipe(Effect.scoped),
   );
 
@@ -305,8 +309,7 @@ describe("the cookie account source", () => {
 
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.id, "user-2");
-      assert.deepEqual(gate.slice(0, 2).toSorted(), ["close", "forget"]);
-      assert.equal(gate[2], "open");
+      assert.deepEqual(gate.slice(1), ["forget", "settle other@example.com", "close", "open"]);
     }).pipe(Effect.scoped),
   );
 
@@ -329,8 +332,9 @@ describe("the cookie account source", () => {
       yield* Fiber.join(signedOut);
 
       assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-      assert.equal(gate[0], "open");
-      assert.deepEqual(gate.slice(1).toSorted(), ["close", "forget"]);
+      // The held opening finishes first; the sign-out's closing comes after it, and last.
+      assert.ok(gate.indexOf("open") < gate.indexOf("close"));
+      assert.equal(gate.at(-1), "close");
     }).pipe(Effect.scoped),
   );
 
@@ -345,7 +349,8 @@ describe("the cookie account source", () => {
 
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.name, "Dev Renamed");
-      assert.deepEqual(gate, []);
+      // Only the launch's own arrival touched the settings or the gate.
+      assert.deepEqual(gate, [`settle ${USER.email}`]);
     }).pipe(Effect.scoped),
   );
 });
