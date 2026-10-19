@@ -62,6 +62,7 @@ const DECLARED_TABLES = [
   "github_connect_intent",
   "github_install_intent",
   "github_installation",
+  "github_personal_token",
   "hosted_usage",
   "inbox_attachment",
   "inbox_attachment_moved",
