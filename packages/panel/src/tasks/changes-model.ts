@@ -659,10 +659,7 @@ export function commentLinesLabel(lines: CommentLines): string {
 }
 
 /** A text's lines, and whether its last line ends in a newline, as a patch counts them. */
-function linesOf(text: string): {
-  readonly lines: readonly string[];
-  readonly endsInNewline: boolean;
-} {
+function linesOf(text: string) {
   const endsInNewline = text.endsWith("\n");
   const body = endsInNewline ? text.slice(0, -1) : text;
   return {

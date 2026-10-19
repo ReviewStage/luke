@@ -649,9 +649,11 @@ function repositoryOf(url: string): string | undefined {
 }
 
 /** What a refusal of the service's read says of a file's gaps: not text, and anything else that it could not be read just now. */
-const EXPANSION_REFUSAL_OF: Partial<Record<TaskFileRefusal, ExpansionRefusal>> = {
-  [TASK_FILE_REFUSAL.NOT_TEXT]: EXPANSION_REFUSAL.NOT_TEXT,
-};
+function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
+  return refusal === TASK_FILE_REFUSAL.NOT_TEXT
+    ? EXPANSION_REFUSAL.NOT_TEXT
+    : EXPANSION_REFUSAL.UNAVAILABLE;
+}
 
 /** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
 interface FileTexts {
@@ -720,7 +722,7 @@ function useFileTexts(
             "text" in answer
               ? EXPANSION_REFUSAL.CHANGED
               : "refusal" in answer
-                ? (EXPANSION_REFUSAL_OF[answer.refusal] ?? EXPANSION_REFUSAL.UNAVAILABLE)
+                ? expansionRefusalOf(answer.refusal)
                 : EXPANSION_REFUSAL.UNAVAILABLE;
           refuse(path, why);
           return undefined;
