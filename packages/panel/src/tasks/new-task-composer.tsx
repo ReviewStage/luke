@@ -277,14 +277,12 @@ export function NewTaskComposer({
   const draft = useDraft(newTaskPlace(workspaceId, from));
   const { text: words, attachments } = draft.draft;
   // Words typed before the workspaces were read become the workspace's
-  // draft once it is known, where it holds none of its own.
+  // draft once it is known, over one it kept, as the words written last win.
   const loose = useDraft(newTaskPlace(undefined, from)).draft;
   const writer = useDraftWriter();
   useEffect(() => {
     if (workspaceId === undefined || !hasWordsOrFiles(loose.text, loose.attachments)) return;
-    writer.update(newTaskPlace(workspaceId, from), (was) =>
-      hasWordsOrFiles(was.text, was.attachments) ? was : loose,
-    );
+    writer.update(newTaskPlace(workspaceId, from), () => loose);
     writer.update(newTaskPlace(undefined, from), () => EMPTY_DRAFT);
   }, [workspaceId, from, loose, writer]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
