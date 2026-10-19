@@ -362,9 +362,6 @@ export type TaskMention = Extract<
 /** A mention of a person: a member of the workspace, or someone who left it. */
 export type PersonMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.PERSON }>;
 
-/** A mention of an issue of the workspace. */
-export type IssueMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.ISSUE }>;
-
 /** A mention of an MCP server or one of its tools. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
 
