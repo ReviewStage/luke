@@ -21,6 +21,8 @@
     "./admin/admin-favorite": "./src/admin/admin-favorite.js",
     "./admin/admin-health": "./src/admin/admin-health.js",
     "./admin/admin-metrics": "./src/admin/admin-metrics.js",
+    "./admin/admin-overview": "./src/admin/admin-overview.js",
+    "./admin/admin-overview-vocabulary": "./src/admin/admin-overview-vocabulary.js",
     "./admin/admin-queries": "./src/admin/admin-queries.js",
     "./admin/admin-reliability": "./src/admin/admin-reliability.js",
     "./admin/admin-route": "./src/admin/admin-route.js",

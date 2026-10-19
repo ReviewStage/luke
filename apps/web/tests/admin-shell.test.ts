@@ -88,15 +88,15 @@ afterEach(() => {
 test("a view whose read is out stands under its title and says it is loading", async () => {
   const page = await openAdmin();
 
-  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
   expect(saysLoading(page)).toBe(true);
   // The rail and the phone's bar are the same navigation, each marking the view.
-  expect(currentSections(page)).toEqual(["Dashboard", "Dashboard"]);
+  expect(currentSections(page)).toEqual(["Overview", "Overview"]);
 });
 
 test("a press on another section makes it the current page", async () => {
   const page = await openAdmin();
-  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
   const users = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Users"]');
   if (!users) throw new Error("No Users link");
@@ -108,6 +108,30 @@ test("a press on another section makes it the current page", async () => {
   expect(currentSections(page)).toEqual(["Users", "Users"]);
   expect(saysLoading(page)).toBe(true);
   expect(window.location.search).toBe("?view=users");
+});
+
+/** The names of a navigation's links, in the order it draws them. */
+function sectionNames(navigation: Element): (string | null)[] {
+  return Array.from(navigation.querySelectorAll("a"), (link) => link.textContent);
+}
+
+test("the rail lists the measures, with Animations after them in its footer at its own address", async () => {
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+
+  const [bar, rail] = Array.from(page.querySelectorAll('nav[aria-label="Admin sections"]'));
+  if (bar === undefined || rail === undefined) throw new Error("No navigation");
+  expect(sectionNames(rail)).toEqual(["Overview", "Workspaces", "Users", "Animations"]);
+  const animations = Array.from(rail.querySelectorAll("a")).find(
+    (link) => link.textContent === "Animations",
+  );
+  expect(animations?.getAttribute("href")).toBe("/admin?view=animations");
+  // The phone's bar carries the measures alone.
+  expect(Array.from(bar.querySelectorAll("a"), (link) => link.getAttribute("aria-label"))).toEqual([
+    "Overview",
+    "Workspaces",
+    "Users",
+  ]);
 });
 
 test("the account menu opens on its avatar, and Escape or a press outside closes it", async () => {

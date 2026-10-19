@@ -30,7 +30,7 @@ import {
  * reader is already looking at. Every fixed dimension below mirrors a real
  * component and must move with it — a stat card's line boxes, each chart's
  * fixed plot height, the retention grid's eight `min-h-9` cohort rows and the
- * tables' ten (`ADMIN_RETENTION_WEEKS` and `ADMIN_TOP_USERS_LIMIT`, not
+ * tables' ten (`ADMIN_RETENTION_WEEKS` and `ADMIN_OVERVIEW_ACCOUNTS_LIMIT`, not
  * imported because the modules exporting them carry query code the client
  * bundle must not), and a table row's `py-3` around a `size-8` avatar. Static
  * words — the headings, the notes under the sections — render as themselves;
@@ -57,6 +57,9 @@ const AVATAR_BONE = { small: "32px", large: "56px" } as const;
 /** Each plot height is its chart's own fixed height, so the bars land where the bone stood. */
 export const SKELETON_PLOT = {
   USAGE: "h-48",
+  ACTIVITY: "h-56",
+  /** The funnel's and reach's seven rows of share bars. */
+  SHARE_BARS: "h-50",
   SIGNUPS: "h-40",
   SIGN_IN_METHODS: "h-30",
   FAILURE_RATES: "h-56",
@@ -124,11 +127,22 @@ const STAT_CARDS_GRID = {
   2: "grid grid-cols-2 gap-3",
 } as const;
 
-/** The bar charts carry a trend across from their heading; the failure rates carry a legend under the plot instead. */
+/**
+ * The bar charts and the share bars carry a caption across from their
+ * heading; the failure rates and the activity chart carry a legend under the plot.
+ */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
-  const trended = plot === SKELETON_PLOT.USAGE || plot === SKELETON_PLOT.SIGNUPS;
+  const captioned =
+    plot === SKELETON_PLOT.USAGE ||
+    plot === SKELETON_PLOT.SIGNUPS ||
+    plot === SKELETON_PLOT.ACTIVITY ||
+    plot === SKELETON_PLOT.SHARE_BARS;
   return (
-    <ChartFrameSkeleton aside={trended} legend={plot === SKELETON_PLOT.FAILURE_RATES} plot={plot} />
+    <ChartFrameSkeleton
+      aside={captioned}
+      legend={plot === SKELETON_PLOT.FAILURE_RATES || plot === SKELETON_PLOT.ACTIVITY}
+      plot={plot}
+    />
   );
 }
 

@@ -18,6 +18,8 @@ import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
+import { SignInMethodsChart } from "../charts/signups-chart";
+import { SectionHeading } from "../charts/stat-card";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
@@ -238,6 +240,13 @@ export function UsersScreen({
               favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
             />
             <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            {/* Note that the methods describe every account the scope keeps, so
+            a search that narrows the rows leaves the chart as it stands. */}
+            <SectionHeading>Sign-in methods</SectionHeading>
+            <SignInMethodsChart
+              methods={list.signIn.methods}
+              totalAccounts={list.signIn.accounts}
+            />
           </>,
         ),
       });
