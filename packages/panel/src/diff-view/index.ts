@@ -11,7 +11,6 @@ import {
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
-  parseDiffFromFile,
   parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
@@ -19,7 +18,6 @@ import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
-  type DiffFileTexts,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -36,6 +34,7 @@ import {
 } from "./contract.js";
 import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
+import { wholeOf } from "./whole-diff.js";
 
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
@@ -430,26 +429,6 @@ interface DrawnFile {
  * files whole being one for the whole list.
  */
 const UNEXPANDED_KIND = "rename-pure";
-
-/**
- * A file drawn whole: its texts before and after diffed with every line
- * kept as context, so its changes stand among all of its unchanged lines
- * in one hunk, as a file opened in full; named as its patch names it.
- */
-function wholeOf(read: FileDiffMetadata, whole: DiffFileTexts): FileDiffMetadata {
-  const kept = WHOLE_DIFFS.get(whole);
-  if (kept !== undefined) return kept;
-  const drawn = parseDiffFromFile(
-    { name: read.prevName ?? read.name, contents: whole.before },
-    { name: read.name, contents: whole.after },
-    { context: Number.MAX_SAFE_INTEGER },
-  );
-  WHOLE_DIFFS.set(whole, drawn);
-  return drawn;
-}
-
-/** Each whole file's diff, made once for its texts, so a file drawn again for its notes keeps the diff Pierre drew. */
-const WHOLE_DIFFS = new WeakMap<DiffFileTexts, FileDiffMetadata>();
 
 /** A read patch as the item draws it: as read where its gaps may be opened, and otherwise told it only moved, so none is offered. */
 function drawnAs(read: FileDiffMetadata, expandable: boolean): FileDiffMetadata {

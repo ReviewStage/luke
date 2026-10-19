@@ -442,7 +442,9 @@ function entryOf(
   const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
   // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
-  const { placed, above } = threadsOn(threads, drawnAs);
+  // A file drawn whole draws every one of its lines, so its threads are placed on them.
+  const drawnWhole = pictured === undefined && !emptyWhole(whole.texts) ? whole.texts : undefined;
+  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole);
   const notes: DiffNote[] =
     minimized === undefined
       ? placed.map((each) => ({
@@ -469,7 +471,7 @@ function entryOf(
   };
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
   // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
-  const notice = whole.texts === undefined ? fileNotice(file) : undefined;
+  const notice = drawnWhole === undefined ? fileNotice(file) : undefined;
   // A file that only moved offers its lines from what it says, its read waiting for the press.
   const shown =
     notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered ? (
@@ -646,6 +648,11 @@ interface FileWhole {
   readonly toggle: () => void;
 }
 
+/** Whether a file drawn whole has no line to draw, which keeps saying what it is rather than drawing nothing. */
+function emptyWhole(texts: DiffFileTexts | undefined): boolean {
+  return texts !== undefined && texts.before === "" && texts.after === "";
+}
+
 /** No file drawn whole. */
 const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
 
@@ -677,7 +684,10 @@ function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => File
     }
     read?.(path).then(
       (whole) => {
-        if (whole !== undefined) held(new Map(latest.current.files).set(path, whole));
+        // Note that a read of an earlier answer is dropped, which would draw that answer's files over this one's.
+        if (whole !== undefined && latest.current.read === read) {
+          held(new Map(latest.current.files).set(path, whole));
+        }
       },
       () => undefined,
     );

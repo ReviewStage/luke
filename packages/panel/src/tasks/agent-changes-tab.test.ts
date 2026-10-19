@@ -1956,6 +1956,109 @@ test("a file read whole that is not the contents GitHub listed its patch against
   assert.equal(await readTexts("src/moved.ts"), undefined);
 });
 
+test("a file that only moved, shown whole, draws its review threads on their lines, and one of no line keeps saying it moved", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/moved.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old.ts",
+      patch: "",
+    }),
+    changed("src/empty.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/was-empty.ts",
+      patch: "",
+    }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/empty.ts" ? "" : HEAD_TEXT,
+    },
+  }));
+  const threads: ChangesThreads = {
+    list: [{ ...seatsThread(2, "on-2"), path: "src/moved.ts" }],
+    draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const drawnAs = (path: string) => lastDrawn().files.find((file) => file.path === path);
+  assert.deepEqual(drawnAs("src/moved.ts")?.annotations, [
+    { key: "lead", side: "additions", line: 0 },
+  ]);
+
+  for (const path of ["src/moved.ts", "src/empty.ts"]) {
+    const lead = lastDrawn().renderAnnotation(path, "lead");
+    document.body.append(lead);
+    await flush();
+    const show = lead.querySelector<HTMLButtonElement>(`button[aria-label="Show file: ${path}"]`);
+    act(() => show?.click());
+    await flush();
+  }
+
+  assert.deepEqual(drawnAs("src/moved.ts")?.annotations, [
+    { key: `${PAGE}#on-2`, side: "additions", line: 2 },
+  ]);
+  assert.equal(drawnAs("src/empty.ts")?.lead, true, "a file of no line says it moved still");
+});
+
+test("a whole file read for an earlier answer, landing after a refresh, leaves the files expanded since as they are", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/plan.ts", { patch: HEAD_PATCH }),
+  ];
+  const held: Array<() => void> = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      const value =
+        request.kind === ACT_KIND.TASKS_FILE
+          ? {
+              text: {
+                path: request.payload.path,
+                repository: "acme/relay",
+                branch: "a".repeat(40),
+                text: HEAD_TEXT,
+              },
+            }
+          : undefined;
+      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      // The first file's read is held until the test lets it land.
+      if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
+        return new Promise((resolve) => held.push(() => resolve(outcome)));
+      }
+      return Promise.resolve(outcome);
+    },
+  });
+  handSettings();
+  await drawTab();
+  const expand = (path: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.getAttribute("aria-label") === "Expand full file",
+    );
+
+  act(() => expand("src/seats.ts")?.click());
+  await flush();
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  act(() => expand("src/plan.ts")?.click());
+  await flush();
+  assert.notEqual(lastDrawn().files.find((file) => file.path === "src/plan.ts")?.whole, undefined);
+
+  for (const land of held) land();
+  await flush();
+
+  const whole = (path: string) => lastDrawn().files.find((file) => file.path === path)?.whole;
+  assert.notEqual(whole("src/plan.ts"), undefined, "the file expanded since stays whole");
+  assert.equal(whole("src/seats.ts"), undefined, "and the earlier answer's read is dropped");
+});
+
 test("a file's header draws the whole file on Expand full file, read once, and back to its changes; a file that only moved shows its lines, from Show file, rather than saying so", async () => {
   commits = { headSha: "a".repeat(40) };
   files = [
