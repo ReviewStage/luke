@@ -345,6 +345,38 @@ test(
   GIT_DEADLINE,
 );
 
+test(
+  "a worktree under its earlier folder that Git will not move is left there, and a fresh one made",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const earlier = path.join(state, "worktrees", "acme", "app", "luke%2Ffix-relay");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = (folder: string) =>
+      openOnMacScript({
+        repository: "acme/app",
+        clone,
+        worktree: folder,
+        branch: "luke/fix-relay",
+        command: "touch ran",
+        remotes: { https: origin, ssh: origin },
+      });
+    run(scratch, shell, script(earlier));
+    // Note that a locked worktree is one Git refuses to move, as it refuses one holding submodules.
+    git(clone, ["worktree", "lock", earlier]);
+
+    const printed = run(scratch, shell, script(worktree));
+
+    assert.match(printed, /Could not move it/u);
+    assert.doesNotMatch(printed, /Could not bring/u);
+    assert.equal(existsSync(path.join(earlier, ".git")), true);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
+    assert.equal(existsSync(path.join(worktree, "ran")), true);
+  },
+  GIT_DEADLINE,
+);
+
 test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
   const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b", "luke+2Fa-b"].map((branch) =>
     worktreeFolder("/state", "acme/app", branch),

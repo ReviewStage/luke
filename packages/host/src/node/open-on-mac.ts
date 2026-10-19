@@ -125,11 +125,12 @@ export function openOnMacScript(input: {
     "  fi",
     // Note that the head is read once, in the clone, as a commit every worktree of it shares, so the worktree fetches nothing of its own.
     '  head="$(git rev-parse --verify --quiet "FETCH_HEAD^{commit}")" || return 1',
-    // Note that a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept.
+    // Note that a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept; one Git will not move, as one holding submodules, is left where it stands and a fresh one made.
     '  if [ "$legacy" != "$worktree" ] && [ ! -e "$worktree" ] && [ -e "$legacy/.git" ]; then',
     '    echo "▸ Moving the worktree to $worktree"',
     '    mkdir -p "$(dirname "$worktree")" || return 1',
-    '    git worktree move "$legacy" "$worktree" || return 1',
+    '    git worktree move "$legacy" "$worktree" ||',
+    '      echo "▸ Could not move it; left at $legacy, and a fresh worktree made"',
     "  fi",
     '  if [ -e "$worktree/.git" ]; then',
     '    cd "$worktree" || return 1',
@@ -143,7 +144,7 @@ export function openOnMacScript(input: {
     "  else",
     '    mkdir -p "$(dirname "$worktree")" || return 1',
     // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
-    "    git worktree prune",
+    "    git worktree prune --expire now || return 1",
     '    git worktree add --detach "$worktree" "$head" || return 1',
     "  fi",
     "}",
