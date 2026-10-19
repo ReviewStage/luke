@@ -90,8 +90,12 @@ function datesIn(words: string): (string | undefined)[] {
   );
 }
 
-test("a coding agent is shown a day, a time, and a range, and the planner a day, each a date Luke draws as its chip", () => {
+test("a coding agent and the planner are each shown a day, a time, and a range, each a date Luke draws as its chip", () => {
   const words = coderInstructions(REPOSITORY, CODING_AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
-  assert.deepEqual(datesIn(BRAIN_INSTRUCTIONS), [MENTION_KIND.DATE]);
+  assert.deepEqual(datesIn(BRAIN_INSTRUCTIONS), [
+    MENTION_KIND.DATE,
+    MENTION_KIND.DATE,
+    MENTION_KIND.DATE,
+  ]);
 });

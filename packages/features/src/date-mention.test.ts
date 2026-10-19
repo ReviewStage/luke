@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Schema } from "effect";
 import { test } from "vitest";
 import {
   dateChipText,
@@ -9,6 +10,7 @@ import {
   isDateMoment,
   isDateRange,
   suggestedDates,
+  timeZoneSchema,
 } from "./date-mention.js";
 
 /** Monday, October 19, 2026, at 10:00 in the morning in Los Angeles. */
@@ -203,4 +205,14 @@ test("a list narrowed to dates offers today, tomorrow, and next Monday", () => {
 test("words far longer than an @ word, spaces among them, name no date", () => {
   assert.equal(dateOfWords(`fri${" ".repeat(10_000)}3pm`, NOW, LOS_ANGELES), undefined);
   assert.equal(dateOfWords(`oct 20${" to".repeat(40)}`, NOW, LOS_ANGELES), undefined);
+});
+
+test("a time zone is one that stands, named as IANA names it, and nothing else", () => {
+  const isTimeZone = Schema.is(timeZoneSchema);
+  assert.equal(isTimeZone(LOS_ANGELES), true);
+  assert.equal(isTimeZone(TOKYO), true);
+  assert.equal(isTimeZone("UTC"), true);
+  assert.equal(isTimeZone("Mars/Olympus_Mons"), false);
+  assert.equal(isTimeZone(""), false);
+  assert.equal(isTimeZone(`America/${"A".repeat(200)}`), false);
 });
