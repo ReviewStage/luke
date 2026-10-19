@@ -31,6 +31,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
   leaveWorkspace,
+  linearIssueLink,
   openHostedStoreTestDatabase,
   openWorkspace,
   startTask,
@@ -45,6 +46,7 @@ import {
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -2656,7 +2658,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     String(identifier),
   );
   assert.ok(isWireString(url) && url.includes(filed.id), String(url));
-  assert.equal(issued.task.linearIssue, null);
+  assert.deepEqual(issued.task.issues, []);
   const linearIssue = {
     identifier: "REL-7",
     title: "Seat pricing",
@@ -2664,10 +2666,23 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     description: "Charge per active seat.",
   };
   const fromLinear = await database.run(
-    createTask(teammates.userId, { organizationId: workspaceId, name: "Seats", linearIssue }),
+    createTask(teammates.userId, {
+      organizationId: workspaceId,
+      name: "Seats",
+      issueLinks: [linearIssueLink(linearIssue)],
+    }),
   );
   const linear = await call(CODER_TOOL.READ_TASK, { taskId: fromLinear.id });
-  assert.deepEqual(isRecord(linear.task) && linear.task.linearIssue, linearIssue);
+  assert.deepEqual(isRecord(linear.task) && linear.task.issues, [
+    {
+      provider: TASK_ISSUE_PROVIDER.LINEAR,
+      key: linearIssue.identifier,
+      title: linearIssue.title,
+      url: linearIssue.url,
+      relation: TASK_ISSUE_RELATION.CLOSES,
+      description: linearIssue.description,
+    },
+  ]);
 
   // A task started from a brief, its plan still untouched, is read with the developer's words.
   const briefed = await database.run(

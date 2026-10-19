@@ -1,5 +1,4 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
-import type { TaskLinearIssue } from "@luke/features/linear-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -53,12 +52,13 @@ export const task = pgTable(
      */
     repository: text("repository"),
     /**
-     * The Linear issue the plan was started from, as the service read it
-     * through the workspace's Linear connection when it started: what every
-     * planning turn is told to research. Kept whatever becomes of the
-     * connection; null for a plan started from no issue.
+     * @deprecated A task's issues are its links now, in `task_issue`
+     * (`task-issue.ts`), and nothing writes or reads this. It was the one
+     * Linear issue a task was started from, as the service read it then. It
+     * stands until no running build reads it, then a later migration drops
+     * it.
      */
-    linearIssue: jsonb("linear_issue").$type<TaskLinearIssue>(),
+    linearIssue: jsonb("linear_issue"),
     /**
      * The workspace's own issue the task was started from (`issue.ts`), one
      * of the same workspace, which a move to another workspace lets go;
@@ -93,8 +93,9 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // An issue's tasks, and the issue's deletion letting each of them go.
-    index("task_issue").on(table.issueId),
+    // An issue's tasks, and the issue's deletion letting each of them go. Note that it is not
+    // named `task_issue`, because an index shares its name's namespace with the table of links.
+    index("task_workspace_issue").on(table.issueId),
   ],
 );
 

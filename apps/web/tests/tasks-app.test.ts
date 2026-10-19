@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
@@ -10,6 +11,7 @@ import { createTask, openTaskConversation, readTask } from "@luke/database/model
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
+import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -28,6 +30,7 @@ import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
 } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
@@ -36,6 +39,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -74,6 +78,7 @@ import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
+  fakeGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
@@ -153,6 +158,21 @@ interface Answer {
   readonly status: number;
   readonly body: WireBoundaryInput;
 }
+
+/** The Linear connectors the deployment names: the accounts' own, and the one a workspace connects for every member. */
+const LINEAR_CONNECTORS = {
+  LINEAR_CONNECTOR_UID: "oauth/linear",
+  LINEAR_WORKSPACE_CONNECTOR_UID: "linear/luke-workspaces",
+} as const;
+
+/** One issue as Linear's GraphQL API answers a read of it, under Linear's own id whatever it was asked for by. */
+const LINEAR_ISSUE = {
+  id: "5b6c1f0e-2a7d-4c3e-9f1a-0d8e7b6a5c4d",
+  identifier: "ENG-42",
+  title: "Invitations expire too soon",
+  url: "https://linear.app/acme/issue/ENG-42/invitations-expire-too-soon",
+  description: "Make them last a week.",
+};
 
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
@@ -286,7 +306,7 @@ const answer = (
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
       modelCatalogOf([]),
-      integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" }),
+      integrationConnectOver(LINEAR_CONNECTORS),
     );
     const seams = {
       // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
@@ -951,6 +971,70 @@ it.layer(getTestDB())("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { plans: [], planlessAgents: [] },
         });
+      }),
+  );
+
+  it.effect(
+    "a start from a Linear issue links the task to it under Linear's own id, for its pull requests to close, as the workspace's Linear read it",
+    () =>
+      Effect.gen(function* () {
+        // Linear's GraphQL API, on the one network double the suite hands the service, answers the issue.
+        const linear = fakeGitHub((sent) =>
+          sent.url === "https://api.linear.app/graphql"
+            ? Response.json({ data: { issue: LINEAR_ISSUE } })
+            : Response.json({ message: "Not Found" }, { status: 404 }),
+        );
+        const { owner, other, ask } = yield* openAccounts(linear);
+        const workspaceId = yield* openWorkspace(owner);
+        yield* Database.use((db) =>
+          db.insert(workspaceIntegrationConnection).values({
+            organizationId: workspaceId,
+            provider: INTEGRATION_PROVIDER.LINEAR,
+            status: INTEGRATION_ROW_STATUS.CONNECTED,
+          }),
+        );
+
+        const started = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(TASKS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, linearIssueId: LINEAR_ISSUE.identifier },
+            }),
+          ),
+        );
+
+        const read = Option.getOrElse(yield* readTask(owner, started.plan.id), () =>
+          assert.fail("the started task was not read"),
+        );
+        assert.deepEqual(
+          read.issueLinks.map(
+            ({ provider, externalId, key, title, url, description, relation, linkedBy }) => ({
+              provider,
+              externalId,
+              key,
+              title,
+              url,
+              description,
+              relation,
+              linkedBy,
+            }),
+          ),
+          [
+            {
+              provider: TASK_ISSUE_PROVIDER.LINEAR,
+              externalId: LINEAR_ISSUE.id,
+              key: LINEAR_ISSUE.identifier,
+              title: LINEAR_ISSUE.title,
+              url: LINEAR_ISSUE.url,
+              description: LINEAR_ISSUE.description,
+              relation: TASK_ISSUE_RELATION.CLOSES,
+              linkedBy: owner,
+            },
+          ],
+        );
+        assert.ok(Option.isNone(yield* readTask(other, started.plan.id)));
       }),
   );
 

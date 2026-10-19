@@ -1,6 +1,5 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
-import { type TaskLinearIssue, taskLinearIssueSchema } from "@luke/features/linear-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -36,6 +35,12 @@ import { InstantColumnSchema } from "./columns.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
+import {
+  linkTaskIssue,
+  listTaskIssues,
+  type NewTaskIssueLink,
+  type TaskIssueLink,
+} from "./task-issue-store.js";
 import { reachableTask, readAccountNames, taskReachableBy } from "./workspace-store.js";
 
 /**
@@ -131,8 +136,8 @@ export interface StoredTask {
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
-  /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
-  readonly linearIssue: TaskLinearIssue | undefined;
+  /** The external issues the task links, oldest linked first (`task-issue-store.ts`); none for a task that links none. */
+  readonly issueLinks: readonly TaskIssueLink[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
   /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
@@ -155,9 +160,9 @@ export interface StoredTaskIssue {
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
- * the repository it is about where one is chosen, and the Linear issue it
- * starts from, as the service read it, where one was picked, and the
- * workspace's own issue it starts from, where it was started from one, which
+ * the repository it is about where one is chosen, the external issues it
+ * links from the start, as the service read them, where any were picked, and
+ * the workspace's own issue it starts from, where it was started from one, which
  * the caller confirms is an issue of the workspace it starts in. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
@@ -168,7 +173,7 @@ export interface NewTask {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
-  readonly linearIssue?: TaskLinearIssue;
+  readonly issueLinks?: readonly NewTaskIssueLink[];
   readonly issueId?: string;
   readonly planning?: boolean;
   readonly brief?: string;
@@ -215,7 +220,6 @@ const TASK_COLUMNS = {
   agentEdits: task.agentEdits,
   document: task.document,
   conversationId: task.conversationId,
-  linearIssue: task.linearIssue,
   brief: task.brief,
 };
 
@@ -254,7 +258,6 @@ const TaskRowSchema = Schema.Struct({
   // Every task is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
-  linearIssue: Schema.NullOr(taskLinearIssueSchema),
   brief: Schema.NullOr(Schema.String),
 });
 
@@ -436,7 +439,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       conversationId: row.conversationId ?? undefined,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
-      linearIssue: row.linearIssue ?? undefined,
+      issueLinks: yield* listTaskIssues(userId, row.id),
       brief: row.brief ?? undefined,
       issue:
         row.issueId === null
@@ -494,7 +497,6 @@ const TaskInsertSchema = Schema.Struct({
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
   document: Schema.String,
-  linearIssue: Schema.NullOr(taskLinearIssueSchema),
   issueId: Schema.NullOr(Schema.String),
   brief: Schema.NullOr(Schema.String),
   now: Schema.Date,
@@ -509,7 +511,6 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     name: write.name,
     repository: write.repository,
     document: write.document,
-    linearIssue: write.linearIssue,
     issueId: write.issueId,
     brief: write.brief,
     createdAt: write.now,
@@ -861,7 +862,8 @@ export function readStartedText(userId: string, createdAt: number): TaskStoreEff
  * Starts a task under the account, in the workspace it was handed, as one
  * document, a copy of the account's own template or the default where it
  * keeps none, or empty where it skips its planning phase, with the
- * repository it was handed; it stands first in the list. A plan handed no
+ * repository it was handed, and the issues it was handed linked to it in
+ * the same transaction; it stands first in the list. A plan handed no
  * name, or a blank one, starts as
  * `UNTITLED_PLAN_NAME`. Note that the template is copied, not referred to,
  * because an edit of the template must leave every plan started from it as
@@ -881,7 +883,6 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
       repository: started.repository ?? null,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
-      linearIssue: started.linearIssue ?? null,
       issueId: started.issueId ?? null,
       brief: brief.length > 0 ? brief : null,
       now,
@@ -889,13 +890,23 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
   });
 
 export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
-  return Effect.gen(function* () {
-    const row = yield* insertTask(yield* insertOf(userId, started)).pipe(
-      // An insert that returned no row is the database breaking its own contract, not an outcome.
-      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
-    );
-    return yield* taskOf(userId, row);
-  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const row = yield* insertTask(yield* insertOf(userId, started)).pipe(
+          // An insert that returned no row is the database breaking its own contract, not an outcome.
+          Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+        );
+        for (const link of started.issueLinks ?? []) {
+          yield* linkTaskIssue(userId, row.id, link).pipe(
+            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
+            Effect.catchTags({ TaskIssuesFull: Effect.die, TaskIssueLinked: Effect.die }),
+          );
+        }
+        return yield* taskOf(userId, row);
+      }),
+    ),
+  );
 }
 
 /**
@@ -906,7 +917,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
  */
 export function createTaskOnce(
   userId: string,
-  started: NewTask & { readonly id: string; readonly text: string },
+  started: Omit<NewTask, "issueLinks"> & { readonly id: string; readonly text: string },
 ): TaskStoreEffect<Option.Option<Task>> {
   return Effect.gen(function* () {
     const values = yield* insertOf(userId, { ...started, planning: false });
