@@ -114,7 +114,7 @@ const BARS = [
 ] as const;
 
 /** Where a bar's row of tabs starts and ends from the column's edges: the bar's padding and the row's margin together. */
-function tabRowInsets(bar: Element, tabs: Element): { start: number; end: number } {
+function tabRowInsets(bar: Element, tabs: Element) {
   const style = getComputedStyle(bar);
   const row = getComputedStyle(tabs);
   return {
