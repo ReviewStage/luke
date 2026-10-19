@@ -335,7 +335,11 @@ const findSharedSummary = SqlSchema.findOneOption({
 
 /**
  * Every invitation into a workspace the scope keeps, counted by status with
- * how many of each are past their expiry. The expiry is a count filter
+ * how many of each are past their expiry. Note that these are not cut to
+ * shared workspaces, because an invitation is how a workspace becomes one:
+ * an accepted invitation makes its workspace shared while a pending or
+ * expired one leaves it solo, so cutting to shared would keep the accepted
+ * and drop the rest, and the rate would read near one whatever happened. The expiry is a count filter
  * rather than a grouping, because a grouped expression carrying a bound
  * instant is a different parameter in the select list than in the grouping,
  * which Postgres will not match.

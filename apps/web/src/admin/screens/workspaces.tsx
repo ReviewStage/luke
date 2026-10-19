@@ -241,7 +241,7 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
             label="Invites accepted"
             value={formatShare(summary.invitations.acceptanceRate)}
             hint={`${formatNumber(summary.invitations.pending)} pending · ${formatNumber(summary.invitations.expired)} expired`}
-            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open`}
+            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace: an invitation is how a workspace becomes shared`}
           />
         </div>
         <div className={STAT_CELL}>
@@ -404,6 +404,7 @@ export function WorkspacesScreen({
             rowKey={(row) => row.id}
             empty={WORKSPACES_EMPTY}
             minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
+            rowPressable={(row) => row.owner !== null}
             onRowPress={(row) => {
               if (row.owner !== null) onOpenAccount(row.owner.id);
             }}
