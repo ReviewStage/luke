@@ -57,7 +57,6 @@
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@types/three": "0.186.0",
     "effect": "catalog:",
     "electron": "43.3.0",
     "electron-builder": "26.8.1",
@@ -68,7 +67,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwindcss": "4.3.3",
-    "three": "0.186.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

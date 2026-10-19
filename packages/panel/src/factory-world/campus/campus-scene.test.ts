@@ -25,18 +25,16 @@ import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand, useAppCommand } from "../../app-commands.js";
-import { sideBundles } from "../../bundle-loader.js";
 import type { TasksControl } from "../../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../../testing/app-bridge.js";
 import { onRegistry } from "../../testing/copy-feedback.js";
-import { onSideBundles } from "../../testing/side-bundles.js";
 import { tasksControl } from "../../testing/tasks-control.js";
 import { PICK_KIND, WORLD_LAYER, type WorldState } from "../world.js";
 import { FactoryWorldPage } from "../world-page.js";
 import { CampusScene } from "./campus-scene.js";
 
 /**
- * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request, with no Three.js loaded; a press on a building opening its card and its door to the task; a layer chosen alone hiding the rest; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.
+ * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request; a press on a building opening its card and its door to the task; a layer chosen alone hiding the rest; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.
  *
  * The service is a script at the act boundary and the snapshot synthetic;
  * jsdom lays nothing out, so the campus draws at its first scale.
@@ -92,13 +90,11 @@ const WORLD: FactoryWorld = factoryWorldOf({
 let root: Root | undefined;
 let opened: string[] = [];
 let left = 0;
-let sceneLoads = 0;
 let reducedMotion = false;
 
 beforeEach(() => {
   opened = [];
   left = 0;
-  sceneLoads = 0;
   reducedMotion = false;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -127,10 +123,10 @@ function Page({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
     if (backOut.current?.() !== true) left += 1;
   });
-  return createElement(FactoryWorldPage, { tasks, scene: { campus: true }, backOut });
+  return createElement(FactoryWorldPage, { tasks, backOut });
 }
 
-/** Draws the campus, its Three.js scene's importer counting every load it is asked for. */
+/** Draws the campus over the listed tasks. */
 async function mount(): Promise<HTMLElement> {
   const tasks = tasksControl({
     tasks: [INVITES, SEARCH, ELSEWHERE, SHIPPED],
@@ -138,19 +134,9 @@ async function mount(): Promise<HTMLElement> {
     shown: true,
     onSelect: (taskId) => opened.push(`task ${taskId}`),
   });
-  const bundles = sideBundles({
-    factoryScene: () => {
-      sceneLoads += 1;
-      return Promise.withResolvers<never>().promise;
-    },
-  });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(AtomRegistry.make(), onSideBundles(bundles, createElement(Page, { tasks }))),
-    ),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page, { tasks }))));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
@@ -180,7 +166,7 @@ function scene(page: HTMLElement): SVGSVGElement {
   return found;
 }
 
-test("the campus stands a building for each listed task of the snapshot's repository and a container for each open pull request and merge, and loads no Three.js", async () => {
+test("the campus stands a building for each listed task of the snapshot's repository and a container for each open pull request and merge", async () => {
   const page = await mount();
   assert.deepEqual(labels(page, ".factory-campus-building").sort(), [
     "Improve search ranking: at work",
@@ -194,7 +180,6 @@ test("the campus stands a building for each listed task of the snapshot's reposi
   assert.deepEqual(labels(page, ".factory-campus-blueprint"), ["Planned: ENG-1, Invite by link"]);
   assert.match(page.textContent ?? "", /Merge gate/u);
   assert.match(page.textContent ?? "", /Shipped since /u);
-  assert.equal(sceneLoads, 0, "the campus never asks for the Three.js scene");
 });
 
 test("a press on a building opens it: its card names the task, lights its blast radius, and opens the task", async () => {

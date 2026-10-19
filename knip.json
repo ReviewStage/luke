@@ -25,8 +25,6 @@
         "src/renderer/voice/index.tsx",
         "src/renderer/call/index.tsx",
         "src/renderer/styles/index.css",
-        "src/renderer/factory-world/scene/index.ts",
-        "src/renderer/factory-world/worlds/*/index.ts",
         "src/renderer/session-recorder/index.ts",
         "src/renderer/avatar-feed/pcm-tee-worklet.ts",
         "src/renderer/avatar-session/index.ts",

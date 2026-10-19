@@ -82,14 +82,12 @@ import type { StageSceneProps } from "../contract.js";
 import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "../world.js";
 
 /**
- * campus-scene.tsx -- the Factory's campus: the world snapshot and the listed tasks drawn in SVG as an isometric town, each task a building, each pull request a container, under the chrome every world shares.
+ * campus-scene.tsx -- the Factory's campus: the world snapshot and the listed tasks drawn in SVG as an isometric town, each task a building, each pull request a container, under the page's chrome.
  *
  * The reading, the layout, and every shape are `@luke/ui/factory-campus`'s;
  * this file puts the shapes on screen and is the camera, the pointer, and the
- * keyboard. It is not a world (`../world.ts`): a world is geometry in a
- * Three.js scene, and the campus loads none of Three.js. The page hands it
- * the same state a world is handed and hears the same hover, press, and
- * flight away from home (`../contract.ts`'s `StageSceneProps`).
+ * keyboard. The page hands it the state (`../world.ts`) and hears its hover,
+ * press, and flight away from home (`../contract.ts`'s `StageSceneProps`).
  *
  * What a press or a hover lands on is a `PickTarget`: a building is its task,
  * a container at the gate its agent, one in the lot its merge, a blueprint

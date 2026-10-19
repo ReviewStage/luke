@@ -7,6 +7,7 @@ import {
   type FactoryWorldView as FactoryWorldAnswer,
 } from "@luke/features/factory-world-view";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -27,29 +28,23 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { FlaskConicalIcon } from "lucide-react";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
-import { type SideBundles, sideBundles, worldBundleAtom } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { bundleLanded, landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import type { FactorySceneModule, FactorySceneProps, SceneHover } from "./contract.js";
-import type { WorldEntry } from "./registry.js";
-import { PICK_KIND, type WorldModule, type WorldState } from "./world.js";
+import { WORLD_LAYER } from "./world.js";
 import { FactoryWorldPage } from "./world-page.js";
 
 /**
- * world-page.test.ts -- a Factory world as the page draws it over a stand-in scene: the snapshot read for the listed workspace and read again while it stands, its loading, empty, and failed states, and the chrome every world shares, the pipeline bar's layers, the hover label, the card and its doors, and Esc stepping back to the overview before it leaves.
+ * world-page.test.ts -- the Factory page over the campus: the snapshot read for the listed workspace and read again while it stands, its loading, empty, and failed states, and the chrome over the campus, the pipeline bar's layers, the hover label, the card and its doors, and Esc stepping back to the overview before it leaves.
  *
- * The scene bundle is a stand-in recording what the page hands it, since
- * jsdom has no WebGL; the service is a script at the act boundary; the
- * snapshot is synthetic.
+ * The service is a script at the act boundary; the snapshot is synthetic;
+ * jsdom lays nothing out, so the campus draws at its first scale.
  */
 
 const WORKSPACE: Workspace = {
@@ -59,8 +54,16 @@ const WORKSPACE: Workspace = {
   github: null,
 };
 
-const TASK_ID = uuidOf(50);
+const TASK: TaskSummary = {
+  id: uuidOf(50),
+  workspaceId: WORKSPACE.id,
+  name: "Invites",
+  createdAt: FACTORY_NOW - DAY_MS,
+  updatedAt: FACTORY_NOW,
+  repository: "acme/factory",
+};
 const AGENT_ID = uuidOf(1);
+
 const PULL_REQUEST = factoryPullRequestOf({
   number: 3501,
   title: "feat(web): invite a teammate",
@@ -82,34 +85,11 @@ const WORLD: FactoryWorld = factoryWorldOf({
     factoryZoneOf("apps/web", ["packages/core"]),
     factoryZoneOf("apps/desktop", ["packages/core"]),
   ],
-  agents: [factoryAgentOf(1, { title: "Invites", taskId: TASK_ID, pullRequest: PULL_REQUEST })],
+  agents: [factoryAgentOf(1, { title: "Invites", taskId: TASK.id, pullRequest: PULL_REQUEST })],
   shipped: [LATER_MERGE, EARLIER_MERGE],
   planned: [factoryPlannedOf(1, { title: "Invite by link" })],
 });
 
-/** A world no scene ever creates: the stand-in scene hands it nothing. */
-const STAND_IN_WORLD: WorldModule = {
-  create: () => ({ update: () => undefined, dispose: () => undefined }),
-};
-
-const ENTRY: WorldEntry = {
-  key: "stand-in",
-  name: "Stand-in",
-  icon: FlaskConicalIcon,
-  load: () => Promise.resolve({ world: STAND_IN_WORLD }),
-};
-
-/** What the stand-in scene was handed: the props it mounted with, each state after, and each call. */
-interface Scene {
-  props: FactorySceneProps | undefined;
-  states: WorldState[];
-  homes: number;
-  shown: boolean[];
-  unmounts: number;
-}
-
-let scene: Scene;
-let bundles: SideBundles;
 let root: Root | undefined;
 /** How the next reads of the world answer, in order; the world itself once they are spent. */
 let answers: FactoryWorldAnswer[] = [];
@@ -117,35 +97,10 @@ let answers: FactoryWorldAnswer[] = [];
 let asked: string[] = [];
 /** Every door the card opened, in order. */
 let opened: string[] = [];
-/** How many times Esc reached past the world to leave Factory. */
+/** How many times Esc reached past the campus to leave Factory. */
 let left = 0;
 
-const STAND_IN_SCENE: FactorySceneModule = {
-  mount: (_element, props) => {
-    scene.props = props;
-    scene.states.push(props.state);
-    return {
-      show: (state) => scene.states.push(state),
-      setShown: (shown) => scene.shown.push(shown),
-      home: () => {
-        scene.homes += 1;
-      },
-      unmount: () => {
-        scene.unmounts += 1;
-      },
-    };
-  },
-};
-
-beforeAll(async () => {
-  bundles = await Effect.runPromise(
-    landedBundles({ factoryScene: () => Promise.resolve(STAND_IN_SCENE) }),
-  );
-  await Effect.runPromise(bundleLanded(worldBundleAtom(ENTRY.load)));
-});
-
 beforeEach(() => {
-  scene = { props: undefined, states: [], homes: 0, shown: [], unmounts: 0 };
   answers = [];
   asked = [];
   opened = [];
@@ -175,10 +130,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The control the page is drawn over: the workspace listed, on screen, and every door recorded. */
+/** The control the page is drawn over: the workspace and its task listed, on screen, and every door recorded. */
 function control(patch: Partial<TasksControl> = {}): TasksControl {
   const base = tasksControl();
   return tasksControl({
+    tasks: [TASK],
     workspace: WORKSPACE,
     shown: true,
     onSelect: (taskId) => opened.push(`task ${taskId}`),
@@ -195,7 +151,7 @@ function Page({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
     if (backOut.current?.() !== true) left += 1;
   });
-  return createElement(FactoryWorldPage, { tasks, scene: { world: ENTRY }, backOut });
+  return createElement(FactoryWorldPage, { tasks, backOut });
 }
 
 /** Draws the page over `registry`, answering the redraw that draws it again with another control. */
@@ -203,11 +159,7 @@ function mount(tasks = control(), registry = AtomRegistry.make()) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const draw = (drawn: TasksControl) =>
-    act(() =>
-      root?.render(
-        onRegistry(registry, onSideBundles(bundles, createElement(Page, { tasks: drawn }))),
-      ),
-    );
+    act(() => root?.render(onRegistry(registry, createElement(Page, { tasks: drawn }))));
   draw(tasks);
   return { page: container, redraw: draw };
 }
@@ -219,19 +171,23 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The state the scene was last handed. */
-function lastState(): WorldState {
-  const state = scene.states.at(-1);
-  assert.ok(state, "the scene was handed a state");
-  return state;
-}
-
 function button(page: HTMLElement, name: string): HTMLButtonElement {
   const found = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === name || each.getAttribute("aria-label") === name,
   );
   assert.ok(found, `no button ${name}`);
   return found;
+}
+
+function campus(page: HTMLElement): SVGSVGElement {
+  const found = page.querySelector<SVGSVGElement>(".factory-campus-scene");
+  assert.ok(found, "the campus stands");
+  return found;
+}
+
+function press(element: Element | null | undefined): void {
+  assert.ok(element, "something to press");
+  act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
 /** The pipeline bar as a reader scans it: each stage's words, and whether it is the one pressed. */
@@ -242,11 +198,10 @@ function pipeline(page: HTMLElement): string[] {
   );
 }
 
-/** The layers the world was last handed, those drawn by name. */
-function drawn(): string[] {
-  return Object.entries(lastState().layers)
-    .filter(([, shown]) => shown)
-    .map(([layer]) => layer);
+/** The layers the campus draws, by name: those it does not hide. */
+function drawn(page: HTMLElement): string[] {
+  const svg = campus(page);
+  return Object.values(WORLD_LAYER).filter((layer) => !svg.hasAttribute(`data-hide-${layer}`));
 }
 
 let pointed: Element | undefined;
@@ -269,31 +224,18 @@ function arrow(page: HTMLElement): Element {
   return found;
 }
 
-function hover(target: SceneHover | undefined): void {
-  act(() => scene.props?.onHover(target));
+/** The container at the gate holding the agent's pull request. */
+function gateContainer(page: HTMLElement): Element | null {
+  return page.querySelector('[aria-label="Pull request #3501: 120 additions, 0 deletions"]');
 }
 
-function pick(kind: (typeof PICK_KIND)[keyof typeof PICK_KIND], id: string): void {
-  act(() => scene.props?.onPick({ kind, id }));
-}
-
-test("the listed workspace's world is read as the page opens, and the scene is mounted over it with the pipeline bar counting it", async () => {
+test("the listed workspace's world is read as the page opens, and the campus is drawn over it with the pipeline bar counting it", async () => {
   const { page } = mount();
   await settle();
   assert.deepEqual(asked, [WORKSPACE.id]);
-  assert.ok(scene.props, "the scene is mounted");
-  assert.equal(scene.props.world, STAND_IN_WORLD);
-  assert.deepEqual(
-    lastState().view.zones.map((zone) => zone.path),
-    ["apps/desktop", "apps/web", "packages/core"],
-  );
-  assert.equal(lastState().live, true);
-  // Note that what the reading does not carry, the planned issues and the defects, reaches the world through the snapshot.
-  assert.deepEqual(
-    lastState().snapshot.planned.map((issue) => issue.identifier),
-    ["ENG-1"],
-  );
+  assert.ok(campus(page));
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+  assert.equal(page.querySelector('input[aria-label="Time"]'), null, "no clock winds it back");
 });
 
 test("until the world is read only a wait stands; a workspace with no repository says so; a read that failed says so, and Retry reads it again", async () => {
@@ -306,7 +248,7 @@ test("until the world is read only a wait stands; a workspace with no repository
   );
   await settle();
   assert.match(empty.page.textContent ?? "", /No repository to draw yet/u);
-  assert.equal(scene.props, undefined);
+  assert.equal(empty.page.querySelector(".factory-campus-scene"), null);
   act(() => root?.unmount());
 
   answers = [{ failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED }];
@@ -316,15 +258,13 @@ test("until the world is read only a wait stands; a workspace with no repository
   act(() => button(failed.page, "Retry").click());
   await settle();
   assert.equal(asked.length, 3);
-  assert.ok(failed.page.querySelector(".factory-world-pipeline"), "the world stands once read");
+  assert.ok(failed.page.querySelector(".factory-world-pipeline"), "the campus stands once read");
 });
 
-test("a press on an agent selects it: the card names its pull request and lines, lights its blast radius, and opens its page, its pull request on GitHub, and its task", async () => {
+test("a press on an agent's pull request selects the agent: the card names its pull request and lines, lights its blast radius, and opens its page, its pull request on GitHub, and its task", async () => {
   const { page } = mount();
   await settle();
-  pick(PICK_KIND.AGENT, AGENT_ID);
-  assert.deepEqual(lastState().selected, { kind: PICK_KIND.AGENT, id: AGENT_ID });
-  assert.deepEqual([...lastState().blast], [["apps/web", 0]]);
+  press(gateContainer(page));
   const card = page.querySelector(".factory-world-card");
   assert.ok(card, "the card stands");
   assert.match(card.textContent ?? "", /feat\(web\): invite a teammate/u);
@@ -336,73 +276,68 @@ test("a press on an agent selects it: the card names its pull request and lines,
   act(() => button(page, "#3501").click());
   act(() => button(page, "Open task").click());
   assert.deepEqual(opened, [
-    `agent ${AGENT_ID} of ${TASK_ID}`,
+    `agent ${AGENT_ID} of ${TASK.id}`,
     PULL_REQUEST.url,
-    `task ${TASK_ID}`,
+    `task ${TASK.id}`,
   ]);
 
   // A press on nothing lets the selection go.
-  act(() => scene.props?.onPick(undefined));
+  press(campus(page));
   assert.equal(page.querySelector(".factory-world-card"), null);
-  assert.equal(lastState().blast.size, 0);
 });
 
-test("Esc steps back to the overview, from a selection or a camera away from home, and leaves Factory only from there", async () => {
+test("Esc steps back to the overview from a selection, and leaves Factory only from there; the home button takes the same step", async () => {
   const { page } = mount();
   await settle();
   assert.equal(page.querySelector(".factory-world-home"), null, "home stands only away from it");
 
-  pick(PICK_KIND.ZONE, "apps/web");
+  press(gateContainer(page));
   assert.ok(page.querySelector(".factory-world-home"));
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_FACTORY);
   });
-  assert.equal(lastState().selected, undefined);
-  assert.equal(scene.homes, 1);
-  assert.equal(left, 0);
-
-  act(() => scene.props?.onAway(true));
-  act(() => {
-    runAppCommand(APP_COMMAND.EXIT_FACTORY);
-  });
-  assert.equal(scene.homes, 2);
-  assert.equal(left, 0);
+  assert.equal(page.querySelector(".factory-world-card"), null);
   assert.equal(page.querySelector(".factory-world-home"), null);
+  assert.equal(left, 0);
 
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_FACTORY);
   });
   assert.equal(left, 1, "from the overview, Esc leaves");
 
-  // The home button takes the same step.
-  act(() => scene.props?.onAway(true));
+  press(gateContainer(page));
   act(() => button(page, "Overview").click());
-  assert.equal(scene.homes, 3);
+  assert.equal(page.querySelector(".factory-world-card"), null);
+  assert.equal(page.querySelector(".factory-world-home"), null);
 });
 
-test("the pointer resting on a zone names it in the label, and on nothing takes the label down", async () => {
+test("the pointer resting on a building names its task in the label, and leaving the campus takes the label down", async () => {
   const { page } = mount();
   await settle();
-  hover({ target: { kind: PICK_KIND.ZONE, id: "packages/core" }, at: { x: 40, y: 60 } });
+  const building = page.querySelector(".factory-campus-building");
+  assert.ok(building);
+  act(() => building.dispatchEvent(new MouseEvent("pointermove", { bubbles: true })));
+  // Note that the campus reads a hover once a frame.
+  await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   const label = page.querySelector(".factory-world-label");
   assert.ok(label);
-  assert.match(label.textContent ?? "", /@acme\/core/u);
-  assert.match(label.textContent ?? "", /packages\/core · 12 files/u);
-  assert.deepEqual(lastState().hovered, { kind: PICK_KIND.ZONE, id: "packages/core" });
-  hover(undefined);
-  assert.equal(page.querySelector(".factory-world-label"), null);
+  assert.match(label.textContent ?? "", /Invites/u);
+  act(() =>
+    building.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: page })),
+  );
+  assert.ok(page.querySelector(".factory-world-label") === null, "the label is taken down");
 });
 
 test("the pointer resting on a count of the pipeline bar draws its layer alone, and leaving the bar draws every layer again", async () => {
   const { page } = mount();
   await settle();
-  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
   pointTo(page, button(page, "2Shipped"));
-  assert.deepEqual(drawn(), ["shipped"]);
+  assert.deepEqual(drawn(page), ["shipped"]);
   pointTo(page, button(page, "1Planned"));
-  assert.deepEqual(drawn(), ["planned"]);
+  assert.deepEqual(drawn(page), ["planned"]);
   pointTo(page, undefined);
-  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
 });
 
@@ -412,27 +347,27 @@ test("a press on a count keeps its layer alone until it is pressed again, and an
   act(() => button(page, "2Shipped").click());
   pointTo(page, undefined);
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped (pressed)", "0Defects"]);
-  assert.deepEqual(drawn(), ["shipped"]);
+  assert.deepEqual(drawn(page), ["shipped"]);
   // Note that resting on another count previews it, and leaving goes back to the one pressed.
   pointTo(page, button(page, "1Building"));
-  assert.deepEqual(drawn(), ["building"]);
+  assert.deepEqual(drawn(page), ["building"]);
   pointTo(page, undefined);
-  assert.deepEqual(drawn(), ["shipped"]);
+  assert.deepEqual(drawn(page), ["shipped"]);
   act(() => button(page, "1Building").click());
   assert.deepEqual(pipeline(page), ["1Planned", "1Building (pressed)", "2Shipped", "0Defects"]);
-  assert.deepEqual(drawn(), ["building"]);
+  assert.deepEqual(drawn(page), ["building"]);
   act(() => button(page, "1Building").click());
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
-  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
 });
 
 test("the pointer leaving a count for the arrow beside it ends that count's preview", async () => {
   const { page } = mount();
   await settle();
   pointTo(page, button(page, "2Shipped"));
-  assert.deepEqual(drawn(), ["shipped"]);
+  assert.deepEqual(drawn(page), ["shipped"]);
   pointTo(page, arrow(page));
-  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
   pointTo(page, undefined);
 });
 
@@ -441,86 +376,20 @@ test("the pointer leaving the bar leaves the keyboard's preview standing, and th
   await settle();
   act(() => button(page, "0Defects").focus());
   pointTo(page, button(page, "1Planned"));
-  assert.deepEqual(drawn(), ["planned"]);
+  assert.deepEqual(drawn(page), ["planned"]);
   pointTo(page, undefined);
-  assert.deepEqual(drawn(), ["defects"]);
+  assert.deepEqual(drawn(page), ["defects"]);
 });
 
 test("the keyboard on a count previews its layer as the pointer does, and leaving the bar draws every layer again", async () => {
   const { page } = mount();
   await settle();
   act(() => button(page, "1Planned").focus());
-  assert.deepEqual(drawn(), ["planned"]);
+  assert.deepEqual(drawn(page), ["planned"]);
   act(() => button(page, "0Defects").focus());
-  assert.deepEqual(drawn(), ["defects"]);
+  assert.deepEqual(drawn(page), ["defects"]);
   act(() => button(page, "0Defects").blur());
-  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
-});
-
-test("the world is drawn live as of its snapshot, with no clock to wind it back", async () => {
-  const { page } = mount();
-  await settle();
-  assert.equal(page.querySelector('input[aria-label="Time"]'), null);
-  assert.equal(lastState().live, true);
-  assert.equal(lastState().snapshot.snapshotAt, WORLD.snapshotAt);
-  assert.equal(lastState().view.timeline.length, 2);
-});
-
-test("the scene rests while the page is off screen, and is taken down as the page goes", async () => {
-  const { redraw } = mount();
-  await settle();
-  redraw(control({ shown: false }));
-  assert.equal(scene.shown.at(-1), false);
-  act(() => root?.unmount());
-  root = undefined;
-  assert.equal(scene.unmounts, 1);
-});
-
-test("a world the Mac cannot draw, its WebGL refused or its setup thrown, says so in the world's place", async () => {
-  const refusing: SideBundles = {
-    ...bundles,
-    factoryScene: sideBundles({
-      factoryScene: () =>
-        Promise.resolve({
-          mount: () => {
-            throw new Error("Error creating WebGL context.");
-          },
-        }),
-    }).factoryScene,
-  };
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        onSideBundles(refusing, createElement(Page, { tasks: control() })),
-      ),
-    ),
-  );
-  await settle();
-  assert.match(container.textContent ?? "", /The world could not be shown\./u);
-  assert.ok(container.querySelector(".factory-world-pipeline"), "the chrome still stands");
-});
-
-test("a scene bundle that could not be loaded says so in the world's place", async () => {
-  const broken: SideBundles = {
-    ...bundles,
-    factoryScene: sideBundles({ factoryScene: () => Promise.reject(new Error("offline")) })
-      .factoryScene,
-  };
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        onSideBundles(broken, createElement(Page, { tasks: control() })),
-      ),
-    ),
-  );
-  await settle();
-  assert.match(container.textContent ?? "", /The world could not be shown\./u);
+  assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
 });
 
 /** A registry whose runtime reads `clock`, so the page's minute moves on the test's own time. */

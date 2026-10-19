@@ -42,9 +42,12 @@ import { AttentionMark } from "../attention-mark.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
-import { FACTORY_CAMPUS } from "../factory-world/registry.js";
 import { FactoryWorldPage } from "../factory-world/world-page.js";
-import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker.js";
+import {
+  FACTORY_CHOICE,
+  FactoryViewPicker,
+  useFactoryViews,
+} from "../factory-world/world-picker.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -106,10 +109,9 @@ import { useRowKeys } from "./use-row-keys.js";
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
  * over, and so does any row of the sidebar. The toolbar's picker shows the
- * campus or one of the Factory's worlds in the board's place
- * (`../factory-world/`); the board is its first entry and what the page
- * opens on, and Escape in the campus or a world steps back to its overview
- * before it leaves. Until the plan list is read the line stands in blocks, its
+ * campus in the board's place (`../factory-world/`); the board is its first
+ * entry and what the page opens on, and Escape in the campus steps back to
+ * its overview before it leaves. Until the plan list is read the line stands in blocks, its
  * stations named and holding placeholder rows in a row's own shape, so the
  * rows land where the blocks stood; a list that could not be read says so
  * with Retry, above the line where an earlier read still stands, and with
@@ -860,10 +862,10 @@ function lineState(tasks: TasksControl, empty: boolean): CollectionState {
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** The window's Factory, in the task's place: the line as it stands now, or the world chosen in its place. */
+/** The window's Factory, in the task's place: the line as it stands now, or the campus in its place. */
 export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  const worlds = useFactoryWorlds();
-  // Note that a world takes Escape first, for as long as it has a step back toward its overview to take.
+  const views = useFactoryViews();
+  // Note that the campus takes Escape first, for as long as it has a step back toward its overview to take.
   const backOut = useRef<(() => boolean) | undefined>(undefined);
   useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
     if (backOut.current?.() !== true) tasks.factoryView.onClose();
@@ -888,7 +890,7 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
-        {worlds.offered.length === 0 ? null : <WorldPicker worlds={worlds} />}
+        {views.offered ? <FactoryViewPicker views={views} /> : null}
         <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
       </div>
     </header>
@@ -900,15 +902,10 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
   const state = lineState(tasks, empty);
   return (
     <div ref={setRoot} className="factory-pages">
-      {worlds.chosen !== undefined || worlds.campus ? (
+      {views.choice === FACTORY_CHOICE.CAMPUS ? (
         <section className="factory-view" aria-label="Factory">
           {toolbar}
-          <FactoryWorldPage
-            key={worlds.chosen?.key ?? FACTORY_CAMPUS}
-            tasks={tasks}
-            scene={worlds.chosen === undefined ? { campus: true } : { world: worlds.chosen }}
-            backOut={backOut}
-          />
+          <FactoryWorldPage tasks={tasks} backOut={backOut} />
         </section>
       ) : (
         // The line stands across the room, its stations side by side wherever they fit.

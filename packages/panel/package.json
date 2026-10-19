@@ -15,9 +15,6 @@
     "./call/call-card": "./src/call/call-card.js",
     "./call/call-video-tile": "./src/call/call-video-tile.js",
     "./call/panel-avatar": "./src/call/panel-avatar.js",
-    "./factory-world/contract": "./src/factory-world/contract.js",
-    "./factory-world/registry": "./src/factory-world/registry.js",
-    "./factory-world/world": "./src/factory-world/world.js",
     "./keyboard-modality": "./src/keyboard-modality.js",
     "./navigation-history": "./src/navigation-history.js",
     "./renderer-runtime": "./src/renderer-runtime.js",
@@ -100,10 +97,8 @@
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
-    "@types/three": "0.186.0",
     "ai": "catalog:",
     "jsdom": "^30.0.1",
-    "three": "0.186.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

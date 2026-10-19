@@ -5,9 +5,6 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
 import type { DiffViewModule } from "./diff-view/contract.js";
-import type { FactorySceneModule } from "./factory-world/contract.js";
-import type { WorldEntry } from "./factory-world/registry.js";
-import type { WorldModule } from "./factory-world/world.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
 import type { PlanEditorModule } from "./plan-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
@@ -24,10 +21,9 @@ import type { WhiteboardModule } from "./whiteboard/contract.js";
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. The answer is kept alive,
- * so leaving the surface and coming back loads nothing. The Factory's scene
- * host is the shell's to reach, and the shell hands it in through a
- * `SideBundlesContext` of its own; each of the Factory's worlds, and a call's
- * avatar, are imported through what it installed (`shell-bundles.ts`).
+ * so leaving the surface and coming back loads nothing. A call's avatar is
+ * the shell's to reach, imported through what it installed
+ * (`shell-bundles.ts`).
  *
  * A surface reads its bundle through `useSideBundles`, whose atoms are built
  * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
@@ -46,7 +42,6 @@ export interface SideBundleImporters {
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
   readonly diffView: BundleImporter<DiffViewModule>;
-  readonly factoryScene: BundleImporter<FactorySceneModule>;
 }
 
 /** Each bundle of the panel's own, as the module its entry exports once imported, or why it could not be. */
@@ -68,9 +63,6 @@ export const TERMINAL_LOAD_FAILED = "The terminal could not be shown.";
 /** What the Files changed view says where its bundle failed to load. */
 export const DIFF_LOAD_FAILED = "The diff could not be shown.";
 
-/** What the Factory says where its scene, or the world chosen, failed to load. */
-export const WORLD_LOAD_FAILED = "The world could not be shown.";
-
 /** What a fence says over its code where the diagram bundle failed to load, as it says where Mermaid refused the code. */
 export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 
@@ -82,7 +74,6 @@ const LOAD_FAILED = {
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
   diffView: DIFF_LOAD_FAILED,
-  factoryScene: WORLD_LOAD_FAILED,
 } as const satisfies { readonly [Bundle in keyof SideBundleImporters]: string };
 
 /** Each bundle's entry, imported where the bundler put it. */
@@ -97,8 +88,6 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
   diffView: () => import("./diff-view/index.js").then((entry) => entry.diffView),
-  // Note that the Factory's scene is the shell's to hand in through `SideBundlesContext`.
-  factoryScene: () => Promise.reject(new Error("This window draws no Factory scene.")),
 };
 
 /**
@@ -136,7 +125,6 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
     diffView: bundleAtom(reach.diffView, LOAD_FAILED.diffView),
-    factoryScene: bundleAtom(reach.factoryScene, LOAD_FAILED.factoryScene),
   };
 }
 
@@ -152,27 +140,6 @@ export const avatarSessionAtom = bundleAtom(
   () => shellBundles().avatarSession(),
   "The video could not be started.",
 );
-
-/** Each Factory world's bundle as imported, by its registry entry's importer. */
-const worldBundles = new Map<
-  WorldEntry["load"],
-  Atom.Atom<AsyncResult.AsyncResult<WorldModule, Error>>
->();
-
-/**
- * A Factory world's own bundle, imported the first time it is chosen and
- * kept, by its registry entry's importer, which is what keys it: a test
- * that offers a world of its own hands an entry of its own.
- */
-export function worldBundleAtom(
-  load: WorldEntry["load"],
-): Atom.Atom<AsyncResult.AsyncResult<WorldModule, Error>> {
-  const held = worldBundles.get(load);
-  if (held !== undefined) return held;
-  const bundle = bundleAtom(() => load().then((entry) => entry.world), WORLD_LOAD_FAILED);
-  worldBundles.set(load, bundle);
-  return bundle;
-}
 
 /** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);
