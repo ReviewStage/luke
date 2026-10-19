@@ -26,7 +26,9 @@ import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-r
  * comment on its line and counts the pending review; GitHub's refusal
  * stands under it in GitHub's words, beside Refresh changes, since a head
  * pushed since is the likeliest why. The words are the view's, kept by the
- * file, so a comment scrolled out of the list and back loses nothing.
+ * file, so a comment scrolled out of the list and back loses nothing. On
+ * lines of the head alone, the new side's, its toolbar offers a suggestion,
+ * GitHub's ```suggestion block holding those lines as they read now.
  */
 
 /** The comment's own words. */
@@ -61,6 +63,7 @@ export function LineComment({
   pending,
   body,
   onBody,
+  suggestion,
   onClose,
   onWritten,
   onRefresh,
@@ -73,6 +76,8 @@ export function LineComment({
   pending: PendingReview;
   body: string;
   onBody: (body: string) => void;
+  /** The lines as they read at the head, which the comment offers to suggest a change to; none where they are not the head's own (`suggestedLines`). */
+  suggestion: string | undefined;
   onClose: () => void;
   /** Reads the tab again once GitHub answered. */
   onWritten: () => void;
@@ -123,6 +128,7 @@ export function LineComment({
         busy={sending}
         fieldRef={field}
         onSubmit={() => send(first)}
+        suggestion={suggestion}
       />
       {headSha === undefined ? <p className="line-comment-note">{LINE_WORDS.NO_HEAD}</p> : null}
       <PullRequestWriteNote writes={writes} className="line-comment-note" />

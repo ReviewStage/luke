@@ -1,4 +1,5 @@
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
+import type { MentionPlace } from "@luke/features/mention-link";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -42,6 +43,13 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
  * press never loses the place being read.
  */
+
+/** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
+function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
+  const { workspace } = tasks;
+  if (workspace === undefined) return undefined;
+  return { workspace: workspace.slug ?? workspace.id, repository: null };
+}
 
 /** What a row's count is read as. */
 const UNREAD = "unread";
@@ -170,6 +178,7 @@ export function DesktopChat({
         chat={chat}
         names={names}
         place={view.place}
+        mentionPlace={mentionPlaceOf(tasks)}
         now={now}
         openLink={openLink}
         onPost={view.onPost}
@@ -224,6 +233,7 @@ export function TaskChatTab({
       chat={read.answer}
       names={names}
       place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
+      mentionPlace={mentionPlaceOf(tasks)}
       now={now}
       openLink={openLink}
       onPost={view.onPost}

@@ -34,6 +34,7 @@ import {
 } from "@luke/database/models/chat-store";
 import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { readTask } from "@luke/database/models/task-store";
+import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -67,7 +68,13 @@ import {
   postMentions,
   postPictures,
 } from "./chat-ask.js";
-import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./chat-notify.js";
+import {
+  blockWords,
+  type ChatReceipt,
+  type ChatTelling,
+  handlesIn,
+  tellMessage,
+} from "./chat-notify.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
@@ -547,7 +554,7 @@ function writePost(
       authorMemberId: seat.self.id,
       to: written.to,
       blocks: written.pictures.blocks,
-      mentions: postMentions(post),
+      ...postMentions(post),
       clientKey: written.clientKey,
     };
     const asked =
@@ -796,6 +803,8 @@ interface ReadNames {
   readonly names: ReadonlyMap<string, string>;
   readonly members: ReadonlyMap<string, ChatMemberRow>;
   readonly roots: ReadonlyMap<string, number>;
+  /** The handle of the member a mention link names, which a person's chip is read as. */
+  readonly handleOf: (mention: ChatMemberMention) => string | undefined;
 }
 
 /** A message as the agent reads it: its words, every block read as words, where it was said, and by whom. */
@@ -807,7 +816,7 @@ function lineOf(message: ChatMessageRow, named: ReadNames): MessageLine {
     from: atHandle(named.members.get(message.authorMemberId)?.handle ?? ""),
     ...(thread === undefined ? undefined : { thread }),
     text: message.blocks
-      .map(blockWords)
+      .map((block) => blockWords(block, named.handleOf))
       .filter((part) => part !== "")
       .join("\n\n"),
   };
@@ -895,7 +904,9 @@ export function readAsAgent(
           kind: channel.kind,
           unread: unread.get(channel.id) ?? 0,
         })),
-        messages: messages.map((message) => lineOf(message, { names, members: byId, roots })),
+        messages: messages.map((message) =>
+          lineOf(message, { names, members: byId, roots, handleOf: handlesIn(byId.values()) }),
+        ),
         ...(more ? { more: true as const } : undefined),
         asks: askLines(asks, names, byId),
       } satisfies ChatToolResult;
@@ -938,7 +949,7 @@ export function peekAsAgent(
       organizationId,
       messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
     );
-    const named = { names, members, roots };
+    const named = { names, members, roots, handleOf: handlesIn(members.values()) };
     const lines = messages.map((message) => lineOf(message, named));
     return Option.some({ messages: lines, more, through });
   });
@@ -1007,7 +1018,10 @@ export function chatDigest(
       );
       const roots = yield* seqsOf(userId, organizationId, parents);
       const lines = messages.map((message) =>
-        digestLine(message, lineOf(message, { names, members, roots })),
+        digestLine(
+          message,
+          lineOf(message, { names, members, roots, handleOf: handlesIn(members.values()) }),
+        ),
       );
       const rest = more ? [`More waits: ${CHAT_TOOLS.READ.name} reads it.`] : [];
       return [CHAT_DIGEST_HEADING, ...lines, ...rest].join("\n");

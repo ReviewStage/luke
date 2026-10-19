@@ -1,6 +1,12 @@
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
+import {
+  APP_SHORTCUTS,
+  FILES_CHANGED_GROUP_TITLE,
+  FILES_CHANGED_KEYS_LISTED,
+  FILES_CHANGED_SHORTCUTS,
+  shownShortcutGroups,
+} from "@luke/settings/shortcuts";
 import { SETTINGS_ROW_DENSITY, SettingsRow, SettingsSection } from "@luke/ui";
 import { Shortcut } from "../shortcut.js";
 
@@ -24,6 +30,10 @@ import { Shortcut } from "../shortcut.js";
  * setting's, the chord in the row's controls. Note that each row stands
  * in a wrapper wearing its search anchor, because the shared row takes no
  * attribute of a caller's.
+ *
+ * Files changed's own keys follow under a group of their own, read from the
+ * table the view's handler answers to (`changes-list.tsx`), the order its
+ * `?` sheet lists them in.
  */
 export function WindowShortcutSections({
   experiments,
@@ -51,6 +61,24 @@ export function WindowShortcutSections({
           ))}
         </SettingsSection>
       ))}
+      <SettingsSection title={FILES_CHANGED_GROUP_TITLE}>
+        {FILES_CHANGED_KEYS_LISTED.map((key) => (
+          <div key={key} {...searchAnchorProps(key)}>
+            <SettingsRow
+              density={SETTINGS_ROW_DENSITY.LIST}
+              label={FILES_CHANGED_SHORTCUTS[key].label}
+            >
+              {() => (
+                <Shortcut
+                  className="shortcut-value"
+                  chord={FILES_CHANGED_SHORTCUTS[key].chord}
+                  spoken
+                />
+              )}
+            </SettingsRow>
+          </div>
+        ))}
+      </SettingsSection>
     </>
   );
 }
