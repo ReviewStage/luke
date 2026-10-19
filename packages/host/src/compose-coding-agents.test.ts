@@ -480,14 +480,6 @@ function fakeService() {
           taken: true,
         };
       }),
-    // The held read answers at once from the start and is held from its own cursor on, as the service holds it while nothing changed.
-    accountInbox: (after) =>
-      Effect.suspend(() => {
-        asked.push(`account-inbox:${after}`);
-        return after === "9"
-          ? Effect.never
-          : Effect.succeed({ items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt });
-      }),
     accountInboxLive: () =>
       Effect.sync(() => {
         asked.push("account-inbox-live");
@@ -512,7 +504,7 @@ function fakeService() {
   return {
     client,
     asked,
-    /** What the service seals for following the account's inbox; none answers unanswered, as a service without Realtime does. */
+    /** What the service seals for following the account's inbox; none answers unanswered. */
     seal: (next: AccountInboxLiveAnswer | undefined) => {
       live = next;
     },
@@ -1020,7 +1012,7 @@ function chatEntry(
 }
 
 it.effect(
-  "the account inbox is followed over Realtime where the service seals it: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
+  "the account inbox is followed over Realtime: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
   () =>
     Effect.gen(function* () {
       const { call, asked, seal, realtime, inboxes } = yield* subject();
@@ -1117,21 +1109,19 @@ it.effect(
 );
 
 it.effect(
-  "a service that seals nothing is followed by its held read as before, and letting go, or a sign-out, ends the follow",
+  "a seal the service did not answer is asked for again after a pause, and letting go, or a sign-out, ends the follow",
   () =>
     Effect.gen(function* () {
-      const held = yield* subject();
-      yield* held.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      const unsealed = yield* subject();
+      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
-      assert.deepEqual(held.asked, [
-        "account-inbox-live",
-        `account-inbox:${INBOX_CURSOR_START}`,
-        "account-inbox:9",
-      ]);
-      assert.deepEqual(held.inboxes(), [
-        { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
-      ]);
-      assert.deepEqual(held.realtime.opened, []);
+      assert.deepEqual(unsealed.asked, ["account-inbox-live"]);
+      unsealed.seal(SEALED);
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(unsealed.asked, ["account-inbox-live", "account-inbox-live"]);
+      assert.deepEqual(unsealed.realtime.opened, [SEALED.url]);
+      assert.deepEqual(unsealed.inboxes(), []);
 
       const live = yield* subject();
       live.seal(SEALED);

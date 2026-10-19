@@ -84,7 +84,7 @@ it.effect("a request without a bearer is refused, and one by another method is n
   }),
 );
 
-it.effect("a deployment without Realtime answers unavailable, so the desktop holds its read", () =>
+it.effect("a deployment whose Realtime is misconfigured answers unavailable", () =>
   Effect.gen(function* () {
     assert.deepEqual(yield* ask({ bearer: "user-dana", sealing: Option.none() }), {
       status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,

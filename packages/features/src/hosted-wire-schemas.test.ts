@@ -250,8 +250,6 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxReadStateParamsSchema: codingAgentView.codingAgentInboxReadStateParamsSchema,
     codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
     codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
-    codingAgentAccountInboxAnswerViewSchema:
-      codingAgentView.codingAgentAccountInboxAnswerViewSchema,
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentChatAttachmentParamsSchema: codingAgentView.codingAgentChatAttachmentParamsSchema,

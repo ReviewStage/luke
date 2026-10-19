@@ -24,9 +24,9 @@ import { LiveSealing } from "./realtime.js";
  * an endpoint" step: the bearer is resolved first, each statement is built
  * with that account's id in it, as its held read's is, and sealed, so a
  * subscription reads that account's rows and no other's, and stays bound to
- * the same rule of who may read them as the rows change. A deployment with
- * no Realtime answers `unavailable`, and the desktop holds its read open as
- * it did before. Nothing here reads a row: the store is read by Realtime.
+ * the same rule of who may read them as the rows change. A deployment whose
+ * Realtime is misconfigured answers `unavailable`, and the desktop asks
+ * again a moment later. Nothing here reads a row: the store is read by Realtime.
  */
 
 const HTTP_METHOD = { GET: "GET" } as const;

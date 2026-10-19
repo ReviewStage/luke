@@ -32,10 +32,9 @@ export interface LiveSealer {
 }
 
 /**
- * The deployment's Realtime, or none where it has not been turned on, which
- * every live endpoint answers as unavailable, so the desktop reads as it did
- * before. None by default, so a test and a deployment without Realtime need
- * provide nothing.
+ * The deployment's Realtime, or none where it is misconfigured, which every
+ * live endpoint answers as unavailable. None by default, so a test that
+ * follows nothing live need provide nothing.
  */
 export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
   "@luke/service/LiveSealing",
@@ -103,7 +102,7 @@ export const liveSealingFromEnvironment = Layer.effect(
       liveSealer({ url, secret: Redacted.make(secretText), database: database.value }),
     );
     if (Option.isNone(sealer))
-      yield* Effect.logWarning("realtime: the secret was refused; reads are held");
+      yield* Effect.logWarning("realtime: the secret was refused; live reads answer unavailable");
     return sealer;
   }),
 );

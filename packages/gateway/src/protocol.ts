@@ -230,8 +230,7 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_RENAME: "integrations.rename",
   /**
    * What waits on the developer across the account's tasks, followed from
-   * now until it is let go or the account signs out: over Neon Realtime
-   * where the service seals it, held open as before where it does not. What
+   * now until it is let go or the account signs out, over Neon Realtime. What
    * it says is heard as `ACCOUNT_INBOX_CHANGED` events, never answered.
    * Main's own read, which no window asks; following again starts over.
    */

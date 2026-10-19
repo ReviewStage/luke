@@ -47,8 +47,8 @@ export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
  * address to subscribe at, and one statement per part of the account
  * inbox's answer (`account-inbox-wire.ts`), what waits in chat as two: the
  * open asks, and the messages the account's people were told of. The service answers
- * `unavailable` where its deployment has no Realtime, and the desktop holds
- * its read open as it did before.
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
  */
 export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,

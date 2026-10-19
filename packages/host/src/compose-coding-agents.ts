@@ -95,7 +95,7 @@ import type { RunMode } from "./run-mode.js";
  * its own, and a loop ends when the window stops asking. What waits across
  * the account is followed rather than asked: main follows it while an
  * account is signed in (`agent-notices.ts`), and it is heard as events,
- * over Neon Realtime where the service seals it (`account-inbox-follow.ts`),
+ * over Neon Realtime (`account-inbox-follow.ts`),
  * whose sealed statements stay here beside the bearer. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
@@ -145,7 +145,6 @@ export type CodingAgentClient = Pick<
   | "markInboxItemRead"
   | "markInboxItemUnread"
   | "markInboxRead"
-  | "accountInbox"
   | "accountInboxLive"
   | "inboxAttachment"
   | "agentPicture"
@@ -628,7 +627,6 @@ function composed(
           follower,
           followAccountInbox({
             live: () => asked(client.accountInboxLive()),
-            held: (after) => asked(client.accountInbox(after)),
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             publish: (answer) => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)),

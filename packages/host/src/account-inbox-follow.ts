@@ -1,6 +1,4 @@
 import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
-import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import {
   type AccountInboxLiveAnswer,
   type AccountInboxLiveRows,
@@ -12,7 +10,7 @@ import { createRealtimeClient } from "@neon/realtime/client";
 import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "effect";
 
 /**
- * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime as Neon's guide says to, or held open where the service has no Realtime.
+ * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime as Neon's guide says to.
  *
  * The sealed statements are fetched from the service ("Fetch from an API
  * endpoint"), subscribed to at the address the answer names ("Subscribe to
@@ -23,22 +21,16 @@ import { Cause, Data, Duration, Effect, Option, Queue, Schema, Stream } from "ef
  * read answered it. The sealed statements stay here, where the account's own
  * bearer is: only the answer built from the rows is published.
  *
- * A service that answers no sealed statements, an older one or one whose
- * deployment has no Realtime, is read as before: one held read after
- * another, asking again for the live read every `LIVE_RETRY`. A
- * subscription that stops for good is started again after `LIVE_RESTART`.
+ * A seal the service did not answer is asked for again, and a subscription
+ * that stops for good started again, after `LIVE_RESTART`.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
 const RENEW_EARLY = Duration.seconds(10);
 /** How soon a renewal whose fetch failed is asked again, as Neon's own bindings ask. */
 const RENEW_RETRY = Duration.seconds(1);
-/** How long the held read stands in before the live read is asked for again. */
-const LIVE_RETRY = Duration.minutes(5);
-/** How long after a subscription stopped for good it is started again. */
+/** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
 const LIVE_RESTART = Duration.seconds(5);
-/** How long a held read that went unanswered rests before it asks again. */
-const HELD_REST = Duration.seconds(30);
 
 /** A subscription that stopped for good: Realtime said so, or a row did not decode. */
 class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
@@ -67,8 +59,6 @@ export const openRealtimeClient = (url: string): LiveClient => createRealtimeCli
 export interface AccountInboxFollowDependencies {
   /** The sealed statements, fetched from the service; a failure where it answered none. */
   readonly live: () => Effect.Effect<AccountInboxLiveAnswer | { readonly failure: string }>;
-  /** The held read past a cursor, as the service answered it before Realtime. */
-  readonly held: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   readonly openLive: (url: string) => LiveClient;
   /** Now, by the host's own clock: when an answer was read, and how far back a failed run is still told. */
   readonly now: () => number;
@@ -225,33 +215,15 @@ function liveAnswers(
   );
 }
 
-/** The held read, one after another from the start, for as long as `span` lasts. */
-function heldFor(
-  dependencies: AccountInboxFollowDependencies,
-  span: Duration.Duration,
-): Effect.Effect<void> {
-  return Effect.suspend(() => {
-    let cursor = INBOX_CURSOR_START;
-    const look = Effect.gen(function* () {
-      const answer = yield* dependencies.held(cursor);
-      if ("failure" in answer) return yield* Effect.sleep(HELD_REST);
-      cursor = answer.cursor;
-      dependencies.publish(answer);
-    });
-    return Effect.forever(look).pipe(Effect.timeoutOption(span), Effect.asVoid);
-  });
-}
-
 /**
- * What waits across the account, followed until interrupted: live where
- * the service seals the account inbox, held where it does not.
+ * What waits across the account, followed live until interrupted.
  */
 export function followAccountInbox(
   dependencies: AccountInboxFollowDependencies,
 ): Effect.Effect<never> {
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.live();
-    if ("failure" in sealed) return yield* heldFor(dependencies, LIVE_RETRY);
+    if ("failure" in sealed) return yield* Effect.sleep(LIVE_RESTART);
     yield* Stream.runForEach(liveAnswers(dependencies, sealed), (answer) =>
       Effect.sync(() => dependencies.publish(answer)),
     ).pipe(Effect.catch(() => Effect.sleep(LIVE_RESTART)));
