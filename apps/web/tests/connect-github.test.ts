@@ -2,6 +2,8 @@
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
+import { rememberReturn } from "../src/connect-return";
+import { appTab } from "./support/connect-app-tab";
 
 /**
  * connect-github.test.ts -- the GitHub connection page says where a connect
@@ -10,6 +12,9 @@ import { afterEach, expect, test, vi } from "vitest";
  * sign-in is opening and holds the other choice, and a sign-in that cannot
  * start is announced and gives the choices back; an expired intent has
  * nothing to press; and a link GitHub refused offers the same intent again.
+ * A connect the web app's tab handed off is answered, and its page closes,
+ * once GitHub is connected, and never while the page is still on its way
+ * there; a same-tab connect that failed offers the way back too.
  * The page runs as it does in the browser, mounted on its own `#root`; the
  * network, the HTTP boundary to Luke and Better Auth, is a fake.
  */
@@ -79,6 +84,7 @@ async function titled(page: HTMLElement, title: string): Promise<void> {
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.replaceChildren();
+  sessionStorage.clear();
 });
 
 test("a signed-out browser is offered each provider, named for it", async () => {
@@ -171,4 +177,47 @@ test("a connected account is told to return to Luke", async () => {
   await titled(page, "GitHub connected");
   expect(page.textContent).toContain("Return to Luke. You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
+});
+
+/** The links the card offers, as their words and where they go. */
+function links(page: HTMLElement): (string | null)[][] {
+  return Array.from(page.querySelectorAll("a")).map((a) => [a.textContent, a.getAttribute("href")]);
+}
+
+test("a connect the app's tab handed off closes once GitHub is connected, and not before", async () => {
+  const closed = vi.spyOn(window, "close").mockImplementation(() => undefined);
+  const app = await appTab(2);
+  const connecting = await openPage(new Map([[SESSION_PATH, () => SIGNED_IN]]));
+  // The page is on its way to GitHub: the channel is given a turn, and nothing closes.
+  await act(() => new Promise((resolve) => setImmediate(resolve)));
+  expect(closed).not.toHaveBeenCalled();
+  expect(links(connecting)).toEqual([]);
+
+  const page = await openPage(new Map(), "/connect-github.html?done=1");
+
+  await titled(page, "GitHub connected");
+  await vi.waitFor(async () => {
+    await act(() => new Promise((resolve) => setImmediate(resolve)));
+    expect(links(page)).toEqual([["Back to Luke", "/app"]]);
+  });
+  expect(closed).toHaveBeenCalled();
+  app.close();
+});
+
+test("a same-tab connect GitHub refused says why and offers the way back", async () => {
+  rememberReturn("/settings/integrations");
+
+  const page = await openPage(
+    new Map(),
+    "/connect-github.html?error=1&intent=intent-1&error=unable_to_link_account",
+  );
+
+  await titled(page, "GitHub was not connected");
+  expect(page.textContent).toContain(
+    "GitHub did not confirm this account, so it was not connected.",
+  );
+  expect(links(page)).toEqual([
+    ["Try again", "/connect-github.html?intent=intent-1"],
+    ["Back to Luke", "/settings/integrations"],
+  ]);
 });

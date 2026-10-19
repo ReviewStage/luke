@@ -66,7 +66,7 @@ export async function mountWebApp(
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
     installAppBridge(withLoadLink(web.bridge));
-    installActPort(web.actPort);
+    installActPort(web.actPort, web.actPortClient);
     installAppPlatform(web.platform);
     installShellBundles(WEB_BUNDLES);
     // The panel's back and forward are the browser's own, each step in the tab's address.

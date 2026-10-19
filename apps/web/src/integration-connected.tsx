@@ -7,10 +7,11 @@ import {
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
-import { AuthPage, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
+import { AuthPage, BUTTON_VARIANT, ButtonLink, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
+import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
@@ -22,7 +23,9 @@ import "./styles.css";
  * on this page's address. It dresses like the page a GitHub sign-in leaves
  * the browser on: one card, the provider's mark beside Luke's, one short line
  * and one shorter one under it. Every string is fixed by the build: the
- * address chooses among them, and nothing it carried is drawn.
+ * address chooses among them, and nothing it carried is drawn. Where the web
+ * app's own connect came here (`connect-return.ts`), the shorter line gives
+ * way to Back to Luke, which says it.
  */
 
 interface Landing {
@@ -30,7 +33,8 @@ interface Landing {
   readonly status: IntegrationLandingStatus;
 }
 
-const BACK_TO_LUKE = {
+/** How to go on for a developer who goes back to Luke themselves, the Mac's or a tab of the browser. */
+const RETURN_TO_LUKE = {
   SETTLED: "Return to Luke. You can close this tab.",
   RETRY: "Return to Luke to try again.",
 } as const;
@@ -63,10 +67,15 @@ function landingFromAddress(): Landing {
 /**
  * The page is one AuthPage card that opens on the provider's mark joined to
  * Luke's, or Luke's full mark alone when the address named no provider: the
- * title says how the connection settled, and the description how to go on.
+ * title says how the connection settled, and the description, or the way
+ * back, how to go on.
  */
 function IntegrationConnected(): React.JSX.Element {
   const [landing] = useState(landingFromAddress);
+  const { back, onBack } = useConnectReturn({
+    landed: true,
+    settled: landing.status === INTEGRATION_LANDING_STATUS.CONNECTED,
+  });
   return (
     <AuthPage
       mark={
@@ -82,11 +91,19 @@ function IntegrationConnected(): React.JSX.Element {
       }
       title={titleOf(landing)}
       description={
-        landing.status === INTEGRATION_LANDING_STATUS.CONNECTED
-          ? BACK_TO_LUKE.SETTLED
-          : BACK_TO_LUKE.RETRY
+        back.kind !== CONNECT_RETURN.ELSEWHERE
+          ? undefined
+          : landing.status === INTEGRATION_LANDING_STATUS.CONNECTED
+            ? RETURN_TO_LUKE.SETTLED
+            : RETURN_TO_LUKE.RETRY
       }
-    />
+    >
+      {back.kind === CONNECT_RETURN.ELSEWHERE ? null : (
+        <ButtonLink href={back.href} variant={BUTTON_VARIANT.PRIMARY} onClick={onBack}>
+          {BACK_TO_LUKE}
+        </ButtonLink>
+      )}
+    </AuthPage>
   );
 }
 
