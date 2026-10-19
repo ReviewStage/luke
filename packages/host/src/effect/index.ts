@@ -20,6 +20,7 @@ export {
   RunMode,
   reporterLayer,
   SecretCipher,
+  ServiceOrigin,
   ShutdownSignal,
   SignInConsent,
   StateRoot,
