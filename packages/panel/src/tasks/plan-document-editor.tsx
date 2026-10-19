@@ -6,13 +6,14 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
-import { Button, PROSE_CLASS } from "@luke/ui";
+import { Button } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
+import { markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorAnchors,
@@ -795,7 +796,8 @@ export function PlanDocumentEditor({
     placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
-    className: `markdown ${PROSE_CLASS} plan-unit`,
+    // Note that the text wears the drawn sections' own classes, so its lists keep their gutter and nothing moves as it opens or closes.
+    className: markdownClass("plan-unit"),
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,

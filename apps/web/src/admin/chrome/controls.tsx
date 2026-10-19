@@ -1,5 +1,5 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
-import { Checkbox, ErrorState, Segmented, Stack } from "@luke/ui";
+import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, Stack } from "@luke/ui";
 
 /** A window by the constant's own name for it, which is how the segmented control keys its options. */
 type WindowName = keyof typeof ADMIN_METRICS_WINDOW;
@@ -67,10 +67,11 @@ export function WindowSwitcher({
 }): React.JSX.Element {
   const chosen = WINDOW_OPTIONS.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
   return (
-    <Segmented
-      legend="Window in days"
-      options={WINDOW_OPTIONS}
+    <ChoiceBar
+      label="Window in days"
+      items={WINDOW_OPTIONS}
       value={chosen?.value}
+      look={CHOICE_BAR_LOOK.SEGMENTED}
       onChange={(name) => onChange(ADMIN_METRICS_WINDOW[name])}
     />
   );

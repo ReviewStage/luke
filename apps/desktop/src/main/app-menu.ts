@@ -423,6 +423,7 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.MENTION_LINES),
         commandItem(APP_COMMAND.INSERT_PICTURE),
+        commandItem(APP_COMMAND.COMMENT_ON_SELECTION),
         SEPARATOR,
         {
           label: "Speech",

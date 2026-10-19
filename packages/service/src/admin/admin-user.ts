@@ -1,6 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { utcDayKey } from "@luke/database/models/quota";
 import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
+import {
+  type AdminAccountSource,
+  type AdminAccountSupport,
+  buildAdminAccountSupport,
+} from "./admin-account.js";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -110,11 +116,14 @@ export interface AdminUserDetail {
     callsWindow: number;
     allTime: AdminUserAllTime;
   };
+  /** What a maintainer supports the account from: `admin-account.ts`. */
+  support: AdminAccountSupport;
 }
 
-/** Shapes one account's queried source into the page's answer. */
+/** Shapes one account's queried source, and its support rows, into the page's answer. */
 export function buildAdminUserDetail(
   source: AdminUserSource,
+  support: AdminAccountSource,
   now: number,
   windowDays: AdminMetricsWindow,
 ): AdminUserDetail {
@@ -159,6 +168,12 @@ export function buildAdminUserDetail(
       callsWindow: sum(daily.map((day) => day.calls)),
       allTime: source.usage.allTime,
     },
+    support: buildAdminAccountSupport(
+      support,
+      now,
+      Date.parse(`${dayKeys[0] ?? utcDayKey(now)}T00:00:00.000Z`),
+      source.usage.allTime.lastActiveDay,
+    ),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -70,6 +71,7 @@ import {
   useState,
 } from "react";
 import { ActorMark, ActorRef } from "../actor-ref.js";
+import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -114,7 +116,9 @@ import { useOpenLink } from "./use-open-link.js";
  *
  * A thread is started from words selected in the read view, with the
  * bubble that rises over them, or from the button a block shows at its end
- * under the pointer, which comments on the whole block. Its words are
+ * under the pointer, which comments on the whole block; while the bubble
+ * stands, ⌥⌘M starts it as a press on the bubble does
+ * (`APP_COMMAND.COMMENT_ON_SELECTION`). Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -1323,6 +1327,11 @@ export function PlanCommentLayer({
       letCaretGo();
     };
     const selected = () => {
+      // Note that a plan kept mounted under a hidden tab keeps its selection, but its words are no longer on screen to comment on.
+      if (element.closest("[hidden]") !== null) {
+        setBubble(undefined);
+        return;
+      }
       const selection = window.getSelection();
       if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
         if (editor !== undefined && selection?.isCollapsed === true) caretIn(selection);
@@ -1405,7 +1414,16 @@ export function PlanCommentLayer({
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
+    // Note that hiding the tab the plan stands in changes no selection, so its `hidden` attribute is watched for itself.
+    // Note that the tab shown again offers the words still selected there, though only a selection, not a caret, is read again, since a caret read opens and closes threads.
+    const hiding = new MutationObserver(() => {
+      if (element.closest("[hidden]") !== null || window.getSelection()?.isCollapsed === false) {
+        selected();
+      }
+    });
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     return () => {
+      hiding.disconnect();
       element.removeEventListener("pointerover", over);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
@@ -1417,6 +1435,9 @@ export function PlanCommentLayer({
       document.removeEventListener("selectionchange", selected);
     };
   }, [body, editor, sections, unitClass, setPending, onActive, active]);
+
+  // While the bubble stands, its command starts the thread as a press on it does.
+  useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, bubble?.start);
 
   const cardRef = (id: string) => (element: HTMLDivElement | null) => {
     if (element === null) cards.current.delete(id);
@@ -1488,9 +1509,11 @@ export function PlanCommentLayer({
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
-        <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
-          {COMMENT_WORDS.COMMENT}
-        </Button>
+        <Tooltip label={COMMENT_WORDS.COMMENT} command={APP_COMMAND.COMMENT_ON_SELECTION}>
+          <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
+            {COMMENT_WORDS.COMMENT}
+          </Button>
+        </Tooltip>
       </div>
     );
   if (wide) {

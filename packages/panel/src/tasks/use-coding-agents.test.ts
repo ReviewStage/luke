@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
@@ -82,7 +83,8 @@ function mount(
     restand = setHeld;
     control = useCodingAgents({
       acts: {
-        act: <Kind extends ActKind>(
+        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
+        act: (<Kind extends ActKind>(
           kind: Kind,
           ...[payload]: unknown[]
         ): Promise<ActResultFor<Kind>> => {
@@ -92,7 +94,7 @@ function mount(
           if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
           // SAFETY: the test scripts each kind's answer in that kind's own shape.
           return Promise.resolve(next as ActResultFor<Kind>);
-        },
+        }) as ActHandle["act"],
       },
       taskId: held.taskId,
       agentId: held.agentId,

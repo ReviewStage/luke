@@ -1436,8 +1436,11 @@ test("opened on its files, as a link to its changes opens it, the header stands 
     }),
     PULL_REQUEST_VIEW.FILES,
   );
+  // The views' own panels, not the Write and Preview panel of a comment box inside one.
   const shownPanel = () =>
-    [...tab.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter((each) => !each.hidden);
+    [...tab.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter(
+      (each) => !each.hidden && each.parentElement?.closest('[role="tabpanel"]') === null,
+    );
   const header = () =>
     tab.querySelector<HTMLElement>(".pull-request-header") ?? assert.fail("the header stands");
   assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
@@ -2390,6 +2393,43 @@ test("its labels stand under the title in their GitHub colours, a fill with word
   assert.equal(colour(3, "--label-fill-light"), "", "a colour spelled otherwise draws no fill");
 });
 
+test("a pull request with no labels spends no line on them: its label picker stands beside the reviewers' picker, and its labels, once it has some, close that same line", async () => {
+  let labels: { name: string; color: string }[] = [];
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, labels } }),
+    }),
+  );
+  const people = () =>
+    tab.querySelector<HTMLElement>(".pull-request-header .pull-request-people") ??
+    assert.fail("the line of people stands");
+  const pickers = () =>
+    [...people().querySelectorAll<HTMLButtonElement>(".pull-request-reviewers button")].map(
+      (button) => button.getAttribute("aria-label"),
+    );
+
+  assert.equal(tab.querySelector(".pull-request-header .pull-request-labels"), null);
+  assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
+
+  labels = [{ name: "bug", color: "d73a4a" }];
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+      assert.fail("the bar has a ⋯")
+    ).click(),
+  );
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  const list = people().querySelector('[aria-label="Labels"]') ?? assert.fail("its labels stand");
+  assert.equal(list.textContent, "bug");
+  assert.equal(people().lastElementChild, list, "they close the line of people");
+  assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
+});
+
 test("its reviewers stand compactly, three faces and a count of the rest: where each stands, a change asked for outlasting a new ask, its author left out, and Apps' bots last; those asked stand asked until the reviews land", async () => {
   const author = { login: "luke-agent[bot]", bot: true };
   const priya = { login: "priyan", bot: false };
@@ -2660,8 +2700,8 @@ test("the label picker lists the repository's labels, those on the pull request 
   );
   assert.equal(tab.querySelector('[aria-label="Edit reviewers"]'), null);
   const picker =
-    tab.querySelector<HTMLButtonElement>('.pull-request-label-row [aria-label="Edit labels"]') ??
-    assert.fail("the label picker stands at the labels' end");
+    tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Edit labels"]') ??
+    assert.fail("the label picker stands beside the reviewers");
 
   act(() => picker.click());
   await settle();
@@ -3669,7 +3709,7 @@ test("a comment on the head's lines offers a suggestion, which writes them as th
   );
   act(() =>
     (
-      [...comment.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      [...comment.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
         (each) => each.textContent === "Preview",
       ) ?? assert.fail("the comment offers Preview")
     ).click(),

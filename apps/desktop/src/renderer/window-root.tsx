@@ -12,8 +12,8 @@
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
-import type { AppBridge } from "@luke/host/bridge";
-import { installAppBridge } from "@luke/panel/app-bridge";
+import { ACT_PORT, type AppBridge } from "@luke/host/bridge";
+import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
@@ -43,6 +43,12 @@ export function mountWindow(surface: ReactNode): void {
   const preloadWindow: Window & { readonly luke?: AppBridge } = window;
   if (preloadWindow.luke === undefined) throw new Error("The preload's bridge is missing");
   installAppBridge(preloadWindow.luke);
+  // The window's act port, as oRPC's Electron adapter opens one: this page
+  // keeps one end and posts the other to itself, where the preload takes it
+  // to main (`apps/desktop/src/main/bridge-host.ts`).
+  const actPortChannel = new MessageChannel();
+  window.postMessage(ACT_PORT.REQUEST, "*", [actPortChannel.port2]);
+  installActPort(actPortChannel.port1);
   installAppPlatform(DESKTOP_PLATFORM);
 
   // Every window's tracing, as Sentry's Electron guide sets up a renderer;

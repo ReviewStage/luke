@@ -2,7 +2,7 @@
 
    Each option is its glyph, its name, and a quiet count, drawn over the
    thumb: one element under the chosen option that slides to the next as
-   the choice moves (`choice-row.tsx` measures it there). Fill is the
+   the choice moves (`choice-bar.tsx` measures it there). Fill is the
    window's own selected state, a sidebar row's: plain words at the
    control's height, the thumb a fill under the chosen one, and no hairline,
    which a header's band draws. Narrower than its options need, a fill bar
@@ -106,7 +106,7 @@
 
   /* The thumb stands where the row last measured its chosen option, hidden
      while none is chosen or drawn; it slides only once it has shown, and on
-     its transform alone, its box landing at once (`choice-row.tsx`). */
+     its transform alone, its box landing at once (`choice-bar.tsx`). */
   .luke-choice-bar-thumb {
     position: absolute;
     top: 0;
@@ -193,8 +193,13 @@
     padding-inline: var(--luke-space-12);
   }
 
+  /* Narrower than its options need, a fill bar shows an option other than
+     the chosen one by its glyph alone. Note that it does so only while one
+     is chosen, because a clearable bar with none chosen would otherwise
+     name none of its options. */
   @container luke-choice-bar (width < 520px) {
-    .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
+    .luke-choice-bar:has(> :is([aria-selected="true"], [aria-checked="true"]))
+      .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
       .luke-choice-bar-icon
       + .luke-choice-bar-label {
       position: absolute;

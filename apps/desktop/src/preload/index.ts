@@ -1,6 +1,6 @@
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
+import { ACT_PORT, type AppBridge, actPortForwarder, bridgeEntries } from "@luke/host/bridge";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
@@ -55,3 +55,13 @@ ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
 ipcRenderer.on(MAC_TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: MAC_TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });
+
+// The page's act port, posted to its own window by its root as oRPC's
+// Electron adapter has it, is forwarded to main once for this page's life;
+// main upgrades it in `bridge-host.ts`, and a later port this page posts is ignored.
+window.addEventListener(
+  "message",
+  actPortForwarder<MessagePort, MessageEventSource>(window, (port) => {
+    ipcRenderer.postMessage(ACT_PORT.CHANNEL, null, [port]);
+  }),
+);

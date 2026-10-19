@@ -35,8 +35,14 @@ import {
   Avatar,
   Badge,
   Button,
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  type ChoiceItem,
+  COUNT_TONE,
   CopyIcon,
-  CountParts,
+  type CountPart,
+  type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
   DisclosureChevron,
@@ -53,12 +59,6 @@ import {
   Skeleton,
   SkeletonRegion,
   Switch,
-  TAB_COUNT_TONE,
-  TABS_INSET,
-  TabCount,
-  type TabCountTone,
-  type TabItem,
-  Tabs,
   TEXT_BUTTON_TONE,
   TextButton,
   useMenu,
@@ -162,11 +162,13 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
  * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its labels in their
- * GitHub colours (`pull-request-labels.tsx`); its branches, with the stack
- * it stands in beside them (`pull-request-stack.tsx`); who opened it and
- * when, as the Changes tab names them (`pull-request-people.tsx`), with its
- * reviewers' first faces wearing where each stands; and, while it is open,
+ * then GitHub and the ⋯); its title and number; its branches, with the
+ * stack it stands in beside them (`pull-request-stack.tsx`); who opened it
+ * and when, as the Changes tab names them (`pull-request-people.tsx`), with
+ * its reviewers' first faces wearing where each stands, the reviewer and
+ * label pickers, and its labels in their GitHub colours
+ * (`pull-request-labels.tsx`) at the line's end, so a pull request with no
+ * labels spends no line on them; and, while it is open,
  * whether it would merge as it stands, in
  * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
  * and a quiet count: Conversation, its description and its comments and
@@ -1007,7 +1009,7 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({
   parts,
   now,
@@ -1050,10 +1052,6 @@ function PullRequestHead({
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <div className="pull-request-label-row">
-        <PullRequestLabels labels={pullRequest.labels ?? []} />
-        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
-      </div>
       <div className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
           <p className="pull-request-branches">
@@ -1082,7 +1080,9 @@ function PullRequestHead({
               {...editing}
             />
           ) : null}
+          <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
         </span>
+        <PullRequestLabels labels={pullRequest.labels ?? []} />
       </div>
       {open ? (
         <MergeLine
@@ -1343,24 +1343,24 @@ const SUMMARY_WORDS = {
 
 /** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
 const SUMMARY_TONES = {
-  [CHECK_SUMMARY.FAILING]: TAB_COUNT_TONE.DANGER,
-  [CHECK_SUMMARY.PENDING]: TAB_COUNT_TONE.ATTENTION,
-  [CHECK_SUMMARY.PASSING]: TAB_COUNT_TONE.COMPLETE,
-  [CHECK_SUMMARY.NONE]: TAB_COUNT_TONE.QUIET,
-} as const satisfies Record<CheckSummary, TabCountTone>;
+  [CHECK_SUMMARY.FAILING]: COUNT_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: COUNT_TONE.ATTENTION,
+  [CHECK_SUMMARY.PASSING]: COUNT_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: COUNT_TONE.QUIET,
+} as const satisfies Record<CheckSummary, CountTone>;
 
 /** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
-function checksCount(summary: CheckSummary, count: number | undefined): ReactNode {
+function checksCount(
+  summary: CheckSummary,
+  count: number | undefined,
+): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  return (
-    <TabCount
-      tone={SUMMARY_TONES[summary]}
-      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
-    >
-      {count?.toLocaleString()}
-    </TabCount>
-  );
+  const text = count?.toLocaleString() ?? "";
+  const tone = SUMMARY_TONES[summary];
+  return [
+    glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
+  ];
 }
 
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
@@ -1382,7 +1382,7 @@ function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   bar: BarPullRequest | undefined,
-): readonly TabItem<PullRequestView>[] {
+): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   return [
@@ -1410,9 +1410,7 @@ function tabsOf(
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined ? undefined : (
-          <CountParts parts={linesCount(published.additions, published.deletions)} />
-        ),
+        published === undefined ? undefined : linesCount(published.additions, published.deletions),
     },
   ];
 }
@@ -1715,13 +1713,14 @@ function PullRequestTabBody({
               />
             </header>
             <div className="pull-request-tabs">
-              <Tabs<PullRequestView>
+              <ChoiceBar<PullRequestView>
                 label="Pull request"
-                tabs={tabsOf(parts, published, bar)}
+                items={tabsOf(parts, published, bar)}
                 value={view}
                 onChange={onView}
-                ids={ids}
-                inset={TABS_INSET.READING}
+                look={CHOICE_BAR_LOOK.FILL}
+                panels={ids}
+                inset={CHOICE_BAR_INSET.READING}
               />
             </div>
             <div

@@ -181,8 +181,8 @@ function WorldStage({
     };
   }, [backOut, away, selected, home]);
 
-  const choose = useCallback((layer: WorldLayer) => {
-    setChosenLayer((was) => (was === layer ? undefined : layer));
+  const choose = useCallback((layer: WorldLayer | undefined) => {
+    setChosenLayer(layer);
     // Note that the press settles what the pointer previewed, so leaving the count shows the press, not the preview.
     setPreviewLayer(undefined);
   }, []);

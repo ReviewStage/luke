@@ -4,6 +4,7 @@ import { authSecrets, socialClientConfigured } from "../auth/auth-deployment.js"
 import { HOSTED_OPENAI_ENVIRONMENT } from "../providers/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
+import { readAdminAccountSource } from "./admin-account-queries.js";
 import type { AdminSeams } from "./admin-app.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations, buildAdminMetrics } from "./admin-metrics.js";
@@ -16,6 +17,8 @@ import {
 } from "./admin-queries.js";
 import { buildAdminUserDetail } from "./admin-user.js";
 import { buildAdminUserList } from "./admin-users.js";
+import { buildAdminWorkspaceList } from "./admin-workspaces.js";
+import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 
 /**
  * The deployment's real seams behind the dashboard's group: the browser
@@ -85,12 +88,22 @@ export function hostedAdminSeams(): AdminSeams {
       ),
     readUser: (userId, now, windowDays) =>
       Effect.map(
-        readAdminUserSource({ userId, now, windowDays }),
-        (source) => source && buildAdminUserDetail(source, now, windowDays),
+        Effect.all(
+          [
+            readAdminUserSource({ userId, now, windowDays }),
+            readAdminAccountSource({ userId, now, windowDays }),
+          ],
+          { concurrency: "unbounded" },
+        ),
+        ([source, support]) => source && buildAdminUserDetail(source, support, now, windowDays),
       ),
     readDay: (day, now, scope) =>
       Effect.map(readAdminDaySource({ day, scope }), (source) =>
         buildAdminDayDetail(source, now, day),
+      ),
+    readWorkspaces: (now, scope, kind, search) =>
+      Effect.map(readAdminWorkspacesSource({ now, scope, kind, search }), (source) =>
+        buildAdminWorkspaceList(source, now, kind, search),
       ),
     writeFavorite: (adminId, userId, favorite) => writeAdminFavorite({ adminId, userId, favorite }),
   };

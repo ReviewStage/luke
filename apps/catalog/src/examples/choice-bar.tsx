@@ -1,23 +1,27 @@
 /**
  * choice-bar.tsx -- the one bar of options where you choose one, in its
  * fill and its segmented look at both sizes: tabs over panels with glyphs
- * and toned counts, a diff's lines among them; a value set by a radio
- * group; a clearable one with none chosen; an option and a whole bar that
- * cannot be chosen; and a row too narrow for its options.
+ * and toned counts, a diff's lines among them, set in to a reading measure
+ * or names alone; a value set by a radio group; a clearable one with none
+ * chosen; an option and a whole bar that cannot be chosen; and a row too
+ * narrow for its options, which names every option while none is chosen.
  */
 
 import {
   AlertIcon,
+  CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   CheckIcon,
   ChoiceBar,
+  type ChoiceBarInset,
   type ChoiceBarLook,
   type ChoiceBarSize,
   type ChoiceItem,
   CloseIcon,
   COUNT_TONE,
   CodeIcon,
+  DocumentIcon,
   GAP,
   linesCount,
   Stack,
@@ -46,6 +50,25 @@ const VIEWS: readonly ChoiceItem<View>[] = [
     count: [{ text: "2", tone: COUNT_TONE.DANGER, glyph: <CloseIcon />, glyphLabel: "failing" }],
   },
   { value: VIEW.FILES, icon: <CodeIcon />, label: "Files changed", count: linesCount(128, 42) },
+];
+
+/** The same views, their checks passing. */
+const VIEWS_PASSING: readonly ChoiceItem<View>[] = VIEWS.map((item) =>
+  item.value === VIEW.CHECKS
+    ? {
+        ...item,
+        count: [
+          { text: "9", tone: COUNT_TONE.COMPLETE, glyph: <CheckIcon />, glyphLabel: "passing" },
+        ],
+      }
+    : item,
+);
+
+/** Three views by their names, one glyph among them. */
+const PLAIN: readonly ChoiceItem<View>[] = [
+  { value: VIEW.CONVERSATION, icon: <DocumentIcon />, label: "Overview" },
+  { value: VIEW.CHECKS, label: "Activity" },
+  { value: VIEW.FILES, label: "Settings" },
 ];
 
 const SHOW = {
@@ -88,12 +111,14 @@ function HeldTabs<Value extends string>({
   start,
   look,
   size,
+  inset,
 }: {
   label: string;
   items: readonly ChoiceItem<Value>[];
   start: Value;
   look: ChoiceBarLook;
   size?: ChoiceBarSize | undefined;
+  inset?: ChoiceBarInset | undefined;
 }): React.JSX.Element {
   const [value, setValue] = useState<Value>(start);
   const id = useId();
@@ -108,6 +133,7 @@ function HeldTabs<Value extends string>({
         look={look}
         size={size}
         panels={panels}
+        inset={inset}
       />
       {items.map((item) => (
         <div
@@ -153,6 +179,21 @@ function HeldEffort({
   );
 }
 
+/** A clearable radio group over glyphed options the example holds, none chosen at first. */
+function HeldClearableViews(): React.JSX.Element {
+  const [view, setView] = useState<View | undefined>(undefined);
+  return (
+    <ChoiceBar<View>
+      label="Show only"
+      items={VIEWS}
+      value={view}
+      onChange={setView}
+      look={CHOICE_BAR_LOOK.FILL}
+      clearable
+    />
+  );
+}
+
 function ChoiceBarExample(): React.JSX.Element {
   return (
     <>
@@ -172,6 +213,23 @@ function ChoiceBarExample(): React.JSX.Element {
             size={CHOICE_BAR_SIZE.COMPACT}
           />
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="choice-bar-reading" title="Fill, set in to a reading measure">
+        <HeldTabs
+          label="Pull request"
+          items={VIEWS_PASSING}
+          start={VIEW.CONVERSATION}
+          look={CHOICE_BAR_LOOK.FILL}
+          inset={CHOICE_BAR_INSET.READING}
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-bar-plain" title="Fill, names alone">
+        <HeldTabs
+          label="Page"
+          items={PLAIN}
+          start={VIEW.CONVERSATION}
+          look={CHOICE_BAR_LOOK.FILL}
+        />
       </CatalogSection>
       <CatalogSection id="choice-bar-segmented" title="Segmented, as tabs over panels">
         <Stack gap={GAP.SECTION}>
@@ -222,6 +280,7 @@ function ChoiceBarExample(): React.JSX.Element {
             start={VIEW.CHECKS}
             look={CHOICE_BAR_LOOK.FILL}
           />
+          <HeldClearableViews />
           <HeldEffort start={EFFORT.HIGH} />
         </div>
       </CatalogSection>

@@ -600,9 +600,20 @@ beside it, how many seconds you dictated.
 
 Luke's own maintainers can see your name, email address, profile picture,
 sign-in method, whether you are an administrator, when you joined and were
-last active, and your daily counts, on an admin page of our site that only an
-account we have marked as an administrator can open; nothing you type, say,
-or run appears on it.
+last active, and your daily counts, and the names of your workspaces and
+their members, roles, invitations, connected integrations, GitHub
+installation, and activity counts, on an admin page of our site that only an
+account we have marked as an administrator can open. Beside them it shows
+how many tasks you created and minutes of calls you held over a window; your
+coding agents, each with when it started, the repository it works in, its
+model and effort, whether it is running, finished, or failed with the fixed
+word for why, and whether its pull request is open, merged, or closed; which
+providers you saved a key for or connected, and whether each key or
+connection works; your coding-agent model and effort, and the experiments
+you turned on; and when a call of yours dropped or an automation of yours
+failed to start, with the fixed word for why. Past those names, nothing you
+type, say, or run appears on it: no task's title, plan, prompt, or message,
+no pull request's title, no key, and no error's own words.
 
 Every account also gets a first workspace on our service when it signs in, a
 record named with your name and holding you as its owner, which is otherwise

@@ -1,6 +1,6 @@
 import { useAtom } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { cssCustomProperties, Segmented } from "@luke/ui";
+import { CHOICE_BAR_LOOK, ChoiceBar, cssCustomProperties } from "@luke/ui";
 import {
   type BuildingPiece,
   blastShapesOf,
@@ -1495,7 +1495,13 @@ export function CampusScene({
         </g>
       </svg>
       <div className="factory-campus-layout">
-        <Segmented legend="Layout" options={LAYOUT_OPTIONS} value={layout} onChange={setLayout} />
+        <ChoiceBar
+          label="Layout"
+          items={LAYOUT_OPTIONS}
+          value={layout}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          onChange={setLayout}
+        />
       </div>
     </div>
   );

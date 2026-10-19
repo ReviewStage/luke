@@ -207,14 +207,16 @@ test("a press on a container at the gate selects its agent's pull request", asyn
 
 test("a layer chosen alone hides what the others hold without drawing the campus again, a failed agent's signal standing under Defects as under Building, and chosen again shows all", async () => {
   const page = await mount();
-  const chip = (layer: string) =>
-    page.querySelector(`.factory-world-pipeline [data-layer="${layer}"]`);
+  const chip = (name: string) =>
+    [...page.querySelectorAll('[aria-label="Layers"] [role="radio"]')].find((each) =>
+      each.textContent?.startsWith(name),
+    );
   const hidden = () =>
     [...scene(page).attributes].flatMap((attribute) =>
       attribute.name.startsWith("data-hide-") ? [attribute.name] : [],
     );
   const building = page.querySelector(".factory-campus-building");
-  press(chip("shipped"));
+  press(chip("Shipped"));
   assert.deepEqual(hidden().sort(), [
     "data-hide-building",
     "data-hide-defects",
@@ -226,13 +228,13 @@ test("a layer chosen alone hides what the others hold without drawing the campus
     building,
     "the buildings were not drawn again",
   );
-  press(chip("defects"));
+  press(chip("Defects"));
   assert.deepEqual(hidden().sort(), [
     "data-hide-building",
     "data-hide-planned",
     "data-hide-shipped",
   ]);
-  press(chip("defects"));
+  press(chip("Defects"));
   assert.deepEqual(hidden(), []);
 });
 

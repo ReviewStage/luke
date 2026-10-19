@@ -120,7 +120,7 @@ async function settle(): Promise<void> {
  * script, and the names it renamed to; `render` draws another plan, through
  * its own door where given.
  */
-function mount(answers: readonly TasksEditAnswer[] = []) {
+function mount(answers: readonly TasksEditAnswer[] = [], first: Task = DOCUMENT_TASK) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
@@ -145,7 +145,7 @@ function mount(answers: readonly TasksEditAnswer[] = []) {
         ),
       ),
     );
-  render(DOCUMENT_TASK);
+  render(first);
   const unmount = () => {
     act(() => root.unmount());
     roots.splice(roots.indexOf(root), 1);
@@ -196,6 +196,27 @@ test("a click into a section opens the whole text in place, the caret where the 
   assert.deepEqual(open().placement, { x: 120, y: 48 });
   assert.ok(container.querySelector(".plan-document-editor")?.classList.contains("ph-no-capture"));
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+});
+
+test("the open text wears every class its drawn sections wear, so a list keeps its gutter and nothing moves as it opens or closes", () => {
+  const { container } = mount([], {
+    ...DOCUMENT_TASK,
+    document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
+  });
+  const drawn = container.querySelector<HTMLElement>(".plan-document-block .plan-unit");
+  // Note that a section's arrival light is left out, since it comes and goes with the reveal's frames and moves nothing.
+  const worn = [...(drawn?.classList ?? [])].filter((name) => name !== "plan-fresh");
+  assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
+
+  act(() => {
+    drawn?.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 40, clientY: 12 }));
+  });
+
+  const wears = new Set(open().className.split(" "));
+  assert.deepEqual(
+    worn.filter((name) => !wears.has(name)),
+    [],
+  );
 });
 
 test("the editor's preview of a Mermaid block is the picture the diagram bundle answered, drawn by the panel until the editor takes it down", async () => {
