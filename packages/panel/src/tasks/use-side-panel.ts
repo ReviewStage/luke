@@ -25,6 +25,7 @@ import {
   sameTab,
   TAB_WORDS,
   type TerminalStripTab,
+  tabKey,
   viewedLast,
 } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
@@ -312,8 +313,11 @@ const sidePanelTabSchema = Schema.Literals([
   ...SIDE_PANEL_TABS,
   ...Object.values(RETIRED_SIDE_PANEL_TAB),
 ]);
-/** An agent's Changes tab as it is kept, on the task it was opened on. */
-const changesTabSchema = Schema.Struct({ changes: Schema.String });
+/** An agent's Changes tab as it is kept, on the task it was opened on, with the number of the pull request it names where it names one. */
+const changesTabSchema = Schema.Struct({
+  changes: Schema.String,
+  number: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+});
 const anyTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
@@ -360,7 +364,7 @@ export interface PinnedTab extends Omit<typeof pinnedTabSchema.Type, "tab"> {
   readonly tab: PinnableTab;
 }
 
-/** What the open task's pins of agents and of their Pull requests are named now, each by agent id: an agent as its tab is, and its Pull request by the pull request's number and title. */
+/** What the open task's pins of agents and of their Pull requests are named now: an agent as its tab is, by agent id, and a Pull request tab by the pull request's number and title, by the tab's key (`tabKey`). */
 interface PinNames {
   readonly agents: ReadonlyMap<string, string>;
   readonly pullRequests: ReadonlyMap<string, string>;
@@ -446,7 +450,7 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly browsers: readonly OpenBrowser[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
   readonly lastTerminals: Readonly<Record<string, string>>;
-  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  /** What each Pull request tab shows, by the tab's key (`tabKey`), of those whose view was chosen; the overview otherwise. */
   readonly pullRequestViews: Readonly<Record<string, PullRequestView>>;
   /** The open tabs of this Mac's terminals, by agent, in the order opened. */
   readonly macTerminals: readonly MacTerminalStripTab[];
@@ -539,10 +543,10 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
-  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
+  /** What each Pull request tab shows, by the tab's key (`tabKey`), of those whose view was chosen; the overview otherwise. */
   pullRequestViews: Readonly<Record<string, PullRequestView>>;
-  /** Chooses what an agent's Pull request tab shows, its tab open or not. */
-  onPullRequestView: (agentId: string, view: PullRequestView) => void;
+  /** Chooses what a Pull request tab shows, by the tab's key (`tabKey`), its tab open or not. */
+  onPullRequestView: (key: string, view: PullRequestView) => void;
   /** The open task's Browser tabs in the order opened, after the Terminal tabs. */
   browsers: readonly OpenBrowser[];
   /** The open task's tabs of every kind as the strip draws them, in its order. */
@@ -787,7 +791,7 @@ function withPinsPlaced(
 /** The name a pin of an agent's tab or its Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
 function agentPinLabel(tab: PinnableTab, names: PinNames): string | undefined {
   if (isAgentTab(tab)) return names.agents.get(tab.agent);
-  return isChangesTab(tab) ? names.pullRequests.get(tab.changes) : undefined;
+  return isChangesTab(tab) ? names.pullRequests.get(tabKey(tab)) : undefined;
 }
 
 /** The state with each agent, and each agent's Changes, pinned on the task named as `names` names it, and the state as it is where every one already was. */
@@ -1747,11 +1751,11 @@ export function useSidePanel(
     [update],
   );
   const onPullRequestView = useCallback(
-    (agentId: string, view: PullRequestView) =>
+    (key: string, view: PullRequestView) =>
       update((held) =>
-        held.pullRequestViews[agentId] === view
+        held.pullRequestViews[key] === view
           ? held
-          : { ...held, pullRequestViews: { ...held.pullRequestViews, [agentId]: view } },
+          : { ...held, pullRequestViews: { ...held.pullRequestViews, [key]: view } },
       ),
     [update],
   );

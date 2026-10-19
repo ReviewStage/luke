@@ -582,11 +582,12 @@ function PlanDocument({
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
-  const openPullRequest = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
+  const openPullRequest = (agentId: string, number?: number) =>
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
-  // a transcript, or an Inbox item, opens that same tab rather than GitHub.
-  const openHere = openPullRequestsHere(agents, openPullRequest);
+  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
+  // pull request of the task's repository opens in a Pull request tab by its number.
+  const openHere = openPullRequestsHere(agents, openPullRequest, task.repository);
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
   };

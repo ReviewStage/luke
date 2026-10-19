@@ -102,6 +102,28 @@ test("an agent's pull request opens in the one Pull request tab of its pull requ
   ]);
 });
 
+test("a pull request named by its number opens a Pull request tab of its own for it, unless it is the agent's own", () => {
+  const control = agents();
+  const asked: unknown[] = [];
+  const panel = {
+    changes: [],
+    onChoose: (tab: SidePanelTab) => asked.push(["choose", tab]),
+    onPullRequestView: (key: string, view: string) => asked.push(["view", key, view]),
+  };
+  showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 40);
+  showPullRequest(panel, control, THIRD.id, PULL_REQUEST_VIEW.CONVERSATION, 42);
+  assert.deepEqual(asked, [
+    ["view", `${THIRD.id}#40`, PULL_REQUEST_VIEW.CONVERSATION],
+    ["choose", { changes: THIRD.id, number: 40 }],
+    ["view", THIRD.id, PULL_REQUEST_VIEW.CONVERSATION],
+    ["choose", { changes: THIRD.id }],
+  ]);
+  // A tab naming another pull request is not the agent's own, so the agent's own still opens its own.
+  assert.deepEqual(changesTabOf(control, SECOND.id, [{ changes: SECOND.id, number: 40 }]), {
+    changes: FIRST.id,
+  });
+});
+
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
   // Read apart, the later agent's snapshot of the shared pull request is the newer one.
   const newer = { ...pullRequest(41, "Teammate invitations, with expiry"), changedFiles: 9 };

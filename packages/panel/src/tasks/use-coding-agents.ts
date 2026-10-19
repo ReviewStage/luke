@@ -51,6 +51,7 @@ import {
   withAgentRun,
 } from "./coding-agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
+import { numberedKey, pullRequestAsked } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { MessageSender } from "./use-agent-composer.js";
@@ -291,20 +292,36 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
   pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, who it names kept in `changesPeople`. */
-  readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
+  /** Each pull request a Pull request tab names by its number, by the tab's key (`numberedKey`), as `readNumberedPullRequest` last read it. */
+  numberedPullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  /** One read of the pull request of an agent's repository by its number, its answer kept in `numberedPullRequests`. */
+  readNumberedPullRequest: (agentId: string, number: number) => Promise<void>;
+  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
+  readChanges: (agentId: string, number?: number) => Promise<CodingAgentChangesAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
-  readOverviewPullRequest: (agentId: string) => Promise<CodingAgentOverviewPullRequestAnswerView>;
+  readOverviewPullRequest: (
+    agentId: string,
+    number?: number,
+  ) => Promise<CodingAgentOverviewPullRequestAnswerView>;
   /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
   readReviewOptions: (agentId: string) => Promise<CodingAgentReviewOptionsAnswerView>;
   /** One read of the checks on an agent's pull request's head, as its overview draws them. */
-  readOverviewChecks: (agentId: string) => Promise<CodingAgentOverviewChecksAnswerView>;
+  readOverviewChecks: (
+    agentId: string,
+    number?: number,
+  ) => Promise<CodingAgentOverviewChecksAnswerView>;
   /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
-  readOverviewConversation: (agentId: string) => Promise<CodingAgentOverviewConversationAnswerView>;
+  readOverviewConversation: (
+    agentId: string,
+    number?: number,
+  ) => Promise<CodingAgentOverviewConversationAnswerView>;
   /** One read of which of an agent's pull request's files the member marked viewed on GitHub, on their own GitHub sign-in. */
-  readPullRequestViewed: (agentId: string) => Promise<CodingAgentPullRequestViewedAnswerView>;
+  readPullRequestViewed: (
+    agentId: string,
+    number?: number,
+  ) => Promise<CodingAgentPullRequestViewedAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
@@ -1113,6 +1130,26 @@ export function useCodingAgents(input: {
   );
   const published = useTaskPullRequests(taskId, agents, readPullRequestOnce);
 
+  // A pull request a tab names by its number is kept by the tab's key, apart
+  // from the agents' own, so it never stands for what an agent published.
+  const [numberedPullRequests, setNumberedPullRequests] = useState<
+    ReadonlyMap<string, CodingAgentPullRequest>
+  >(() => new Map());
+  const readNumberedPullRequest = useCallback<CodingAgentsControl["readNumberedPullRequest"]>(
+    (agentId, number) =>
+      act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) => {
+        if ("failure" in answer) return;
+        const key = numberedKey(agentId, number);
+        setNumberedPullRequests((was) => {
+          const next = new Map(was);
+          if (answer.pullRequest === null) next.delete(key);
+          else next.set(key, answer.pullRequest);
+          return next;
+        });
+      }),
+    [act],
+  );
+
   // Note that who a pull request names is kept beside the agent, with the
   // pull request it was read for, so its Changes card says them wherever it
   // hangs once its tab has read them, and never for another pull request.
@@ -1123,7 +1160,11 @@ export function useCodingAgents(input: {
   );
   const changesAsked = useRef(new Map<string, number>());
   const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
-    (agentId) => {
+    (agentId, number) => {
+      // Note that another pull request's people are not this agent's, so they are never kept beside it.
+      if (number !== undefined) {
+        return act(ACT_KIND.CODING_AGENTS_CHANGES, pullRequestAsked(agentId, number));
+      }
       const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
       changesAsked.current.set(agentId, ask);
       return act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }).then((answer) => {
@@ -1146,7 +1187,8 @@ export function useCodingAgents(input: {
   );
 
   const readOverviewPullRequest = useCallback<CodingAgentsControl["readOverviewPullRequest"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId }),
+    (agentId, number) =>
+      act(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
     [act],
   );
 
@@ -1156,17 +1198,20 @@ export function useCodingAgents(input: {
   );
 
   const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, { agentId }),
+    (agentId, number) =>
+      act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const readOverviewConversation = useCallback<CodingAgentsControl["readOverviewConversation"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, { agentId }),
+    (agentId, number) =>
+      act(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const readPullRequestViewed = useCallback<CodingAgentsControl["readPullRequestViewed"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId }),
+    (agentId, number) =>
+      act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestAsked(agentId, number)),
     [act],
   );
 
@@ -1260,6 +1305,8 @@ export function useCodingAgents(input: {
     readTranscript,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
+    numberedPullRequests,
+    readNumberedPullRequest,
     readChanges,
     changesPeople,
     readOverviewPullRequest,

@@ -1561,13 +1561,13 @@ export function useTasksTab(input: {
         (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
       ),
       pullRequests: new Map(
-        [...agents.pullRequests].map(([agentId, pullRequest]) => [
-          agentId,
+        [...agents.pullRequests, ...agents.numberedPullRequests].map(([key, pullRequest]) => [
+          key,
           pullRequestLabelOf(pullRequest),
         ]),
       ),
     }),
-    [agents.agents, agents.models, agents.pullRequests],
+    [agents.agents, agents.models, agents.pullRequests, agents.numberedPullRequests],
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {

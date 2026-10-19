@@ -71,7 +71,7 @@ import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab.js";
-import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab.js";
+import { AgentPullRequestTab, pullRequestOfTab } from "../tasks/agent-pull-request-tab.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -367,7 +367,9 @@ function changesAgentOf(
   const sharing = (agents.agents ?? []).filter(
     (agent) => agents.pullRequests.get(agent.id)?.url === url,
   );
-  const opened = sharing.find((agent) => open.some((tab) => tab.changes === agent.id));
+  const opened = sharing.find((agent) =>
+    open.some((tab) => tab.changes === agent.id && tab.number === undefined),
+  );
   return (opened ?? sharing[0])?.id ?? agentId;
 }
 
@@ -408,7 +410,12 @@ export function changesTabOf(
   agents: CodingAgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
+  number?: number,
 ): ChangesStripTab {
+  // A pull request named by its number that is the agent's own is its own tab, so it never stands in two.
+  if (number !== undefined && agents.pullRequests.get(agentId)?.number !== number) {
+    return { changes: agentId, number };
+  }
   return { changes: changesAgentOf(agents, agentId, open) };
 }
 
@@ -422,9 +429,10 @@ export function showPullRequest(
   agents: CodingAgentsControl,
   agentId: string,
   view: PullRequestView,
+  number?: number,
 ): void {
-  const tab = changesTabOf(agents, agentId, panel.changes);
-  panel.onPullRequestView(tab.changes, view);
+  const tab = changesTabOf(agents, agentId, panel.changes, number);
+  panel.onPullRequestView(tabKey(tab), view);
   panel.onChoose(tab);
 }
 
@@ -568,9 +576,9 @@ export function taskWorkers(workRows: readonly WorkTurnRow[]): readonly WorkWork
   });
 }
 
-/** An agent's Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
-function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
-  return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: agents.pullRequests.get(agentId) });
+/** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
+function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLook {
+  return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: pullRequestOfTab(agents, tab) });
 }
 
 /**
@@ -717,7 +725,7 @@ function stripTabs(input: {
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
     const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
-    const pullRequest = agents.pullRequests.get(tab.changes);
+    const pullRequest = pullRequestOfTab(agents, tab);
     const card =
       subject.agent === undefined || pullRequest === undefined ? undefined : (
         <ChangesCard
@@ -730,7 +738,7 @@ function stripTabs(input: {
       );
     return {
       tab,
-      look: look(tab, { ...changesLook(tab.changes, agents), card }),
+      look: look(tab, { ...changesLook(tab, agents), card }),
       close: () => panel.onClose(tab),
     };
   });
@@ -1456,15 +1464,16 @@ function TabContent({
   if (isChangesTab(tab)) {
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <PullRequestsOnGitHub key={tab.changes}>
+      <PullRequestsOnGitHub key={tabKey(tab)}>
         <AgentPullRequestTab
           agentId={tab.changes}
+          number={tab.number}
           control={agents}
           shown={shown}
           repository={repository}
           tree={fileTree}
-          view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
-          onView={(view) => onPullRequestView(tab.changes, view)}
+          view={pullRequestViews[tabKey(tab)] ?? PULL_REQUEST_VIEW.CONVERSATION}
+          onView={(view) => onPullRequestView(tabKey(tab), view)}
         />
       </PullRequestsOnGitHub>
     );
@@ -1867,6 +1876,20 @@ export function SidePanel({
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const { tab } = panel;
+  // A Pull request tab naming another pull request by its number is named by
+  // that pull request, read once for each such tab the strip draws, since
+  // only the tab shown reads it on its own.
+  const { readNumberedPullRequest, numberedPullRequests } = agents;
+  const numberedRead = useRef(new Set<string>());
+  useEffect(() => {
+    for (const each of panel.changes) {
+      if (each.number === undefined) continue;
+      const key = tabKey(each);
+      if (numberedRead.current.has(key) || numberedPullRequests.has(key)) continue;
+      numberedRead.current.add(key);
+      readNumberedPullRequest(each.changes, each.number).catch(() => undefined);
+    }
+  }, [panel.changes, numberedPullRequests, readNumberedPullRequest]);
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
   // its tabs.
@@ -1930,7 +1953,7 @@ export function SidePanel({
         : isFileTab(tab)
           ? tab.file
           : isChangesTab(tab)
-            ? changesLook(tab.changes, agents).label
+            ? changesLook(tab, agents).label
             : isPageTab(tab)
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)

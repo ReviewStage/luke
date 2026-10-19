@@ -123,6 +123,8 @@ export function codingAgentsControl(
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
+    numberedPullRequests: new Map(),
+    readNumberedPullRequest: () => Promise.resolve(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readOverviewPullRequest: () =>
       Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
