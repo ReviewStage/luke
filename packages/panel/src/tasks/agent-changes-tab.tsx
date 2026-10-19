@@ -778,7 +778,7 @@ const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
  * it is, its refusal said as a gap's is.
  */
 function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => FileWhole {
-  const { read, refused } = texts;
+  const { read, refused, whole } = texts;
   const [held, setHeld] = useState<{
     readonly of: unknown;
     readonly files: ReadonlyMap<string, DiffFileTexts>;
@@ -811,7 +811,7 @@ function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => File
     doors.current.set(file.path, door);
     return {
       texts: files.get(file.path),
-      offered: read !== undefined && wholeable(file) && !refused.has(file.path),
+      offered: read !== undefined && whole(file) && wholeable(file) && !refused.has(file.path),
       toggle: door,
     };
   };
@@ -1300,6 +1300,8 @@ function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
 /** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
 interface FileTexts {
   readonly expandable: (file: CodingAgentChangedFile) => boolean;
+  /** Whether a file is the answer's own, every hunk of it drawn, rather than one a chapter cut down, which is never read whole. */
+  readonly whole: (file: CodingAgentChangedFile) => boolean;
   readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   readonly refused: ReadonlyMap<string, ExpansionRefusal>;
 }
@@ -1321,7 +1323,11 @@ interface FileTexts {
 function useFileTexts(
   taskId: string | null,
   repository: string | null,
-  pullRequest: { readonly url: string; readonly headSha?: string } | null,
+  pullRequest: {
+    readonly url: string;
+    readonly headSha?: string;
+    readonly files: readonly CodingAgentChangedFile[];
+  } | null,
   files: readonly CodingAgentChangedFile[],
 ): FileTexts {
   const { act } = useAct();
@@ -1378,12 +1384,15 @@ function useFileTexts(
       return reading;
     };
   }, [act, taskId, repository, pullRequest, files]);
+  // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
+  const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
+  const whole = useCallback((file: CodingAgentChangedFile) => own.has(file), [own]);
   const offered = useCallback(
     (file: CodingAgentChangedFile) =>
-      read !== undefined && expandable(file) && !refused.has(file.path),
-    [read, refused],
+      read !== undefined && whole(file) && expandable(file) && !refused.has(file.path),
+    [read, whole, refused],
   );
-  return { expandable: offered, read, refused };
+  return { expandable: offered, read, refused, whole };
 }
 
 /**
@@ -1643,6 +1652,12 @@ export function useChangesReads(
   return { answer, out, ask, count: reads.current.count, pullRequest, viewedFiles };
 }
 
+/** A file to bring into view in the list, as a chapter's key change asks: counted, so each ask is its own. */
+export interface FileReveal {
+  readonly path: string;
+  readonly ask: number;
+}
+
 export function AgentChangesTab({
   agentId,
   control,
@@ -1653,6 +1668,8 @@ export function AgentChangesTab({
   lineComments,
   reveal,
   reads,
+  files,
+  fileReveal,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -1670,19 +1687,23 @@ export function AgentChangesTab({
   reveal?: ChangesReveal | undefined;
   /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
   reads: ChangesReads;
+  /** The files drawn in the place of every file the read answered, as a chapter draws its own (`chapterPatches`); none draws them all. */
+  files?: readonly CodingAgentChangedFile[] | undefined;
+  /** A file to bring into view, once, among those drawn. */
+  fileReveal?: FileReveal | undefined;
 }): React.JSX.Element {
   const { answer, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
-  // Note that the lists are kept while the answer is the same one, because
+  // Note that the lists are kept while the answer and the files given are the same, because
   // fresh ones would have the tree draw itself anew.
   const changed = useMemo(() => {
-    const files = pullRequest?.files ?? [];
-    const paths = files.map((file) => file.path);
-    return { files, paths, ordered: treeOrder(files), folders: changedFolders(paths) };
-  }, [pullRequest]);
+    const drawn = files ?? pullRequest?.files ?? [];
+    const paths = drawn.map((file) => file.path);
+    return { files: drawn, paths, ordered: treeOrder(drawn), folders: changedFolders(paths) };
+  }, [pullRequest, files]);
   const viewSettings = useFileViewSettings();
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
@@ -1705,7 +1726,7 @@ export function AgentChangesTab({
   useEffect(() => {
     if (!shown) hideKeys();
   }, [shown, hideKeys]);
-  const { go } = list;
+  const { go, expand } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
     (path: string) => {
@@ -1714,6 +1735,15 @@ export function AgentChangesTab({
     },
     [closeOver, go],
   );
+  // A file asked for is opened and scrolled to, each ask once.
+  const latestFileReveal = useRef({ fileReveal, expand, go });
+  latestFileReveal.current = { fileReveal, expand, go };
+  useEffect(() => {
+    const { fileReveal, expand, go } = latestFileReveal.current;
+    if (fileReveal === undefined) return;
+    expand(fileReveal.path);
+    go(fileReveal.path);
+  }, [fileReveal?.ask]);
   const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
   const refresh = () => {
     ask();
@@ -1756,8 +1786,8 @@ export function AgentChangesTab({
   if (shownFile === undefined) {
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
-  const count = pullRequest.files.length;
-  const total = linesChanged(pullRequest.files);
+  const count = changed.files.length;
+  const total = linesChanged(changed.files);
   const counted = (
     <>
       {count} {count === 1 ? "file" : "files"} changed{" "}
@@ -1766,7 +1796,7 @@ export function AgentChangesTab({
         <span className="diff-list-progress">
           {" · "}
           {LIST_WORDS.viewedOf(
-            pullRequest.files.filter((file) => list.viewed?.(file.path) === true).length,
+            changed.files.filter((file) => list.viewed?.(file.path) === true).length,
             count,
           )}
         </span>

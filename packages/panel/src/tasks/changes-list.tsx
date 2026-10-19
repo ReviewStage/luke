@@ -95,7 +95,7 @@ export const LIST_WORDS = {
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */
-function typingInto(target: EventTarget | null): boolean {
+export function typingInto(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches("input, textarea, select");
 }
