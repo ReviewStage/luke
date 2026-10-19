@@ -100,7 +100,7 @@ export type TaskTool =
   | typeof CODER_TOOL.SHOW_PAGE
   | (typeof COMMENT_TASK_TOOLS)[number];
 
-/** The comment tools every agent on a task is offered, one handed a prompt among them, since a member may send any of them a thread. */
+/** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
 const COMMENT_TASK_TOOLS = [
   CODER_TOOL.READ_COMMENTS,
   CODER_TOOL.REPLY_TO_COMMENT,
@@ -110,15 +110,15 @@ const COMMENT_TASK_TOOLS = [
 
 /**
  * The plan's tools an agent is offered: none for one on no plan, as an
- * automation's run starts one, and no `edit_plan` for one handed a prompt,
- * which never saw the plan; every agent on a task reads and answers its
- * comments. Note that each tool withheld is one its call
- * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
- * the instructions leave out the same words (`instructions.ts`).
+ * automation's run starts one, and all of them for one on a task, whether
+ * it was handed the plan or a prompt, since New task starts every agent on
+ * the developer's own words while Luke writes the plan beside it. Note that
+ * each tool withheld is one its call would only be refused by (`host.ts`'s
+ * `editPlan` and `showPage`), and that the instructions leave out the same
+ * words (`instructions.ts`).
  */
-export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
+export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
-  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
 }
 

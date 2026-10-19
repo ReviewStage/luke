@@ -161,7 +161,12 @@ test("For you lists every open ask someone else posted, the oldest first, then e
   );
 });
 
-test("the rail counts For you, lists #general, then the plans' channels, then the topics, and the direct messages the latest spoken in first, each counting what others posted past the reader's cursor", () => {
+/** Every channel row the rail draws above the direct messages, in its order: the channels, then the tasks' groups. */
+function placed(rail: ReturnType<typeof chatRail>) {
+  return [...rail.channels, ...rail.tasks.flatMap((group) => group.rows)];
+}
+
+test("the rail counts For you, lists #general and the topics, then the tasks' channels, and the direct messages the latest spoken in first, each counting what others posted past the reader's cursor", () => {
   const chat = chatOf(3, [
     message(2, MARIA, WITH_MARIA.id),
     message(4, AGENT, WITH_AGENT.id),
@@ -173,11 +178,11 @@ test("the rail counts For you, lists #general, then the plans' channels, then th
   const rail = chatRail(chat, NAMES);
   assert.equal(rail.forYou, 1);
   assert.deepEqual(
-    rail.channels.map((row) => [row.label, row.unread]),
+    placed(rail).map((row) => [row.label, row.unread]),
     [
       ["general", 0],
-      ["invites", 2],
       ["alpha", 0],
+      ["invites", 2],
     ],
   );
   assert.deepEqual(
@@ -201,11 +206,11 @@ test("a channel read further on its own cursor counts only what came past that, 
   };
   const rail = chatRail(chat, NAMES);
   assert.deepEqual(
-    rail.channels.map((row) => [row.label, row.unread]),
+    placed(rail).map((row) => [row.label, row.unread]),
     [
       ["general", 0],
-      ["invites", 1],
       ["alpha", 0],
+      ["invites", 1],
     ],
   );
   assert.deepEqual(
@@ -226,7 +231,7 @@ test("a message changed past the reader's cursor counts unread again, as the ser
     reads: [{ channelId: TASK_CHANNEL.id, readSeq: 5 }],
   };
   const rail = chatRail(chat, NAMES);
-  assert.equal(rail.channels.find((row) => row.label === "invites")?.unread, 1);
+  assert.equal(placed(rail).find((row) => row.label === "invites")?.unread, 1);
 });
 
 test("a channel reads as its roots in the order posted, each with its thread's replies under it, and a reply whose root was not read stands as a root", () => {
@@ -358,4 +363,48 @@ test("a topic's name is written as a channel's, and refused where it breaks the 
     [false, false, true, false, false, false],
   );
   assert.equal(topicNameProblem(chat, "alpha", TOPIC.id), undefined, "a topic keeps its own name");
+});
+
+test("the tasks' channels stand as the sidebar groups their tasks: pinned in the pins' order, each section in its order, the rest under Other tasks; and the archived channels apart", () => {
+  const task = (id: string, name: string, archived = false): ChatChannel => ({
+    id: `channel-${id}`,
+    kind: CHANNEL_KIND.TASK,
+    name,
+    planId: id,
+    archived,
+  });
+  const chat = {
+    ...chatOf(0, []),
+    channels: [
+      GENERAL,
+      TOPIC,
+      OLD,
+      task("t1", "billing"),
+      task("t2", "invites"),
+      task("t3", "schema"),
+      task("t4", "zeta"),
+      task("t5", "gone", true),
+    ],
+  };
+  const grouped = chatRail(chat, NAMES, {
+    pinned: ["t3"],
+    sections: [{ id: "launch", title: "Launch", taskIds: ["t2", "t3", "t1"] }],
+  });
+  assert.deepEqual(
+    grouped.tasks.map((group) => [group.title, group.rows.map((row) => row.label)]),
+    [
+      ["Pinned", ["schema"]],
+      ["Launch", ["invites", "billing"]],
+      ["Other tasks", ["zeta"]],
+    ],
+  );
+  assert.deepEqual(
+    grouped.archived.map((row) => row.label),
+    ["gone", "aardvark"],
+  );
+  const flat = chatRail(chat, NAMES);
+  assert.deepEqual(
+    flat.tasks.map((group) => [group.title, group.rows.length]),
+    [[undefined, 4]],
+  );
 });
