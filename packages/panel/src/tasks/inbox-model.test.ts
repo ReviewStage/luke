@@ -1137,15 +1137,28 @@ test("an answered item previews its answer after who gave it: the options picked
   assert.equal(inboxPreview(unnamed, previewName), "Someone: Approved");
 });
 
-test("an item its agent took back previews that it was withdrawn and why, or that alone where it gave no reason", () => {
+test("an item its agent took back previews that it was withdrawn and why", () => {
   const withdrawn = item({
     id: "f1",
     status: INBOX_STATUS.CLOSED,
     closedReason: "the plan settled on 5",
   });
   assert.equal(inboxPreview(withdrawn, previewName), "Withdrawn: the plan settled on 5");
-  const { closedReason: _reason, ...unexplained } = withdrawn;
-  assert.equal(inboxPreview(unexplained, previewName), "Withdrawn");
+});
+
+test("an item a member closed without an answer previews who closed it, You for the reader, and never reads as withdrawn by its agent", () => {
+  const closed = item({ id: "f2", status: INBOX_STATUS.CLOSED, closedBy: YOU });
+  assert.equal(inboxPreview(closed, previewName), "You: Closed without answering");
+  assert.equal(
+    inboxPreview({ ...closed, closedBy: CHARLES }, previewName),
+    "Charles Pan: Closed without answering",
+  );
+  const { closedBy: _by, ...unnamed } = closed;
+  assert.equal(
+    inboxPreview(unnamed, previewName),
+    "Someone: Closed without answering",
+    "a closed item without the agent's reason is a member's, though their account is gone",
+  );
 });
 
 test("the latest message on an item's thread is its preview, open or settled, led by the agent, You, or the teammate who wrote it, a message of files alone saying so; a settlement after the last message is the preview instead", () => {

@@ -23,6 +23,7 @@ import * as issueView from "./issue-view.js";
 import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
+import * as liveWire from "./live-wire.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
 import * as pinOrder from "./pin-order.js";
@@ -62,6 +63,10 @@ const EFFECT_MODULE_SCHEMAS = {
     accountChatEntrySchema: accountInboxWire.accountChatEntrySchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
+  "live-wire": {
+    sealedLiveQuerySchema: liveWire.sealedLiveQuerySchema,
+    accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,
@@ -180,6 +185,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxAnswerSchema: inboxWire.inboxAnswerSchema,
     inboxAnswerRequestSchema: inboxWire.inboxAnswerRequestSchema,
     inboxAnsweredSchema: inboxWire.inboxAnsweredSchema,
+    inboxCloseRequestSchema: inboxWire.inboxCloseRequestSchema,
     inboxMessageRequestSchema: inboxWire.inboxMessageRequestSchema,
     inboxMessagedSchema: inboxWire.inboxMessagedSchema,
     inboxReadStateSchema: inboxWire.inboxReadStateSchema,
@@ -243,14 +249,12 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
+    codingAgentInboxCloseParamsSchema: codingAgentView.codingAgentInboxCloseParamsSchema,
     codingAgentInboxMessageParamsSchema: codingAgentView.codingAgentInboxMessageParamsSchema,
     codingAgentInboxMessagedViewSchema: codingAgentView.codingAgentInboxMessagedViewSchema,
     codingAgentInboxReadStateParamsSchema: codingAgentView.codingAgentInboxReadStateParamsSchema,
     codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
     codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
-    codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
-    codingAgentAccountInboxAnswerViewSchema:
-      codingAgentView.codingAgentAccountInboxAnswerViewSchema,
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentChatAttachmentParamsSchema: codingAgentView.codingAgentChatAttachmentParamsSchema,
@@ -472,7 +476,6 @@ const EFFECT_MODULE_SCHEMAS = {
     linearIssueIdSchema: linearWire.linearIssueIdSchema,
     linearIdentifierSchema: linearWire.linearIdentifierSchema,
     linearIssueSummarySchema: linearWire.linearIssueSummarySchema,
-    taskLinearIssueSchema: linearWire.taskLinearIssueSchema,
     linearIssuesAnswerSchema: linearWire.linearIssuesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
   "transcript-wire": {

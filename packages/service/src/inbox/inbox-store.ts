@@ -1,6 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import {
+  LIVE_COUNT,
+  type LiveStatement,
+  liveLatest,
+  liveSelection,
+  liveStatementOf,
+} from "@luke/database/core/live-statement";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@luke/database/core/query";
 import { automationReadableBy } from "@luke/database/models/automation-store";
+import {
+  type ChatWaitingLiveStatements,
+  chatWaitingLiveStatements,
+} from "@luke/database/models/chat-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
@@ -282,6 +298,10 @@ const INBOX_ITEM_COLUMNS = {
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.answeredBy})`,
   closedReason: inboxItem.closedReason,
+  closedBy: inboxItem.closedBy,
+  closedByName: sql<
+    string | null
+  >`(select "name" from ${user} where ${user.id} = ${inboxItem.closedBy})`,
   messages: MESSAGES,
   postedAt: inboxItem.postedAt,
   settledAt: SETTLED_AT,
@@ -339,6 +359,8 @@ const InboxRowSchema = Schema.Struct({
   answeredBy: Schema.NullOr(Schema.String),
   answeredByName: Schema.NullOr(Schema.String),
   closedReason: Schema.NullOr(Schema.String),
+  closedBy: Schema.NullOr(Schema.String),
+  closedByName: Schema.NullOr(Schema.String),
   messages: Schema.Array(MessageRowSchema),
   postedAt: InstantColumnSchema,
   settledAt: Schema.NullOr(Schema.Number),
@@ -371,6 +393,9 @@ function storedItem(row: InboxRow): StoredInboxItem {
         ? undefined
         : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
       ...(row.closedReason === null ? undefined : { closedReason: row.closedReason }),
+      ...(row.closedBy === null || row.closedByName === null
+        ? undefined
+        : { closedBy: { userId: row.closedBy, name: row.closedByName } }),
       ...(row.messages.length === 0 ? undefined : { messages: row.messages.map(storedMessage) }),
       postedAt: row.postedAt.getTime(),
       ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
@@ -665,6 +690,7 @@ const upsertItem = SqlSchema.findOne({
       answerKey: null,
       answeredBy: null,
       closedReason: null,
+      closedBy: null,
       settledAt: null,
       updatedAt: write.now,
     };
@@ -706,6 +732,7 @@ const closeItem = SqlSchema.findOneOption({
         .set({
           status: INBOX_STATUS.CLOSED,
           closedReason: reason,
+          closedBy: null,
           revision: sql`${inboxItem.revision} + 1`,
           settledAt: now,
           updatedAt: now,
@@ -1025,6 +1052,112 @@ const findAutomationsWithItems = SqlSchema.findAll({
     ),
 });
 
+/** The statements the account's read is subscribed to live: each part of its answer as a row of the wire's own shape, what waits in chat among them. */
+export interface AccountInboxLiveStatements extends ChatWaitingLiveStatements {
+  readonly items: LiveStatement;
+  readonly planless: LiveStatement;
+  readonly plans: LiveStatement;
+  readonly automations: LiveStatement;
+}
+
+/**
+ * What waits on the developer across the account, written for Neon Realtime:
+ * the same rows, joins, and rule of who may read them as `accountWaitingItems`,
+ * `accountTasklessItems`, `accountInboxTasks` with the archived tasks, and
+ * `accountInboxAutomations`, each item unread or not for the account as they say it, and what waits in
+ * chat as `chat-waiting.ts` reads it (`chatWaitingLiveStatements`), each
+ * column under the key `account-inbox-wire.ts` reads it by and each instant
+ * in epoch milliseconds, so a row decodes as the held read's entry does. The order is the reader's to keep, since Realtime keeps none.
+ * None where a statement names a value Realtime cannot carry.
+ */
+export function accountInboxLiveStatements(
+  userId: string,
+): Option.Option<AccountInboxLiveStatements> {
+  const items = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: inboxItem.id,
+          planId: inboxItem.taskId,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          startedBy: codingAgent.userId,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+          unread: unreadFor(userId),
+        },
+        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+      ),
+    )
+    .from(inboxItem)
+    .innerJoin(task, eq(task.id, inboxItem.taskId))
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .where(accountWaiting(userId));
+  const planless = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: inboxItem.id,
+          agentId: inboxItem.agentId,
+          agentTitle: codingAgent.title,
+          agentModel: codingAgent.model,
+          startedBy: codingAgent.userId,
+          automationId: automation.id,
+          automationName: automation.name,
+          repository: codingAgent.repository,
+          workspaceId: codingAgent.organizationId,
+          title: inboxItem.title,
+          revision: inboxItem.revision,
+          unread: unreadFor(userId),
+        },
+        { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
+      ),
+    )
+    .from(inboxItem)
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .leftJoin(
+      automation,
+      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+    )
+    .where(tasklessWaiting(userId));
+  const plans = queryBuilder
+    .select({
+      ...liveSelection({ planId: inboxItem.taskId }),
+      items: LIVE_COUNT.as("items"),
+      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
+    })
+    .from(inboxItem)
+    .innerJoin(task, eq(task.id, inboxItem.taskId))
+    // The archived tasks too, as the held read lists them to a desktop that asks with `archived=include`, which every desktop following live does.
+    .where(taskReachableBy(userId))
+    .groupBy(inboxItem.taskId);
+  const automations = queryBuilder
+    .select({
+      ...liveSelection({ automationId: automation.id }),
+      items: LIVE_COUNT.as("items"),
+      updatedAt: liveLatest(inboxItem.updatedAt).as("updatedAt"),
+    })
+    .from(inboxItem)
+    .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+    .leftJoin(
+      automation,
+      and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+    )
+    .where(and(isNull(inboxItem.taskId), itemReachableBy(userId)))
+    .groupBy(automation.id);
+  return Option.zipWith(
+    Option.all({
+      items: liveStatementOf(items),
+      planless: liveStatementOf(planless),
+      plans: liveStatementOf(plans),
+      automations: liveStatementOf(automations),
+    }),
+    chatWaitingLiveStatements(userId),
+    (parts, chat) => ({ ...parts, ...chat }),
+  );
+}
+
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
 function scopeItems(
   scope: InboxScope,
@@ -1249,6 +1382,45 @@ const answerItem = SqlSchema.findOneOption({
           answer,
           answerKey,
           answeredBy: userId,
+          settledAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(inboxItem.id, itemId),
+            itemReachableBy(userId),
+            eq(inboxItem.revision, revision),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+          ),
+        )
+        .returning(inboxColumns(userId)),
+    ),
+});
+
+/**
+ * The item closed by the member without an answer where it is open at the
+ * revision named, under the key their client sent the close with, kept
+ * where an answer's is, so a close sent again finds the one it made and a
+ * close taken back finds its own; nothing where it is not open there.
+ */
+const memberCloseItem = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    revision: Schema.Number,
+    closeKey: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: InboxRowSchema,
+  execute: ({ userId, itemId, revision, closeKey, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          status: INBOX_STATUS.CLOSED,
+          answerKey: closeKey,
+          closedBy: userId,
+          closedReason: null,
           settledAt: now,
           updatedAt: now,
         })
@@ -1545,6 +1717,85 @@ export function withdrawInboxAnswer(
         // The answer taken back is the member's own, so it leaves the item read for them as the answer did.
         yield* upsertRead({ userId, itemId });
         // Note that the row is read again, because what `returning` projected still named the files and was read before the marker moved.
+        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+      }),
+    ),
+  );
+}
+
+/**
+ * The item closed by a member without an answer, at the revision named and
+ * under the key their client sent the close with, where it is open there;
+ * nothing where it is not. The close is the member's own, so it leaves the
+ * item read for them, as an answer does.
+ */
+export function closeInboxItemAsMember(
+  userId: string,
+  itemId: string,
+  revision: number,
+  closeKey: string,
+): InboxStoreEffect<Option.Option<InboxItem>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const closed = yield* memberCloseItem({ userId, itemId, revision, closeKey, now });
+        if (Option.isNone(closed)) return Option.none();
+        yield* upsertRead({ userId, itemId });
+        // Note that the row is read again, because what `returning` projected was read before the marker moved.
+        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+      }),
+    ),
+  );
+}
+
+/** A member's close taken back off the item it was taken on under the key, opening it again; nothing where that close no longer stands. */
+const withdrawClose = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    closeKey: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: InboxRowSchema,
+  execute: ({ userId, itemId, closeKey, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          status: INBOX_STATUS.OPEN,
+          answerKey: null,
+          closedBy: null,
+          settledAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(inboxItem.id, itemId),
+            itemReachableBy(userId),
+            eq(inboxItem.answerKey, closeKey),
+            eq(inboxItem.status, INBOX_STATUS.CLOSED),
+            // The agent's own close since, which always says why, is never opened by taking the member's back.
+            isNull(inboxItem.closedReason),
+          ),
+        )
+        .returning(inboxColumns(userId)),
+    ),
+});
+
+/** The member's close taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */
+export function withdrawInboxClose(
+  userId: string,
+  itemId: string,
+  closeKey: string,
+): InboxStoreEffect<Option.Option<InboxItem>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const withdrawn = yield* withdrawClose({ userId, itemId, closeKey, now });
+        if (Option.isNone(withdrawn)) return Option.none();
+        yield* upsertRead({ userId, itemId });
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),
     ),

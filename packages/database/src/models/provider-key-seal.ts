@@ -3,7 +3,7 @@ import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 
 /**
- * provider-key-seal.ts -- an account's own provider key sealed for the database, and opened again for the one call that needs it.
+ * provider-key-seal.ts -- an account's own provider key, or a member's GitHub token, sealed for the database, and opened again for the one call that needs it.
  *
  * Envelope encryption under AES-256-GCM. Every save draws a fresh 32-byte
  * data key, seals the provider key under it, and wraps the data key under
@@ -20,10 +20,15 @@ import { Redacted, Result } from "effect";
  * and a version the environment no longer holds are all a key the service
  * must not use.
  *
+ * A member's GitHub personal access token is sealed the same way under the
+ * same ring, with purposes of its own (`luke/github-token/*`) and the
+ * account alone bound beside them, so a provider key's seal never opens as
+ * a token's or the reverse.
+ *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
  * standing row onto it by unwrapping and rewrapping its data key, never
- * touching the provider key itself. A version stays in the list until no
+ * touching the sealed secret itself. A version stays in the list until no
  * row names it.
  */
 
@@ -40,11 +45,18 @@ const SEAL = {
   TAG_BYTES: 16,
 } as const;
 
-/** What each seal's additional data names first, so a wrapped data key never opens as a sealed provider key or the reverse. */
+/**
+ * What each seal's additional data names first, one pair per kind of secret
+ * sealed under the ring: a wrapped data key never opens as a sealed secret
+ * or the reverse, and a provider key's seal never opens as a GitHub token's.
+ */
 const SEAL_PURPOSE = {
-  DATA_KEY: "luke/provider-key/data-key",
-  PROVIDER_KEY: "luke/provider-key/key",
+  PROVIDER_KEY: { DATA_KEY: "luke/provider-key/data-key", SECRET: "luke/provider-key/key" },
+  GITHUB_TOKEN: { DATA_KEY: "luke/github-token/data-key", SECRET: "luke/github-token/token" },
 } as const;
+
+/** One kind of secret's purposes: the data key's wrap, and the secret's own seal. */
+type SealPurpose = (typeof SEAL_PURPOSE)[keyof typeof SEAL_PURPOSE];
 
 /** One entry of the environment's list: a version of one to six digits and a 32-byte key in standard base64. */
 const KEY_ENTRY = /^(\d{1,6}):([A-Za-z0-9+/]{43}=)$/u;
@@ -73,6 +85,15 @@ export interface SealedProviderKey {
   readonly sealedKey: string;
 }
 
+/** What a row holds of one member's GitHub personal access token. */
+export interface SealedGitHubToken {
+  readonly keyVersion: number;
+  /** base64 of nonce, ciphertext, and tag: the data key under the key-encryption key. */
+  readonly sealedDataKey: string;
+  /** base64 of nonce, ciphertext, and tag: the token under the data key. */
+  readonly sealedToken: string;
+}
+
 /** Whose key a seal is, which both seals bind. */
 export interface SealOwner {
   readonly userId: string;
@@ -84,12 +105,18 @@ export const PROVIDER_KEY_UNREADABLE = "unreadable";
 
 export type ProviderKeyUnreadable = typeof PROVIDER_KEY_UNREADABLE;
 
-function additionalData(purpose: string, owner: SealOwner, version?: number): Buffer {
-  // A JSON array, so no account id can be spelled to run into the provider beside it.
-  const named =
-    version === undefined
-      ? [purpose, owner.userId, owner.provider]
-      : [purpose, owner.userId, owner.provider, version];
+/** A data key's wrap as a row holds it: the version it is wrapped under, and the wrap. */
+interface WrappedDataKey {
+  readonly keyVersion: number;
+  readonly sealedDataKey: string;
+}
+
+/** What a seal binds besides its purpose: the account first, then whatever else names the row, as the provider. */
+type SealNames = readonly string[];
+
+function additionalData(purpose: string, names: SealNames, version?: number): Buffer {
+  // A JSON array, so no account id can be spelled to run into the name beside it.
+  const named = version === undefined ? [purpose, ...names] : [purpose, ...names, version];
   return Buffer.from(JSON.stringify(named), "utf8");
 }
 
@@ -122,30 +149,86 @@ function openBytes(key: Uint8Array, sealed: string, aad: Buffer): Buffer | undef
 /** The data key a row wraps, or nothing where its version is gone or its wrap does not open. */
 function openDataKey(
   ring: KeyRing,
-  owner: SealOwner,
-  sealed: SealedProviderKey,
+  purpose: SealPurpose,
+  names: SealNames,
+  wrapped: WrappedDataKey,
 ): Buffer | undefined {
-  const wrapping = ring.keys.get(sealed.keyVersion);
+  const wrapping = ring.keys.get(wrapped.keyVersion);
   if (wrapping === undefined) return undefined;
-  const aad = additionalData(SEAL_PURPOSE.DATA_KEY, owner, sealed.keyVersion);
-  const dataKey = openBytes(Redacted.value(wrapping), sealed.sealedDataKey, aad);
+  const aad = additionalData(purpose.DATA_KEY, names, wrapped.keyVersion);
+  const dataKey = openBytes(Redacted.value(wrapping), wrapped.sealedDataKey, aad);
   return dataKey?.length === SEAL.KEY_BYTES ? dataKey : undefined;
 }
 
 function wrapDataKey(
   ring: KeyRing,
-  owner: SealOwner,
+  purpose: SealPurpose,
+  names: SealNames,
   dataKey: Uint8Array,
-): Pick<SealedProviderKey, "keyVersion" | "sealedDataKey"> {
+): WrappedDataKey {
   const wrapping = ring.keys.get(ring.current);
   // The parse puts the current version in the map, so its absence is a ring built by hand wrongly.
   if (wrapping === undefined)
     throw new Error("The key ring names a current version it does not hold.");
-  const aad = additionalData(SEAL_PURPOSE.DATA_KEY, owner, ring.current);
+  const aad = additionalData(purpose.DATA_KEY, names, ring.current);
   return {
     keyVersion: ring.current,
     sealedDataKey: sealBytes(Redacted.value(wrapping), dataKey, aad),
   };
+}
+
+/** A secret sealed under a fresh data key, wrapped under the ring's current version, both bound to the purpose and the names. */
+function sealSecret(
+  ring: KeyRing,
+  purpose: SealPurpose,
+  names: SealNames,
+  secret: Redacted.Redacted<string>,
+): WrappedDataKey & { readonly sealed: string } {
+  const dataKey = randomBytes(SEAL.KEY_BYTES);
+  const sealed = sealBytes(
+    dataKey,
+    Buffer.from(Redacted.value(secret), "utf8"),
+    additionalData(purpose.SECRET, names),
+  );
+  const wrapped = wrapDataKey(ring, purpose, names, dataKey);
+  dataKey.fill(0);
+  return { ...wrapped, sealed };
+}
+
+/** The secret a row seals, sealed again at once, or nothing where any part of it does not open for these names. */
+function openSecret(
+  ring: KeyRing,
+  purpose: SealPurpose,
+  names: SealNames,
+  wrapped: WrappedDataKey,
+  sealed: string,
+): Redacted.Redacted<string> | undefined {
+  const dataKey = openDataKey(ring, purpose, names, wrapped);
+  if (dataKey === undefined) return undefined;
+  const opened = openBytes(dataKey, sealed, additionalData(purpose.SECRET, names));
+  dataKey.fill(0);
+  if (opened === undefined) return undefined;
+  const secret = Redacted.make(opened.toString("utf8"));
+  opened.fill(0);
+  return secret;
+}
+
+/** The row's data key wrapped again under the ring's current version, or nothing where its wrap does not open. */
+function rewrapSecret(
+  ring: KeyRing,
+  purpose: SealPurpose,
+  names: SealNames,
+  wrapped: WrappedDataKey,
+): WrappedDataKey | undefined {
+  const dataKey = openDataKey(ring, purpose, names, wrapped);
+  if (dataKey === undefined) return undefined;
+  const rewrapped = wrapDataKey(ring, purpose, names, dataKey);
+  dataKey.fill(0);
+  return rewrapped;
+}
+
+function providerNames(owner: SealOwner): SealNames {
+  return [owner.userId, owner.provider];
 }
 
 /** The ring the environment's value names, or which shape it breaks. */
@@ -177,15 +260,13 @@ export function sealProviderKey(
   owner: SealOwner,
   key: Redacted.Redacted<string>,
 ): SealedProviderKey {
-  const dataKey = randomBytes(SEAL.KEY_BYTES);
-  const sealedKey = sealBytes(
-    dataKey,
-    Buffer.from(Redacted.value(key), "utf8"),
-    additionalData(SEAL_PURPOSE.PROVIDER_KEY, owner),
+  const { sealed, ...wrapped } = sealSecret(
+    ring,
+    SEAL_PURPOSE.PROVIDER_KEY,
+    providerNames(owner),
+    key,
   );
-  const wrapped = wrapDataKey(ring, owner, dataKey);
-  dataKey.fill(0);
-  return { ...wrapped, sealedKey };
+  return { ...wrapped, sealedKey: sealed };
 }
 
 /** The provider key a row seals, sealed again at once, or unreadable where any part of it does not open for this owner. */
@@ -194,18 +275,14 @@ export function openProviderKey(
   owner: SealOwner,
   sealed: SealedProviderKey,
 ): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
-  const dataKey = openDataKey(ring, owner, sealed);
-  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const opened = openBytes(
-    dataKey,
+  const key = openSecret(
+    ring,
+    SEAL_PURPOSE.PROVIDER_KEY,
+    providerNames(owner),
+    sealed,
     sealed.sealedKey,
-    additionalData(SEAL_PURPOSE.PROVIDER_KEY, owner),
   );
-  dataKey.fill(0);
-  if (opened === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const key = Redacted.make(opened.toString("utf8"));
-  opened.fill(0);
-  return Result.succeed(key);
+  return key === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(key);
 }
 
 /** The row's data key wrapped again under the ring's current version, the provider key's seal untouched; unreadable where its wrap does not open. */
@@ -214,9 +291,40 @@ export function rewrapProviderKey(
   owner: SealOwner,
   sealed: SealedProviderKey,
 ): Result.Result<SealedProviderKey, ProviderKeyUnreadable> {
-  const dataKey = openDataKey(ring, owner, sealed);
-  if (dataKey === undefined) return Result.fail(PROVIDER_KEY_UNREADABLE);
-  const wrapped = wrapDataKey(ring, owner, dataKey);
-  dataKey.fill(0);
-  return Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
+  const wrapped = rewrapSecret(ring, SEAL_PURPOSE.PROVIDER_KEY, providerNames(owner), sealed);
+  return wrapped === undefined
+    ? Result.fail(PROVIDER_KEY_UNREADABLE)
+    : Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
+}
+
+/** A member's GitHub token sealed for their row under a fresh data key, wrapped under the ring's current version. */
+export function sealGitHubToken(
+  ring: KeyRing,
+  userId: string,
+  token: Redacted.Redacted<string>,
+): SealedGitHubToken {
+  const { sealed, ...wrapped } = sealSecret(ring, SEAL_PURPOSE.GITHUB_TOKEN, [userId], token);
+  return { ...wrapped, sealedToken: sealed };
+}
+
+/** The GitHub token a row seals, sealed again at once, or unreadable where any part of it does not open for this member. */
+export function openGitHubToken(
+  ring: KeyRing,
+  userId: string,
+  sealed: SealedGitHubToken,
+): Result.Result<Redacted.Redacted<string>, ProviderKeyUnreadable> {
+  const token = openSecret(ring, SEAL_PURPOSE.GITHUB_TOKEN, [userId], sealed, sealed.sealedToken);
+  return token === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(token);
+}
+
+/** The row's data key wrapped again under the ring's current version, the token's seal untouched; unreadable where its wrap does not open. */
+export function rewrapGitHubToken(
+  ring: KeyRing,
+  userId: string,
+  sealed: SealedGitHubToken,
+): Result.Result<SealedGitHubToken, ProviderKeyUnreadable> {
+  const wrapped = rewrapSecret(ring, SEAL_PURPOSE.GITHUB_TOKEN, [userId], sealed);
+  return wrapped === undefined
+    ? Result.fail(PROVIDER_KEY_UNREADABLE)
+    : Result.succeed({ ...wrapped, sealedToken: sealed.sealedToken });
 }

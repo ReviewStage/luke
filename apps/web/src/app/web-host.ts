@@ -47,6 +47,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
 } from "@luke/host/client";
+import type { ActPortClient } from "@luke/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -75,6 +76,7 @@ import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
+import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
 import {
   notificationsOffered,
@@ -129,6 +131,8 @@ export interface WebHost {
   readonly bridge: AppBridge;
   /** The panel's end of its act port, for the acts that ride oRPC (`@luke/host/contract`). */
   readonly actPort: MessagePort;
+  /** What the panel's client of its act port is installed through: a workspace connect's press opens its tab. */
+  readonly actPortClient: (client: ActPortClient) => ActPortClient;
   readonly platform: AppPlatform;
 }
 
@@ -261,7 +265,7 @@ function platformRows(
   };
 }
 
-/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own. */
+/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
 function hostRowDependencies(
   operator: OperatorClient,
   notices: HostActDependencies["codingAgents"]["notices"],
@@ -282,6 +286,7 @@ function portDependencies(
   operator: OperatorClient,
   state: AppStateStore,
   reporter: string,
+  tabs: ConnectTabs,
 ): ActPortDependencies {
   const host = operator.host;
   const nothing = () => undefined;
@@ -314,14 +319,14 @@ function portDependencies(
     // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
     tasks: {
       host,
-      openExternal: async (url) => openTab(url),
+      openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
       talkAboutTask: nothing,
       voiceReady: () => false,
       callStanding: () => false,
     },
-    workspaces: { host, openExternal: async (url) => openTab(url) },
+    workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
 }
 
@@ -388,11 +393,14 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       if (notificationsOffered()) {
         state.update({ notifications: { status: notificationsStatusNow() } });
       }
+      // An address the host opens goes to a connect's waiting tab, or opens as a link.
+      const tabs = connectTabs(tabBrowser(openTab));
+      yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
       const operator = yield* createOperatorClient({
         report,
         gateway: assembly.gateway,
         nodes: assembly.nodes,
-        node: { openExternal: async (url) => openTab(url) },
+        node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
       // No voice window and no talk key stand beside the panel.
@@ -433,12 +441,13 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, state, crypto.randomUUID()),
+        portDependencies(operator, state, crypto.randomUUID(), tabs),
         services,
       );
       return {
         bridge: made.bridge,
         actPort,
+        actPortClient: tabs.portClient,
         platform: webPlatform({ recordSurfaceEvent: count }),
         operator,
       };
@@ -472,6 +481,7 @@ export function composeWeb(
         Layer.succeed(WebHostTag, {
           bridge: web.bridge,
           actPort: web.actPort,
+          actPortClient: web.actPortClient,
           platform: web.platform,
         }),
         effectServiceLayer(web.operator, report),

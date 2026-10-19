@@ -65,6 +65,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   INBOX_READ: "/api/inbox/read",
   /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime (GET): the address and one sealed statement per part
+   * of the account inbox, or `unavailable` where the deployment has no
+   * Realtime. `live-wire.ts` declares the answer.
+   */
+  LIVE_INBOX: "/api/live/inbox",
+  /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
@@ -188,6 +195,13 @@ export const HOSTED_SERVICE_PATH = {
    * `github-connection-wire.ts` declares both bodies.
    */
   GITHUB_CONNECT_CLAIM: "/api/github/connect/claim",
+  /**
+   * The member's own classic GitHub personal access token: read what it is
+   * (GET), save one (PUT), or remove it (DELETE), while the GitHub token
+   * experiment is on for them. No answer carries the token.
+   * `github-token-wire.ts` declares every body.
+   */
+  GITHUB_TOKEN: "/api/github/token",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
@@ -426,6 +440,11 @@ export function agentInboxPath(agentId: string, after: string): string {
 /** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
+}
+
+/** One item closed by a member without an answer (POST) against the revision they saw; `inbox-wire.ts` declares the request, and it answers as an answer does. */
+export function inboxClosePath(itemId: string): string {
+  return `${inboxItemPath(itemId)}/close`;
 }
 
 /** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */

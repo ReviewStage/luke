@@ -2,15 +2,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { readGitHubTokenRow, saveGitHubToken } from "@luke/database/models/github-token-store";
 import {
   type KeyRing,
+  openGitHubToken,
   openProviderKey,
   parseKeyRing,
+  sealGitHubToken,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { user } from "@luke/database/schemas/auth";
+import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
 import { getTestDB } from "@luke/database/testing";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
@@ -26,6 +30,8 @@ import {
  * an older version is moved onto the current one and opens under a ring
  * that no longer holds the old, a key already current or one the ring
  * cannot open is left as it was, and a second pass moves nothing.
+ *
+ * A member's GitHub token, sealed under the same ring, moves in the same pass.
  *
  * Synthetic accounts and keys; the key-encryption keys are fixed bytes
  * written for this file.
@@ -74,6 +80,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const db = yield* Database;
         // A pass walks every account's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
+        yield* db.delete(githubPersonalToken);
         const [first, second] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
         for (const id of [first, second]) {
           yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
@@ -97,14 +104,25 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           PROVIDER_KEY_PROVIDER.ANTHROPIC,
           "sk-ant-second-stray",
         );
+        yield* saveGitHubToken(
+          second,
+          sealGitHubToken(ring(KEK.ONE), second, Redacted.make("second-github-token")),
+          {
+            hint: "ghp_…test",
+            githubUserId: "1",
+            githubLogin: "second",
+            expiresAt: null,
+          },
+          new Date(0),
+        );
         const rotating = ring(`${KEK.TWO},${KEK.ONE}`);
 
         const pass = yield* rewrapProviderKeys(rotating);
         const again = yield* rewrapProviderKeys(rotating);
         const rotated = ring(KEK.TWO);
 
-        assert.deepEqual(pass, { moved: 2, current: 1, changed: 0, unreadable: 1 });
-        assert.deepEqual(again, { moved: 0, current: 3, changed: 0, unreadable: 1 });
+        assert.deepEqual(pass, { moved: 3, current: 1, changed: 0, unreadable: 1 });
+        assert.deepEqual(again, { moved: 0, current: 4, changed: 0, unreadable: 1 });
         assert.deepEqual(yield* openedUnder(rotated, first), [
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-first-anthropic"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-first-openai"],
@@ -113,6 +131,11 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 3, "unreadable"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-second-openai"],
         ]);
+        const token = yield* readGitHubTokenRow(second);
+        assert.equal(token?.keyVersion, 2);
+        const openedToken = token && openGitHubToken(rotated, second, token);
+        assert.ok(openedToken !== undefined && Result.isSuccess(openedToken));
+        assert.equal(Redacted.value(openedToken.success), "second-github-token");
       }),
   );
 
@@ -122,6 +145,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
       Effect.gen(function* () {
         const db = yield* Database;
         yield* db.delete(accountProviderKey);
+        yield* db.delete(githubPersonalToken);
         const owner = `user-${randomUUID()}`;
         yield* db
           .insert(user)

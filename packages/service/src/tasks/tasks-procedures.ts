@@ -247,11 +247,11 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The Linear issue a plan starts from, read through the workspace's own
- * Linear connection whatever team it is in, or the Linear refusal: the
- * workspace has none connected, its grant is refused, or the issue is none
- * it reaches. Nothing is written before it is read, so a refusal starts no
- * plan.
+ * The Linear issue a plan starts from, as the task links it, read through
+ * the workspace's own Linear connection whatever team it is in, or the
+ * Linear refusal: the workspace has none connected, its grant is refused,
+ * or the issue is none it reaches. Nothing is written before it is read, so
+ * a refusal starts no plan.
  */
 const startingLinearIssue = (organizationId: string, issueId: string) =>
   linearOrRefused(
@@ -419,7 +419,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
           repository,
-          ...(issue === undefined ? undefined : { linearIssue: issue }),
+          ...(issue === undefined ? undefined : { issueLinks: [issue] }),
           ...(issueId === undefined ? undefined : { issueId }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),

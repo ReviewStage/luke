@@ -22,6 +22,7 @@ import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../../core.js";
 import {
   answerInboxItem,
+  closeInboxItemAsMember,
   postInboxMessage,
   readInboxAttachment,
   taskInboxItems,
@@ -243,6 +244,33 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           "a closed item takes no answer",
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "the agent reads back which member closed an item without an answer, and its own close by its reason alone",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        yield* post(agent, input(SETTINGS));
+        yield* post(agent, input({ ...SETTINGS, key: "own" }));
+        const items = yield* taskInboxItems(agent.userId, agent.taskId);
+        const settings = items.find((item) => item.key === SETTINGS.key);
+        assert.ok(settings);
+        yield* closeInboxItemAsMember(agent.userId, settings.id, 1, randomUUID());
+        yield* closeInInbox(agent, input({ key: "own", reason: "Did it myself." }));
+
+        const read = yield* readOwnInbox(agent);
+        assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.deepEqual(
+          read.inbox
+            ?.map((line) => [line.key, line.status, line.closedBy, line.closedReason])
+            .sort(),
+          [
+            ["own", INBOX_STATUS.CLOSED, undefined, "Did it myself."],
+            [SETTINGS.key, INBOX_STATUS.CLOSED, "Test User", undefined],
+          ].sort(),
+        );
       }),
   );
 

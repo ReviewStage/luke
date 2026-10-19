@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, an empty issue list, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -34,6 +34,12 @@ export const LISTED_TASK = {
   updatedAt: 1_760_000_000_000,
   repository: null,
 } as const;
+
+/** Where the fake sends a browser to sign in to Notion. */
+export const NOTION_SIGN_IN = "https://notion.example/oauth/authorize";
+
+/** Where the fake sends a browser to install the GitHub App on a workspace. */
+export const GITHUB_INSTALL = "https://github.com/apps/luke/installations/new";
 
 /** One request the fake answered: its method and path, never a header. */
 interface SeenRequest {
@@ -99,6 +105,12 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     }
     if (pathname === "/api/account/integrations/settle" && method === "POST" && signedIn) {
       return json({ integrations: { slack: "connected" } });
+    }
+    if (pathname === "/api/account/integrations/notion/connect" && method === "POST" && signedIn) {
+      return json({ url: NOTION_SIGN_IN });
+    }
+    if (pathname === "/api/workspaces/github/connect" && method === "POST" && signedIn) {
+      return json({ url: GITHUB_INSTALL });
     }
     if (pathname === "/api/issues" && method === "GET" && signedIn) {
       return json({ issues: [] });

@@ -10,12 +10,19 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Context, Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
-import { fakeService, GITHUB_REPOSITORIES, WORKSPACE_MEMBER } from "./support/fake-service";
+import {
+  fakeService,
+  GITHUB_INSTALL,
+  GITHUB_REPOSITORIES,
+  NOTION_SIGN_IN,
+  WORKSPACE_MEMBER,
+} from "./support/fake-service";
 
 /**
  * The shared host as a browser tab composes it, with no panel drawn: what it
- * keeps survives the tab in the browser's storage, and an act the panel
- * sends reaches the service through the in-process bridge and comes back.
+ * keeps survives the tab in the browser's storage, an act the panel sends
+ * reaches the service through the in-process bridge and comes back, and a
+ * connect's address lands in the tab its press opened.
  */
 
 /** The host stood up in a scope of its own over the fake given, its acts run on the test's own services. */
@@ -33,6 +40,7 @@ const standingHost = (service: ReturnType<typeof fakeService>) =>
 
 afterEach(() => {
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 it.effect(
@@ -159,4 +167,57 @@ it.effect(
         );
       }),
     ),
+);
+
+it.effect(
+  "a connect's address, answered after the press, lands in the tab the press opened, cut from the app",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const sentTo: string[] = [];
+        const app: Window | null = window;
+        const tab = {
+          closed: false,
+          opener: app,
+          location: { replace: (url: string) => sentTo.push(url) },
+        };
+        // SAFETY: the tab's opener is cut, and its `closed` and `location.replace` read, alone, which this holds.
+        vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+        const { bridge, actPort, actPortClient } = yield* standingHost(
+          fakeService({ signedIn: true }),
+        );
+        installAppBridge(bridge);
+        installActPort(actPort, actPortClient);
+
+        yield* Effect.promise(() =>
+          askAct(ACT_KIND.INTEGRATIONS_CONNECT, { provider: INTEGRATION_PROVIDER.NOTION }),
+        );
+
+        assert.deepEqual(sentTo, [NOTION_SIGN_IN]);
+        // The provider's page reaches nothing of the app's tab.
+        assert.equal(tab.opener, null);
+      }),
+    ),
+);
+
+it.effect("a workspace connect on the act port lands in the tab its press opened", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sentTo: string[] = [];
+      const tab = { closed: false, location: { replace: (url: string) => sentTo.push(url) } };
+      // SAFETY: the connect reads a tab's `closed` and `location.replace`, and cuts its opener, alone.
+      vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+      const { bridge, actPort, actPortClient } = yield* standingHost(
+        fakeService({ signedIn: true }),
+      );
+      installAppBridge(bridge);
+      installActPort(actPort, actPortClient);
+
+      yield* Effect.promise(() =>
+        askAct(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId: "workspace-ada" }),
+      );
+
+      assert.deepEqual(sentTo, [GITHUB_INSTALL]);
+    }),
+  ),
 );

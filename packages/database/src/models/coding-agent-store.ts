@@ -17,6 +17,7 @@ import {
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { pullRequestAreasSchema } from "@luke/features/pull-request-area";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TURN_STATUS } from "@luke/wire";
 import {
   and,
@@ -51,6 +52,7 @@ import {
 } from "../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { taskIssue } from "../schemas/task-issue.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
@@ -915,10 +917,23 @@ const findAgentPublished = SqlSchema.findOneOption({
     ),
 });
 
-/** The Linear issue an agent's task links, by its key; null for an agent with no task, or a task that links none. */
-const AGENT_LINEAR_ISSUE = sql<
-  string | null
->`(select ${task.linearIssue} ->> 'identifier' from ${task} where ${task.id} = ${codingAgent.taskId})`;
+/**
+ * The first Linear issue an agent's task links, by its key; null for an
+ * agent with no task, or a task that links none. Note that it is built as a
+ * subquery, because a column in a raw template is spelled without its table
+ * and the task's id would then name the link's own.
+ */
+const AGENT_LINEAR_ISSUE = sql<string | null>`(${queryBuilder
+  .select({ key: taskIssue.key })
+  .from(taskIssue)
+  .where(
+    and(
+      eq(taskIssue.taskId, codingAgent.taskId),
+      eq(taskIssue.provider, TASK_ISSUE_PROVIDER.LINEAR),
+    ),
+  )
+  .orderBy(asc(taskIssue.createdAt), asc(taskIssue.id))
+  .limit(1)})`;
 
 /** The pull request states under which a pull request is still open for review or still a draft. */
 const OPEN_PULL_REQUEST_STATES: readonly string[] = [

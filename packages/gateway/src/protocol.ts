@@ -204,6 +204,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
@@ -228,8 +230,15 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
-  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
+  /**
+   * What waits on the developer across the account's tasks, followed from
+   * now until it is let go or the account signs out, over Neon Realtime. What
+   * it says is heard as `ACCOUNT_INBOX_CHANGED` events, never answered.
+   * Main's own read, which no window asks; following again starts over.
+   */
+  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  /** The account's inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
+  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -560,6 +569,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** What waits on the developer across the account, whole, each time it changes while it is followed. */
+  ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

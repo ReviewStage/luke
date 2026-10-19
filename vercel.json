@@ -218,6 +218,10 @@
           "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
         },
         {
+          "src": "/api/inbox/([^/]+)/close",
+          "dest": "/api/default.js?route=inbox/close&id=$1"
+        },
+        {
           "src": "/api/inbox/([^/]+)/messages",
           "dest": "/api/default.js?route=inbox/messages&id=$1"
         },
@@ -390,6 +394,10 @@
           "dest": "/api/default.js?route=github/repositories/tree"
         },
         {
+          "src": "/api/github/token",
+          "dest": "/api/default.js?route=github/token"
+        },
+        {
           "src": "/api/github/webhook",
           "dest": "/api/default.js?route=github/webhook"
         },
@@ -400,6 +408,10 @@
         {
           "src": "/api/issues",
           "dest": "/api/default.js?route=issues"
+        },
+        {
+          "src": "/api/live/inbox",
+          "dest": "/api/default.js?route=live/inbox"
         },
         {
           "src": "/api/mac-commands",
