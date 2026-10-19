@@ -185,6 +185,8 @@ export const CHAT_BOUNDS = {
   MAX_POSTS_PER_TURN: 20,
   /** The most characters a handle may spell. */
   MAX_HANDLE_CHARS: 40,
+  /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
+  MAX_PURPOSE_CHARS: 250,
 } as const;
 
 /**
@@ -303,6 +305,11 @@ const HANDLE_GRAMMAR = /^[a-z][a-z0-9-]*$/u;
 /** A channel's name, without its `#`: the same grammar as a key. */
 export const chatChannelNameSchema = inboxKeySchema;
 
+/** What a topic channel says it is for: one line of words, with no line break in it. */
+const chatPurposeSchema = filledText(CHAT_BOUNDS.MAX_PURPOSE_CHARS).check(
+  EffectSchema.isPattern(/^[^\r\n]*$/u),
+);
+
 /** A member's handle, without its `@`. */
 export const chatHandleSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
@@ -384,6 +391,8 @@ function askKeyed(post: { readonly key?: string; readonly ask?: unknown }): bool
  */
 export const postChatAskInputSchema = EffectSchema.Struct({
   ...postFields,
+  /** What a topic channel `to` opens is for; nothing where the post opens none. */
+  purpose: EffectSchema.optionalKey(chatPurposeSchema),
   key: EffectSchema.optionalKey(inboxKeySchema),
   ask: EffectSchema.optionalKey(chatAskSchema),
   blocks: EffectSchema.optionalKey(inboxPostBlocksSchema),
@@ -439,6 +448,8 @@ export const chatChannelSchema = EffectSchema.Struct({
     ),
   ),
   archived: EffectSchema.Boolean,
+  /** What a topic channel says it is for; absent where it says nothing. */
+  purpose: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /** @public */
@@ -621,9 +632,34 @@ export const chatReadToRequestSchema = EffectSchema.Struct({
   channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+/** A person's window opening a topic channel under a name of its own, with what it is for. */
+export const chatOpenRequestSchema = EffectSchema.Struct({
+  open: EffectSchema.Struct({
+    name: chatChannelNameSchema,
+    purpose: EffectSchema.optionalKey(chatPurposeSchema),
+  }),
+});
+
+/** @public */
+export type ChatOpenRequest = typeof chatOpenRequestSchema.Type;
+
+/** A person's window renaming a topic channel, saying or clearing its purpose, or archiving it or bringing it back; each left out stays. */
+export const chatEditRequestSchema = EffectSchema.Struct({
+  edit: EffectSchema.Struct({
+    channelId: wireUuidSchema,
+    name: EffectSchema.optionalKey(chatChannelNameSchema),
+    purpose: EffectSchema.optionalKey(EffectSchema.NullOr(chatPurposeSchema)),
+    archived: EffectSchema.optionalKey(EffectSchema.Boolean),
+  }),
+});
+
+/** @public */
+export type ChatEditRequest = typeof chatEditRequestSchema.Type;
+
 /**
  * What the window writes to a workspace's chat (POST): a post, an answer to
- * an ask, an ask of the person's own resolved, or how far they have read.
+ * an ask, an ask of the person's own resolved, how far they have read, or a
+ * topic channel opened or edited.
  * @public
  */
 export const chatWriteRequestSchema = EffectSchema.Union([
@@ -631,6 +667,8 @@ export const chatWriteRequestSchema = EffectSchema.Union([
   chatAnswerRequestSchema,
   chatResolveRequestSchema,
   chatReadToRequestSchema,
+  chatOpenRequestSchema,
+  chatEditRequestSchema,
 ]);
 
 /** @public */
@@ -649,8 +687,9 @@ export const chatReceiptSchema = EffectSchema.Struct({
  * the message and who it came to, a repeat under its key finishing a
  * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
  * taken, which it is not at a revision its poster has moved past or on an
- * ask no longer open; a resolve, the ask resolved; and a read, where the
- * person's cursor then stands everywhere, and each channel past it.
+ * ask no longer open; a resolve, the ask resolved; a read, where the
+ * person's cursor then stands everywhere, and each channel past it; and a
+ * channel opened or edited, the channel as it then stands.
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
@@ -660,6 +699,7 @@ export const chatWriteAnswerSchema = EffectSchema.Union([
     readSeq: countedNumber,
     reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
   }),
+  EffectSchema.Struct({ channel: chatChannelSchema }),
 ]);
 
 /** @public */

@@ -200,3 +200,27 @@ test("a notice's words as a person reads them keep the message alone, without th
   );
   assert.equal(chatNoticeWords("Reply with care."), "Reply with care.");
 });
+
+test("a topic's purpose is one line within its bound, as an open, an edit, and an agent's post write it, and an edit may clear it", () => {
+  const id = "00000000-0000-4000-8000-0000000000c1";
+  assert.equal(
+    takes(chatWriteRequestSchema, { open: { name: "release", purpose: "Friday" } }),
+    true,
+  );
+  assert.equal(
+    takes(chatWriteRequestSchema, { open: { name: "release", purpose: "Friday\nMonday" } }),
+    false,
+  );
+  assert.equal(
+    takes(chatWriteRequestSchema, {
+      open: { name: "release", purpose: "x".repeat(CHAT_BOUNDS.MAX_PURPOSE_CHARS + 1) },
+    }),
+    false,
+  );
+  assert.equal(takes(chatWriteRequestSchema, { edit: { channelId: id, purpose: null } }), true);
+  assert.equal(takes(chatWriteRequestSchema, { edit: { channelId: id, purpose: "a\rb" } }), false);
+  assert.equal(
+    takes(postChatAskInputSchema, { text: "Hi.", to: "#release", purpose: "Two\nlines" }),
+    false,
+  );
+});

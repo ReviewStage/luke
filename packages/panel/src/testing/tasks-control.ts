@@ -347,6 +347,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onShow: ignore,
       onPost: () => Promise.resolve(undefined),
       onAnswer: () => Promise.resolve(undefined),
+      onChannel: () => Promise.resolve(undefined),
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

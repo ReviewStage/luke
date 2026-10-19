@@ -4916,6 +4916,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--column-inset);
 }
 
+/* A topic's menu stands at the head's end, past its name and purpose. */
+.chat-head-actions {
+  flex: none;
+  margin-inline-start: auto;
+}
+
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
 .chat-stream-body {
   padding: var(--luke-space-16) var(--column-inset);

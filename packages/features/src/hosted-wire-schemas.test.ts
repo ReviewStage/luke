@@ -105,6 +105,8 @@ const EFFECT_MODULE_SCHEMAS = {
     chatAnswerRequestSchema: chatWire.chatAnswerRequestSchema,
     chatResolveRequestSchema: chatWire.chatResolveRequestSchema,
     chatReadToRequestSchema: chatWire.chatReadToRequestSchema,
+    chatOpenRequestSchema: chatWire.chatOpenRequestSchema,
+    chatEditRequestSchema: chatWire.chatEditRequestSchema,
     chatWriteRequestSchema: chatWire.chatWriteRequestSchema,
     chatReceiptSchema: chatWire.chatReceiptSchema,
     chatWriteAnswerSchema: chatWire.chatWriteAnswerSchema,
