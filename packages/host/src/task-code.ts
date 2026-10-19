@@ -1,5 +1,6 @@
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
+import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 
@@ -74,25 +75,26 @@ let highlighter: HighlighterCore | undefined;
  * since most launches show none, and kept for the life of the process; or
  * none where its module could not be loaded or built, as where a browser's
  * chunk fails to download, so the code is drawn plain rather than not at
- * all. Note that a failure is not kept, so the next colouring tries again,
+ * all; a caller's interruption still ends it. Note that a failure is not kept, so the next colouring tries again,
  * and that two colourings racing the first load may each build one, which
  * is harmless: the module loads once, and the later build is the one kept.
  */
 const sharedHighlighter: Effect.Effect<HighlighterCore | undefined> = Effect.suspend(() =>
   highlighter === undefined
-    ? Effect.tryPromise(() => import("./task-code-highlighter.js")).pipe(
-        Effect.map((module) => module.createTaskCodeHighlighter()),
-        Effect.tap((built) =>
-          Effect.sync(() => {
-            highlighter = built;
-          }),
+    ? catchAllButInterrupt(
+        Effect.tryPromise(() => import("./task-code-highlighter.js")).pipe(
+          Effect.map((module) => module.createTaskCodeHighlighter()),
+          Effect.tap((built) =>
+            Effect.sync(() => {
+              highlighter = built;
+            }),
+          ),
         ),
-        Effect.catchCause((cause) =>
+        (cause) =>
           Effect.as(
             Effect.logWarning("Code is drawn plain: the highlighter could not be loaded", cause),
             undefined,
           ),
-        ),
       )
     : Effect.succeed(highlighter),
 );

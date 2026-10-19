@@ -1,3 +1,10 @@
+/**
+ * task-code-highlighter.ts -- Shiki, its two GitHub themes, and the grammar of every language `task-code.ts` colours, in one module.
+ *
+ * Nothing imports this module statically: `task-code.ts` reaches it through
+ * one dynamic `import()` the first time code is coloured, so a build that
+ * splits chunks loads all of it as one chunk then, and none of it before.
+ */
 import langBash from "@shikijs/langs/bash";
 import langC from "@shikijs/langs/c";
 import langCpp from "@shikijs/langs/cpp";
@@ -23,14 +30,6 @@ import githubDarkDefault from "@shikijs/themes/github-dark-default";
 import githubLightDefault from "@shikijs/themes/github-light-default";
 import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-
-/**
- * task-code-highlighter.ts -- Shiki, its two GitHub themes, and the grammar of every language `task-code.ts` colours, in one module.
- *
- * Nothing imports this module statically: `task-code.ts` reaches it through
- * one dynamic `import()` the first time code is coloured, so a build that
- * splits chunks loads all of it as one chunk then, and none of it before.
- */
 
 /** A highlighter for every language coloured on a task, in both themes, on Shiki's JavaScript regex engine. */
 export function createTaskCodeHighlighter(): HighlighterCore {
