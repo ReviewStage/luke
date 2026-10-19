@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { appLinkOf, LINK_PLACE, type LinkPlace, linkOf, readLink } from "./luke-link.js";
+import {
+  appLinkOf,
+  LINK_PLACE,
+  type LinkPlace,
+  linkOf,
+  PULL_REQUEST_THREAD_VIEW,
+  readLink,
+} from "./luke-link.js";
 
 /**
  * A place in Luke as the link a teammate is sent: written under its
@@ -43,6 +50,26 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [
     { kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT },
     `${HOME}/plan/${TASK}/agent/${AGENT}/changes`,
+  ],
+  [
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      planId: TASK,
+      agentId: AGENT,
+      threadId: "PRRT_kwDOAbc-_12",
+      view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,
+    },
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/conversation/thread/PRRT_kwDOAbc-_12`,
+  ],
+  [
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      planId: TASK,
+      agentId: AGENT,
+      threadId: "PRRT_kwDOAbc-_12",
+      view: PULL_REQUEST_THREAD_VIEW.FILES,
+    },
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/PRRT_kwDOAbc-_12`,
   ],
   [
     { kind: LINK_PLACE.MESSAGE, planId: TASK, agentId: AGENT, messageId: OTHER },
@@ -180,6 +207,12 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/agents/${AGENT}`,
     `${HOME}/agent/${AGENT}/changes`,
     `${HOME}/agent/${AGENT}/worker/toolu_01`,
+    `${HOME}/agent/${AGENT}/changes/files/thread/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/checks/thread/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/threads/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/PRRT_1/more`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/MDE%3D`,
     `${HOME}/agent/Fix%20the%20billing%20export`,
     `${HOME}/task/Fix%20billing`,
     `${HOME}/plan/Fix%20billing#rollout`,

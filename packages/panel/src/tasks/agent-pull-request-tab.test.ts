@@ -31,7 +31,7 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/luke-link";
 import {
   MERGE_METHOD,
   PULL_REQUEST_ACTION,
@@ -52,6 +52,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -63,7 +64,7 @@ import { type GitHubConnectControl, GitHubConnectProvider } from "../github-conn
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -71,6 +72,7 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
+import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -219,7 +221,8 @@ const DIFF_STAND_IN: DiffViewModule = {
     lists.push(props);
     return {
       update: (next) => lists.push(next),
-      reveal: () => undefined,
+      reveal: (path) => listReveals.push(path),
+      revealLine: (path, side, line) => listReveals.push(`${path}:${side}:${line}`),
       unmount: () => undefined,
     };
   },
@@ -243,6 +246,8 @@ let changeNumbers: (number | undefined)[] = [];
 
 /** What Files changed handed the diff bundle's list, mount first, each draw after it. */
 let lists: DiffListProps[] = [];
+/** The files, or the lines of them, the list was scrolled to, in order. */
+let listReveals: string[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -255,6 +260,7 @@ beforeEach(() => {
   changeNumbers = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   lists = [];
+  listReveals = [];
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
@@ -288,6 +294,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -3815,4 +3822,310 @@ test("a merge asked about goes with its panel: hidden, the question is let go an
 
   assert.equal(question(), false, "the panel comes back asking nothing");
   assert.deepEqual(changes, []);
+});
+
+/** The thread the jumps below land on, by GitHub's node id. */
+const JUMPED = "PRRT_kwDOjump";
+
+/** The route's opener the last `Routed` drew, as a link pressed anywhere in the window reaches it. */
+let routeOpen: (link: ReadLink) => void = () => undefined;
+
+/** The Pull request tab inside the window's route for a review thread's link, as `openLink` takes it: the view the link names chosen, and the ask left for the tab; every link opened heard. */
+function Routed({
+  control,
+  heard,
+  first = PULL_REQUEST_VIEW.CONVERSATION,
+}: {
+  control: CodingAgentsControl;
+  heard: ReadLink[];
+  first?: PullRequestView;
+}) {
+  const [view, setView] = useState<PullRequestView>(first);
+  const [reveal, setReveal] = useState<ThreadReveal | undefined>(undefined);
+  const open = (link: ReadLink) => {
+    heard.push(link);
+    const { place } = link;
+    if (place.kind !== LINK_PLACE.PULL_REQUEST_THREAD) return;
+    setView(place.view);
+    setReveal((last) => ({
+      agentId: place.agentId,
+      threadId: place.threadId,
+      view: place.view,
+      ask: (last?.ask ?? 0) + 1,
+    }));
+  };
+  routeOpen = open;
+  return createElement(
+    OpenLinkProvider,
+    { value: open },
+    createElement(
+      ThreadRevealProvider,
+      {
+        value: {
+          reveal,
+          onRevealed: (ask: number) => setReveal((last) => (last?.ask === ask ? undefined : last)),
+        },
+      },
+      createElement(AgentPullRequestTab, {
+        agentId: AGENT.id,
+        control,
+        shown: true,
+        repository: "acme/relay",
+        tree: { open: false, onToggle: () => undefined },
+        view,
+        onView: setView,
+      }),
+    ),
+  );
+}
+
+/** A control whose conversation holds the threads given and whose changes hold the files given. */
+function jumpControl(
+  threads: readonly ReviewThread[],
+  files: readonly (typeof INVITE_FILE)[] = [INVITE_FILE],
+): CodingAgentsControl {
+  return controlAnswering(
+    { conversation: () => Promise.resolve({ pullRequest: reviewWith(threads) }) },
+    PULL_REQUEST_STATE.OPEN,
+    () =>
+      Promise.resolve({ pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files } }),
+  );
+}
+
+/** Lets the frames a landing waits on pass. */
+async function frames(count = 3): Promise<void> {
+  for (let frame = 0; frame < count; frame += 1) {
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  }
+}
+
+/** A thread's head press in the Conversation, which takes it to Files changed. */
+function headPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>('button[aria-label^="View in Files changed"]') ??
+    assert.fail("the thread's file and lines take it to Files changed")
+  );
+}
+
+/** Ends a card's ring, as its animation would. Note that jsdom has no AnimationEvent, so React hears the prefixed name there, which is sent beside the standard one. */
+function ringEnds(card: Element): void {
+  for (const name of ["animationend", "webkitAnimationEnd"]) {
+    const end = new Event(name, { bubbles: true });
+    Object.defineProperty(end, "animationName", { value: "search-landed" });
+    act(() => card.dispatchEvent(end));
+  }
+}
+
+/** A thread's ⋯ opened and the item named pressed. */
+async function threadMenuItem(card: Element, label: string): Promise<void> {
+  act(() =>
+    (
+      card.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the thread has its ⋯")
+    ).click(),
+  );
+  const item =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (each) => each.textContent?.includes(label) === true,
+    ) ?? assert.fail(`the ⋯ offers ${label}`);
+  act(() => item.click());
+  await settle();
+}
+
+test("a thread's file and lines in the Conversation take it to Files changed through the window's route for its link: its collapsed file opened, its minimized chip shown, the list scrolled to its line, its lines lit, the thread ringed and focused, and the lines let go as the ring ends", async () => {
+  handSettings();
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  const heard: ReadLink[] = [];
+  const tab = await drawn(
+    createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
+  );
+  // The member collapsed the file and minimized the comments in Files changed before.
+  await choose(tab, "Files changed");
+  const header = (lists.at(-1) ?? assert.fail("the files are drawn")).renderHeader(
+    INVITE_FILE.path,
+  );
+  act(() => header.querySelector<HTMLButtonElement>('button[aria-label="Collapse file"]')?.click());
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')]
+      .find((each) => each.getAttribute("aria-label") === "Minimize inline comments")
+      ?.click(),
+  );
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  await settle();
+  assert.equal(lists.at(-1)?.files[0]?.collapsed, true, "the file stands collapsed");
+  await choose(tab, "Conversation");
+
+  act(() => headPress(tab).click());
+  await settle();
+
+  assert.deepEqual(heard.at(-1)?.place, {
+    kind: LINK_PLACE.PULL_REQUEST_THREAD,
+    planId: AGENT.planId,
+    agentId: AGENT.id,
+    threadId: JUMPED,
+    view: PULL_REQUEST_THREAD_VIEW.FILES,
+  });
+  assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
+  const list = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.equal(list.files[0]?.collapsed, false, "the file is opened");
+  assert.deepEqual(listReveals, [`${INVITE_FILE.path}:additions:13`]);
+  const lit = {
+    path: INVITE_FILE.path,
+    selection: {
+      start: 12,
+      side: DIFF_SELECTION_SIDE.ADDITIONS,
+      end: 13,
+      endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+    },
+  };
+  assert.deepEqual(list.selected, lit);
+  const note = list.renderAnnotation(INVITE_FILE.path, `${PAGE}#discussion_r1`);
+  const card =
+    note.querySelector(".diff-inline-thread") ?? assert.fail("the chip shows its thread");
+
+  // Pierre draws the thread's note into the list, where it stands in sight.
+  (tab.querySelector(".diff-list") ?? assert.fail("the list's box")).appendChild(note);
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 400));
+  await frames();
+
+  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is ringed");
+  assert.equal(document.activeElement, card.querySelector("summary"), "the thread takes the focus");
+  ringEnds(card);
+  assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go as the ring ends");
+  assert.equal(card.hasAttribute("data-search-landed"), false);
+});
+
+test("a thread on a line no hunk shows, and one a later push outdated, land on their file's list above its diff, opened, the list scrolled to the file's header", async () => {
+  const outside = thread({
+    id: JUMPED,
+    line: 40,
+    startLine: 40,
+    originalLine: 40,
+    originalStartLine: 40,
+  });
+  const outdated = thread({
+    id: "PRRT_kwDOgone",
+    line: null,
+    startLine: null,
+    outdated: true,
+    comments: [
+      { ...(thread().comments[0] ?? assert.fail("a comment")), url: `${PAGE}#discussion_r2` },
+    ],
+  });
+  const tab = await draw(jumpControl([outside, outdated]));
+
+  act(() => headPress(tab).click());
+  await settle();
+  assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
+  assert.deepEqual(listReveals, [INVITE_FILE.path]);
+
+  await choose(tab, "Conversation");
+  const folded =
+    [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")].find((each) =>
+      threadLabels(each).includes("Outdated"),
+    ) ?? assert.fail("the outdated thread is drawn");
+  assert.equal(folded.querySelector("details")?.open, false, "an outdated thread stands folded");
+  await threadMenuItem(folded, "View in Files changed");
+
+  assert.deepEqual(listReveals, [INVITE_FILE.path, INVITE_FILE.path]);
+  const above = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    "above-additions",
+  );
+  const opened = [...above.querySelectorAll<HTMLElement>(".diff-inline-thread")].map(
+    (each) => each.querySelector("details")?.open,
+  );
+  assert.deepEqual(opened, [true, true], "the outdated thread is opened above the diff");
+});
+
+test("a thread whose file the changes no longer hold stays in the Conversation, brought into view there; a link to one the conversation no longer holds is let go", async () => {
+  const heard: ReadLink[] = [];
+  const tab = await drawn(
+    createElement(Routed, {
+      control: jumpControl([thread({ id: JUMPED, path: "src/gone.ts" })]),
+      heard,
+    }),
+  );
+
+  act(() => headPress(tab).click());
+  await settle();
+  await frames();
+
+  assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
+  assert.deepEqual(listReveals, [], "no file is scrolled to");
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
+  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is shown where it stays");
+
+  ringEnds(card);
+  act(() =>
+    routeOpen({
+      workspace: "acme",
+      place: {
+        kind: LINK_PLACE.PULL_REQUEST_THREAD,
+        planId: AGENT.planId ?? "",
+        agentId: AGENT.id,
+        threadId: "PRRT_kwDOnone",
+        view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,
+      },
+    }),
+  );
+  await settle();
+  await frames();
+  assert.equal(card.hasAttribute("data-search-landed"), false, "nothing is landed on");
+});
+
+test("a thread's ⋯ in Files changed shows it in the Conversation through the same route, standing through Hide resolved, ringed and focused there", async () => {
+  window.localStorage.clear();
+  const heard: ReadLink[] = [];
+  const resolved = thread({ id: JUMPED, resolved: true });
+  const tab = await drawn(
+    createElement(Routed, {
+      control: jumpControl([resolved]),
+      heard,
+      first: PULL_REQUEST_VIEW.FILES,
+    }),
+  );
+  await choose(tab, "Conversation");
+  act(() => filter(tab, "Hide resolved").click());
+  await settle();
+  assert.equal(tab.querySelector(".pull-request-thread"), null, "Hide resolved leaves it out");
+  await choose(tab, "Files changed");
+  const note = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    `${PAGE}#discussion_r1`,
+  );
+  document.body.appendChild(note);
+
+  await threadMenuItem(note, "View in Conversation");
+  await frames();
+
+  assert.equal(heard.at(-1)?.place.kind, LINK_PLACE.PULL_REQUEST_THREAD);
+  assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true");
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread stands");
+  assert.equal(card.querySelector("details")?.open, true, "the resolved thread is opened");
+  assert.equal(card.hasAttribute("data-search-landed"), true);
+  assert.equal(document.activeElement, card.querySelector("summary"));
+});
+
+test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn in; a thread with no id offers no ⋯ and no press to Files changed", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
+  const tab = await drawn(
+    createElement(
+      LinkWorkspaceProvider,
+      { value: "acme" },
+      createElement(Switching, {
+        control: jumpControl([thread({ id: JUMPED }), thread({ comments: [] })]),
+        first: PULL_REQUEST_VIEW.CONVERSATION,
+      }),
+    ),
+  );
+  const [card] = tab.querySelectorAll(".pull-request-thread");
+
+  await threadMenuItem(card ?? assert.fail("the thread is drawn"), "Copy link");
+
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}/changes/conversation/thread/${JUMPED}`,
+  ]);
 });

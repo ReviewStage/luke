@@ -161,56 +161,6 @@ export interface AdminTopUser {
   calls: number;
 }
 
-interface AdminDatabaseHealth {
-  reachable: boolean;
-  /** Round-trip of a trivial probe query, in milliseconds. */
-  latencyMs: number;
-}
-
-/**
- * Whether one integration is wired, by the presence of its key alone — never
- * the value. A maintainer reads that recording is on or the hosted tier is off
- * without any secret crossing into the response.
- */
-export interface AdminIntegration {
-  key: string;
-  label: string;
-  configured: boolean;
-}
-
-/**
- * The integrations the dashboard reports on, each by the key whose presence in
- * the environment decides it. The label is the maintainer-facing name; the key
- * is stable for anything that keys off the row.
- */
-const ADMIN_INTEGRATION = {
-  ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
-  ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
-  HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },
-  GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
-  GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
-} as const;
-
-/** Whether each integration's configuration is present — never its value. */
-export interface AdminIntegrationPresence {
-  analyticsRecording: boolean;
-  analyticsErasure: boolean;
-  hostedTier: boolean;
-  googleSignIn: boolean;
-  githubSignIn: boolean;
-}
-
-/** The integration health list, in the fixed order the dashboard draws it. */
-export function adminIntegrations(present: AdminIntegrationPresence): AdminIntegration[] {
-  return [
-    { ...ADMIN_INTEGRATION.HOSTED_TIER, configured: present.hostedTier },
-    { ...ADMIN_INTEGRATION.ANALYTICS_RECORDING, configured: present.analyticsRecording },
-    { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
-    { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },
-    { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
-  ];
-}
-
 export interface AdminMetrics {
   generatedAt: number;
   windowDays: number;
@@ -237,18 +187,6 @@ export interface AdminMetrics {
     /** Oldest cohort first; each row's cells stop at the current week. */
     cohorts: AdminRetentionCohort[];
   };
-  reliability: {
-    /**
-     * The analytics project's console, where the per-request error rates this
-     * section cannot show actually live. Absent when the deployment names no
-     * project, so the page states the absence rather than drawing a dead link.
-     */
-    analyticsConsoleUrl?: string | undefined;
-  };
-  systemHealth: {
-    database: AdminDatabaseHealth;
-    integrations: AdminIntegration[];
-  };
 }
 
 /**
@@ -273,14 +211,6 @@ export interface AdminMetricsSource {
     cohortSizes: ReadonlyMap<string, number>;
     /** Distinct accounts active per week, keyed by signup week then activity week. */
     activeByCohortWeek: ReadonlyMap<string, ReadonlyMap<string, number>>;
-  };
-  reliability: {
-    /** Read from the environment like the integrations, not from a table. */
-    analyticsConsoleUrl?: string | undefined;
-  };
-  systemHealth: {
-    database: AdminDatabaseHealth;
-    integrations: readonly AdminIntegration[];
   };
 }
 
@@ -420,11 +350,6 @@ export function buildAdminMetrics(
     retention: {
       weeks: ADMIN_RETENTION_WEEKS,
       cohorts: buildRetentionCohorts(source.retention, now),
-    },
-    reliability: { analyticsConsoleUrl: source.reliability.analyticsConsoleUrl },
-    systemHealth: {
-      database: source.systemHealth.database,
-      integrations: [...source.systemHealth.integrations],
     },
   };
 }

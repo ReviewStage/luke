@@ -25,6 +25,7 @@ import { PageSkeleton } from "../chrome/page-skeleton";
 import { accountReadPath } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, useAdminRead } from "../use-admin-read";
+import { AccountSupportSections, formatInstant } from "./account-support";
 
 const ACCOUNT_ERROR = "The account endpoint did not answer.";
 
@@ -49,6 +50,8 @@ const ACCOUNT_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.HEADING, label: "Volume" },
   { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
   { kind: SKELETON_SHAPE.STATIC, node: <AccountActivityNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Work" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 4, columns: 4 },
 ];
 
 export function AccountScreen({
@@ -142,6 +145,7 @@ export function AccountScreen({
                   </Inline>
                   <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                     Joined {formatDate(subject.createdAt)}
+                    {` · last seen ${detail.support.lastSeenAt === null ? "never" : formatInstant(detail.support.lastSeenAt)}`}
                     {subject.signInMethods.length > 0
                       ? ` · signs in with ${subject.signInMethods.map(signInMethodLabel).join(", ")}`
                       : ""}
@@ -227,6 +231,8 @@ export function AccountScreen({
               </div>
             </div>
             <AccountActivityNote />
+
+            <AccountSupportSections support={detail.support} windowDays={detail.windowDays} />
           </Refreshing>
         </AdminPage>,
       );

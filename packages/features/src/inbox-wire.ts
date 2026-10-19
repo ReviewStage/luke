@@ -362,7 +362,7 @@ export const inboxOptionSchema = EffectSchema.Struct({
   detail: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS)),
 });
 
-/** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options. */
+/** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options, one perhaps recommended. */
 export const inboxFieldSchema = EffectSchema.Struct({
   type: EffectSchema.Literals(Object.values(INBOX_FIELD)),
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
@@ -373,6 +373,8 @@ export const inboxFieldSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
     ),
   ),
+  /** The select's option the agent recommends, as a choice names its recommended label. */
+  recommended: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type InboxField = typeof inboxFieldSchema.Type;
@@ -380,8 +382,8 @@ export type InboxField = typeof inboxFieldSchema.Type;
 /**
  * What an item asks of the developer, one of six: a choice among options,
  * several where `multiple`, the label it recommends named; an approval; words,
- * with what the box says while empty; a task; a form of fields; or nothing
- * but an acknowledgement.
+ * with what the box says while empty; a task; a form of fields, each select
+ * naming the option it recommends; or nothing but an acknowledgement.
  */
 export const inboxResponseSchema = EffectSchema.Union([
   EffectSchema.Struct({

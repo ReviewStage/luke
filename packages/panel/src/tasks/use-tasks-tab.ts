@@ -154,6 +154,7 @@ import {
   fixtureSidePanel,
   fixtureTasksView,
 } from "./tasks-fixture.js";
+import type { ThreadReveal } from "./thread-reveal.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents.js";
 import { useInboxPages } from "./use-inbox-pages.js";
@@ -664,6 +665,10 @@ export interface TasksControl {
   messageReveal: MessageReveal | undefined;
   /** The agent's tab answered the ask, so a later visit to the agent does not answer it again. */
   onMessageRevealed: (ask: number) => void;
+  /** The last ask to bring one review thread of an agent's pull request into view, which a link to it makes; let go once its Pull request tab takes it (`thread-reveal.tsx`). */
+  threadReveal: ThreadReveal | undefined;
+  /** The agent's Pull request tab took the ask, so a later visit to the tab does not answer it again. */
+  onThreadRevealed: (ask: number) => void;
   /** The last ask to show a section, under the task it was asked of, so a section of a task not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly taskId: string; readonly reveal: SectionReveal } | undefined;
   /** The task's page showed the section an ask named, so a later visit to the task does not show it again. */
@@ -1212,6 +1217,7 @@ export function useTasksTab(input: {
   const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
   const [commentReveal, setCommentReveal] = useState<TasksControl["commentReveal"]>(undefined);
   const messageAsks = useRef(0);
+  const [threadReveal, setThreadReveal] = useState<ThreadReveal | undefined>(undefined);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
@@ -2711,6 +2717,19 @@ export function useTasksTab(input: {
       case LINK_PLACE.CHANGES:
         showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
+      // A review thread opens its agent's Pull request tab on the view the link names, which takes the ask once drawn; each ask is its own.
+      case LINK_PLACE.PULL_REQUEST_THREAD: {
+        const changes = sharedChangesAgent(place.planId, place.agentId);
+        sidePanel.onPullRequestView({ changes }, place.view);
+        showPanelTab(place.planId, { changes });
+        setThreadReveal((last) => ({
+          agentId: changes,
+          threadId: place.threadId,
+          view: place.view,
+          ask: (last?.ask ?? 0) + 1,
+        }));
+        return;
+      }
       case LINK_PLACE.AGENT:
         if (place.planId === undefined)
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
@@ -3270,6 +3289,9 @@ export function useTasksTab(input: {
     messageReveal,
     // Only the ask answered is let go; a newer one stands until its agent's tab answers it.
     onMessageRevealed: (ask) => setMessageReveal((last) => (last?.ask === ask ? undefined : last)),
+    threadReveal,
+    // Only the ask taken is let go; a newer one stands until its tab takes it.
+    onThreadRevealed: (ask) => setThreadReveal((last) => (last?.ask === ask ? undefined : last)),
     sectionReveal,
     commentReveal,
     // Only the ask shown is let go; a newer one stands until its own task shows it.

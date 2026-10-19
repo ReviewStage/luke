@@ -7,7 +7,7 @@
  */
 import type { OpenConsent } from "@luke/credentials";
 import type { OpenSocket } from "@luke/voice";
-import { type ConfigProvider, Context, Layer, Logger } from "effect";
+import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
@@ -67,6 +67,19 @@ export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/h
 export class ServiceOrigin extends Context.Service<ServiceOrigin, string>()(
   "@luke/host/ServiceOrigin",
 ) {}
+
+/**
+ * Each time the settings file was written by someone other than this host,
+ * for a shell where that can happen: a browser tab's file lives in storage
+ * every tab of the origin shares, and the tab hears another tab's write as a
+ * `storage` event. On each, the settings store reads the file again and the
+ * panel is sent the settings as they now stand, as after any update. It is
+ * optional: the desktop is the file's one writer and provides none.
+ */
+export class SettingsChangedElsewhere extends Context.Service<
+  SettingsChangedElsewhere,
+  Stream.Stream<void>
+>()("@luke/host/SettingsChangedElsewhere") {}
 
 /**
  * The voice sideband's WebSocket to the service. It arrives rather than being
