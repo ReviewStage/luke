@@ -17,7 +17,7 @@ import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-servi
 
 let app: WebApp | undefined;
 
-/** How many times the tab has read its session so far. */
+/** How many session reads the tab has begun so far. */
 function sessionReads(service: FakeService): number {
   return service.seen().filter((request) => request.path === "/api/auth/get-session").length;
 }
@@ -43,10 +43,12 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   );
   assert.match(toMac?.getAttribute("href") ?? "", /^tryluke:/u);
 
-  // The launch reads the session once more as the host stands, before the
-  // cookie changes; a return to the tab while that read is still out joins
-  // it, so the tab is returned to until a read begun after the change lands.
-  await vi.waitFor(() => assert.equal(sessionReads(service), 2));
+  // The launch reads the session again once the host stands; that read must
+  // have begun before the cookie changes, or it alone would sign the tab in
+  // and the return below would prove nothing. A return to the tab while a
+  // read is still out joins it, so the tab is returned to until a read begun
+  // after the change lands.
+  await vi.waitFor(() => assert.ok(sessionReads(service) >= 2, "the launch's reads have begun"));
 
   // Another tab signed in: the cookie names someone now, and this tab is focused again.
   service.setSession(true);
