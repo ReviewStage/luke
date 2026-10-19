@@ -1204,7 +1204,8 @@ export function useMentionPicker({
   const issueWordAt = open ? trigger.start : undefined;
   const [workspaceIssues, setWorkspaceIssues] = useState<{
     readonly reader: MentionIssuesReader;
-    readonly wordAt: number;
+    /** The word the read was asked for; none once the list closed, so the next word, wherever it stands, reads again. */
+    readonly wordAt: number | undefined;
     readonly issues: readonly MentionableIssue[];
   }>();
   const issuesRead = workspaceIssues?.reader === readIssues ? workspaceIssues : undefined;
@@ -1219,6 +1220,10 @@ export function useMentionPicker({
       live = false;
     };
   }, [wantsIssues, readIssues, issueWordAt]);
+  useEffect(() => {
+    if (issueWordAt === undefined)
+      setWorkspaceIssues((was) => was && { ...was, wordAt: undefined });
+  }, [issueWordAt]);
   const issues = issuesRead?.issues ?? NO_ISSUES;
 
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.

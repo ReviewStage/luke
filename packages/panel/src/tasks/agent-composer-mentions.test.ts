@@ -1534,6 +1534,24 @@ test("with Issues on an @ offers the workspace's issues, found by their identifi
   ]);
 });
 
+test("an @ typed again where a closed one stood reads the workspace's issues again, so one filed between them is offered", async () => {
+  const { container } = await issuesBox(true);
+  const reads = () => told.filter((each) => each.kind === ACT_KIND.ISSUES_LIST).length;
+
+  typeInComposer(container, "@");
+  await settle();
+  const first = reads();
+  // The word deleted, as the developer clears the box, and an @ typed where it stood.
+  act(() => {
+    composerEditor(container).editor?.commands.clearContent(true);
+  });
+  await settle();
+  typeInComposer(container, "@");
+  await settle();
+
+  assert.deepEqual([first, reads()], [1, 2]);
+});
+
 test("with Issues off an @ offers no issue and reads none", async () => {
   const { container } = await issuesBox(false);
 
