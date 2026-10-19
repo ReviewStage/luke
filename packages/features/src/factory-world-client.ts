@@ -4,11 +4,10 @@ import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
   FACTORY_WORLD_CALL_FAILURE,
   type FactoryWorldParams,
@@ -29,7 +28,9 @@ import { HOSTED_API_ERROR, hostedErrorSchema, readServiceAnswer } from "./servic
  * refuse by shape is answered unanswered here without traveling.
  */
 
-export interface HostedFactoryWorldClientOptions extends AccountToken {
+export interface HostedFactoryWorldClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -51,7 +52,7 @@ export class HostedFactoryWorldClient {
   constructor(options: HostedFactoryWorldClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

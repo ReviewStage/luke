@@ -12,6 +12,7 @@ import {
   RunMode,
   reporterLayer,
   SecretCipher as SecretCipherTag,
+  ServiceOrigin,
   ShutdownSignal,
   StateRoot,
 } from "./seams.js";
@@ -82,5 +83,29 @@ describe("the seam tags", () => {
       assert.equal(packaged.accountBaseUrl, none.accountBaseUrl);
       assert.equal(packaged.hostedServiceBaseUrl, none.hostedServiceBaseUrl);
     }),
+  );
+
+  it.effect(
+    "build every hosted address on the service origin a shell names, over any override",
+    () =>
+      Effect.gen(function* () {
+        const origin = "https://preview.example.test";
+        const override = "http://127.0.0.1:3000/api/auth";
+        const kernelOn = (packaged: boolean) =>
+          Effect.provide(
+            HostKernelTag,
+            Layer.provideMerge(
+              kernelLayerOver(
+                seams({ packaged, environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } }),
+              ),
+              Layer.succeed(ServiceOrigin, origin),
+            ),
+          );
+
+        for (const kernel of [yield* kernelOn(true), yield* kernelOn(false)]) {
+          assert.equal(kernel.accountBaseUrl, `${origin}/api/auth`);
+          assert.equal(kernel.hostedServiceBaseUrl, origin);
+        }
+      }),
   );
 });

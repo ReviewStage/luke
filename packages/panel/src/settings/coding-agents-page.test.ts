@@ -21,7 +21,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   focusedSegment,
   pressKeyIn,
@@ -116,7 +116,7 @@ beforeEach(() => {
   keys = [];
   sent = [];
   refuseWrite = false;
-  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeAppBridge({ act: answer });
 });
 

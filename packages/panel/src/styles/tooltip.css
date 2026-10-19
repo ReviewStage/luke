@@ -3,7 +3,7 @@
    a control. */
 
 /* A hint is never part of the window's drag region, wherever it hangs. */
-.luke-tooltip {
+[data-luke-profile="desktop"] .luke-tooltip {
   -webkit-app-region: no-drag;
 }
 

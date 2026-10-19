@@ -19,9 +19,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -42,6 +43,8 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
  */
 
 const roots: Root[] = [];
+
+beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());

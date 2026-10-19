@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer } from "./account-call.js";
 import { HostedIntegrationsClient } from "./integration-client.js";
 import {
   INTEGRATION_PROVIDER,
@@ -18,9 +19,11 @@ import {
 
 const client = new HostedIntegrationsClient({
   serviceBaseUrl: "https://tryluke.dev",
-  readAccessToken: () => Effect.succeed("token-1"),
-  refreshAccount: () => Effect.void,
-  readAccountKey: () => Effect.succeed("ada@example.com"),
+  credential: accountBearer({
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
+    readAccountKey: () => Effect.succeed("ada@example.com"),
+  }),
 });
 
 it.effect("a read keeps each sign-in failure it can read, beside every provider's status", () =>

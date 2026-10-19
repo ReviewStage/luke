@@ -71,10 +71,17 @@ export const ACCOUNT_BASE_URL_VARIABLE = "LUKE_ACCOUNT_BASE_URL";
 
 const ACCOUNT_BASE_URL = "https://tryluke.dev/api/auth";
 
+/**
+ * The account service's address: on the service origin a shell named, where it
+ * named one, and otherwise production's or, in a development build, the
+ * override's.
+ */
 export function accountBaseUrlFor(input: {
   readonly packaged: boolean;
   readonly override: string | undefined;
+  readonly serviceOrigin: string | undefined;
 }): string {
+  if (input.serviceOrigin !== undefined) return `${input.serviceOrigin}/api/auth`;
   return (input.packaged ? undefined : input.override) ?? ACCOUNT_BASE_URL;
 }
 

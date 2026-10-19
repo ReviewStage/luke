@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { accountBearer } from "./account-call.js";
 import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -35,8 +36,10 @@ const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 function client(): HostedCodingAgentClient {
   return new HostedCodingAgentClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+    }),
   });
 }
 

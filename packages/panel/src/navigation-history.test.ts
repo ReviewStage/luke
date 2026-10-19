@@ -4,13 +4,16 @@ import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { memoryHistory } from "@luke/ui/history-adapter";
-import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { runAppCommand } from "./app-commands.js";
+import { useCopyLink } from "./links-at-hand.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -25,27 +28,40 @@ import {
   type LeaveAsk,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
 
-afterEach(() => {
-  document.body.innerHTML = "";
-});
+const roots: Root[] = [];
 
-/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own as a window's root installs one. */
+/** Takes down every window mounted so far, and the commands each offered. */
+function unmountAll(): void {
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+}
+
+afterEach(unmountAll);
+
+/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own as a window's root installs one, and its addresses written from the window's own Copy link, as the root wires it. */
 function mount(initial: TasksControl) {
-  installWindowHistory(memoryHistory());
+  const held: Parameters<typeof installWindowHistory>[0] = memoryHistory();
+  installWindowHistory(held);
   let history: WindowHistory | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
   function Probe() {
     const [tasks, setTasks] = useState(initial);
     restand = setTasks;
+    const copyLink = useCopyLink(tasks, undefined, true);
     history = useWindowHistory({
       known: true,
+      link: copyLink.standing,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       settingsView: SETTINGS_VIEW.ACCOUNT,
@@ -57,13 +73,17 @@ function mount(initial: TasksControl) {
   const container = document.createElement("div");
   document.body.append(container);
   // Each window reads its state under a registry of its own, as the window's root provides one.
-  act(() => createRoot(container).render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
   return {
     history: () => {
       assert.ok(history);
       return history;
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
+    /** The address of every step held, oldest first. */
+    addresses: () => held.current().entries.map((entry) => entry.address),
   };
 }
 
@@ -377,4 +397,93 @@ test("an issue's page is a step of its own beside the Issues list, so Back from 
   act(() => window.history().onForward());
 
   assert.deepEqual(opened, [{ kind: ISSUES_PAGE.LIST }, issue]);
+});
+
+const ACME = {
+  id: "workspace-acme",
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+};
+
+/** A task drawn in Acme, the workspaces as `workspaces` lists them. */
+function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
+  return tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    activeTaskId: DOCUMENT_TASK.id,
+    boundFor: DOCUMENT_TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
+    workspaces,
+    workspace: ACME,
+  });
+}
+
+test("each step's address is the path of the link ⌥⌘C copies there", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const listed = { workspaces: [ACME], workspace: ACME };
+  const places: TasksControl[] = [
+    onTask([ACME]),
+    tasksControl({ ...listed, inboxView: { ...tasksControl().inboxView, open: true } }),
+    tasksControl({
+      ...listed,
+      automationsView: {
+        ...tasksControl().automationsView,
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
+      },
+    }),
+    tasksControl({
+      ...listed,
+      personView: { ...tasksControl().personView, userId: "user-charles", workspaceId: ACME.id },
+    }),
+    tasksControl({
+      ...listed,
+      issuesView: {
+        ...tasksControl().issuesView,
+        open: true,
+        place: { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" },
+      },
+    }),
+  ];
+  const addresses: string[] = [];
+  for (const tasks of places) {
+    const window = mount(tasks);
+    act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+    await settle();
+    addresses.push(...window.addresses());
+    unmountAll();
+  }
+
+  assert.equal(copied.length, places.length);
+  assert.deepEqual(
+    addresses,
+    copied.map((link) => new URL(link).pathname),
+  );
+});
+
+test("a new automation's page has no link, so it stands at /app beside the list it was opened from", () => {
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, []));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, []));
+
+  assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
+});
+
+test("a place with no link stands at /app: the home page, and Chat though a task stands under it", () => {
+  const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
+  const task = onTask([ACME]);
+  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
+
+  assert.deepEqual(window.addresses(), ["/app", "/app"]);
+});
+
+test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own", () => {
+  const window = mount(onTask([]));
+  const before = window.addresses();
+  window.stand(onTask([ACME]));
+
+  assert.deepEqual(before, [`/workspace-acme/plan/${DOCUMENT_TASK.id}`]);
+  assert.deepEqual(window.addresses(), [`/acme/plan/${DOCUMENT_TASK.id}`]);
+  assert.equal(window.history().canGoBack, false);
 });

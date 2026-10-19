@@ -29,6 +29,7 @@ for the host you are in:
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
 | Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
 | Archive a worker | `conductor workspace archive <workspaceId>` | `archive_agent` with a short reason, once the agent is idle |
+| Keep the rollout together | The workspaces' own list | `create_section` named for the rollout before the first worker starts, and `move_task` of each worker's task into it as it starts (below) |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
 Arguments: the plan (a file path, a Linear issue key such as `LUKE-159`, or
@@ -78,7 +79,12 @@ BRIEF
 )"
 ```
 
-In Luke, call `start_agent` with `newTask` set to the PR title, so each
+In Luke, before the first worker starts, make one section for the rollout
+with `create_section`, titled after the plan or the issue (such as "Inbox
+threads rollout"), so its tasks stand together in the developer's sidebar
+rather than scattered under Tasks; reuse a section `list_tasks` already names
+for this rollout rather than making a second. Then call `start_agent` with
+`newTask` set to the PR title, so each
 worker stands as its own task in the sidebar as a Conductor workspace does,
 and `title` set to the PR title too (at most 80 characters). Set `branch` to
 the base branch when it is not `main`; the worker starts on it and is told to
@@ -90,6 +96,9 @@ hold at most 64,000 characters, and a `message_agent` message 16,000: put the
 PR's own scope and acceptance criteria in `prompt` and the rest of the brief
 in `note`, and where the plan is long, quote only the parts this PR needs and
 name the plan's file in the repository, if it has one, for the worker to read.
+Once a start answers its new task, move that task into the rollout's section
+with `move_task` before you start the next worker. Move only the tasks you
+made for the rollout, never the task you work on or a teammate's.
 
 Every brief must contain:
 
@@ -215,7 +224,9 @@ worker to reset and resume.
 
 ## Step 4: Finish
 
-When every PR is merged and every worker is archived, report to the user:
+When every PR is merged and every worker is archived, report to the user,
+naming the rollout's section in Luke, which you leave standing for the user
+to keep or delete:
 the merged PRs with links, anything that was cut or changed from the plan,
 and any follow-ups the workers surfaced. If the rollout came from a Linear
 issue, update the issue with the merged PRs.

@@ -31,6 +31,7 @@ import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -94,6 +95,7 @@ const roots: Root[] = [];
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   installEditorLayout();
 });

@@ -13,13 +13,15 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
+import { useStageWidth } from "../stage-width.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
@@ -81,6 +83,9 @@ const KEPT_FOLD = "luke.sidebar-collapsed";
 
 let root: Root | undefined;
 
+/** How wide the panel's stage is laid out, which jsdom, laying out nothing, leaves to the test. */
+let stageWidth = 0;
+
 beforeEach(() => {
   window.localStorage.clear();
   Object.defineProperty(window, "matchMedia", {
@@ -99,27 +104,32 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
 
-/** Resizes the window, as the developer dragging its frame does. */
-function resizeWindow(width: number): void {
-  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
-  act(() => {
-    window.dispatchEvent(new Event("resize"));
-  });
+/** Resizes the panel's stage, as the developer dragging the window's frame does on the desktop. */
+function resizeStage(width: number): void {
+  stageWidth = width;
+  act(() => relayout());
 }
 
-/** The window's shell on the home page at a width, its sidebar the real fold kept in storage. */
+/** The window's shell on the home page, on a stage of a width, its sidebar the real fold kept in storage. */
 function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
-  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  stageWidth = width;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return DOMRect.fromRect({ width: this.classList.contains("app-stage") ? stageWidth : 0 });
+  });
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   function Window() {
-    const sidebar = useSidebarCollapse(false);
+    const stage = useStageWidth();
+    const sidebar = useSidebarCollapse(false, stage.width);
     const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
-    return createElement(DesktopShell, {
+    const shell = createElement(DesktopShell, {
       gates: {
         accountRequired: false,
         onBeginSignIn: ignore,
@@ -143,6 +153,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       settings: SETTINGS,
     });
+    return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
   }
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
   return container;
@@ -199,29 +210,37 @@ function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefin
   );
 }
 
-test("a window narrowed past the line folds the pinned sidebar without forgetting it: within the band it stays as it is, and widened past it the sidebar is pinned again", () => {
+test("a stage narrowed past the line folds the pinned sidebar without forgetting it: within the band it stays as it is, and widened past it the sidebar is pinned again", () => {
   const page = mount(1450);
   assert.equal(standing(page), "pinned");
   assert.ok(sidebarOf(page).querySelector('[role="separator"]'), "a pinned sidebar has its edge");
 
-  resizeWindow(1100);
+  resizeStage(1100);
   assert.equal(standing(page), "away");
   assert.equal(toggle(page).getAttribute("aria-label"), "Show sidebar");
-  resizeWindow(1140);
-  assert.equal(standing(page), "away", "a window dragged back within the band does not unfold it");
-  resizeWindow(1170);
+  resizeStage(1140);
+  assert.equal(standing(page), "away", "a stage dragged back within the band does not unfold it");
+  resizeStage(1170);
   assert.equal(standing(page), "pinned");
-  resizeWindow(1130);
-  assert.equal(standing(page), "pinned", "a window dragged back within the band does not fold it");
+  resizeStage(1130);
+  assert.equal(standing(page), "pinned", "a stage dragged back within the band does not fold it");
   assert.equal(window.localStorage.getItem(KEPT_FOLD), "false", "the fold kept is the developer's");
+});
+
+test("the fold follows the panel's stage rather than the window, as a browser tab gives the panel a box of its own", () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1450 });
+  const page = mount(1000);
+  assert.equal(standing(page), "away", "a narrow stage in a wide window folds the sidebar");
+  resizeStage(1170);
+  assert.equal(standing(page), "pinned");
 });
 
 test("a sidebar the developer folded stays folded across a narrowing and a widening", () => {
   const page = mount(1450);
   act(() => toggle(page).click());
   assert.equal(standing(page), "away");
-  resizeWindow(900);
-  resizeWindow(1450);
+  resizeStage(900);
+  resizeStage(1450);
   assert.equal(standing(page), "away");
   assert.equal(window.localStorage.getItem(KEPT_FOLD), "true");
 });
@@ -319,7 +338,7 @@ test("the pointer at the window's left edge peeks the folded sidebar out, which 
   pointerCross(sidebarOf(page), main);
   assert.equal(standing(page), "away", "a press keeps no peek open");
 
-  resizeWindow(1450);
+  resizeStage(1450);
   act(() => toggle(page).click());
   assert.equal(standing(page), "away");
   pointerCross(main, edge());

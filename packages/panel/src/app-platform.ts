@@ -3,8 +3,9 @@
  *
  * The bridge (`app-bridge.ts`) reaches the host; this reaches what stands
  * beside it. Copying, saving a file, bringing the panel forward, the address
- * an agent's page is drawn from, the menu bar, a shortcut being recorded, a
- * counted surface event, and a link opened outside the window are each
+ * an agent's page is drawn from, the folder the panel's static files are
+ * served from, the menu bar, a shortcut being recorded, a counted surface
+ * event, and a link opened outside the window are each
  * answered by whatever shell holds the window, the desktop through main and
  * a browser through its own APIs, so the panel names the capability here and
  * never the act or the event a shell answers it with. Note that this is a
@@ -27,6 +28,12 @@ export interface AppPlatform {
   focusPanel(): void;
   /** The address one version of an agent's page is drawn from, in a sandboxed frame. */
   pageFrameUrl(page: FramedPage): string;
+  /**
+   * The folder the panel's static files are served from (Excalidraw's fonts,
+   * the harness marks), as an absolute address ending in `/`: the shell's to
+   * name, because the document's own address need not be that folder.
+   */
+  assetBase(): string;
   /** Hears each command chosen from the shell's menu, until the returned function is called. */
   onMenuCommand(listener: (command: AppCommand) => void): () => void;
   /** Says whether a shortcut is being recorded, during which the shell's own keys hold off. */
@@ -59,4 +66,9 @@ export function installAppPlatform(platform: AppPlatform): void {
 export function appPlatform(): AppPlatform {
   if (installed === undefined) throw new Error("No app platform is installed in this window.");
   return installed;
+}
+
+/** The absolute address of one of the panel's static files, named by its path under the shell's asset base. */
+export function assetUrl(path: string): string {
+  return new URL(path, appPlatform().assetBase()).href;
 }

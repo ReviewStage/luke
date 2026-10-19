@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer, sessionBearer } from "./account-call.js";
+import type { AccountSessionToken } from "./account-token.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
-import { HostedWorkspaceClient, type HostedWorkspaceClientOptions } from "./workspace-client.js";
+import { HostedWorkspaceClient } from "./workspace-client.js";
 import { WORKSPACE_PHOTO_BOUNDS, WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
@@ -25,17 +27,20 @@ const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=opaque
 
 /** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
-  session: Pick<HostedWorkspaceClientOptions, "readSessionToken" | "obtainSession"> = {
+  session: AccountSessionToken = {
     readSessionToken: () => Effect.succeed("session-1"),
     obtainSession: () => Effect.void,
   },
 ): HostedWorkspaceClient {
-  return new HostedWorkspaceClient({
-    serviceBaseUrl: "https://tryluke.dev",
+  const token = {
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     readAccountKey: () => Effect.succeed("ada@example.com"),
-    ...session,
+  };
+  return new HostedWorkspaceClient({
+    serviceBaseUrl: "https://tryluke.dev",
+    credential: accountBearer(token),
+    sessionCredential: sessionBearer({ ...token, ...session }),
   });
 }
 
@@ -525,18 +530,24 @@ it.effect("an account that changes during the hand-off sends nothing under the n
     });
     let holder = "ada@example.com";
     let session: string | undefined;
-    const switched = new HostedWorkspaceClient({
-      serviceBaseUrl: "https://tryluke.dev",
+    const token = {
       readAccessToken: () => Effect.succeed("token-1"),
       refreshAccount: () => Effect.void,
       readAccountKey: () => Effect.sync(() => holder),
-      readSessionToken: () => Effect.sync(() => session),
-      // Another account signs in while the hand-off's browser page is open, holding a session of its own.
-      obtainSession: () =>
-        Effect.sync(() => {
-          holder = "bob@example.com";
-          session = "session-bob";
-        }),
+    };
+    const switched = new HostedWorkspaceClient({
+      serviceBaseUrl: "https://tryluke.dev",
+      credential: accountBearer(token),
+      sessionCredential: sessionBearer({
+        ...token,
+        readSessionToken: () => Effect.sync(() => session),
+        // Another account signs in while the hand-off's browser page is open, holding a session of its own.
+        obtainSession: () =>
+          Effect.sync(() => {
+            holder = "bob@example.com";
+            session = "session-bob";
+          }),
+      }),
     });
 
     const removed = yield* Effect.provide(switched.removeMember(ACME.id, GRACE.userId), api.layer);

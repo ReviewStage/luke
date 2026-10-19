@@ -5,10 +5,9 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  type AccountToken,
-  accountBearer,
   accountCall,
   CALL_FAULT,
+  type CallCredential,
   callAnswered,
   HOSTED_SERVICE_PATH,
 } from "../index.js";
@@ -43,7 +42,7 @@ const PRODUCT_EVENT_DEFAULTS = {
 const DAY_ACTIVE_KEY = "day";
 
 /**
- * The account a sender handed no `readAccountKey` counts every day under:
+ * The account a sender whose credential names no holder counts every day under:
  * with no identity to tell two accounts apart, they are one holder.
  */
 const UNNAMED_ACCOUNT = "";
@@ -62,7 +61,7 @@ function utcDay(at: number): string {
 export interface RecordedDay {
   readonly name: ProductEventName;
   readonly discriminator: string;
-  /** The account key `readAccountKey` answered when the event was queued. */
+  /** The holder the sender's credential named when the event was queued. */
   readonly account: string;
   /** `YYYY-MM-DD`, in UTC. */
   readonly day: string;
@@ -89,7 +88,12 @@ interface QueuedEvent {
   readonly recorded?: RecordedDay;
 }
 
-export interface ProductEventSenderOptions extends AccountToken {
+export interface ProductEventSenderOptions {
+  /**
+   * What authorizes a batch on the signed-in account; its holder is also the
+   * account a once-a-day count is kept for.
+   */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The running build's version, as the packaged app reports it. */
@@ -145,7 +149,7 @@ export class ProductEventSender {
   readonly #now: () => number;
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
-  readonly #readAccountKey: () => Effect.Effect<string | undefined>;
+  readonly #readHolder: () => Effect.Effect<string | undefined>;
   readonly #keptDays: RecordedDayStore;
   readonly #queue: QueuedEvent[] = [];
   /**
@@ -194,7 +198,7 @@ export class ProductEventSender {
   private constructor(options: ProductEventSenderOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
@@ -205,7 +209,7 @@ export class ProductEventSender {
     };
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
-    this.#readAccountKey = options.readAccountKey ?? (() => Effect.succeed(UNNAMED_ACCOUNT));
+    this.#readHolder = options.credential.holder ?? (() => Effect.succeed(UNNAMED_ACCOUNT));
     this.#keptDays = options.recordedDays ?? UNKEPT_DAYS;
     this.#flushIntervalMs = positiveInteger(
       options.flushIntervalMs,
@@ -281,7 +285,7 @@ export class ProductEventSender {
   ): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (!this.#allowed()) return;
-      const account = yield* this.#readAccountKey();
+      const account = yield* this.#readHolder();
       if (account === undefined) return;
       const day = utcDay(this.#now());
       const accounts = this.#recordedDaysOf(name, discriminator);
@@ -342,7 +346,7 @@ export class ProductEventSender {
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.gen({ self: this }, function* () {
       if (this.#queue.length === 0) return;
-      const holder = yield* this.#readAccountKey();
+      const holder = yield* this.#readHolder();
       // Gone whatever becomes of the request, save for the one end that never
       // authenticated at all.
       const queued = this.#ownDays(this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT), holder);
