@@ -21,6 +21,7 @@
     "./admin/admin-route": "./src/admin/admin-route.js",
     "./admin/admin-user": "./src/admin/admin-user.js",
     "./admin/admin-users": "./src/admin/admin-users.js",
+    "./admin/admin-workspaces": "./src/admin/admin-workspaces.js",
     "./admin/gate": "./src/admin/gate.js",
     "./admin/http": "./src/admin/http.js",
     "./admin/http-effect": "./src/admin/http-effect.js",

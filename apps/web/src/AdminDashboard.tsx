@@ -21,6 +21,7 @@ import { AnimationsScreen } from "./admin/screens/animations";
 import { DashboardScreen, useMetricsRead } from "./admin/screens/dashboard";
 import { DayScreen } from "./admin/screens/day";
 import { UsersScreen } from "./admin/screens/users";
+import { WorkspacesScreen } from "./admin/screens/workspaces";
 
 export function AdminDashboard(): React.JSX.Element {
   // Admin accounts are the maintainers' own; their traffic reads as noise in
@@ -58,7 +59,8 @@ export function AdminDashboard(): React.JSX.Element {
   }, []);
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
-    if (tab === "users") setView({ kind: "users" });
+    if (tab === "workspaces") setView({ kind: "workspaces" });
+    else if (tab === "users") setView({ kind: "users" });
     else if (tab === "animations") setView({ kind: "animations" });
     else setView({ kind: "dashboard" });
   }, []);
@@ -161,6 +163,19 @@ export function AdminDashboard(): React.JSX.Element {
     return shell(
       "animations",
       <AnimationsScreen account={viewer} onSignOut={() => void signOut()} />,
+    );
+  }
+
+  if (view.kind === "workspaces") {
+    return (
+      <WorkspacesScreen
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={changeHideAdmins}
+        account={viewer}
+        onSignOut={signOut}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("workspaces", content)}
+      />
     );
   }
 
