@@ -278,6 +278,12 @@ body,
   border-right: 0;
 }
 
+/* A place standing alone in a narrow room leads its head with the way back,
+   so its name keeps the room left and what is said beside it gives way. */
+.desktop-shell[data-room="narrow"] .chat-head > h2 ~ * {
+  display: none;
+}
+
 .app-stage[data-surface="desktop"]:has(.desktop-shell[data-room="narrow"]) {
   --work-left: 0px;
 }
