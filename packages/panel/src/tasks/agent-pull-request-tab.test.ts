@@ -4660,15 +4660,18 @@ const SIZED = [
   ["c.ts", 30, 0],
 ] as const;
 
-/** The plan's agents, the pull request published at +60 −7, its changes those three files, and the member's marks as given; every read of the marks counted. */
-function viewing(marked: readonly string[]) {
-  const reads = { viewed: 0 };
+/** The plan's agents, the pull request published at the size given (+60 −7 unless told), its changes those three files, read in full unless told, and the member's marks as given. */
+function viewing(
+  marked: readonly string[],
+  options: { readonly published?: readonly [number, number]; readonly truncated?: boolean } = {},
+) {
+  const [additions, deletions] = options.published ?? [60, 7];
   const control: CodingAgentsControl = {
     ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
       Promise.resolve({
         pullRequest: {
           url: PAGE,
-          truncated: false,
+          truncated: options.truncated ?? false,
           files: SIZED.map(([path, additions, deletions]) => ({
             path,
             previousPath: null,
@@ -4682,20 +4685,18 @@ function viewing(marked: readonly string[]) {
       }),
     ),
     pullRequests: new Map([
-      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions: 60, deletions: 7 }],
+      [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions }],
     ]),
-    readPullRequestViewed: () => {
-      reads.viewed += 1;
-      return Promise.resolve({
+    readPullRequestViewed: () =>
+      Promise.resolve({
         outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
         files: SIZED.map(([path]) => ({
           path,
           state: marked.includes(path) ? FILE_VIEWED_STATE.VIEWED : FILE_VIEWED_STATE.UNVIEWED,
         })),
-      });
-    },
+      }),
   };
-  return { control, reads };
+  return { control };
 }
 
 /** A file's Viewed box, in the header Files changed's list draws for it. */
@@ -4718,11 +4719,9 @@ async function filesHint(tab: HTMLElement): Promise<string | undefined> {
   return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
 }
 
-test("Files changed counts what was published until it is first opened, reading no marks before; then it counts the lines left to review, the whole in its hint", async () => {
-  const { control, reads } = viewing(["a.ts"]);
-  const tab = await draw(control);
+test("Files changed counts what was published until it is first opened; then it counts the lines left to review, the whole in its hint", async () => {
+  const tab = await draw(viewing(["a.ts"]).control);
   assert.equal(tabCount(tab, "Files changed"), "+60 −7");
-  assert.equal(reads.viewed, 0, "the marks are read with Files changed, as before");
 
   await choose(tab, "Files changed");
   assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
@@ -4774,4 +4773,25 @@ test("ticking the last file left counts the whole again, every file viewed", asy
   act(() => viewedBoxOf("c.ts").click());
   await settle();
   assert.equal(tabCount(tab, "Files changed"), "+60 −7");
+});
+
+test("once its files are read, Files changed counts from their own whole, so a pull request pushed to since it was published counts what the read holds", async () => {
+  const tab = await draw(viewing(["a.ts"], { published: [40, 5] }).control);
+  assert.equal(
+    tabCount(tab, "Files changed"),
+    "+40 −5",
+    "until the files land, what was published",
+  );
+  await choose(tab, "Files changed");
+  assert.equal(tabCount(tab, "Files changed"), "+50 −5 left");
+  assert.equal(await filesHint(tab), "+60 −7 total");
+});
+
+test("where the read stopped short of every file, the whole is what was published, and every file read being viewed still leaves the rest to review", async () => {
+  const tab = await draw(
+    viewing(["a.ts", "b.ts", "c.ts"], { published: [100, 20], truncated: true }).control,
+    PULL_REQUEST_VIEW.FILES,
+  );
+  assert.equal(tabCount(tab, "Files changed"), "+40 −13 left");
+  assert.equal(await filesHint(tab), "+100 −20 total");
 });

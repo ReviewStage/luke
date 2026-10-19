@@ -1444,27 +1444,37 @@ interface FilesCount {
  * left to review, the whole less every file the member marked viewed, its
  * whole in the hint, while some files are viewed and some are not; the whole
  * alone where none or all are, or where the changes and the marks, read as
- * Files changed is first opened, have not both landed. Note that it reads
- * the marks Files changed draws, so a box ticked there counts at once, and
- * one GitHub refuses counts again as it goes back.
+ * Files changed is first opened, have not both landed. The whole is the
+ * changes' own once they are read, so it and the files it is cut by describe
+ * the same push; where the read stopped short of every file, it is what the
+ * agent published, and files the read left out count as still to review.
+ * Note that it reads the marks Files changed draws, so a box ticked there
+ * counts at once, and one GitHub refuses counts again as it goes back.
  */
 function filesCountOf(
   published: CodingAgentPullRequest | undefined,
   reads: ChangesReads,
 ): FilesCount | undefined {
-  if (published === undefined) return undefined;
-  const { additions, deletions } = published;
-  const whole = { count: linesCount(additions, deletions), hint: undefined };
-  const files = reads.pullRequest?.files;
+  const changes = reads.pullRequest;
   const marks = reads.viewedFiles.marks;
-  if (files === undefined || marks === undefined) return whole;
+  if (changes === null || marks === undefined) {
+    return published === undefined
+      ? undefined
+      : { count: linesCount(published.additions, published.deletions), hint: undefined };
+  }
+  const { files, truncated } = changes;
+  const sum = (of: readonly (typeof files)[number][], key: "additions" | "deletions") =>
+    of.reduce((total, file) => total + file[key], 0);
+  const additions =
+    truncated && published !== undefined ? published.additions : sum(files, "additions");
+  const deletions =
+    truncated && published !== undefined ? published.deletions : sum(files, "deletions");
+  const whole = { count: linesCount(additions, deletions), hint: undefined };
   const viewed = files.filter((file) => marks.viewed(file.path));
-  if (viewed.length === 0 || viewed.length === files.length) return whole;
-  const seenAdditions = viewed.reduce((sum, file) => sum + file.additions, 0);
-  const seenDeletions = viewed.reduce((sum, file) => sum + file.deletions, 0);
+  if (viewed.length === 0 || (viewed.length === files.length && !truncated)) return whole;
   const left = linesCount(
-    Math.max(0, additions - seenAdditions),
-    Math.max(0, deletions - seenDeletions),
+    Math.max(0, additions - sum(viewed, "additions")),
+    Math.max(0, deletions - sum(viewed, "deletions")),
   );
   return {
     count: [...left, { text: PULL_REQUEST_WORDS.LEFT }],
