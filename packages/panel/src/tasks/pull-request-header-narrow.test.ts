@@ -5,7 +5,7 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * pull-request-header-narrow.test.ts -- the Pull request tab's header gives a narrow tab's title a line of its own, over the pill and the controls, rather than a word to a line beside them; a roomy one keeps the three in one row.
+ * pull-request-header-narrow.test.ts -- the Pull request tab's header gives a narrow tab's title a line of its own, over the pill and the controls, rather than a word to a line beside them, Tab going through the row as it is drawn; a roomy one keeps the three in one row.
  *
  * jsdom lays nothing out and answers no container query, so the window's
  * stylesheets are laid for a header of each width
@@ -38,12 +38,18 @@ function titleRowAt(width: number, touch = false) {
   const style = getComputedStyle(title);
   return {
     wraps: getComputedStyle(row).flexWrap === "wrap",
+    tabsAsDrawn: getComputedStyle(row).getPropertyValue("reading-flow") === "flex-visual",
     titleFirst: style.order === "-1",
     titleFullWidth: style.flexBasis === "100%",
   };
 }
 
-const OWN_LINE = { wraps: true, titleFirst: true, titleFullWidth: true } as const;
+const OWN_LINE = {
+  wraps: true,
+  tabsAsDrawn: true,
+  titleFirst: true,
+  titleFullWidth: true,
+} as const;
 
 test("a phone's header stands the title on its own line, ahead of the pill and the controls", () => {
   assert.deepEqual(titleRowAt(342, true), OWN_LINE);
@@ -58,6 +64,7 @@ test("a desktop side panel at its least width does the same, under a mouse", () 
 test("a header wider than 520px keeps the pill, the title, and the controls in one row", () => {
   const style = titleRowAt(521);
   assert.equal(style.wraps, false);
+  assert.equal(style.tabsAsDrawn, false);
   assert.equal(style.titleFirst, false);
   assert.equal(style.titleFullWidth, false);
 }, 30_000);

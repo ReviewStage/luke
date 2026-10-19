@@ -2249,10 +2249,12 @@
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
-   line. */
+   line. Note that Tab follows the row as it is drawn (`reading-flow`)
+   rather than the markup's pill-first order, where the browser reads it. */
 @container pull-request-header (max-width: 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
+    reading-flow: flex-visual;
   }
 
   .pull-request-title-row > .pull-request-title,
