@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentMessagesAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
@@ -30,7 +29,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import {
   continuationsOf,
@@ -193,7 +192,6 @@ async function drawnTab(input: {
     continued.push({ agentId, note, attachments });
     return input.answer?.() ?? Promise.resolve(undefined);
   };
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [source, ...(input.others ?? [])],
     archived: input.archived ?? [],
@@ -209,18 +207,16 @@ async function drawnTab(input: {
     },
     onMessage: () =>
       Promise.resolve(input.message ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [...(input.messages ?? MESSAGES)],
         cursor: "2:0",
         status: input.status,
         title: null,
         ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
         ...input.usage,
-      });
-    },
+      },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

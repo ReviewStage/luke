@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
 /**
@@ -46,15 +42,11 @@ afterEach(() => {
 
 /** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
-  // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [AGENT],
     me: reader,
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [
           {
             id: "worker-step",
@@ -73,8 +65,8 @@ async function workerTabFor(reader: string): Promise<string> {
         cursor: "1:0",
         status: CODING_AGENT_STATUS.COMPLETED,
         title: null,
-      });
-    },
+      },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

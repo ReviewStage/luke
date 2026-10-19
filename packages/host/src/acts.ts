@@ -144,7 +144,7 @@ export const ACT_KIND = {
   TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
+  /** One page of a task's conversation, held open by the service while it runs, or a brain worker's under the call that started it, read at once; answered to the tab, never on the document. */
   TASKS_MESSAGES: "tasks.messages",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",

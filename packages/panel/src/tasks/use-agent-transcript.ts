@@ -1,11 +1,12 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
-  CODING_AGENT_CURSOR_START,
   type CodingAgentContext,
   type CodingAgentFailure,
   type CodingAgentMessage,
@@ -13,34 +14,62 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentUsage,
 } from "@luke/features/coding-agent-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type AgentRun, agentStillWriting, followsAgent } from "./coding-agent-model.js";
+import type { ActHandle } from "../act.js";
+import { appBridge } from "../app-bridge.js";
+import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
 
 /**
- * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, read page by page on the service's held long-poll while the agent may still write.
+ * use-agent-transcript.ts -- one agent's transcript, or one of its workers', or a task's planning worker's, as its tab draws it, pushed to the window page by page while the tab is on screen.
  *
- * The service holds a read open while the agent is starting or runs and
- * nothing new stands past the cursor, and lets it go at its own hold, so
- * the loop here is one read after another with no clock of its own: each
- * answer's cursor is where the next read starts, each page joins the
- * messages held by id, and each page's status is the agent's as the page
- * was read, with why where its turn failed, which the tab's end line says,
- * what its model's context holds, which the box's ring draws, and when its
- * run and each worker it waits on began, which the working line and a
- * subagent's row count from.
- * The loop runs while the tab is on screen and the agent may
- * still write, and ends on its own when a page says the agent ended; an
- * agent that has ended is read once through, page by page, and then left
- * alone. A read that did not answer ends the loop and says so, with Try
- * again, rather than asking again at once. A worker's transcript is read
- * the same way under the agent and the delegation call that started it,
- * and where the worker stands is what its pages say.
+ * The tab follows its transcript while it is shown and lets it go when it
+ * is not; main follows it at the host and sends every page to the windows
+ * following it on `app:transcript` (`main/ipc/transcript-follow-acts.ts`),
+ * so nothing here asks again, holds a cursor, or keeps a loop. The first
+ * page is the transcript from its start, each later one what moved past
+ * the last, and each joins the messages held by id. Each page's status is
+ * the agent's as the page was read, with why where its turn failed, which
+ * the tab's end line says, what its model's context holds, which the box's
+ * ring draws, and when its run and each worker it waits on began, which the
+ * working line and a subagent's row count from. A page that says the
+ * transcript could not be read says so, with Try again, which follows it
+ * anew; the messages held stand meanwhile.
  */
 
-/** How one read is asked: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. */
+/** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
 export type TranscriptReader = (
   params: CodingAgentMessagesParams,
 ) => Promise<CodingAgentMessagesAnswerView>;
+
+/** How the window follows a transcript, lets it go, and hears its pages pushed. */
+export interface TranscriptFollower {
+  readonly follow: (transcript: CodingAgentTranscriptKey) => void;
+  readonly unfollow: (transcript: CodingAgentTranscriptKey) => void;
+  /** Hears every transcript page pushed to the window; the returned call stops hearing. */
+  readonly onTranscript: (listener: (changed: CodingAgentTranscriptChanged) => void) => () => void;
+}
+
+/** The window's own follower: the follow acts out, and `app:transcript` in. */
+export function windowTranscriptFollower(acts: Pick<ActHandle, "act">): TranscriptFollower {
+  return {
+    follow: (transcript) =>
+      void acts.act(ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW, transcript).catch(() => undefined),
+    unfollow: (transcript) =>
+      void acts.act(ACT_KIND.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, transcript).catch(() => undefined),
+    onTranscript: (listener) => appBridge().onTranscript(listener),
+  };
+}
+
+/** The agent's or task's id a transcript is under. */
+function ownerOf(transcript: CodingAgentTranscriptKey): string {
+  return transcript.kind === TRANSCRIPT_KIND.AGENT ? transcript.agentId : transcript.taskId;
+}
+
+/** Whether two keys name the same transcript. */
+function sameTranscript(one: CodingAgentTranscriptKey, other: CodingAgentTranscriptKey): boolean {
+  return one.kind === other.kind && ownerOf(one) === ownerOf(other) && one.callId === other.callId;
+}
 
 /** What the tab draws of the transcript. */
 export interface AgentTranscriptControl {
@@ -75,17 +104,16 @@ export interface AgentTranscriptControl {
 }
 
 interface Held {
-  agentId: string;
+  transcript: CodingAgentTranscriptKey;
   messages: readonly CodingAgentMessage[];
-  cursor: string;
   failure: CodingAgentFailure | undefined;
   usage: CodingAgentUsage | undefined;
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
   pageStatus: CodingAgentStatus | undefined;
-  /** Whether the last page read came back with nothing more on it, so every message written by then is read. */
+  /** Whether the last page pushed came with nothing more on it, so every message written by then is held. */
   caughtUp: boolean;
-  /** How many pages have been read, which an ask counts from to know a page landed after it. */
+  /** How many pages have been pushed, which an ask counts from to know a page landed after it. */
   pages: number;
   pageTitle: string | undefined;
   subagentTitles: ReadonlyMap<string, string>;
@@ -94,11 +122,10 @@ interface Held {
   failed: boolean;
 }
 
-function fresh(agentId: string): Held {
+function fresh(transcript: CodingAgentTranscriptKey): Held {
   return {
-    agentId,
+    transcript,
     messages: [],
-    cursor: CODING_AGENT_CURSOR_START,
     failure: undefined,
     usage: undefined,
     context: undefined,
@@ -114,112 +141,78 @@ function fresh(agentId: string): Held {
   };
 }
 
+/** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
+function joined(was: Held, page: CodingAgentMessagesAnswerView): Held {
+  if ("failure" in page) return { ...was, failed: true };
+  return {
+    ...was,
+    messages: applyMessagesPage(was.messages, page.messages),
+    failure: page.failureReason,
+    usage: page.usage,
+    context: page.context,
+    runStartedAt: page.runStartedAt,
+    pageStatus: page.status,
+    caughtUp: page.messages.length === 0,
+    pages: was.pages + 1,
+    pageTitle: page.title ?? undefined,
+    subagentTitles: new Map(
+      (page.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
+    ),
+    delegations: new Map(
+      (page.delegations ?? []).map((started) => [started.callId, started.startedAt]),
+    ),
+    subagents: new Map((page.subagents ?? []).map((standing) => [standing.callId, standing])),
+    failed: false,
+  };
+}
+
 export function useAgentTranscript(input: {
-  agentId: string;
-  /** The delegation call whose worker's transcript this is, where it is a worker's rather than the agent's own. */
-  callId?: string | undefined;
-  /** The agent's, or the worker's, status as the tab knows it, which the pages read keep current through `onStatus`. */
-  status: CodingAgentStatus;
+  /** Which transcript: the agent's own, one of its workers' by the call that started it, or a task's planning worker's. */
+  transcript: CodingAgentTranscriptKey;
   /** Whether the tab is on screen: the panel open on it, on the Tasks tab. */
   shown: boolean;
-  read: TranscriptReader;
+  follower: TranscriptFollower;
   /** A page said where the agent stands now, and since when, which is newer than the list. */
   onStatus: (agentId: string, run: AgentRun) => void;
   /** A page said what the agent is titled now, which the list may have read before the title landed. */
   onTitle: (agentId: string, title: string | null) => void;
 }): AgentTranscriptControl {
-  const { agentId, callId, status, shown, read, onStatus, onTitle } = input;
-  const [held, setHeld] = useState<Held>(() => fresh(agentId));
-  // Note that another agent's tab starts from nothing of this one's.
-  if (held.agentId !== agentId) setHeld(fresh(agentId));
+  const { shown, follower, onStatus, onTitle } = input;
+  const [held, setHeld] = useState<Held>(() => fresh(input.transcript));
+  // Note that another transcript's tab starts from nothing of this one's.
+  const changed = !sameTranscript(held.transcript, input.transcript);
+  if (changed) setHeld(fresh(input.transcript));
+  // Note that the key is kept as it was while it names the same transcript, so a tab drawn again follows nothing anew.
+  const transcript = changed ? input.transcript : held.transcript;
   const [attempt, setAttempt] = useState(0);
-  const latest = useRef({ read, onStatus, onTitle });
-  latest.current = { read, onStatus, onTitle };
-  const cursor = useRef(CODING_AGENT_CURSOR_START);
-  if (held.agentId !== agentId) cursor.current = CODING_AGENT_CURSOR_START;
-  // Whether this agent has been read through once: an ended agent is read
-  // once, page by page, and a running one for as long as it writes.
-  const readThrough = useRef<string | undefined>(undefined);
-
-  const following = followsAgent({ shown, status });
-  const once = shown && !following && readThrough.current !== agentId;
-  const active = (following || once) && !held.failed;
+  const latest = useRef({ follower, onStatus, onTitle });
+  latest.current = { follower, onStatus, onTitle };
 
   useEffect(() => {
-    if (!active) return;
-    let live = true;
-    const loop = async () => {
-      while (live) {
-        const answer = await latest.current
-          .read({
-            agentId,
-            after: cursor.current,
-            ...(callId === undefined ? undefined : { callId }),
-          })
-          .catch(
-            (): CodingAgentMessagesAnswerView => ({
-              failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
-            }),
-          );
-        if (!live) return;
-        if ("failure" in answer) {
-          setHeld((was) => ({ ...was, failed: true }));
-          return;
-        }
-        cursor.current = answer.cursor;
-        setHeld((was) => ({
-          ...was,
-          messages: applyMessagesPage(was.messages, answer.messages),
-          cursor: answer.cursor,
-          failure: answer.failureReason,
-          usage: answer.usage,
-          context: answer.context,
-          runStartedAt: answer.runStartedAt,
-          pageStatus: answer.status,
-          caughtUp: answer.messages.length === 0,
-          pages: was.pages + 1,
-          pageTitle: answer.title ?? undefined,
-          subagentTitles: new Map(
-            (answer.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
-          ),
-          delegations: new Map(
-            (answer.delegations ?? []).map((started) => [started.callId, started.startedAt]),
-          ),
-          subagents: new Map(
-            (answer.subagents ?? []).map((standing) => [standing.callId, standing]),
-          ),
-        }));
-        latest.current.onStatus(agentId, answer);
-        latest.current.onTitle(agentId, answer.title);
-        // A page with nothing on it from an agent that may still write is
-        // the hold letting go: ask again. One from an agent that ended is
-        // the end of the transcript, once no worker of its own session still
-        // reads as working, since a worker stopped with its agent may settle
-        // a look after it and its row would stand running.
-        const workerStillWriting = (answer.subagents ?? []).some((standing) =>
-          agentStillWriting(standing.status),
-        );
-        if (
-          answer.messages.length === 0 &&
-          !agentStillWriting(answer.status) &&
-          !workerStillWriting
-        ) {
-          readThrough.current = agentId;
-          return;
-        }
-      }
-    };
-    void loop();
+    if (!shown) return;
+    const { follower: following } = latest.current;
+    const agentId = ownerOf(transcript);
+    const stop = following.onTranscript((pushed) => {
+      if (!sameTranscript(pushed.transcript, transcript)) return;
+      const { page } = pushed;
+      setHeld((was) => (sameTranscript(was.transcript, transcript) ? joined(was, page) : was));
+      if ("failure" in page) return;
+      latest.current.onStatus(agentId, page);
+      latest.current.onTitle(agentId, page.title);
+    });
+    following.follow(transcript);
     return () => {
-      live = false;
+      stop();
+      following.unfollow(transcript);
     };
-  }, [active, agentId, callId, attempt]);
+  }, [shown, transcript, attempt]);
 
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));
     setAttempt((count) => count + 1);
   }, []);
 
+  const writing = held.pageStatus === undefined || agentStillWriting(held.pageStatus);
   return {
     messages: held.messages,
     failure: held.failure,
@@ -233,7 +226,7 @@ export function useAgentTranscript(input: {
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,
     subagents: held.subagents,
-    reading: active && held.messages.length === 0,
+    reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
     onRetry,
   };

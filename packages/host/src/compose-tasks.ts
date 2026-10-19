@@ -145,7 +145,7 @@ import {
   followTranscript,
   type TranscriptFollows,
   transcriptFollows,
-  transcriptPast,
+  windowsPage,
 } from "./transcript-follow.js";
 
 /**
@@ -1339,19 +1339,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           });
         }
         const { taskId, callId, ...page } = read.success;
-        // A planning worker's transcript is held here on its live statements.
+        // A planning worker's page is read at once, since Copy transcript waits on no hold.
         const answer =
           callId === undefined
             ? yield* served(conversations.taskMessages(taskId, page))
-            : yield* transcriptPast(workerTranscripts, new TaskWorkerKey({ taskId, callId }), {
-                now: served(
+            : windowsPage(
+                yield* served(
                   conversations.taskWorkerMessagesNow(
                     taskId,
                     callId,
                     page.after ?? CODING_AGENT_CURSOR_START,
                   ),
                 ),
-              });
+              );
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),
     // A planning worker's transcript is followed for main, each page told as an event.

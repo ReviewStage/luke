@@ -46,7 +46,7 @@ export const GATEWAY_METHOD = {
   TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The page of the open task's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation as an agent's transcript is read, or a brain worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
+  /** One page of a task's conversation as an agent's transcript is read, held open by the service while a turn runs; or a brain worker's under the call that started it, read at once; answered to the caller, never held in the view. */
   TASKS_MESSAGES: "tasks.messages",
   /** A task's planning worker's transcript followed and let go, on the same terms as `CODING_AGENTS_TRANSCRIPT_FOLLOW`. */
   TASKS_WORKER_TRANSCRIPT_FOLLOW: "tasks.workerTranscriptFollow",
@@ -137,7 +137,7 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
   CODING_AGENTS_START: "codingAgents.start",
-  /** One agent's transcript past a cursor, held open by the service while the agent runs. */
+  /** One agent's transcript past a cursor, read at once, as Copy transcript reads it; a shown tab follows it instead (`CODING_AGENTS_TRANSCRIPT_FOLLOW`). */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   /**
    * One agent's transcript, or one of its workers', followed from now until

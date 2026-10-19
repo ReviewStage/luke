@@ -90,23 +90,23 @@ import {
   type TranscriptFollows,
   TranscriptKey,
   transcriptFollows,
-  transcriptPast,
+  windowsPage,
 } from "./transcript-follow.js";
 
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
- * Nothing is held here but the account inbox's follower. The window holds the agents it draws and the
- * cursor it reads from, asks when a task opens, when it starts or stops an
- * agent, and while an agent's tab shows its running transcript, and every
- * ask is one call of the service answered whole. The transcript read is
- * one held open while the agent runs and nothing new stands, here on a
- * Neon Realtime subscription where the service seals one
- * (`transcript-follow.ts`) and by the service where it does not, and the
- * inbox read another, held while nothing in it changed, and the
- * chat read a third, held while nothing in the workspace's chat moved, so each of
- * the window's loops is one held read after another rather than a clock of
- * its own, and a loop ends when the window stops asking. What waits across
+ * Nothing is held here but the account inbox's follower and the transcripts
+ * main follows. The window holds the agents it draws, asks when a task
+ * opens and when it starts or stops an agent, and every ask is one call of
+ * the service answered whole. A shown tab's transcript is followed rather
+ * than asked: main follows it for the windows drawing it, and its pages are
+ * told as events, read on a Neon Realtime subscription
+ * (`transcript-follow.ts`); a read past a cursor is answered at once, as
+ * Copy transcript asks it. The inbox read is held while nothing in it
+ * changed, and the chat read while nothing in the workspace's chat moved,
+ * so each of those loops is one held read after another rather than a
+ * clock of its own, and a loop ends when the window stops asking. What waits across
  * the account is followed rather than asked: main follows it while an
  * account is signed in (`agent-notices.ts`), and it is heard as events,
  * over Neon Realtime (`account-inbox-follow.ts`),
@@ -401,12 +401,9 @@ function composed(
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = gate()
-          ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
-              now: asked(client.messagesNow(agentId, after, callId)),
-            })
-          : UNANSWERED;
-        return carried<CodingAgentMessagesAnswerView>(answer);
+        // Note that the page is read at once, since Copy transcript waits on no hold.
+        const answer = yield* asked(client.messagesNow(agentId, after, callId));
+        return carried<CodingAgentMessagesAnswerView>(windowsPage(answer));
       }),
     [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {

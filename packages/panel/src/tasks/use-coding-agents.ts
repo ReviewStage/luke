@@ -63,7 +63,11 @@ import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
-import type { TranscriptReader } from "./use-agent-transcript.js";
+import {
+  type TranscriptFollower,
+  type TranscriptReader,
+  windowTranscriptFollower,
+} from "./use-agent-transcript.js";
 import type {
   InboxAnswerer,
   InboxCloser,
@@ -292,8 +296,10 @@ export interface CodingAgentsControl {
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
   onTitle: (agentId: string, title: string | null) => void;
-  /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
+  /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
+  /** How a shown tab follows its transcript and hears its pages pushed. */
+  transcripts: TranscriptFollower;
   /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
   /** Each of the task's agents' pull requests, by agent, of those that have one (`useTaskPullRequests`). */
@@ -1131,6 +1137,7 @@ export function useCodingAgents(input: {
     (params) => act(ACT_KIND.CODING_AGENTS_MESSAGES, params),
     [act],
   );
+  const transcripts = useMemo(() => windowTranscriptFollower({ act }), [act]);
 
   const readPullRequestOnce = useCallback<PullRequestReader>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
@@ -1326,6 +1333,7 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
+    transcripts,
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
     numberedPullRequests,

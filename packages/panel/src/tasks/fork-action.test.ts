@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -18,7 +14,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
 import type { AgentFork } from "./fork-model.js";
@@ -227,15 +223,11 @@ async function forkedAtInTab(
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [agent],
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({ messages: [...messages], cursor: "2:0", status, title: null });
-    },
+    transcripts: pushedTranscripts(() => [
+      { messages: [...messages], cursor: "2:0", status, title: null },
+    ]),
   });
   const forks: AgentFork[] = [];
   const doors = agentForkDoors({

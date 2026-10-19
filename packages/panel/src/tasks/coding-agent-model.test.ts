@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
@@ -26,7 +25,6 @@ import {
   choiceOn,
   delegates,
   effortFor,
-  followsAgent,
   knownDeveloperRows,
   messageFailureNote,
   messageFailureWords,
@@ -43,19 +41,6 @@ import {
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model.js";
-
-test("the transcript is followed only while the tab shows and the agent may still write", () => {
-  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.RUNNING }), true);
-  assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.STARTING }), true);
-  assert.equal(followsAgent({ shown: false, status: CODING_AGENT_STATUS.RUNNING }), false);
-  for (const ended of [
-    CODING_AGENT_STATUS.COMPLETED,
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_STATUS.CANCELLED,
-  ]) {
-    assert.equal(followsAgent({ shown: true, status: ended }), false, ended);
-  }
-});
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [

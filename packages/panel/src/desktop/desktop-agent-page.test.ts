@@ -12,6 +12,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentPageAnswerView,
+  type CodingAgentTranscriptChanged,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -148,8 +149,10 @@ let archives: { agentId: string; archived: boolean }[] = [];
 let archiveRefused = false;
 /** What the agent's workspace's members read answers; none refuses it. */
 let members: readonly WorkspaceMember[] | undefined;
-/** What the next read of the agent's transcript answers; none refuses it. */
+/** What the agent's transcript is pushed as once its tab follows it, and what a read of it answers once; none refuses it. */
 let transcript: CodingAgentMessagesAnswerView | undefined;
+/** Where the window hears its followed transcripts pushed. */
+let pushed: ((changed: CodingAgentTranscriptChanged) => void) | undefined;
 /** Every act the page told or asked, in order. */
 let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
@@ -176,6 +179,7 @@ beforeEach(() => {
   archiveRefused = false;
   members = undefined;
   transcript = undefined;
+  pushed = undefined;
   told = [];
   published = undefined;
   earlier = 0;
@@ -185,6 +189,12 @@ beforeEach(() => {
   workspace = [];
   gitHub = new Map();
   fakeActs({
+    onTranscript: (listener) => {
+      pushed = listener;
+      return () => {
+        pushed = undefined;
+      };
+    },
     act: (request: AnyAct): Promise<AnyActOutcome> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({
@@ -200,6 +210,10 @@ beforeEach(() => {
         );
       }
       told.push(request);
+      if (request.kind === ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW) {
+        if (transcript !== undefined) pushed?.({ transcript: request.payload, page: transcript });
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const value = {
           skills: {

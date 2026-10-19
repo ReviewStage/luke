@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -16,7 +12,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
 /**
@@ -62,14 +58,10 @@ async function workerTab(
   parts: readonly WireRecord[],
   opened: { task: string; first?: string; later?: string } = { task: "Audit the CSV writers" },
 ): Promise<HTMLElement> {
-  // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [AGENT],
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [
           ...(opened.first === undefined
             ? []
@@ -94,8 +86,8 @@ async function workerTab(
         cursor: "1:0",
         status,
         title: null,
-      });
-    },
+      },
+    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

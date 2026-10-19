@@ -31,7 +31,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { ReplyToSelection } from "./reply-to-selection.js";
@@ -390,29 +390,21 @@ const AGENT: CodingAgentSummary = {
 
 test("on the agent's tab, Reply quotes its words into the tab's own box, and stands down while a message is out", async () => {
   const sent: string[] = [];
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [AGENT],
     // The transcript ends on a page with nothing on it, as an ended agent's does.
-    readTranscript: () => {
-      reads += 1;
-      return Promise.resolve({
-        messages:
-          reads === 1
-            ? [
-                {
-                  id: "task",
-                  role: MESSAGE_ROLE.USER,
-                  parts: [{ type: "text", text: "Plan it." }],
-                },
-                TURN,
-              ]
-            : [],
-        cursor: `${String(reads)}:0`,
+    transcripts: pushedTranscripts(() => [
+      {
+        messages: [
+          { id: "task", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Plan it." }] },
+          TURN,
+        ],
+        cursor: "1:0",
         status: AGENT.status,
         title: null,
-      });
-    },
+      },
+      { messages: [], cursor: "2:0", status: AGENT.status, title: null },
+    ]),
     // The message never answers, so it stays out.
     onMessage: (_agentId, text) => {
       sent.push(text);
