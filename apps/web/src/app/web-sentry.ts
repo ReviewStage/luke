@@ -31,8 +31,8 @@ export interface WebSentryBuild {
 
 /** What the root reports through once the SDK stands. */
 export interface WebSentry {
-  /** Reports a failure nothing past the root was there to handle. */
-  readonly captureUnhandled: (error: unknown, mechanism: string) => void;
+  /** Reports a tab whose host could not stand or whose state could not be read, so nothing is drawn. */
+  readonly reportBlankTab: (error: Error) => void;
 }
 
 /** The environment a report names where the build names none, as the deployment's functions do. */

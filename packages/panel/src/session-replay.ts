@@ -226,34 +226,6 @@ function preloadRemoteConfig(key: string): void {
 }
 
 /**
- * Files what is being recorded under the account, when there is one.
- *
- * The id is the same opaque one the counted events resolve to, so a recording
- * and the counts around it belong to one person — which is what makes
- * deleting the account erase the recordings with it.
- *
- * Signed out there is no id and none is invented: the recording runs under
- * the anonymous id the library made for itself, and a sign-in that lands
- * later calls this, which is where the library joins that anonymous session
- * to the person. What never reaches a sign-in stays anonymous, and so cannot
- * be erased with an account — `PRIVACY.md` says so, because it is true.
- * Note that an account already identified is not identified again, because
- * every account transition re-answers recording, most of them for nothing
- * that moved. The build registered at the start stands: `identify` keeps the
- * registered properties, and only the stop's `reset` clears them.
- */
-function identifyAccount(
-  posthog: PostHog,
-  bootstrap: SessionReplayBootstrap,
-  identified: { current: string | undefined },
-): void {
-  const accountId = bootstrap.accountId;
-  if (!accountId || accountId === identified.current) return;
-  identified.current = accountId;
-  posthog.identify(accountId);
-}
-
-/**
  * Opting in and out rather than only starting and stopping the recorder,
  * because this client sends more than recordings: the registered build and
  * the identified person travel on their own, and neither answers to
@@ -307,7 +279,31 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
   /** The run's latest word on recording, which a recorder that finishes loading starts under. */
   let latest: SessionReplayBootstrap | undefined;
   /** The account the running recording is filed under, cleared with the person on a stop. */
-  const identified: { current: string | undefined } = { current: undefined };
+  let identified: string | undefined;
+
+  /**
+   * Files what is being recorded under the account, when there is one.
+   *
+   * The id is the same opaque one the counted events resolve to, so a recording
+   * and the counts around it belong to one person — which is what makes
+   * deleting the account erase the recordings with it.
+   *
+   * Signed out there is no id and none is invented: the recording runs under
+   * the anonymous id the library made for itself, and a sign-in that lands
+   * later calls this, which is where the library joins that anonymous session
+   * to the person. What never reaches a sign-in stays anonymous, and so cannot
+   * be erased with an account — `PRIVACY.md` says so, because it is true.
+   * Note that an account already identified is not identified again, because
+   * every account transition re-answers recording, most of them for nothing
+   * that moved. The build registered at the start stands: `identify` keeps the
+   * registered properties, and only the stop's `reset` clears them.
+   */
+  const identifyAccount = (posthog: PostHog, bootstrap: SessionReplayBootstrap): void => {
+    const accountId = bootstrap.accountId;
+    if (!accountId || accountId === identified) return;
+    identified = accountId;
+    posthog.identify(accountId);
+  };
 
   /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
   const record = (posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap): void => {
@@ -318,7 +314,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       // because the person may have changed since the last one.
       optIn(posthog);
       registerBuild(posthog, bootstrap, shell.appName);
-      identifyAccount(posthog, bootstrap, identified);
+      identifyAccount(posthog, bootstrap);
       posthog.startSessionRecording();
       return;
     }
@@ -357,7 +353,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
     // been stopped would come up recording nothing for the rest of the install.
     optIn(posthog);
     registerBuild(posthog, bootstrap, shell.appName);
-    identifyAccount(posthog, bootstrap, identified);
+    identifyAccount(posthog, bootstrap);
   };
 
   /**
@@ -406,7 +402,7 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
 
   const stop = (): void => {
     started = false;
-    identified.current = undefined;
+    identified = undefined;
     const posthog = initialized ? client : undefined;
     if (posthog === undefined) return;
     posthog.stopSessionRecording();
@@ -428,7 +424,6 @@ export function sessionReplay(shell: SessionReplayShell): ApplySessionReplay {
       return;
     }
     // A client still loading starts under `latest`, which already names the account.
-    if (started && initialized && client !== undefined)
-      identifyAccount(client, bootstrap, identified);
+    if (started && initialized && client !== undefined) identifyAccount(client, bootstrap);
   };
 }

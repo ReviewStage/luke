@@ -10,6 +10,9 @@ import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { browserTracingIntegration, captureException, init } from "@sentry/browser";
 import type { WebSentry, WebSentryBuild } from "./web-sentry";
 
+/** The mechanism a blank tab's report names, so Sentry's issue says which path caught it, as the desktop's first read does. */
+const BLANK_TAB_MECHANISM = { type: "auto.browser.web_root.first_read", handled: false } as const;
+
 /** Starts the SDK with its default data collection, under the build's DSN, environment, and release. */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({
@@ -20,8 +23,8 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
   });
   return {
-    captureUnhandled: (error, mechanism) => {
-      captureException(error, { mechanism: { type: mechanism, handled: false } });
+    reportBlankTab: (error) => {
+      captureException(error, { mechanism: BLANK_TAB_MECHANISM });
     },
   };
 }

@@ -83,7 +83,7 @@ export async function mountWebApp(
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
-    (await sentry)?.captureUnhandled(error, "auto.browser.web_root.first_read");
+    (await sentry)?.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
     await runtime.dispose();
     return undefined;
   }
