@@ -228,6 +228,9 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
   });
 }
 
+/** The version history the last window drew, which the window's history moves as it goes back and forth. */
+let standingVersions: ReturnType<typeof usePlanHistory> | undefined;
+
 /** The plan's version history over the window, opened on the plan as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
   const versions = usePlanHistory({
@@ -240,6 +243,7 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
     returnTo,
     onRestored: ignore,
   });
+  standingVersions = versions;
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -369,6 +373,14 @@ test("a link to a Settings page on a narrow stage opens on that page, with the w
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 });
 
+test("a link to Settings that names no page opens on the page list on a narrow stage", async () => {
+  const page = await mount(
+    PHONE,
+    createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.ACCOUNT, listed: true } }),
+  );
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
+});
+
 test("Find on a narrow Settings lands in the search shown: a page with none shows the list for it, and the list takes it from a hidden page's own", async () => {
   const page = await mount(
     PHONE,
@@ -434,6 +446,23 @@ test("a link to a version on a narrow stage opens on that version, with the way 
 
   press(the(page, HISTORY_COLUMNS.version), "Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+});
+
+test("a version history gone back to on its list in a narrow room opens on its list, and the window's history moves it between the list and the version", async () => {
+  const page = await mount(
+    PHONE,
+    createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined, listed: true } }),
+  );
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+
+  act(() => standingVersions?.onStand({ revision: 2, opened: undefined, listed: false }));
+  await settle();
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
+  assert.equal(standingVersions?.selected, 2);
+
+  act(() => standingVersions?.onStand({ revision: 3, opened: undefined, listed: true }));
+  assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
+  assert.equal(standingVersions?.selected, 2, "the list stands over the version chosen");
 });
 
 const CHAT_COLUMNS = {

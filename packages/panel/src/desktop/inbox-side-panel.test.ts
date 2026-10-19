@@ -226,6 +226,8 @@ async function inbox(
   handState(experiments);
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    // Whether the list was asked for, which the window keeps as the Tasks tab does.
+    const [listed, setListed] = useState(false);
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
     const taskAgents = useInboxTaskAgents(panelFor);
@@ -256,6 +258,8 @@ async function inbox(
             onOpen: () => undefined,
             onClose: () => undefined,
             onChoose: setChosen,
+            listed,
+            onListed: setListed,
             pages,
             onRereadPages: () => {
               left.rereads += 1;

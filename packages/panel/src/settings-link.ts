@@ -37,7 +37,8 @@ export interface SettingsLinkTargets {
 export function followSettingsLink(link: SettingsLink, targets: SettingsLinkTargets): () => void {
   if (link.workspaceId !== undefined) targets.chooseWorkspace(link.workspaceId);
   targets.changeTab(PANEL_TAB.SETTINGS);
-  targets.changeView(link.page);
+  // Note that entering Settings stands it on its page list, at its first page, which a link to the list keeps.
+  if (link.listed !== true) targets.changeView(link.page);
   if (link.section === undefined) return () => undefined;
   return (targets.land ?? landOnSettingsRow)(link.section);
 }

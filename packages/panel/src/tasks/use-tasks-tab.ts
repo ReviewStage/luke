@@ -254,6 +254,15 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /**
+   * Whether the list stands alone rather than the item chosen, where the
+   * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
+   * Show all, and given up by a row pressed. It is held here rather than in
+   * the Inbox, so the window's history can record it and go back to it.
+   */
+  readonly listed: boolean;
+  /** Stands the list alone, or the item chosen. */
+  readonly onListed: (listed: boolean) => void;
   /** The pages of the chosen item's task, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Reads the chosen item's task's pages again, as a link names a page the last read did not hold. */
@@ -306,7 +315,12 @@ const STAND_IN = {
 
 /** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
 type StandIn =
-  | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
+  | {
+      readonly kind: typeof STAND_IN.INBOX;
+      readonly chosen: InboxChoice | undefined;
+      /** Whether the list stands alone rather than the item chosen, where the Inbox shows one column. */
+      readonly listed: boolean;
+    }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | {
       readonly kind: typeof STAND_IN.PERSON;
@@ -2737,6 +2751,7 @@ export function useTasksTab(input: {
             account: input.account,
             workspaceId,
           }),
+          listed: false,
         });
         return;
       }
@@ -2753,6 +2768,7 @@ export function useTasksTab(input: {
             "planId" in place
               ? { taskId: place.planId, itemId: place.itemId, opened: true }
               : { agentId: place.agentId, itemId: place.itemId, opened: true },
+          listed: false,
         });
         return;
       case LINK_PLACE.AUTOMATIONS:
@@ -3120,14 +3136,16 @@ export function useTasksTab(input: {
                   account: input.account,
                   workspaceId: listedWorkspaceId,
                 }),
+                listed: false,
               },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
-        ),
+        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
+      listed: inboxView?.listed ?? false,
+      onListed: (listed) =>
+        setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),
       pages: inboxPages.pages,
       onRereadPages: inboxPages.onReread,
       onTaskAgents: inboxTaskAgents.onRead,

@@ -173,6 +173,8 @@ async function inbox(options: {
   // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    // Whether the list was asked for, which the window keeps as the Tasks tab does.
+    const [listed, setListed] = useState(false);
     return createElement(DesktopInbox, {
       tasks: tasksControl({
         workspace: options.listed,
@@ -192,6 +194,8 @@ async function inbox(options: {
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setChosen,
+          listed,
+          onListed: setListed,
           pages: undefined,
           onRereadPages: () => undefined,
           onTaskAgents: () => undefined,

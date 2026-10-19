@@ -20,6 +20,7 @@ import {
   type WindowHistory,
 } from "./navigation-history.js";
 import { PANEL_TAB } from "./panel-tabs.js";
+import { SHELL_ROOM } from "./shell-room.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -66,6 +67,9 @@ function mount(initial: TasksControl) {
       onTabChange: () => undefined,
       settingsView: SETTINGS_VIEW.ACCOUNT,
       onSettingsViewChange: () => undefined,
+      settingsListed: true,
+      onSettingsList: () => undefined,
+      room: SHELL_ROOM.WIDE,
       tasks,
     });
     return null;

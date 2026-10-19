@@ -42,14 +42,14 @@ test("a link to a page of Settings opens it on the workspace its slug names, whe
   );
 });
 
-test("a link to Settings with no page, or a page this window does not know, opens Settings on its first", () => {
+test("a link to Settings with no page, or a page this window does not know, opens Settings on its page list, at its first page", () => {
   for (const place of [
     { kind: LINK_PLACE.SETTINGS },
     { kind: LINK_PLACE.SETTINGS, page: "billing" },
   ] as const) {
     assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
       kind: LINK_ROUTE.SETTINGS,
-      settings: { page: SETTINGS_VIEW.ACCOUNT, workspaceId: ACME.id },
+      settings: { page: SETTINGS_VIEW.ACCOUNT, listed: true, workspaceId: ACME.id },
     });
   }
 });

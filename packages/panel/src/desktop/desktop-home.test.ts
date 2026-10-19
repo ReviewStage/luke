@@ -278,6 +278,8 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      listed: false,
+      onListed: () => undefined,
       pages: undefined,
       onRereadPages: () => undefined,
       onTaskAgents: () => undefined,
