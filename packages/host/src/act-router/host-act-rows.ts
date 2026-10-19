@@ -23,7 +23,6 @@ import {
   type IntegrationActsDependencies,
   integrationActRows,
 } from "./integration-acts.js";
-import { type IssueActKind, type IssueActsDependencies, issueActRows } from "./issue-acts.js";
 import type { ActRows } from "./router.js";
 import {
   type SettingsActKind,
@@ -40,7 +39,6 @@ export type HostActKind =
   | CodingAgentActKind
   | IntegrationActKind
   | AutomationActKind
-  | IssueActKind
   | FactoryActKind;
 
 /** What the host's rows are handed, by the group of rows that uses it. */
@@ -51,7 +49,6 @@ export interface HostActDependencies<Sender> {
   readonly codingAgents: CodingAgentActsDependencies;
   readonly integrations: IntegrationActsDependencies;
   readonly automations: AutomationActsDependencies;
-  readonly issues: IssueActsDependencies;
   readonly factory: FactoryActsDependencies;
 }
 
@@ -66,7 +63,6 @@ export function hostActRows<Sender>(
     ...codingAgentActRows(dependencies.codingAgents),
     ...integrationActRows(dependencies.integrations),
     ...automationActRows(dependencies.automations),
-    ...issueActRows(dependencies.issues),
     ...factoryActRows(dependencies.factory),
   };
 }
