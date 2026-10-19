@@ -9,6 +9,7 @@ import {
   CHAT_IMAGE_TYPE,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -29,6 +30,7 @@ import {
   stagedChannel,
   stagedPost,
 } from "../tasks/chat-fixture.js";
+import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
@@ -78,6 +80,7 @@ function mount(
   workspace: Workspace | undefined = undefined,
   readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
+  opened: ReadLink[] | undefined = undefined,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -119,7 +122,15 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  const page =
+    opened === undefined
+      ? createElement(Page)
+      : createElement(
+          OpenLinkProvider,
+          { value: (link: ReadLink) => opened.push(link) },
+          createElement(Page),
+        );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return container;
 }
 
@@ -965,4 +976,20 @@ test("in a listed workspace, a person is drawn with their photo from the members
     page.querySelector(".chat-face img[src^='https://example.com/maria.png']"),
     "and lead with her photo",
   );
+});
+
+test("an agent's line names it by its title and quietly by its handle, and a press on its name opens its tab", () => {
+  const opened: ReadLink[] = [];
+  const page = mount((chat) => chat, undefined, undefined, opened);
+  act(() => railRow(page, "teammate-invitations").click());
+  const [byline] = [...page.querySelectorAll(".chat-message .chat-byline")];
+  assert.ok(byline);
+  assert.equal(byline.querySelector(".chat-byline-handle")?.textContent, "@agent-1");
+  const name = byline.querySelector<HTMLButtonElement>(".chat-byline-name button");
+  assert.ok(name, "the agent's name is a press");
+  act(() => name.click());
+  assert.equal(opened.length, 1);
+  const [link] = opened;
+  assert.ok(link !== undefined && "place" in link);
+  assert.equal(link.place.kind, LINK_PLACE.AGENT);
 });

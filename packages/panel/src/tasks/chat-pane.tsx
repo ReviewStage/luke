@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
+  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
@@ -22,7 +23,7 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
-import { type Actor, distinctActors } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -47,6 +48,7 @@ import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import { PictureBlock } from "../picture-block.js";
+import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
@@ -255,12 +257,15 @@ function Body({
 /** The line over a message's words, as an Inbox comment's head is: its author by name, their card on it, where it was said, and when. */
 function Byline({
   actor,
+  handle,
   at,
   where,
   now,
   action,
 }: {
   actor: Actor;
+  /** An agent's handle, said quietly after its title, since two agents may share a title and the chat names them by it. */
+  handle: string | undefined;
   at: number;
   where: string | undefined;
   now: number;
@@ -270,13 +275,24 @@ function Byline({
   return (
     <div className="chat-byline">
       <span className="chat-byline-name">
-        <ActorRef actor={actor} nameOnly />
+        {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+          <SendingAgent actor={actor} agentId={actor.agentId} nameOnly />
+        ) : (
+          <ActorRef actor={actor} nameOnly />
+        )}
       </span>
+      {handle === undefined ? null : <span className="chat-byline-handle">@{handle}</span>}
       {where === undefined ? null : <span className="chat-byline-where">{where}</span>}
       <RelativeTime at={at} now={now} />
       {action}
     </div>
   );
+}
+
+/** An agent author's handle, which tells two agents of one title apart; none for a person or Luke, named by who they are. */
+function agentHandle(context: MessageContext, memberId: string): string | undefined {
+  const member = context.chat.members.find((each) => each.id === memberId);
+  return member?.kind === MEMBER_KIND.AGENT ? member.handle : undefined;
 }
 
 /** The face a message leads with, in a column of its own: the author's photo, Luke, or the agent's harness, as a list row draws them. */
@@ -295,7 +311,13 @@ function Reply({ message, context }: { message: ChatMessage; context: MessageCon
     <li className="chat-reply" data-seq={message.seq}>
       <Face actor={actor} />
       <div className="chat-message-body">
-        <Byline actor={actor} at={message.postedAt} where={undefined} now={context.now} />
+        <Byline
+          actor={actor}
+          handle={agentHandle(context, message.authorId)}
+          at={message.postedAt}
+          where={undefined}
+          now={context.now}
+        />
         <Body message={message} context={context} />
       </div>
     </li>
@@ -337,7 +359,13 @@ function ThreadRow({
       <li className="chat-message" data-seq={message.seq}>
         <Face actor={actor} />
         <div className="chat-message-body">
-          <Byline actor={actor} at={message.postedAt} where={where} now={context.now} />
+          <Byline
+            actor={actor}
+            handle={agentHandle(context, message.authorId)}
+            at={message.postedAt}
+            where={where}
+            now={context.now}
+          />
           <Body message={message} context={context} />
         </div>
       </li>
@@ -349,6 +377,7 @@ function ThreadRow({
       <div className="chat-message-body">
         <Byline
           actor={actor}
+          handle={agentHandle(context, message.authorId)}
           at={message.postedAt}
           where={where}
           now={context.now}
