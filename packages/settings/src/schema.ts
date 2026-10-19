@@ -63,8 +63,7 @@ function voiceOptionLabel(voice: LiveVoice): string {
 }
 
 /* Each voice's clip under the panel's asset base, recorded from the voice
-   itself by `@luke/panel`'s `scripts/record-voice-samples.mjs`, which names
-   the file this way. */
+   itself by `tools/voice-samples`, which names the file this way. */
 function voiceSamplePath(voice: LiveVoice): string {
   return `voices/${voice}.m4a`;
 }

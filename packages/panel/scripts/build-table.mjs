@@ -164,7 +164,7 @@ const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
  * from and the path under that base it is served at: Excalidraw's fonts, the
  * harness marks drawn as images rather than traced
  * (`src/harness-marks.tsx`), and the clip Settings plays for each voice
- * (`scripts/record-voice-samples.mjs`), so the bundle carries none of their bytes.
+ * (`tools/voice-samples`), so the bundle carries none of their bytes.
  */
 export function panelStaticDirectories() {
   return [

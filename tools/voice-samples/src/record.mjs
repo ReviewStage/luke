@@ -1,9 +1,9 @@
 /**
- * record-voice-samples.mjs -- records the clip Settings plays for each voice, from GPT-Live itself.
+ * record.mjs -- records the clip Settings plays for each voice, from GPT-Live itself.
  *
  * Run it on a Mac, from the repository root, after bootstrapping:
  *
- *   OPENAI_API_KEY=… node packages/panel/scripts/record-voice-samples.mjs [voice …]
+ *   OPENAI_API_KEY=… pnpm --filter @luke/voice-samples record [voice …]
  *
  * With no voice named it records every voice `@luke/live` offers. Each is
  * spoken by the model and voice a call uses, over the Live WebSocket, so a
@@ -12,7 +12,7 @@
  * whose transcript is not that line is recorded again, and a voice that never
  * says it fails the run. The audio is trimmed of the quiet around it, brought
  * to one level, and written as AAC in an MPEG-4 file (`afconvert`, which every Mac has) under
- * `packages/panel/voices/`, the folder the panel serves (`build-table.mjs`).
+ * `packages/panel/voices/`, the folder the panel serves (its `build-table.mjs`).
  *
  * Note that this runs by hand, never in a check: it spends the key's money and
  * reaches the network, and its output is committed.
@@ -23,10 +23,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { LIVE_DEFAULTS, LIVE_VOICE_LIST } from "../../live/src/voices.ts";
+// Note that the vocabulary is read from its source rather than through `@luke/live`, because
+// Node strips the types of one TypeScript file but resolves no `.js` specifier to a `.ts` one.
+import { LIVE_DEFAULTS, LIVE_VOICE_LIST } from "../../../packages/live/src/voices.ts";
 
-const panelRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const VOICES_DIRECTORY = path.join(panelRoot, "voices");
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const VOICES_DIRECTORY = path.join(repositoryRoot, "packages/panel/voices");
 
 /** What every voice says, so the voices are compared on the same words. */
 const SAMPLE_LINE =
@@ -148,12 +150,17 @@ function recordTake(voice, apiKey) {
       clearInterval(microphone);
       for (const timer of timers) clearTimeout(timer);
       closing = true;
-      if (socket.readyState === WebSocket.OPEN) socket.close();
+      if (socket.readyState !== WebSocket.CLOSED) socket.close();
       if (error) reject(error);
       else resolve({ pcm: Buffer.concat(audio), transcript });
     };
     const close = () => {
       if (closing) return;
+      // A socket that never opened has no session to close, so the take fails rather than sending into it.
+      if (socket.readyState !== WebSocket.OPEN) {
+        finish(new Error(`${voice}: the connection never opened`));
+        return;
+      }
       closing = true;
       clearInterval(microphone);
       socket.send(JSON.stringify({ type: "session.close" }));
@@ -227,7 +234,12 @@ function recordTake(voice, apiKey) {
 /** Records the voice until a take says the line, and writes it as the voice's clip. */
 async function recordVoice(voice, apiKey, scratch) {
   for (let take = 1; take <= TAKES_PER_VOICE; take += 1) {
-    const { pcm, transcript } = await recordTake(voice, apiKey);
+    const recorded = await recordTake(voice, apiKey).catch((error) => {
+      console.error(`${voice}: take ${take} failed: ${error.message}`);
+      return undefined;
+    });
+    if (recorded === undefined) continue;
+    const { pcm, transcript } = recorded;
     if (wordsOf(transcript) !== wordsOf(SAMPLE_LINE) || pcm.length === 0) {
       console.error(`${voice}: take ${take} said ${JSON.stringify(transcript.trim())}`);
       continue;

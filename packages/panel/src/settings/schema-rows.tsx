@@ -41,7 +41,12 @@ function anchorOf(id: string) {
   return isAppSettingId(id) ? searchAnchorProps(id) : undefined;
 }
 
-/** The press beside a choice whose values are heard, which plays the chosen one's clip or stops it. */
+/**
+ * The press beside a choice whose values are heard, which plays the chosen
+ * one's clip, or stops whatever clip the row is playing. Note that it stops
+ * any clip and not only the chosen one's, because a clip picked from the menu
+ * plays before its write lands, and keeps playing where the write is refused.
+ */
 function SampleButton({
   sample,
   player,
@@ -49,7 +54,7 @@ function SampleButton({
   sample: string;
   player: SamplePlayer;
 }): React.JSX.Element {
-  const playing = player.playing === sample;
+  const playing = player.playing !== undefined;
   const label = playing ? "Stop sample" : "Play sample";
   return (
     <Tooltip label={label}>

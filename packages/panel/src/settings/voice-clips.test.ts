@@ -12,7 +12,7 @@ import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 /**
  * The Voice row names each voice's clip by its path under the asset base,
  * and the build copies the panel's static folders there, so a voice the Live
- * vocabulary gains without a recording (`scripts/record-voice-samples.mjs`)
+ * vocabulary gains without a recording (`tools/voice-samples`)
  * fails here rather than as a play button that plays nothing.
  */
 

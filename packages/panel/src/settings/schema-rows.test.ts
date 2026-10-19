@@ -212,3 +212,25 @@ test("choosing another voice writes it and plays it, cutting off the clip alread
   ]);
   assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/cedar.m4a`]);
 });
+
+test("a voice whose choice is refused still plays, and the row's button stops it", async () => {
+  fakeAppPlatform({ assetBase: () => ASSET_BASE });
+  const heard = listenToClips();
+  const page = mount(SETTINGS_PAGE.VOICE);
+  answer = { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED };
+
+  act(() => control(page, "Voice: Cedar").click());
+  const marin =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
+      (item) => item.textContent === "Marin (default)",
+    ) ?? assert.fail("the menu offers Marin");
+  act(() => marin.click());
+  await settle();
+  assert.deepEqual(heard.played, [`${ASSET_BASE}voices/marin.m4a`]);
+  control(page, "Voice: Cedar");
+
+  act(() => control(page, "Stop sample").click());
+  await settle();
+  assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/marin.m4a`]);
+  control(page, "Play sample");
+});
