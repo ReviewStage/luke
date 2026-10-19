@@ -127,13 +127,16 @@ test("V on the row the tree's keyboard stands on presses that row's toggle and g
   row("src/seats.ts").dispatchEvent(
     new KeyboardEvent("keydown", { key: "v", bubbles: true, composed: true }),
   );
+  row("src/seats.ts").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "v", isComposing: true, bubbles: true, composed: true }),
+  );
   row("README.md").focus();
   row("README.md").dispatchEvent(
     new KeyboardEvent("keydown", { key: "v", bubbles: true, composed: true }),
   );
 
   assert.deepEqual(viewed, ["src/seats.ts"]);
-  assert.equal(heard, 1, "V on a row with no toggle is left to the view");
+  assert.equal(heard, 2, "a V composed, and V on a row with no toggle, are left to the view");
 });
 
 test("marks handed again redraw the rows, a file marked viewed since ticked", async () => {

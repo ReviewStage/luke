@@ -334,7 +334,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     if (path === null || path.endsWith("/")) return;
     if (event.key === "Enter")
       return props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
-    const plain = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
+    const plain =
+      !event.isComposing && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
     const toggles = markOf.get(repositoryPath(path))?.viewed !== undefined;
     if (
       !plain ||
