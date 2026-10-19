@@ -6,6 +6,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import { AGENT_ACT_KIND } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,7 +31,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -38,6 +39,11 @@ import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+
+/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
+const isAgentRead = (kind: string): boolean =>
+  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
+  kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -802,6 +808,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
+    if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
 }
