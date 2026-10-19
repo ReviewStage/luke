@@ -960,10 +960,11 @@ not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
 default: every error they did not handle or that ended work they started
 apart from a turn, with its message, stack trace, the lines of code around it,
-and the values of local variables; performance traces of each request they
-answer, each database query, and each request they make, with their headers,
-bodies, addresses, the names of their query parameters, and database query
-parameters,
+and the values of local variables, apart from a tool's refusal the agent was
+handed back to go on from, which its agent trace still shows; performance
+traces of each request they answer, each database query, and each request they
+make, with their headers, bodies, addresses, the names of their query
+parameters, and database query parameters,
 and the IP address a request came from; every line they log; and Sentry's
 agent traces of each turn: the instructions and messages sent to the model
 (which include the plan, the conversation, what was said on a call, and what
