@@ -520,6 +520,15 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
     "Home's composer shows them",
   );
   assert.equal(
+    await newTaskDrafted({
+      ...inWorkspace(),
+      page: TASKS_PAGE.HOME,
+      personView: { ...tasksControl().personView, userId: "user-sam", name: "Sam" },
+    }),
+    true,
+    "a person's page opened from Home stands in its composer's place",
+  );
+  assert.equal(
     await newTaskDrafted(inWorkspace({ workspaceId: "workspace-team" })),
     false,
     "another workspace's New task starts from nothing of this one's",

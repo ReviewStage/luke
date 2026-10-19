@@ -1610,7 +1610,8 @@ function SidebarColumn({
       <div className="sidebar-places">
         <NewTaskButton
           tasks={tasks}
-          shown={tasks.newTask.open || atHome}
+          // A person's page stands in Home's place without leaving its page, and draws no composer.
+          shown={tasks.newTask.open || (atHome && tasks.personView.userId === undefined)}
           onNewTask={chosen(newTask)}
         />
         {/* Search is a second door to the command palette, drawn as New task
