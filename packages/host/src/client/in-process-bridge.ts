@@ -49,7 +49,7 @@ interface InProcessBridgeDependencies<Sender = unknown> {
   createId: () => string;
   /** The page's own reports that reach anything here: that it painted, and its surface events. */
   reports: Pick<AppBridge, "notifyReady" | "recordSurfaceEvent">;
-  /** Where a push of the document that failed is said. */
+  /** Where a page's listener that failed is said. */
   report: (message: string) => void;
 }
 
@@ -58,10 +58,11 @@ interface InProcessBridge {
   events: InProcessEvents;
 }
 
-/** One subscription set: what a page subscribed, and the one door that tells them all. */
+/** One subscription set: what a page subscribed, the one door that tells them all, and its end. */
 interface Listeners<Payload> {
   subscribe: (listener: (payload: Payload) => void) => () => void;
   emit: (payload: Payload) => void;
+  clear: () => void;
 }
 
 /** Each one-shot event's subscriptions, the page's side and the shell's of one set. */
@@ -72,9 +73,11 @@ type EventListeners = {
 /**
  * Note that each subscription is held as its own entry, so a listener
  * subscribed twice hears twice and one unsubscribe ends one of them, as a
- * listener on a channel of the desktop's does.
+ * listener on a channel of the desktop's does. Each is told on its own as
+ * well: one that throws is reported, and the rest still hear, because on the
+ * desktop a page's callback throws in the page and never into the sender.
  */
-function listeners<Payload>(): Listeners<Payload> {
+function listeners<Payload>(report: (message: string) => void): Listeners<Payload> {
   const held = new Set<{ readonly listener: (payload: Payload) => void }>();
   return {
     subscribe: (listener) => {
@@ -85,8 +88,17 @@ function listeners<Payload>(): Listeners<Payload> {
       };
     },
     emit: (payload) => {
-      for (const entry of [...held]) entry.listener(payload);
+      for (const entry of [...held]) {
+        try {
+          entry.listener(payload);
+        } catch (error) {
+          report(
+            `a page's bridge listener failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
     },
+    clear: () => held.clear(),
   };
 }
 
@@ -100,8 +112,8 @@ const dropped = (): void => {};
  * always a panel: the host's rows check that a panel asked, and no voice or
  * call window stands beside it. An act goes to the router on the shell's
  * runtime; the document is the store's, read on request and pushed on every
- * change for the scope's life; the one-shot events are what the shell says
- * through `events`; and everything the voice, the avatar, the call window, a
+ * change; the one-shot events are what the shell says through `events`; every
+ * subscription ends with the scope; and everything the voice, the avatar, the call window, a
  * Browser tab, the menu bar, or a global key would say is never said, its
  * subscription ending cleanly.
  */
@@ -114,24 +126,31 @@ export function createInProcessBridge<Sender = unknown>(
     const router = routerFor(() => reporter);
     const asking: ActSender<Sender> = { sender, panel: true, voice: false, call: false };
     const snapshot = (): AppStateSnapshot => ({ ...state.snapshot(), window: windowFacts() });
-    const appState = listeners<AppStateSnapshot>();
+    const appState = listeners<AppStateSnapshot>(report);
     yield* publishAppStateChanges(
       state,
       () => Effect.sync(() => appState.emit(snapshot())),
       report,
     );
     const said: EventListeners = {
-      onShowAgent: listeners(),
-      onShowInbox: listeners(),
-      onShowInboxItem: listeners(),
-      onShowFailedRun: listeners(),
-      onShowChat: listeners(),
-      onAgentEnded: listeners(),
-      onInboxItemOpened: listeners(),
-      onRunFailed: listeners(),
-      onChatMessageWaiting: listeners(),
-      onShowLink: listeners(),
+      onShowAgent: listeners(report),
+      onShowInbox: listeners(report),
+      onShowInboxItem: listeners(report),
+      onShowFailedRun: listeners(report),
+      onShowChat: listeners(report),
+      onAgentEnded: listeners(report),
+      onInboxItemOpened: listeners(report),
+      onRunFailed: listeners(report),
+      onChatMessageWaiting: listeners(report),
+      onShowLink: listeners(report),
     };
+    // A page whose bridge is closed hears nothing more, whoever still holds `events`.
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        appState.clear();
+        for (const set of Object.values(said)) set.clear();
+      }),
+    );
     const bridge: AppBridge = {
       act: (act) => run(router.performAct(act, asking)),
       requestAppState: async () => snapshot(),
