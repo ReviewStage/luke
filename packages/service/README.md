@@ -138,7 +138,8 @@ is who a coding agent's commits are by. A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
-`GET /api/github/repositories` (`src/github/github-repositories-app.ts`) is that
+`GET /api/github/repositories` (`src/github/github-procedures.ts`, on the
+hosted oRPC router) is that
 listing under the account bearer, answered as
 `packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
@@ -167,7 +168,7 @@ token minted for that one repository with `issues: read` alone; an
 installation that does not grant the App issues mints nothing and answers
 `{ issue: null }`, as an unreached repository, a pull request's number, a
 missing number, and a repository with its issues turned off do.
-`src/github/github-repositories-app.test.ts` holds the route and
+`src/github/github-repositories-procedures.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
 

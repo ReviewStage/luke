@@ -31,9 +31,11 @@ import {
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import type { WebServices } from "@luke/service/runtime";
 import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
+import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -41,7 +43,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
@@ -60,7 +62,7 @@ import { SqlClient } from "effect/sql";
 const ORIGIN = "https://luke.test";
 const COMMENTS = "/api/plans/comments";
 const THREAD = "/api/plans/comment-thread";
-const EDIT = "/api/plans/edit";
+const EDIT = (taskId: string) => `/api/plans/${taskId}/edit`;
 
 const PLAN_TEXT =
   "## Goal\n\nAn admin invites a teammate by email.\n\n## Approach\n\nAdmins can withdraw an invite from the members page. A withdrawn link never grants access again.\n";
@@ -113,7 +115,7 @@ const fakeEve = (): EveSessions => ({
   stream: () => Stream.empty,
 });
 
-/** One route group over the test's own database, answering one request. */
+/** The comments' route group, or the plans' procedures behind the hosted oRPC router, over the test's own database, answering one request. */
 const answer = (routes: "comments" | "plans", request: Request) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -124,23 +126,31 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
-    const app =
-      routes === "comments"
-        ? planCommentsApp({ resolveUserId, eveOrigin: () => undefined, eve: fakeEve })
-        : tasksApp({
-            resolveUserId,
-            workspaces: yield* fakeWorkspaceSeams,
-            eveOrigin: () => undefined,
-          });
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      app.pipe(HttpRouter.provideRequest(services)),
-      {
-        disableLogger: true,
-      },
-    );
-    const response = yield* Effect.promise(() => handler(request));
+    let response: Response;
+    if (routes === "comments") {
+      const { handler, dispose } = HttpRouter.toWebHandler(
+        planCommentsApp({ resolveUserId, eveOrigin: () => undefined, eve: fakeEve }).pipe(
+          HttpRouter.provideRequest(services),
+        ),
+        { disableLogger: true },
+      );
+      response = yield* Effect.promise(() => handler(request));
+      yield* Effect.promise(() => dispose());
+    } else {
+      // SAFETY: the plans procedures yield the services this layer provides, which is all a test provides of the web runtime's.
+      const webServices = (yield* Effect.context<never>().pipe(
+        Effect.provide(services),
+      )) as Context.Context<WebServices>;
+      const plans = hostedFetch({
+        plans: tasksProcedures({
+          resolveUserId,
+          workspaces: yield* fakeWorkspaceSeams,
+          eveOrigin: () => undefined,
+        }),
+      });
+      response = yield* Effect.promise(() => plans(request, webServices));
+    }
     const text = yield* Effect.promise(() => response.text());
-    yield* Effect.promise(() => dispose());
     return {
       status: response.status,
       body: text,
@@ -157,7 +167,11 @@ function request(
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   return new Request(url, {
     method: body === undefined ? "GET" : "POST",
-    headers: { authorization: `Bearer ${userId}` },
+    headers: {
+      authorization: `Bearer ${userId}`,
+      // A body is named JSON, as the account call names every body it sends.
+      ...(body === undefined ? undefined : { "content-type": "application/json" }),
+    },
     ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
   });
 }
@@ -282,9 +296,9 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
         const deleting = yield* answer(
           "plans",
           request(
-            EDIT,
+            EDIT(taskId),
             owner,
-            { id: taskId },
+            {},
             {
               document: { base: PLAN_TEXT, value: deleted },
               comments: { anchors: [], carried: [thread.id] },
@@ -302,9 +316,9 @@ it.layer(getTestDB())("a plan's comment threads through the routes", (it) => {
         yield* answer(
           "plans",
           request(
-            EDIT,
+            EDIT(taskId),
             owner,
-            { id: taskId },
+            {},
             {
               document: { base: deleted, value: PLAN_TEXT },
               comments: {

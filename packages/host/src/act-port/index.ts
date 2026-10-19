@@ -9,7 +9,16 @@ import {
   type AccountAskProceduresDependencies,
   accountAskProcedures,
 } from "./account-ask-procedures.js";
+import {
+  type AutomationProceduresDependencies,
+  automationProcedures,
+} from "./automation-procedures.js";
 import { type ActPortContext, actPortFor, isRefusal, refusedBy } from "./base.js";
+import { type FactoryProceduresDependencies, factoryProcedures } from "./factory-procedures.js";
+import {
+  type IntegrationProceduresDependencies,
+  integrationProcedures,
+} from "./integration-procedures.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
@@ -26,7 +35,9 @@ import {
  */
 
 export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
+export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, actPortFor } from "./base.js";
+export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
 export type { TasksProceduresDependencies } from "./tasks-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
@@ -68,6 +79,9 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 /** What the act port's procedures are handed, by the domain that uses it, in alphabetical order. */
 export interface ActPortDependencies {
   readonly accountAsks: AccountAskProceduresDependencies;
+  readonly automations: AutomationProceduresDependencies;
+  readonly factory: FactoryProceduresDependencies;
+  readonly integrations: IntegrationProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
@@ -91,6 +105,9 @@ export function createActPortHandler<Sender>(
   const router = {
     ...platformProcedures,
     ...accountAskProcedures(dependencies.accountAsks),
+    ...automationProcedures(dependencies.automations),
+    ...factoryProcedures(dependencies.factory),
+    ...integrationProcedures(dependencies.integrations),
     ...issueProcedures(dependencies.issues),
     ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces),

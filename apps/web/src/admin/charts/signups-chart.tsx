@@ -1,6 +1,6 @@
 import type {
   AdminDailySignups,
-  AdminMetrics,
+  AdminSignInMethods,
   AdminTrend,
 } from "@luke/service/admin/admin-metrics";
 import {
@@ -99,7 +99,7 @@ export function SignInMethodsChart({
   methods,
   totalAccounts,
 }: {
-  methods: AdminMetrics["users"]["signInMethods"];
+  methods: AdminSignInMethods;
   totalAccounts: number;
 }): React.JSX.Element {
   const rows = [

@@ -188,7 +188,7 @@ const WIRE_NAME = {
     "packages/features/src/task-wire.ts",
     "packages/host/src/compose-tasks.ts",
     "packages/host/src/compose-tasks.test.ts",
-    "packages/service/src/tasks/tasks-app.ts",
+    "packages/service/src/tasks/tasks-procedures.ts",
     "packages/service/src/agents/coding-agents-app.test.ts",
     "apps/web/tests/tasks-app.test.ts",
   ],

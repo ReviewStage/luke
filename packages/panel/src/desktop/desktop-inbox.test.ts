@@ -324,9 +324,6 @@ beforeEach(() => {
           value: { pages: taskPages.get(request.payload.taskId) ?? [] },
         });
       }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
@@ -375,6 +372,7 @@ beforeEach(() => {
     },
   });
   fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations }),
     [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(members),
   });

@@ -222,60 +222,51 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
+  fakeActPort({
+    ...openingLinks((link) => told.push(link)),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: LINEAR_CONNECTED }),
+    [ACT_KIND.INTEGRATIONS_TOOLS]: () =>
+      Promise.resolve({
+        tools: [
+          { name: "list_issues", description: "List the team's issues." },
+          { name: "get_issue", description: "Read one issue." },
+          { name: "list/issues", description: "A name no mention can carry." },
+          {
+            name: "list\ud800",
+            description: "A name that is no string of characters.",
+          },
+          { name: "..", description: "A name an address resolves away." },
+        ],
+      }),
+  });
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
       told.push(request);
       return Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+        request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
           ? {
               status: ACT_OUTCOME_STATUS.DONE,
               value: {
-                integrations: LINEAR_CONNECTED,
+                agents: workspaceAnswer(request.payload),
               },
             }
-          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
+          : request.kind === ACT_KIND.TASKS_TREE
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  tools: [
-                    { name: "list_issues", description: "List the team's issues." },
-                    { name: "get_issue", description: "Read one issue." },
-                    { name: "list/issues", description: "A name no mention can carry." },
-                    {
-                      name: "list\ud800",
-                      description: "A name that is no string of characters.",
-                    },
-                    { name: "..", description: "A name an address resolves away." },
-                  ],
+                  folder: {
+                    path: "",
+                    repository: standing,
+                    branch: "main",
+                    entries: TREES.get(standing) ?? [],
+                    truncated: false,
+                  },
                 },
               }
-            : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: {
-                    agents: workspaceAnswer(request.payload),
-                  },
-                }
-              : request.kind === ACT_KIND.TASKS_TREE
-                ? {
-                    status: ACT_OUTCOME_STATUS.DONE,
-                    value: {
-                      folder: {
-                        path: "",
-                        repository: standing,
-                        branch: "main",
-                        entries: TREES.get(standing) ?? [],
-                        truncated: false,
-                      },
-                    },
-                  }
-                : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       );
     },
-  });
-  fakeActPort({
-    ...openingLinks((link) => told.push(link)),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
   });
 });
 

@@ -6,7 +6,7 @@
  * `repositoryPullRequestToken`), the same reach that admits the agent's
  * checkout: the installation's own permissions bound it. A link to a pull
  * request reads it by number on the same mint, for a repository its
- * workspace's installation reaches (`github-repositories-app.ts`). The requests
+ * workspace's installation reaches (`github-procedures.ts`). The requests
  * compose over the App module's own kit (`githubRead`, `send`, `readBody`)
  * so a token leaves this module no more than it leaves that one. The checks are read as one word for a dot: GitHub's
  * check runs and its older commit statuses together, since a workflow

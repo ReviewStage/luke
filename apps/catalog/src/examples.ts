@@ -7,6 +7,7 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CALENDAR_EXAMPLE } from "./examples/calendar";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -80,6 +81,7 @@ export const EXAMPLES: readonly Example[] = [
   BANNERS_EXAMPLE,
   BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
+  CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,

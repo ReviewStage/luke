@@ -89,6 +89,7 @@ beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeActPort({});
 });
 
 afterEach(() => {
@@ -361,21 +362,11 @@ test("a model picked on the chip runs this agent alone, and the account's defaul
 });
 
 test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
-  fakeAppBridge({
-    act: (request: Act) =>
-      Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_STATUS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                integrations: {
-                  ...UNAVAILABLE,
-                  [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED,
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
+      Promise.resolve({
+        integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED },
+      }),
   });
   const card = await mount();
   await settle();

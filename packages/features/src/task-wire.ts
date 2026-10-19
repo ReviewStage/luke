@@ -525,8 +525,6 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 /** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
 export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
 
-export type TaskAnswer = typeof taskAnswerSchema.Type;
-
 /**
  * Why the agent a start asked for was not started beside the task it made,
  * in the service's own word, as the agent's Start would have refused it.

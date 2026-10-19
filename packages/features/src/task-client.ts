@@ -13,18 +13,22 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
+import type { Board, BoardElement } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import {
-  GITHUB_REPOSITORIES_QUERY,
-  type GitHubRepositoriesAnswer,
-  type GitHubRepositoryIssueAnswer,
-  type GitHubRepositoryPullRequestAnswer,
-  githubRepositoriesAnswerSchema,
-  githubRepositoryIssueAnswerSchema,
-  githubRepositoryPullRequestAnswerSchema,
+import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
+import type {
+  GitHubRepositoriesAnswer,
+  GitHubRepositoryIssueAnswer,
+  GitHubRepositoryPullRequestAnswer,
 } from "./github-repositories-wire.js";
+import {
+  askHosted,
+  HOSTED_DEADLINE,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
   type PageLine,
@@ -42,38 +46,20 @@ import {
   planCommentsAnswerSchema,
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
-import {
-  type PlanEditAnswer,
-  type PlanEditRequest,
-  planEditAnswerSchema,
-  planEditRequestSchema,
-} from "./plan-edit.js";
+import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
 import {
   HOSTED_SERVICE_PATH,
   planAttachmentPath,
   planAttachmentsPath,
   planCommentsPath,
   planCommentThreadPath,
-  planEditPath,
   planPageVersionPath,
-  planRevisionPath,
-  planRevisionsPath,
   type RepositoryPlace,
-  repositoryIssuePath,
-  repositoryPullRequestPath,
-  repositorySkillsPath,
-  repositoryTreePath,
-  taskBoardPath,
   taskCodePath,
   taskFilePath,
   taskPagesPath,
-  taskPath,
-  taskRestorePath,
   taskSkillsPath,
-  taskStopPath,
-  taskTranscriptPath,
   taskTreePath,
-  taskWorkPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -90,13 +76,10 @@ import {
 import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
-  planRevisionAnswerSchema,
-  planRevisionsAnswerSchema,
   type RepositoryPin,
   repositoryPinRequestSchema,
   repositoryPinsAnswerSchema,
   TASK_LIST_ARCHIVED,
-  TASK_LIST_QUERY,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -108,15 +91,11 @@ import {
   type TaskTreeAnswer,
   type TaskTreeRequest,
   type TaskUpdateRequest,
-  taskAnswerSchema,
   taskCreateRequestSchema,
-  taskDeleteAnswerSchema,
   taskFileAnswerSchema,
   taskFileRequestSchema,
-  taskListAnswerSchema,
   taskRenameRequestSchema,
   taskSkillsAnswerSchema,
-  taskStartAnswerSchema,
   taskTreeAnswerSchema,
   taskTreeRequestSchema,
   taskUpdateRequestSchema,
@@ -136,9 +115,8 @@ import {
   type TasksPictureKeepAnswer,
   type TaskWorkAnswer,
   taskCodeAnswerSchema,
-  taskWorkAnswerSchema,
 } from "./tasks-view.js";
-import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wire.js";
+import type { TaskTranscript } from "./transcript-wire.js";
 
 /**
  * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
@@ -149,9 +127,6 @@ import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wi
  * answered, the task is gone, or, on a call that names a repository, GitHub's
  * reach refused it.
  */
-
-/** How long a start naming an agent may stand: an agent's Start's own bound, since it opens the agent's session before it answers. */
-const AGENT_START_TIMEOUT_MS = 120_000;
 
 /** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
 export interface TaskStarted {
@@ -182,11 +157,6 @@ const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as 
 
 /** A comment call refused because the plan is not the account's to read or write. */
 const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
-
-/** The list with the archived tasks among it, each flagged, which this build sorts into its own place. */
-const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.TASKS}?${new URLSearchParams({
-  [TASK_LIST_QUERY.ARCHIVED]: TASK_LIST_ARCHIVED.INCLUDE,
-})}`;
 
 /** What a task's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
 export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "archived">;
@@ -219,6 +189,31 @@ const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
+/** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
+function hostedResult<Answer, Failure extends TaskCallFailure>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
+): Effect.Effect<
+  TaskCallResult<Answer, Failure | typeof TASK_CALL_FAILURE.UNANSWERED>,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: succeeded,
+    onFailure: (failed) => {
+      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
+      return failure === undefined ? UNANSWERED : ({ ok: false, failure } as const);
+    },
+  });
+}
+
+/** A procedure's answer, or nothing where it reached none. */
+function orNothing<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient> {
+  return Effect.orElseSucceed(asked, () => undefined);
+}
+
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
 function refusedAs<Failure extends TaskCallFailure>(
   payload: UnparsedWireValue,
@@ -238,20 +233,20 @@ function refusedAs<Failure extends TaskCallFailure>(
  */
 export class HostedTaskClient {
   readonly #call: AccountCallEffects;
-  readonly #start: AccountCallEffects;
   readonly #held: AccountCallEffects;
+  readonly #hosted: HostedClient;
 
   constructor(options: HostedTaskClientOptions) {
     const { credential } = options;
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#start = accountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
-      requestTimeoutMs: AGENT_START_TIMEOUT_MS,
+      requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#held = accountCall({
       baseUrl: options.serviceBaseUrl,
@@ -326,12 +321,9 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
-        taskListAnswerSchema,
-      ),
-      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
+    return hostedResult(
+      askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
+      {},
     );
   }
 
@@ -339,17 +331,10 @@ export class HostedTaskClient {
   open(
     taskId: string,
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({ method: HTTP_METHOD.GET, path: taskPath(taskId) });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const opened = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return opened === undefined ? UNANSWERED : succeeded(opened.plan);
-      }
-      return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND });
-    });
+    return hostedResult(
+      Effect.map(askHosted(this.#hosted.plans.open, { id: taskId }), (opened) => opened.plan),
+      NOT_FOUND_REFUSAL,
+    );
   }
 
   /**
@@ -374,24 +359,13 @@ export class HostedTaskClient {
   > {
     const admitted = Result.getOrUndefined(readEither(planEditRequestSchema)(edit));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.POST,
-        path: planEditPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const edited = Result.getOrUndefined(readServiceAnswer(planEditAnswerSchema)(payload));
-        return edited === undefined ? UNANSWERED : succeeded(edited);
-      }
-      return refusedAs(payload, {
+    return hostedResult(
+      askHosted(this.#hosted.plans.edit, { params: { id: taskId }, body: admitted }),
+      {
         [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
         [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
-      });
-    });
+      },
+    );
   }
 
   /**
@@ -407,24 +381,10 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const query =
-        workspaceId === undefined
-          ? ""
-          : `?${new URLSearchParams({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceId })}`;
-      const answer = yield* call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}${query}`,
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) return UNANSWERED;
-      const listed = Result.getOrUndefined(
-        readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
-      );
-      return listed === undefined ? UNANSWERED : succeeded(listed);
-    });
+    return Effect.match(
+      askHosted(this.#hosted.github.repositories, workspaceId === undefined ? {} : { workspaceId }),
+      { onSuccess: succeeded, onFailure: () => UNANSWERED },
+    );
   }
 
   /**
@@ -439,21 +399,7 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskCallResult<Task, RepositoryCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ repository }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.PATCH,
-        path: taskPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const changed = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return changed === undefined ? UNANSWERED : succeeded(changed.plan);
-      }
-      return refusedAs(payload, REPOSITORY_REFUSALS);
-    });
+    return hostedResult(this.#update(taskId, admitted), REPOSITORY_REFUSALS);
   }
 
   /**
@@ -468,28 +414,13 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ workspaceId }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.PATCH,
-        path: taskPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const moved = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return moved === undefined ? UNANSWERED : succeeded(moved.plan);
-      }
-      return refusedAs(payload, MOVE_REFUSALS);
-    });
+    return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
   /** One task's whiteboard as it stands; nothing where the service did not answer one. */
   readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask({ method: HTTP_METHOD.GET, path: taskBoardPath(taskId) }, boardAnswerSchema),
-      (answer) => answer?.board,
+    return orNothing(
+      Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
     );
   }
 
@@ -497,12 +428,11 @@ export class HostedTaskClient {
   readTranscript(
     taskId: string,
   ): Effect.Effect<TaskTranscript | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: taskTranscriptPath(taskId) },
-        taskTranscriptAnswerSchema,
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.transcript, { id: taskId }),
+        (answer) => answer.transcript,
       ),
-      (answer) => answer?.transcript,
     );
   }
 
@@ -511,9 +441,11 @@ export class HostedTaskClient {
     taskId: string,
     before?: string,
   ): Effect.Effect<TaskWorkAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskWorkPath(taskId, before) },
-      taskWorkAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.plans.work, {
+        id: taskId,
+        ...(before === undefined ? undefined : { before }),
+      }),
     );
   }
 
@@ -583,9 +515,14 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryTreePath(place, admitted) },
-      taskTreeAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryTree, {
+        ...place,
+        ...(admitted.path === "" ? undefined : { path: admitted.path }),
+        ...(admitted.recursive === true
+          ? { recursive: GITHUB_REPOSITORY_TREE_RECURSIVE }
+          : undefined),
+      }),
     );
   }
 
@@ -593,10 +530,7 @@ export class HostedTaskClient {
   readRepositorySkills(
     place: RepositoryPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
-      taskSkillsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
   }
 
   /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
@@ -604,9 +538,8 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
-      githubRepositoryPullRequestAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryPullRequest, { ...place, number: String(number) }),
     );
   }
 
@@ -615,9 +548,8 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryIssuePath(place, number) },
-      githubRepositoryIssueAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
     );
   }
 
@@ -626,9 +558,11 @@ export class HostedTaskClient {
     taskId: string,
     before?: number,
   ): Effect.Effect<PlanRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: planRevisionsPath(taskId, before) },
-      planRevisionsAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.plans.revisions, {
+        id: taskId,
+        ...(before === undefined ? undefined : { before: String(before) }),
+      }),
     );
   }
 
@@ -637,12 +571,11 @@ export class HostedTaskClient {
     taskId: string,
     seq: number,
   ): Effect.Effect<PlanRevisionAnswer["revision"] | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: planRevisionPath(taskId, seq) },
-        planRevisionAnswerSchema,
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.revision, { id: taskId, seq: String(seq) }),
+        (answer) => answer.revision,
       ),
-      (answer) => answer?.revision,
     );
   }
 
@@ -739,7 +672,7 @@ export class HostedTaskClient {
 
   /** Stops the turn Luke is running on a task. */
   stopWork(taskId: string): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.asVoid(this.#call.send({ method: HTTP_METHOD.POST, path: taskStopPath(taskId) }));
+    return Effect.ignore(askHosted(this.#hosted.plans.stop, { id: taskId }));
   }
 
   /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
@@ -747,12 +680,11 @@ export class HostedTaskClient {
     taskId: string,
     seq: number,
   ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.POST, path: taskRestorePath(taskId, seq) },
-        taskAnswerSchema,
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
+        (answer) => answer.plan,
       ),
-      (answer) => answer?.plan,
     );
   }
 
@@ -763,28 +695,23 @@ export class HostedTaskClient {
     appliedDrawing: number,
     image?: string,
   ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: taskBoardPath(taskId),
-          body: JSON.stringify({ elements, appliedDrawing, image }),
-        },
-        boardAnswerSchema,
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.saveBoard, {
+          params: { id: taskId },
+          body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
+        }),
+        (answer) => answer.board,
       ),
-      (answer) => answer?.board,
     );
   }
 
   /** Deletes one task with its document and its conversation; whether the service deleted it. */
   delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.DELETE, path: taskPath(taskId) },
-        taskDeleteAnswerSchema,
-      ),
-      (answer) => answer?.deleted === true,
-    );
+    return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
+      onFailure: () => false,
+      onSuccess: (answer) => answer.deleted,
+    });
   }
 
   /**
@@ -798,13 +725,7 @@ export class HostedTaskClient {
   ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.PATCH, path: taskPath(taskId), body: JSON.stringify(admitted) },
-        taskAnswerSchema,
-      ),
-      (answer) => answer?.plan,
-    );
+    return orNothing(this.#update(taskId, admitted));
   }
 
   /**
@@ -818,12 +739,17 @@ export class HostedTaskClient {
   ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(marks));
     if (admitted === undefined) return Effect.succeed(undefined);
+    return orNothing(this.#update(taskId, admitted));
+  }
+
+  /** One plan changed as the request names, answered as changed. */
+  #update(
+    taskId: string,
+    changes: TaskUpdateRequest,
+  ): Effect.Effect<Task, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.PATCH, path: taskPath(taskId), body: JSON.stringify(admitted) },
-        taskAnswerSchema,
-      ),
-      (answer) => answer?.plan,
+      askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
+      (changed) => changed.plan,
     );
   }
 
@@ -910,21 +836,13 @@ export class HostedTaskClient {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
-    const call = admitted.agent === undefined ? this.#call : this.#start;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.TASKS,
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const started = Result.getOrUndefined(readServiceAnswer(taskStartAnswerSchema)(payload));
-        return started === undefined ? UNANSWERED : succeeded(taskStartedOf(started));
-      }
-      return refusedAs(payload, START_REFUSALS);
-    });
+    const deadline = admitted.agent === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.START;
+    return hostedResult(
+      Effect.map(askHosted(this.#hosted.plans.create, admitted, deadline), (started) =>
+        taskStartedOf(started.body),
+      ),
+      START_REFUSALS,
+    );
   }
 }
 

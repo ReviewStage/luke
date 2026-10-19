@@ -454,7 +454,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
-          seams.now(),
+          { now: seams.now(), timeZone: admitted.timeZone },
           Option.getOrElse(comments, () => []),
         );
         return chat.through === undefined ? { text } : { text, chatThrough: chat.through };

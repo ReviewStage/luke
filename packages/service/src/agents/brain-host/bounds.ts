@@ -38,15 +38,18 @@ export const CONVERSATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The request headers a client names the conversation and the turn's kind
- * with, and the one the deployment names the account it acts for with: read
- * only from a request the deployment's own credential admitted, never from
- * an account's bearer, whose account is the bearer's.
+ * The request headers a client names the conversation, the turn's kind, and
+ * its sender's time zone with, and the one the deployment names the account
+ * it acts for with, the last read only from a request the deployment's own
+ * credential admitted, never from an account's bearer, whose account is the
+ * bearer's.
  */
 export const BRAIN_HOST_HEADER = {
   CONVERSATION: "x-luke-conversation",
   TURN: "x-luke-turn",
   ACCOUNT: "x-luke-account",
+  /** The sender's IANA time zone, which the turn its message opens reads the day in. */
+  TIME_ZONE: "x-luke-time-zone",
 } as const;
 
 /** An account id as the header carries it: the auth service's own id shape, bounded, and nothing else names a user row. */
@@ -62,6 +65,8 @@ export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
+  /** The current request's time zone, where it named one a zone stands under; the turn's standing context reads it. */
+  TIME_ZONE: "luke:time-zone",
   /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;

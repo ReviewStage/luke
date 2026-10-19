@@ -1,3 +1,7 @@
+import {
+  RETENTION_BASIS,
+  type RetentionBasis,
+} from "@luke/service/admin/admin-overview-vocabulary";
 import { TEXT_TONE, Text } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 
@@ -10,13 +14,21 @@ function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Ele
   );
 }
 
-export function RetentionNote(): React.JSX.Element {
+/**
+ * What a retention cell counts, by the grid's basis: a meaningful action, or
+ * any hosted-tier call, the basis the grid had before the Overview was rebuilt.
+ */
+export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.Element {
   return (
     <SectionNote>
-      Each cell is the share of one UTC week's signups that spent hosted voice or attention that
-      many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing. Local
-      use of the desktop app writes no row here, so a cohort that never touched the hosted tier
-      reads the same as one that left.
+      Each cell is the share of one UTC week's signups that{" "}
+      {basis === RETENTION_BASIS.MEANINGFUL
+        ? "created a task, wrote a plan revision, started a coding agent, or held a call"
+        : "spent hosted voice or attention"}{" "}
+      that many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing.
+      {basis === RETENTION_BASIS.MEANINGFUL
+        ? " A deleted task takes its agents and revisions with it, so a cohort's past weeks can shrink."
+        : " Local use of the desktop app writes no row here, so a cohort that never touched the hosted tier reads the same as one that left."}
     </SectionNote>
   );
 }
@@ -24,7 +36,21 @@ export function RetentionNote(): React.JSX.Element {
 export function TopAccountsNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day the account spent hosted voice or attention.
+      An active day is a UTC day the account created a task, wrote a plan revision, started a coding
+      agent, or held a call. PRs merged count its agents' pull requests merged in the window. Last
+      seen is the account's latest sign-in session.
+    </SectionNote>
+  );
+}
+
+/** What the activity chart and the headline tiles count, and what they cannot. */
+export function ActivityNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active developer created a task, wrote a plan revision, started a coding agent, or held a
+      call in the last 7 UTC days. Plan revisions count the developer's own and Luke's notes on
+      their calls; automation runs leave out the ones a guard held back. A deleted task leaves no
+      row, and takes its agents and revisions with it, so past counts can shrink.
     </SectionNote>
   );
 }

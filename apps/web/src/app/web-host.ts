@@ -271,9 +271,6 @@ function hostRowDependencies(
     },
     tasks: { host, colourCode: highlightSnippet },
     codingAgents: { host, notices },
-    integrations: { host },
-    automations: { host },
-    factory: { host },
   };
 }
 
@@ -297,6 +294,9 @@ const servedActPort = (
       createActPortHandler(
         {
           accountAsks: { host: operator.host },
+          automations: { host: operator.host },
+          factory: { host: operator.host },
+          integrations: { host: operator.host },
           issues: { host: operator.host },
           // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
           tasks: {

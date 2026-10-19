@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS } from "./task-wire.js";
@@ -205,4 +206,80 @@ it.effect(
       assert.equal(api.requests().length, 3);
       assert.equal(api.requests()[0]?.searchParams.get("after"), "0");
     }),
+);
+
+it.effect(
+  "a change the service refuses answers why as the window names it: a repository out of reach, its reason beside it, and a move onto an archived plan; anything else, a deleted plan's delete among it, as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const unreached = {
+        reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+        repository: "acme/relay",
+        connectedTo: "someone-else",
+      };
+      const api = fakeCloudApi({
+        [`PATCH /api/plans/${TASK_ID}`]: {
+          status: 403,
+          answer: () => ({ error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached }),
+        },
+        [`PATCH /api/plans/${OTHER_TASK}`]: {
+          status: 409,
+          answer: () => ({ error: HOSTED_API_ERROR.TASK_ARCHIVED }),
+        },
+        [`DELETE /api/plans/${OTHER_TASK}`]: {
+          status: 404,
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+        },
+      });
+
+      const repository = yield* Effect.provide(
+        client().setRepository(TASK_ID, "acme/relay"),
+        api.layer,
+      );
+      const moved = yield* Effect.provide(client().move(OTHER_TASK, "workspace-acme"), api.layer);
+      const renamed = yield* Effect.provide(
+        client().rename(OTHER_TASK, { name: "Invitation expiry" }),
+        api.layer,
+      );
+      const deleted = yield* Effect.provide(client().delete(OTHER_TASK), api.layer);
+
+      assert.deepEqual(repository, {
+        ok: false,
+        failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      });
+      assert.deepEqual(moved, { ok: false, failure: TASK_CALL_FAILURE.TASK_ARCHIVED });
+      assert.equal(renamed, undefined);
+      assert.equal(deleted, false);
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "null")),
+        [
+          { repository: "acme/relay" },
+          { workspaceId: "workspace-acme" },
+          { name: "Invitation expiry" },
+          null,
+        ],
+      );
+    }),
+);
+
+it.effect("the list asks for the archived plans too, and a revision is asked by its number", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "GET /api/plans": { answer: () => ({ plans: [SUMMARY] }) },
+      [`GET /api/plans/${TASK_ID}/revisions/3`]: {
+        status: 404,
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+      },
+    });
+
+    const listed = yield* Effect.provide(client().list(), api.layer);
+    const revision = yield* Effect.provide(client().readRevision(TASK_ID, 3), api.layer);
+
+    assert.deepEqual(listed, { ok: true, answer: { plans: [SUMMARY] } });
+    assert.equal(revision, undefined);
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "GET /api/plans?archived=include",
+      `GET /api/plans/${TASK_ID}/revisions/3`,
+    ]);
+  }),
 );
