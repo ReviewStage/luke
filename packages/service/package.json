@@ -103,6 +103,7 @@
     "./agents/mac-command": "./src/agents/mac-command.js",
     "./agents/mac-commands-app": "./src/agents/mac-commands-app.js",
     "./agents/mentioned-context": "./src/agents/mentioned-context.js",
+    "./agents/messages-procedures": "./src/agents/messages-procedures.js",
     "./agents/task-agents": "./src/agents/task-agents.js",
     "./agents/public-research": "./src/agents/public-research.js",
     "./agents/repository-shell": "./src/agents/repository-shell.js",

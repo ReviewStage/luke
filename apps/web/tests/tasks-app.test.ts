@@ -56,6 +56,7 @@ import {
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EVE_RESET_OUTCOME, type EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
+import { messagesProcedures } from "@luke/service/agents/messages-procedures";
 import {
   requestUserId,
   type SessionEndpoint,
@@ -64,7 +65,6 @@ import {
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
-import { hostedRouter } from "@luke/service/orpc/router";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WebServices } from "@luke/service/runtime";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
@@ -284,7 +284,7 @@ const answer = (
     const webServices = (yield* Effect.context<never>().pipe(
       Effect.provide(services),
     )) as Context.Context<WebServices>;
-    const messages = hostedFetch(hostedRouter(seams));
+    const messages = hostedFetch({ messages: messagesProcedures(seams) });
     /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry. */
     const routed = (each: Request): Promise<Response> => {
       const url = new URL(each.url);
