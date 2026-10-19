@@ -305,7 +305,7 @@ test("the support sections say what the account did and what broke, by the servi
   );
   expect(page.textContent).toContain("Tasks created · 30 days74");
   expect(page.textContent).toContain("Coding agents · 30 days405% failed");
-  expect(page.textContent).toContain("Pull requests merged12of 17 opened");
+  expect(page.textContent).toContain("Pull requests merged · 30 days12of 17 opened");
   expect(page.textContent).toContain("Call minutes · 30 days612");
 
   const agents = rows(page, "The account's newest coding agents");

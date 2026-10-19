@@ -46,26 +46,26 @@ import { SectionHeading, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../cha
 const NONE = "—";
 
 /** A coding agent's status words, by the tone the panel's own pills would draw them in. */
-const AGENT_STATUS_TONE: Record<AdminAccountAgent["status"], BadgeTone> = {
+const AGENT_STATUS_TONE = {
   [CODING_AGENT_STATUS.STARTING]: BADGE_TONE.WORKING,
   [CODING_AGENT_STATUS.RUNNING]: BADGE_TONE.WORKING,
   [CODING_AGENT_STATUS.COMPLETED]: BADGE_TONE.COMPLETE,
   [CODING_AGENT_STATUS.FAILED]: BADGE_TONE.DANGER,
   [CODING_AGENT_STATUS.CANCELLED]: BADGE_TONE.NEUTRAL,
-};
+} as const satisfies Record<AdminAccountAgent["status"], BadgeTone>;
 
-const PULL_REQUEST_TONE: Record<AdminAccountAgent["pullRequest"], BadgeTone> = {
+const PULL_REQUEST_TONE = {
   [ADMIN_PULL_REQUEST.NONE]: BADGE_TONE.NEUTRAL,
   [ADMIN_PULL_REQUEST.OPEN]: BADGE_TONE.WORKING,
   [ADMIN_PULL_REQUEST.MERGED]: BADGE_TONE.MERGED,
   [ADMIN_PULL_REQUEST.CLOSED]: BADGE_TONE.NEUTRAL,
-};
+} as const satisfies Record<AdminAccountAgent["pullRequest"], BadgeTone>;
 
-const GITHUB_TONE: Record<AdminAccountWorkspace["github"][number], BadgeTone> = {
+const GITHUB_TONE = {
   [GITHUB_INSTALLATION_STATUS.ACTIVE]: BADGE_TONE.COMPLETE,
   [GITHUB_INSTALLATION_STATUS.SUSPENDED]: BADGE_TONE.ATTENTION,
   [GITHUB_INSTALLATION_STATUS.DELETED]: BADGE_TONE.DANGER,
-};
+} as const satisfies Record<AdminAccountWorkspace["github"][number], BadgeTone>;
 
 /** A connection's status words by tone; a status this build does not know reads as needing attention. */
 const CONNECTION_TONE: ReadonlyMap<string, BadgeTone> = new Map([
@@ -74,22 +74,22 @@ const CONNECTION_TONE: ReadonlyMap<string, BadgeTone> = new Map([
 ]);
 
 /** What each kind of failure is called on the timeline. */
-const FAILURE_SUBJECT: Record<AdminAccountFailure["kind"], string> = {
+const FAILURE_SUBJECT = {
   [ADMIN_FAILURE_KIND.AGENT]: "Coding agent failed",
   [ADMIN_FAILURE_KIND.CALL]: "Call dropped",
   [ADMIN_FAILURE_KIND.KEY]: "Provider key",
   [ADMIN_FAILURE_KIND.CONNECTION]: "Connection",
   [ADMIN_FAILURE_KIND.AUTOMATION]: "Automation run failed",
-};
+} as const satisfies Record<AdminAccountFailure["kind"], string>;
 
 /** What a fast-access word says beside a key's status. */
-const FAST_ACCESS_WORDS: Record<
-  NonNullable<AdminAccountSupport["providerKeys"][number]["fastAccess"]>,
-  string
-> = {
+const FAST_ACCESS_WORDS = {
   [FAST_ACCESS.ENABLED]: "fast mode enabled",
   [FAST_ACCESS.NOT_ENABLED]: "fast mode not enabled",
-};
+} as const satisfies Record<
+  NonNullable<AdminAccountSupport["providerKeys"][number]["fastAccess"]>,
+  string
+>;
 
 /** The window a model runs on, said only where it is the smaller one. */
 function windowWords(contextWindow: string | null): string {
@@ -149,9 +149,10 @@ function WorkCards({
       <div className={STAT_PAIR}>
         <div className={STAT_CELL}>
           <StatCard
-            label="Pull requests merged"
+            label={`Pull requests merged · ${windowDays} days`}
             value={formatNumber(totals.pullRequestsMerged)}
-            hint={`of ${formatNumber(totals.pullRequestsOpened)} opened by the window's agents`}
+            hint={`of ${formatNumber(totals.pullRequestsOpened)} opened`}
+            title="Of the pull requests opened by the agents started in the window"
           />
         </div>
         <div className={STAT_CELL}>
