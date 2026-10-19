@@ -48,8 +48,7 @@ async function runShell(cwd: string, run: SandboxRunOptions): Promise<SandboxCom
 
 /** A sandbox rooted at a directory the test made, with a checkout one directory below it, as the coding agent's stands. */
 function directorySandbox() {
-  // Note that the root is resolved, because a Mac's temporary directory sits behind a
-  // symlink (`/var` is `/private/var`) and eve patches the resolved path.
+  // Note that we resolve the root, because eve patches a Mac's /private/var, not /var.
   const root = realpathSync(mkdtempSync(join(tmpdir(), "coder-files-")));
   const checkout = join(root, "repository");
   mkdirSync(checkout);

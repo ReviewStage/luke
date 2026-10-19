@@ -1,6 +1,6 @@
 {
   "slack": 0.05,
-  "minimumSlackBytes": 1024,
+  "sentrySlackBytes": 1024,
   "gzipBytes": {
     "renderer/panel.js": 946875,
     "renderer/voice.js": 345922,
