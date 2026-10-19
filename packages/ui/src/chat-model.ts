@@ -2,7 +2,6 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
-  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
@@ -528,51 +527,4 @@ export function topicNameProblem(
     name === GENERAL_CHANNEL ||
     chat.channels.some((channel) => channel.name === name && channel.id !== renaming);
   return taken ? `#${name} is already a channel.` : undefined;
-}
-
-/** A Markdown link, kept as its label, as a preview reads one. */
-const PREVIEW_LINK = /!?\[([^\]]*)\]\([^)]*\)/gu;
-
-/** A code span, its words kept as written, every mark inside them included. */
-const PREVIEW_CODE = /`([^`\n]+)`/u;
-
-/** A line's lead a preview drops: a heading's hashes or a quote's mark. */
-const PREVIEW_LEAD = /^\s*(?:#+|>)\s*/gmu;
-
-/** Strong, emphasis, or a strike written with stars or tildes, its words kept: a mark that hugs words on both sides, never a lone star such as `2 * 3`. */
-const PREVIEW_STARS = /(\*\*|\*|~~)(?=\S)(.+?)(?<=\S)\1/gu;
-
-/** Strong or emphasis written with underscores, its words kept: only outside a word, as Markdown reads them, so `user_id` stays as written. */
-const PREVIEW_UNDERSCORES = /(?<![\p{L}\p{N}_])(__|_)(?=\S)(.+?)(?<=\S)\1(?![\p{L}\p{N}_])/gu;
-
-/** Markdown read as plain words outside code: a link by its label, emphasis by its words. */
-function plainWords(text: string): string {
-  return text
-    .replace(PREVIEW_LINK, "$1")
-    .replace(PREVIEW_STARS, "$2")
-    .replace(PREVIEW_UNDERSCORES, "$2");
-}
-
-/** A block's Markdown as plain words: its lines' leads dropped, its code spans' words kept as written, the rest's marks read away. */
-function markdownWords(text: string): string {
-  // Note that a split on a pattern with one group answers the code spans' words at the odd places.
-  return text
-    .replace(PREVIEW_LEAD, "")
-    .split(PREVIEW_CODE)
-    .map((part, at) => (at % 2 === 1 ? part : plainWords(part)))
-    .join("");
-}
-
-/** A message's words as a row previews them, one line: its Markdown read as plain words, a chip as its label; a picture alone by its words. */
-export function previewWords(message: ChatMessage): string {
-  const words = message.blocks.map((block) =>
-    block.type === CHAT_BLOCK.MARKDOWN && "text" in block
-      ? markdownWords(block.text)
-      : block.type === CHAT_BLOCK.IMAGE && "alt" in block
-        ? block.alt
-        : block.type === CHAT_BLOCK.LINK && "label" in block
-          ? block.label
-          : "",
-  );
-  return words.join(" ").replace(/\s+/gu, " ").trim();
 }

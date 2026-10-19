@@ -30,7 +30,6 @@ import {
   chatNames,
   chatRail,
   FOR_YOU,
-  previewWords,
 } from "@luke/ui/chat-model";
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
@@ -51,6 +50,7 @@ import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
+import { previewWords } from "./chat-preview.js";
 import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
