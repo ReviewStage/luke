@@ -42,6 +42,7 @@ import { callCard } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
+  type ChatChannelChange,
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
@@ -423,6 +424,8 @@ interface ChatViewControl {
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
 }
 
 /** The fixture's staging, as a fixture run imports it. */
@@ -3205,6 +3208,10 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onAnswer(answer)
           : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
+      onChannel: (change) =>
+        liveRun
+          ? liveChat.onChannel(change)
+          : stage((held, staging) => staging.stagedChannel(held, change)),
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {

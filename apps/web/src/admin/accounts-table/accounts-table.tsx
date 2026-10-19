@@ -137,7 +137,9 @@ export function AccountCell({
  * shared columns cannot drift apart. Every row opens the account's own page:
  * the row for the pointer, and the anchor on its name for a keyboard. What
  * belongs to one surface is opted into — the roster's star column, sortable
- * headers, and detail columns.
+ * headers, and detail columns before the shared ones; the overview's
+ * trailing columns after Active days, in place of the hosted-tier pair it
+ * leaves out.
  */
 export function AccountsTable<Row extends AccountsTableRow>({
   rows,
@@ -146,6 +148,8 @@ export function AccountsTable<Row extends AccountsTableRow>({
   minWidth,
   onOpen,
   detailColumns = [],
+  trailingColumns = [],
+  hostedColumns = true,
   sortable = false,
   favorite,
 }: {
@@ -155,6 +159,10 @@ export function AccountsTable<Row extends AccountsTableRow>({
   minWidth: AccountsTableMinWidth;
   onOpen: (id: string) => void;
   detailColumns?: readonly AccountsDetailColumn<Row>[];
+  /** Columns after Active days and, where drawn, the hosted-tier pair. */
+  trailingColumns?: readonly AccountsDetailColumn<Row>[];
+  /** Draws Last active and Calls, the hosted-tier columns the roster's rows carry. */
+  hostedColumns?: boolean;
   /** Sorts by any header's press, remembering the order chosen. */
   sortable?: boolean;
   /** Draws the leading star column. */
@@ -170,6 +178,29 @@ export function AccountsTable<Row extends AccountsTableRow>({
     setSort(next);
   };
 
+  const numericColumn = (column: AccountsDetailColumn<Row>) => ({
+    key: column.key,
+    label: column.label,
+    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+    sortable,
+    cell: column.cell,
+  });
+  const hosted: DataTableColumn<Row, AccountsColumnKey>[] = [
+    {
+      key: ACCOUNTS_SORT_KEY.LAST_ACTIVE,
+      label: "Last active",
+      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+      sortable,
+      cell: (row) => (row.lastActiveDay == null ? "—" : formatDayTick(row.lastActiveDay)),
+    },
+    {
+      key: ACCOUNTS_SORT_KEY.CALLS,
+      label: "Calls",
+      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+      sortable,
+      cell: (row) => (row.calls === undefined ? "—" : formatNumber(row.calls)),
+    },
+  ];
   const columns: DataTableColumn<Row, AccountsColumnKey>[] = [
     ...(favorite ? [favoriteColumn(favorite)] : []),
     {
@@ -178,13 +209,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
       sortable,
       cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
     },
-    ...detailColumns.map((column) => ({
-      key: column.key,
-      label: column.label,
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: column.cell,
-    })),
+    ...detailColumns.map(numericColumn),
     {
       key: ACCOUNTS_SORT_KEY.ACTIVE_DAYS,
       label: "Active days",
@@ -200,26 +225,14 @@ export function AccountsTable<Row extends AccountsTableRow>({
         </>
       ),
     },
-    {
-      key: ACCOUNTS_SORT_KEY.LAST_ACTIVE,
-      label: "Last active",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: (row) => (row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)),
-    },
-    {
-      key: ACCOUNTS_SORT_KEY.CALLS,
-      label: "Calls",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: (row) => formatNumber(row.calls),
-    },
+    ...(hostedColumns ? hosted : []),
+    ...trailingColumns.map(numericColumn),
   ];
   return (
     <DataTable
       label="Accounts"
       columns={columns}
-      rows={sortAccountsRows(rows, sort, detailColumns, favorite?.starred)}
+      rows={sortAccountsRows(rows, sort, [...detailColumns, ...trailingColumns], favorite?.starred)}
       rowKey={(row) => row.id}
       empty={emptyText}
       minWidth={minWidth}

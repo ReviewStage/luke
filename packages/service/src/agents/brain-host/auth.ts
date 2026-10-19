@@ -1,4 +1,5 @@
-import type { Redacted } from "effect";
+import { timeZoneSchema } from "@luke/features/date-mention";
+import { type Redacted, Schema } from "effect";
 import { type AuthFn, ForbiddenError, withAuthChallenges } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { isWireString } from "../../core.js";
@@ -72,7 +73,10 @@ import {
 
 const BEARER_CHALLENGE = [{ scheme: "Bearer" }] as const;
 
-/** The two request headers as attributes, each only when it is well formed; a malformed one names nothing. */
+/** Whether a zone is one the service counts days in. */
+const isTimeZone = Schema.is(timeZoneSchema);
+
+/** The three request headers as attributes, each only when it is well formed; a malformed one names nothing. */
 function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   const attributes: Record<string, string> = {};
   const conversation = headers.get(BRAIN_HOST_HEADER.CONVERSATION)?.trim();
@@ -81,6 +85,9 @@ function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   }
   const turn = headers.get(BRAIN_HOST_HEADER.TURN)?.trim();
   if (turn && isBrainHostTurn(turn)) attributes[BRAIN_HOST_ATTRIBUTE.TURN] = turn;
+  // Note that a zone the service does not know names none, and the turn reads UTC, rather than refusing the message.
+  const timeZone = headers.get(BRAIN_HOST_HEADER.TIME_ZONE)?.trim();
+  if (timeZone && isTimeZone(timeZone)) attributes[BRAIN_HOST_ATTRIBUTE.TIME_ZONE] = timeZone;
   return attributes;
 }
 
@@ -277,6 +284,12 @@ function attribute(auth: SessionAuthContext | null, name: string): string | unde
 /** The conversation a session was opened for: the initiator's attribute, read for the session's life. */
 export function conversationIdOf(initiator: SessionAuthContext | null): string | undefined {
   return attribute(initiator, BRAIN_HOST_ATTRIBUTE.CONVERSATION);
+}
+
+/** The time zone the current request named, or nothing for one that named none; read again as the turn opens. */
+export function timeZoneOf(current: SessionAuthContext | null): string | undefined {
+  const timeZone = attribute(current, BRAIN_HOST_ATTRIBUTE.TIME_ZONE);
+  return timeZone !== undefined && isTimeZone(timeZone) ? timeZone : undefined;
 }
 
 /** The kind of turn the current request opened, or nothing for a request that named none. */

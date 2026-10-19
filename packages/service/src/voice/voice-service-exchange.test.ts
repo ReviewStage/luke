@@ -351,14 +351,19 @@ async function stand(offer: Offer): Promise<Stand> {
   };
 }
 
-/** The desktop's opening frame for a call about the task named. */
-function createFrame(taskId: string, input: readonly WireRecord[] = []): WireRecord {
+/** The desktop's opening frame for a call about the task named, in the time zone named where a desktop names one. */
+function createFrame(
+  taskId: string,
+  input: readonly WireRecord[] = [],
+  timeZone?: string,
+): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input: [...input],
     planId: taskId,
+    ...(timeZone === undefined ? undefined : { timeZone }),
   };
 }
 
@@ -367,11 +372,12 @@ async function openSession(
   context: Stand,
   taskId: string = context.taskId,
   input: readonly WireRecord[] = [],
+  timeZone?: string,
 ) {
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   const desktop = opened.reader;
-  await send(desktop.socket, createFrame(taskId, input));
+  await send(desktop.socket, createFrame(taskId, input, timeZone));
   const attach = await context.openAi.nextAttach();
   // The upstream reader stands the instant the attach lands, ahead of the created frame, so a frame
   // the service sent between its attach and its answer is seen rather than lost before any listener.
@@ -547,6 +553,33 @@ async function hangUpConnection(
 }
 
 it.effect(
+  "a call whose desktop named its time zone hands that zone to eve with its spoken ask",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context, context.taskId, [], "Pacific/Honolulu");
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+
+      await speak(session.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.timeZone]),
+        [[context.target.conversationId, "Pacific/Honolulu"]],
+      );
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the connection to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
   "a call is created under the planning instructions, its spoken ask reaches eve in its plan's conversation and never another plan's, and a re-attach is bound to the same plan by the session's row",
   () =>
     Effect.promise(async () => {
@@ -571,6 +604,8 @@ it.effect(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
         [[planned, BRAIN_HOST_TURN.SPOKEN]],
       );
+      // A desktop that named no time zone hands none, and the turn reads UTC.
+      assert.equal(context.eve.opened[0]?.timeZone, undefined);
 
       // A fresh connection names no task; the session's row binds it, and its words land in the same task.
       const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {

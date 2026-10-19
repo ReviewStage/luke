@@ -361,10 +361,13 @@ function PlaceHead({
   title,
   meta,
   lead,
+  actions,
 }: {
   title: string;
   meta: string | undefined;
   lead: React.ReactNode;
+  /** The place's own presses at the head's end, a topic's menu. */
+  actions?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-head">
@@ -377,6 +380,7 @@ function PlaceHead({
           {meta}
         </Text>
       )}
+      {actions === undefined ? null : <span className="chat-head-actions">{actions}</span>}
     </header>
   );
 }
@@ -385,8 +389,9 @@ function PlaceHead({
 function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string | undefined {
   switch (channel.kind) {
     case CHANNEL_KIND.GENERAL:
-    case CHANNEL_KIND.TOPIC:
       return CHANNEL_META[channel.kind];
+    case CHANNEL_KIND.TOPIC:
+      return channel.purpose ?? CHANNEL_META[channel.kind];
     case CHANNEL_KIND.TASK:
       return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
     case CHANNEL_KIND.DM: {
@@ -423,6 +428,7 @@ export function ChatPane({
   onPost,
   onAnswer,
   lead,
+  channelActions,
   hidden,
 }: {
   chat: ChatAnswer;
@@ -438,6 +444,8 @@ export function ChatPane({
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** What leads the place's head: the way back to the rail, where the place stands alone. */
   lead?: React.ReactNode;
+  /** The presses a channel's head ends on, a topic's menu; none where the channel offers none. */
+  channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
@@ -485,7 +493,12 @@ export function ChatPane({
   const title = channelTitle(chat, names, channel);
   return (
     <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
-      <PlaceHead title={title} meta={channelMeta(chat, names, channel)} lead={lead} />
+      <PlaceHead
+        title={title}
+        meta={channelMeta(chat, names, channel)}
+        lead={lead}
+        actions={channelActions?.(channel)}
+      />
       {threads.length === 0 ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
           {NOTHING_POSTED}

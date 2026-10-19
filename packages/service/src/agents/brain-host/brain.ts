@@ -3,8 +3,10 @@ import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-s
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { dateLabel } from "@luke/features/date-mention";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR, type PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
@@ -18,7 +20,7 @@ import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/task-wire";
 import { type UnparsedWireValue, type WireRecord, WireValueSchema } from "@luke/wire";
 import { emitJsonSchema, verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
-import { Effect, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition, ToolModelOutput } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
@@ -198,7 +200,7 @@ You write the document yourself, with edit_plan, as the conversation and your re
 - Write what was settled: what the developer said, what you found, and what you proposed that the developer did not push back on. Never write a guess, and never restate or reword a point the plan already holds: a note is only what is new or what changed.
 - Put each point under the heading it answers: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts. Write it in its section's form: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result.
 - add puts one Markdown "- " bullet at the end of a section; replace corrects text copied exactly from the saved document, the document's body, with what it becomes, or deletes it with empty text. A section still holding only its template's guidance line takes your first add in its place. Restructure only when the developer asks for it.
-- Keep exact names: file paths, functions, tables, commands. Write a pull request, an issue, or another page as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip, and copy a mention the developer placed, a link whose words start with @, exactly as it stands. Write a day the developer names, such as a deadline, as a date mention whose words are the date in full, [@Oct 20, 2026](luke://date/2026-10-20), which the plan draws as a chip saying it from the reader's today.
+- Keep exact names: file paths, functions, tables, commands. Write a pull request, an issue, or another page as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip, and copy a mention the developer placed, a link whose words start with @, exactly as it stands. Write a day the developer names, such as a deadline, as a date mention whose words are the date in full, [@Oct 20, 2026](luke://date/2026-10-20), which the plan draws as a chip saying it from the reader's today. Where they name a time, write it in their time zone at the offset it stands at then, its words the time in full with the zone's short name, [@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00), and a range as both ends joined by a slash, [@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24). Count a day they name, such as tomorrow or Friday, from their own today, which [the developer's time] gives every turn with their zone and its offset.
 - A save runs in the background: the call answers with a receipt at once, which is not the save, and its result arrives later. Keep researching and answering meanwhile, and never wait on a save to speak. Never say the plan is saved before its result says so. A call's notes land together or not at all: when one misses, the result holds the document as it stands, so write them again from that. A note that builds on text an earlier call is still writing waits for that call's result.
 
 The saved document is handed to you every turn, as it stood when the turn began.
@@ -364,6 +366,7 @@ export const BRAIN_EXPLORE_ASK =
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";
+const DEVELOPER_TIME_MARKER = "[the developer's time]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const BRIEF_MARKER = "[the developer's brief for the task]";
@@ -465,27 +468,89 @@ function issueText(stored: StoredTask): readonly string[] {
   ];
 }
 
+/** The zone a turn reads the day in where the developer's window named none. */
+const UTC_ZONE = "UTC";
+
+/** The language the developer's time is said in, as the plan's dates are (`date-mention.ts`). */
+const TIME_LOCALE = "en-US";
+
+/** A date names no workspace or repository, so its mention is written under none. */
+const NO_PLACE: MentionPlace = { workspace: "", repository: null };
+
+/** When a turn opens, and the zone the developer's window named for it, where it named one. */
+export interface TurnClock {
+  readonly now: number;
+  readonly timeZone: string | undefined;
+}
+
+/**
+ * The developer's own time as the turn opens: the weekday, the date, and the
+ * time in their zone, the zone's name and offset, and the time in UTC beside
+ * them, then today as the date mention the plan writes it, so Luke counts
+ * "Friday" from their today rather than UTC's and spells a time at their
+ * offset. A turn whose window named no zone, a desktop released before it
+ * sent one, reads UTC and says so.
+ */
+function developerTimeText({ now, timeZone }: TurnClock): string {
+  const named =
+    timeZone === undefined
+      ? Option.none()
+      : Option.map(DateTime.makeZoned(now, { timeZone }), (at) => ({ zone: timeZone, at }));
+  // Note that UTC is a zone every runtime holds, so the fallback cannot throw.
+  const { zone, at } = Option.getOrElse(named, () => ({
+    zone: UTC_ZONE,
+    at: DateTime.makeZonedUnsafe(now, { timeZone: UTC_ZONE }),
+  }));
+  const day = new Intl.DateTimeFormat(TIME_LOCALE, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: zone,
+  }).format(now);
+  const time = new Intl.DateTimeFormat(TIME_LOCALE, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: zone,
+  }).format(now);
+  const utc = new Date(now).toISOString().slice(11, 16);
+  const offset = DateTime.zonedOffsetIso(at);
+  const today = DateTime.formatIsoDate(at);
+  const todayMention = mentionMarkdown(
+    { kind: MENTION_KIND.DATE, start: today },
+    dateLabel({ start: today }),
+    NO_PLACE,
+  );
+  const unknown = Option.isSome(named) ? "" : " Their time zone is unknown, so read it as UTC.";
+  return `${DEVELOPER_TIME_MARKER} ${day}, ${time} ${zone} (UTC ${utc}), offset ${offset}. Today is ${todayMention}.${unknown}`;
+}
+
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the developer's brief where they wrote one as they started it,
- * the Linear issue and the workspace's own issue it was started from where it was, the saved
- * document as JSON, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), what was
+ * developer's own time and today (`developerTimeText`), the plan's name, the
+ * developer's brief where they wrote one as they started it, the Linear issue
+ * and the workspace's own issue it was started from where it was, the saved
+ * document as JSON, the newest saves coding agents made on it (so Luke can
+ * raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
  * the developer last wrote themselves (so Luke treats them as decided), the
  * plan's open comment threads (so Luke can raise what a member asked), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what Luke saved and what the developer drew is what the
- * next turn reads. A task that no longer stands gets the heading alone.
+ * next turn reads. A task that no longer stands gets the heading and the
+ * developer's time alone.
  */
 export function brainStandingContext(
   stored: StoredTask | undefined,
   board: Board,
   chat: ChatSince,
-  now: number,
+  clock: TurnClock,
   comments: readonly PlanCommentThread[] = [],
 ): string {
-  const heading = `${TASK_MARKER} ${new Date(now).toISOString()}`;
+  const heading = [
+    `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
+    developerTimeText(clock),
+  ].join("\n");
   if (!stored) return heading;
   const { task } = stored;
   return [

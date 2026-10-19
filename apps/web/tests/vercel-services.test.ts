@@ -271,6 +271,9 @@ test("every path the web app is served at sends its Content Security Policy, ref
     assert.deepEqual(directives.get("base-uri"), ["'self'"], route.src);
     assert.deepEqual(directives.get("form-action"), ["'self'"], route.src);
     assert.deepEqual(directives.get("frame-ancestors"), ["'none'"], route.src);
+    // The installed app's manifest and its icons are the site's own files.
+    assert.deepEqual(directives.get("manifest-src"), ["'self'"], route.src);
+    assert.ok(directives.get("img-src")?.includes("'self'"), route.src);
     assert.equal(route.headers?.["X-Content-Type-Options"], "nosniff", route.src);
     assert.equal(route.headers?.["Referrer-Policy"], "strict-origin-when-cross-origin", route.src);
   }

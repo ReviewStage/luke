@@ -15,13 +15,15 @@ import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
+import { type TasksProcedureSeams, tasksProcedures } from "../tasks/tasks-procedures.js";
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment. */
 export type HostedRouterSeams = AutomationsProcedureSeams &
   IntegrationsProcedureSeams &
   MessagesProcedureSeams &
-  ModelsProcedureSeams;
+  ModelsProcedureSeams &
+  TasksProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
@@ -30,5 +32,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     integrations: integrationsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
+    plans: tasksProcedures(seams),
   });
 }

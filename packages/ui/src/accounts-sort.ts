@@ -4,7 +4,8 @@ import { SORT_DIRECTION, type SortDirection } from "./sort-direction.js";
 /**
  * The account fields both admin tables' rows carry — the shared columns'
  * whole vocabulary, so a row from either endpoint draws through the one
- * `AccountsTable`.
+ * `AccountsTable`. The hosted-tier fields are the roster's alone: the
+ * overview's rows count meaningful actions instead and leave them out.
  */
 export interface AccountsTableRow {
   id: string;
@@ -13,8 +14,8 @@ export interface AccountsTableRow {
   image: string | null;
   admin: boolean;
   activeDays: number;
-  lastActiveDay: string | null;
-  calls: number;
+  lastActiveDay?: string | null;
+  calls?: number;
 }
 
 /** The sortable columns, one per header the roster draws. */
@@ -25,6 +26,10 @@ export const ACCOUNTS_SORT_KEY = {
   ACTIVE_DAYS: "activeDays",
   LAST_ACTIVE: "lastActive",
   CALLS: "calls",
+  TASKS: "tasks",
+  AGENTS: "agents",
+  PRS_MERGED: "prsMerged",
+  CALL_MINUTES: "callMinutes",
 } as const;
 
 export type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
@@ -37,6 +42,10 @@ const ACCOUNTS_SORT_FIRST_DIRECTION = {
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.LAST_ACTIVE]: SORT_DIRECTION.DESCENDING,
   [ACCOUNTS_SORT_KEY.CALLS]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.TASKS]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.AGENTS]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.PRS_MERGED]: SORT_DIRECTION.DESCENDING,
+  [ACCOUNTS_SORT_KEY.CALL_MINUTES]: SORT_DIRECTION.DESCENDING,
 } satisfies Record<AccountsSortKey, SortDirection>;
 
 /**
@@ -52,13 +61,13 @@ const SHARED_SORT_VALUE = new Map<
 >([
   [ACCOUNTS_SORT_KEY.ACCOUNT, (row) => accountLabel(row).toLowerCase()],
   [ACCOUNTS_SORT_KEY.ACTIVE_DAYS, (row) => row.activeDays],
-  [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay],
-  [ACCOUNTS_SORT_KEY.CALLS, (row) => row.calls],
+  [ACCOUNTS_SORT_KEY.LAST_ACTIVE, (row) => row.lastActiveDay ?? null],
+  [ACCOUNTS_SORT_KEY.CALLS, (row) => row.calls ?? null],
 ]);
 
 /**
- * A column one surface adds between Account and the usage counts — the
- * roster's Joined and Last seen. It carries its own cell and ordering because
+ * A column one surface adds beside the shared ones — the roster's Joined and
+ * Last seen, the overview's per-feature counts. It carries its own cell and ordering because
  * its fields exist only on that surface's rows; the shared columns are fixed
  * in the table itself.
  */

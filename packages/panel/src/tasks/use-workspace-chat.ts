@@ -1,6 +1,7 @@
 import {
   CHAT_CURSOR_START,
   type ChatAnswer,
+  type ChatChannel,
   type ChatMessage,
   type ChatWriteAnswer,
   type ChatWriteRequest,
@@ -12,7 +13,7 @@ import {
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
 } from "@luke/features/coding-agent-view";
-import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
+import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { messageFailureWords } from "./coding-agent-model.js";
 
@@ -61,6 +62,8 @@ export interface WorkspaceChatControl {
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was not taken, or nothing once it is. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
 }
 
 /** What a card says when its answer was not taken. */
@@ -105,13 +108,57 @@ function withMessages(
   return [...byId.values()].toSorted((one, other) => one.seq - other.seq);
 }
 
-/** The chat held with a read's answer taken in: the roster and channels whole, the messages by id. */
-function withRead(chat: ChatAnswer | undefined, answer: ChatAnswer): ChatAnswer {
-  return { ...answer, messages: withMessages(chat?.messages ?? [], answer.messages) };
+/** The channels given with each one written since put in its place by id, or after them where the read had none yet. */
+function withChannels(
+  channels: readonly ChatChannel[],
+  written: readonly ChatChannel[],
+): readonly ChatChannel[] {
+  const fresh = written.filter((channel) => !channels.some((each) => each.id === channel.id));
+  return [
+    ...channels.map((channel) => written.find((each) => each.id === channel.id) ?? channel),
+    ...fresh,
+  ];
+}
+
+/**
+ * The chat held with a read's answer taken in: the roster and channels
+ * whole, the messages by id. Note that a channel carries no place of its
+ * own to order a read against a write, as a message's `touchedSeq` does, so
+ * the channels the window wrote while the read was out are laid back over
+ * the read's, which may have been taken before they were.
+ */
+function withRead(
+  chat: ChatAnswer | undefined,
+  answer: ChatAnswer,
+  written: readonly ChatChannel[],
+): ChatAnswer {
+  return {
+    ...answer,
+    channels: withChannels(answer.channels, written),
+    messages: withMessages(chat?.messages ?? [], answer.messages),
+  };
+}
+
+/** A channel the window wrote: what the write answered, the account and workspace it went as and to, and the count of channel writes it was. */
+interface WrittenChannel {
+  readonly channel: ChatChannel;
+  readonly account: string | undefined;
+  readonly workspaceId: string;
+  readonly generation: number;
 }
 
 /** The chat held with a write's answer taken in: the message it names in place, or the cursor where it moved. */
 function withWrite(chat: ChatAnswer, answer: ChatWriteAnswer): ChatAnswer {
+  if ("channel" in answer) {
+    const { channel } = answer;
+    const standing = chat.channels.some((each) => each.id === channel.id);
+    return {
+      ...chat,
+      channels: standing
+        ? chat.channels.map((each) => (each.id === channel.id ? channel : each))
+        : [...chat.channels, channel],
+    };
+  }
   if ("readSeq" in answer) {
     return {
       ...chat,
@@ -177,6 +224,9 @@ export function useWorkspaceChat(input: {
   const [attempt, setAttempt] = useState(0);
   // A send's key and words, by what it sends, so the same send again goes under the same key.
   const keys = useRef(new Map<string, string>());
+  // Each channel the window writes, by id, and how many it has written, which a read taken before one did not see.
+  const written = useRef(new Map<string, WrittenChannel>());
+  const channelWrites = useRef(0);
   const latest = useRef(input);
   latest.current = input;
 
@@ -187,6 +237,7 @@ export function useWorkspaceChat(input: {
     const loop = async () => {
       let after = CHAT_CURSOR_START;
       while (live) {
+        const asked = channelWrites.current;
         const answer = await latest.current
           .readChat({ workspaceId, after })
           .catch((): CodingAgentChatAnswerView => UNANSWERED);
@@ -196,8 +247,17 @@ export function useWorkspaceChat(input: {
           return;
         }
         after = answer.cursor;
+        // A write this read was asked after is in it, so only the ones written since are laid over it, and the rest let go.
+        for (const [id, each] of written.current) {
+          if (each.generation <= asked) written.current.delete(id);
+        }
+        const since = [...written.current.values()].flatMap((each) =>
+          each.account === account && each.workspaceId === workspaceId ? [each.channel] : [],
+        );
         setHeld((was) =>
-          heldFor(was, account, workspaceId) ? { ...was, chat: withRead(was.chat, answer) } : was,
+          heldFor(was, account, workspaceId)
+            ? { ...was, chat: withRead(was.chat, answer, since) }
+            : was,
         );
       }
     };
@@ -221,6 +281,15 @@ export function useWorkspaceChat(input: {
         .writeChat({ workspaceId, write: request })
         .catch((): CodingAgentChatWriteAnswerView => UNANSWERED);
       if ("failure" in answer) return { refused: messageFailureWords(answer.failure) };
+      if ("channel" in answer) {
+        channelWrites.current += 1;
+        written.current.set(answer.channel.id, {
+          channel: answer.channel,
+          account,
+          workspaceId,
+          generation: channelWrites.current,
+        });
+      }
       setHeld((was) =>
         heldFor(was, account, workspaceId) && was.chat !== undefined
           ? { ...was, chat: withWrite(was.chat, answer) }
@@ -246,6 +315,12 @@ export function useWorkspaceChat(input: {
       return write(request).then((landed) => settledWords(keys.current, words, landed));
     },
     [workspaceId, write],
+  );
+
+  const onChannel = useCallback(
+    (change: ChatChannelChange) =>
+      write(change).then((landed) => ("refused" in landed ? landed.refused : undefined)),
+    [write],
   );
 
   // While a channel is shown, the developer has read it to the newest message it holds: told once per place, of that channel alone.
@@ -274,5 +349,5 @@ export function useWorkspaceChat(input: {
     });
   }, [reading, newest, readSeq, account, workspaceId, write]);
 
-  return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer };
+  return { chat: held.chat, failed: held.failed, onRetry, onPost, onAnswer, onChannel };
 }

@@ -1,15 +1,7 @@
-import { workspaceSeams } from "@luke/database/models/workspace-seams";
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { auth } from "@luke/service/auth/auth";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** A page of a plan's history, newest first, by the id its path carries (GET). */
-export default routeFromHttpRouter(
-  tasksApp({
-    resolveUserId: resolveHostedUserId,
-    workspaces: workspaceSeams(auth.api),
-    eveOrigin: deploymentEveOrigin,
-  }),
-);
+/**
+ * A page of one plan's history (GET), answered by the hosted oRPC router
+ * (`packages/service/src/tasks/tasks-procedures.ts`).
+ */
+export default orpcRoute;
