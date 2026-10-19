@@ -18,6 +18,7 @@ import {
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
+  CHOICE_LOOK,
   ChoiceList,
   type ChoiceOption,
   ConfirmDialog,
@@ -319,6 +320,7 @@ function MergePanel({
       {options.length < 2 || method === undefined ? null : (
         <ChoiceList<MergeMethod>
           legend={BOX_WORDS.CHOOSE_METHOD}
+          look={CHOICE_LOOK.MARKED}
           options={options}
           value={[method]}
           disabled={busy}

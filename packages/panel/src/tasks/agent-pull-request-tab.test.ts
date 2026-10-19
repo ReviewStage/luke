@@ -2421,7 +2421,8 @@ test("Review stands at the end of the tabs' row while the pull request is open o
         state,
       ),
     );
-    const row = tab.querySelector(".pull-request-tabs") ?? assert.fail("the tabs' row stands");
+    const row =
+      tab.querySelector<HTMLElement>(".pull-request-tabs") ?? assert.fail("the tabs' row stands");
     const review = buttonWith(row, /^Review$/u);
     assert.equal(review !== undefined, offered, state);
     const before = review?.closest(".pull-request-review")?.previousElementSibling;

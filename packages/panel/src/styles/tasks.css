@@ -2200,12 +2200,13 @@
 
 /* The title's row: the pill at the row's inset, the title taking the room
    between, wrapping beside the controls rather than under them, and the
-   controls at the row's end. The title's first line is centred on the
-   controls' height, so a title of one line reads level with them. */
+   controls at the row's end, each centred on the row. The title stands at
+   least the controls' height, so one of a single line reads level with
+   them. */
 .pull-request-title-row {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--luke-space-8);
 }
 
