@@ -28,8 +28,8 @@ for the host you are in:
 | Check on a silent worker | `conductor session message <sessionId>` | `read_agent` with its agent id |
 | Stop a worker | `conductor session cancel <sessionId>` | `stop_agent` with its agent id |
 | Continue a dead or stalled worker | `conductor session create --workspace <workspaceId> --agent claude --model <model> --effort <effort>`, with `--message` repeating the brief, the PR url, your session id, and "report to me" | `start_agent` with `from: { agentId }` and a `note` repeating the PR url and its branch, "keep this PR and open no second one", your agent id, and "report to me" |
-| Archive a worker | `conductor workspace archive <workspaceId>` | `archive_agent` with a short reason, once the agent is idle |
-| Keep the rollout together | The workspaces' own list | `create_section` named for the rollout before the first worker starts, and `move_task` of each worker's task into it as it starts (below) |
+| Archive a worker | `conductor workspace archive <workspaceId>` | `update_agent` with `archived: true` and a short `reason`, once the agent is idle |
+| Keep the rollout together | The workspaces' own list | `create_section` named for the rollout before the first worker starts, and `update_task` with each worker's task and the section's `sectionId` as it starts (below) |
 | Point the user at a worker or PR | Deep links | The mentions `start_agent` answered, and the PR's URL |
 
 Arguments: the plan (a file path, a Linear issue key such as `LUKE-159`, or
@@ -98,7 +98,7 @@ PR's own scope and acceptance criteria in `prompt` and the rest of the brief
 in `note`, and where the plan is long, quote only the parts this PR needs and
 name the plan's file in the repository, if it has one, for the worker to read.
 Once `create_task` answers the worker's task, move that task into the rollout's section
-with `move_task` before you start its worker. Move only the tasks you
+with `update_task`'s `sectionId` before you start its worker. Move only the tasks you
 made for the rollout, never the task you work on or a teammate's.
 
 Every brief must contain:

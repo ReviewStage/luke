@@ -48,7 +48,6 @@ import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { CHAT_TOOLS } from "../coder-host/chat.js";
 import {
-  ARCHIVE_AGENT_TOOL,
   type CodingAgentCall,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
@@ -56,7 +55,6 @@ import {
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
   READ_PAGE_TOOL,
-  runArchiveAgent,
   runListAgents,
   runListModels,
   runListTasks,
@@ -65,12 +63,10 @@ import {
   runReadPage,
   runStartAgent,
   runStopAgent,
-  runUnarchiveAgent,
   runUpdateAgent,
   runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
-  UNARCHIVE_AGENT_TOOL,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
@@ -101,10 +97,8 @@ import {
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
-  MOVE_TASK_TOOL,
   runCreateSection,
   runDeleteSection,
-  runMoveTask,
 } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import {
@@ -279,7 +273,7 @@ On an instruction, send it when it is clear which agent is meant and what to say
 
 On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither; where they named a model in their own words, list_models first for its id and an effort it lists. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Where they ask for an agent on a new task of its own ("make a task for the invite emails and start an agent on it"), create_task makes the task first, with their words as its brief, and start_agent then starts the agent on it by its taskId. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
 
-On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
+On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), update_agent with archived true archives each idle one the developer means, with a short reason such as its pull request having merged, and archived false brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
 On a request to put tasks away or change one ("archive the tasks of the finished rollout", "clean up the done tasks", "rename this one", "pin the billing task"), update_task changes each task of the workspace the developer means, found with list_tasks (with includeArchived for one already archived), as their own task menu would: archived true archives it and false brings it back, and a name, a repository, or pinned change the rest. Change only what the developer asked for: never a task a teammate is still using, unless the developer named it, and never archive this task itself, which is refused; the developer archives it from its menu. Like the menu, an archive stops no agent: one still working on the task finishes the turn it is on. Then say in your return which tasks you changed and how.
 
@@ -289,7 +283,7 @@ On a request to change an agent ("rename it Billing export", "switch it to Sonne
 
 ### The sidebar's sections
 
-The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, with one exception: where you start agents on several new tasks for one piece of work at once, as when the developer asks you to roll a plan out as a set of tasks, make one section named for that work and move each of those tasks into it, so they stand together in the sidebar; leave every other task where it stands. Then say in your return what you changed.
+The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, update_task with a sectionId moves a task into one, or with null back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, with one exception: where you start agents on several new tasks for one piece of work at once, as when the developer asks you to roll a plan out as a set of tasks, make one section named for that work and move each of those tasks into it, so they stand together in the sidebar; leave every other task where it stands. Then say in your return what you changed.
 
 ### The workspace's issues
 
@@ -326,13 +320,12 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
 - stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
-- archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
-- update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it.
+- update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it, or archives an idle one with a short reason its archived banner shows, or brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
 - read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
 - create_task makes a task in the workspace for the developer, on the repository named or this task's, with their brief and a plan to start from where given, and no agent on it; start_agent then starts one on it.
-- create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
-- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
+- create_section makes a section in the developer's sidebar for this workspace and delete_section deletes one, its tasks going back under Tasks; update_task's sectionId moves a task into a section or back under Tasks.
+- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, the sidebar section they keep it in, or its archive, found with list_tasks and includeArchived for an archived one.
 - list_issues lists the workspace's issues, each with its id, identifier, title, status, priority, and whether it is archived; read_issue reads one by its id or identifier with its description; create_issue files one; and update_issue changes its title, description, status, or priority, or archives it or brings it back.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
@@ -658,14 +651,6 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     run: (call, input) => runStartAgent(call.agents, input),
   },
   {
-    ...ARCHIVE_AGENT_TOOL,
-    run: (call, input) => runArchiveAgent(call.agents, input),
-  },
-  {
-    ...UNARCHIVE_AGENT_TOOL,
-    run: (call, input) => runUnarchiveAgent(call.agents, input),
-  },
-  {
     ...STOP_AGENT_TOOL,
     run: (call, input) => runStopAgent(call.agents, input),
   },
@@ -692,10 +677,6 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...DELETE_SECTION_TOOL,
     run: (call, input) => runDeleteSection(call.agents, input),
-  },
-  {
-    ...MOVE_TASK_TOOL,
-    run: (call, input) => runMoveTask(call.agents, input),
   },
   {
     ...UPDATE_TASK_TOOL,

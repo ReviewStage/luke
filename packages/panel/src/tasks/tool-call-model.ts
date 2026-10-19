@@ -648,6 +648,13 @@ function issueCall(
   return { ...namedCall(kind, input, output, undefined), subject: answered ?? asked };
 }
 
+/** How an agent's change is said on its row: archived or unarchived where it named its archive, and changed otherwise. */
+function agentUpdateKind(input: WireValue | undefined): CallKind {
+  const archived = isRecord(input) ? input.archived : undefined;
+  if (archived === true) return CALL_KIND.ARCHIVE_AGENT;
+  return archived === false ? CALL_KIND.UNARCHIVE_AGENT : CALL_KIND.UPDATE_AGENT;
+}
+
 /** How a task's change is said on its row: archived or unarchived where it named its archive, which is what such a call is for, and updated otherwise. */
 function taskUpdateKind(input: WireValue | undefined): CallKind {
   const archived = isRecord(input) ? input.archived : undefined;
@@ -660,7 +667,7 @@ const SIDEBAR_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.CREATE_TASK,
   AGENT_TOOL.CREATE_SECTION,
   AGENT_TOOL.DELETE_SECTION,
-  AGENT_TOOL.MOVE_TASK,
+  RETIRED_TOOL.MOVE_TASK,
   AGENT_TOOL.UPDATE_TASK,
 ]);
 
@@ -771,23 +778,24 @@ function tasksToolView(
         output,
         stringAt(input, "prompt") === undefined ? "task" : "prompt",
       );
-    case AGENT_TOOL.ARCHIVE_AGENT:
+    // An archive and an unarchive are read alike under the tools they had before `update_agent` took them.
+    case RETIRED_TOOL.ARCHIVE_AGENT:
       return answeredAgentCall(CALL_KIND.ARCHIVE_AGENT, input, output);
-    case AGENT_TOOL.UNARCHIVE_AGENT:
+    case RETIRED_TOOL.UNARCHIVE_AGENT:
       return answeredAgentCall(CALL_KIND.UNARCHIVE_AGENT, input, output);
     case AGENT_TOOL.LIST_MODELS:
       return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
     case AGENT_TOOL.STOP_AGENT:
       return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
     case AGENT_TOOL.UPDATE_AGENT:
-      return answeredAgentCall(CALL_KIND.UPDATE_AGENT, input, output);
+      return answeredAgentCall(agentUpdateKind(input), input, output);
     case AGENT_TOOL.READ_TASK:
       return answeredCall(CALL_KIND.READ_TASK, input, output, "task", "name");
     case AGENT_TOOL.CREATE_SECTION:
       return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
     case AGENT_TOOL.DELETE_SECTION:
       return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
-    case AGENT_TOOL.MOVE_TASK:
+    case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
       return answeredCall(taskUpdateKind(input), input, output, "task", "name");
@@ -960,6 +968,11 @@ function startedAgent(call: TargetedCall): ToolTarget | undefined {
   return { kind: TOOL_TARGET.AGENT, agent };
 }
 
+/** The agent a change names, which its row opens, as a read's does; none for an archive, whose agent left the tabs it would open in. */
+function changedAgent(call: TargetedCall): ToolTarget | undefined {
+  return agentUpdateKind(call.input) === CALL_KIND.ARCHIVE_AGENT ? undefined : namedAgent(call);
+}
+
 /** The task a change answered, which its row opens as the sidebar opens it. */
 function answeredTask(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.task : undefined;
@@ -1016,12 +1029,12 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.READ_AGENT, namedAgent],
   [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
-  [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
+  [RETIRED_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
   [AGENT_TOOL.UPDATE_TASK, answeredTask],
   [AGENT_TOOL.CREATE_TASK, answeredTask],
   [AGENT_TOOL.READ_TASK, answeredTask],
-  [AGENT_TOOL.UPDATE_AGENT, namedAgent],
+  [AGENT_TOOL.UPDATE_AGENT, changedAgent],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
@@ -1062,8 +1075,8 @@ const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.READ_AGENT,
   AGENT_TOOL.MESSAGE_AGENT,
   AGENT_TOOL.START_AGENT,
-  AGENT_TOOL.ARCHIVE_AGENT,
-  AGENT_TOOL.UNARCHIVE_AGENT,
+  RETIRED_TOOL.ARCHIVE_AGENT,
+  RETIRED_TOOL.UNARCHIVE_AGENT,
   AGENT_TOOL.STOP_AGENT,
   AGENT_TOOL.UPDATE_AGENT,
   RETIRED_TOOL.READ_CODING_AGENT,

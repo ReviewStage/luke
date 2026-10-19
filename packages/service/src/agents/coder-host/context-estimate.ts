@@ -12,7 +12,6 @@ import {
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
-  ARCHIVE_AGENT_TOOL,
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
@@ -21,7 +20,6 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
-  UNARCHIVE_AGENT_TOOL,
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
@@ -33,7 +31,7 @@ import {
 } from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
-import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
+import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
@@ -149,14 +147,6 @@ const AUTHORED_TOOLS = {
     description: START_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
   },
-  [CODER_TOOL.ARCHIVE_AGENT]: {
-    description: ARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
-  },
-  [CODER_TOOL.UNARCHIVE_AGENT]: {
-    description: UNARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
-  },
   [CODER_TOOL.STOP_AGENT]: {
     description: STOP_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(STOP_AGENT_TOOL.inputSchema),
@@ -184,10 +174,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.DELETE_SECTION]: {
     description: DELETE_SECTION_TOOL.description,
     inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
-  },
-  [CODER_TOOL.MOVE_TASK]: {
-    description: MOVE_TASK_TOOL.description,
-    inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.UPDATE_TASK]: {
     description: UPDATE_TASK_TOOL.description,

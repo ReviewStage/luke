@@ -34,8 +34,6 @@ export const AGENT_TOOL = {
   READ_AGENT: "read_agent",
   MESSAGE_AGENT: "message_agent",
   START_AGENT: "start_agent",
-  ARCHIVE_AGENT: "archive_agent",
-  UNARCHIVE_AGENT: "unarchive_agent",
   STOP_AGENT: "stop_agent",
   UPDATE_AGENT: "update_agent",
   LIST_TASKS: "list_tasks",
@@ -44,7 +42,6 @@ export const AGENT_TOOL = {
   // The sections the member keeps tasks in in the workspace's sidebar, named for any agent offered `list_tasks`.
   CREATE_SECTION: "create_section",
   DELETE_SECTION: "delete_section",
-  MOVE_TASK: "move_task",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
   // The workspace's issues, listed, read, filed, and changed, named for any agent offered `list_tasks`.
@@ -134,4 +131,8 @@ export const RETIRED_TOOL = {
   READ_CODING_AGENT: "read_coding_agent",
   MESSAGE_CODING_AGENT: "message_coding_agent",
   START_CODING_AGENT: "start_coding_agent",
+  // Folded into `update_agent` (`archived`, `reason`) and `update_task` (`sectionId`).
+  ARCHIVE_AGENT: "archive_agent",
+  UNARCHIVE_AGENT: "unarchive_agent",
+  MOVE_TASK: "move_task",
 } as const;

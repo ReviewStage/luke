@@ -86,7 +86,6 @@ import { DEPLOYMENT_PRESENCE } from "../brain-host/auth.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
-  ARCHIVE_AGENT_REFUSAL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
@@ -1580,8 +1579,8 @@ test("an agent whose starter has left the workspace reaches no other agent", asy
   assert.equal(eve.sent.length, 0);
 });
 
-test("archive_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and unarchive_agent brings it back with the record cleared", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and brings it back with the record cleared", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
   await turnOn(agents.teammates, true);
@@ -1590,23 +1589,14 @@ test("archive_agent archives a teammate's idle agent on another task for the cal
     Option.getOrThrow(
       await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id)),
     );
-  const answered = (archived: boolean, already: boolean) => ({
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    agent: {
-      id: agents.teammates.id,
-      title: OPUS,
-      model: OPUS,
-      task: { id: tasks.billing, name: "Billing", archived: false },
-      onYourTask: false,
-    },
-    archived,
-    already,
-  });
+  const archivedAs = (answer: WireRecord) => {
+    assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answer));
+    return isRecord(answer.agent) ? answer.agent.archived : undefined;
+  };
+  const archive = (input: Readonly<Record<string, WireBoundaryInput>>, callId?: string) =>
+    call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.teammates.id, ...input }, callId);
 
-  assert.deepEqual(
-    await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id, reason }),
-    answered(true, false),
-  );
+  assert.equal(archivedAs(await archive({ archived: true, reason })), true);
   const record = {
     by: CODING_AGENT_ARCHIVER.AGENT,
     userId: agents.caller.userId,
@@ -1616,41 +1606,34 @@ test("archive_agent archives a teammate's idle agent on another task for the cal
   };
   assert.ok((await row()).archivedAt !== null);
   assert.deepEqual((await row()).archivedBy, record);
-  assert.deepEqual(
-    await call(
-      CODER_TOOL.ARCHIVE_AGENT,
-      { agentId: agents.teammates.id, reason: "Again." },
-      "call-2",
-    ),
-    answered(true, true),
-  );
+  assert.equal(archivedAs(await archive({ archived: true, reason: "Again." }, "call-2")), true);
   assert.deepEqual((await row()).archivedBy, record, "a second archive keeps the first record");
   assert.deepEqual(
     await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED },
   );
 
-  assert.deepEqual(
-    await call(CODER_TOOL.UNARCHIVE_AGENT, { agentId: agents.teammates.id }),
-    answered(false, false),
-  );
+  // An unarchive, here beside a rename, brings it back with the record cleared, and again is done.
+  assert.equal(archivedAs(await archive({ archived: false, title: "Billing" }, "call-3")), false);
   assert.deepEqual([(await row()).archivedAt, (await row()).archivedBy], [null, null]);
-  assert.deepEqual(
-    await call(CODER_TOOL.UNARCHIVE_AGENT, { agentId: agents.teammates.id }),
-    answered(false, true),
-  );
+  assert.equal((await row()).title, "Billing");
+  assert.equal(archivedAs(await archive({ archived: false }, "call-4")), false);
 });
 
-test("archive_agent refuses an agent still working, the caller itself, an agent of another workspace its starter is also in, and a stranger's, archiving none of them", async () => {
+test("update_agent archives no agent still working, nor the caller itself, an agent of another workspace its starter is also in, or a stranger's, and an archive refused writes nothing else asked beside it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
   await turnOn(agents.teammates, false);
-  const archive = (agentId: string) => call(CODER_TOOL.ARCHIVE_AGENT, { agentId });
+  const archive = (agentId: string, input: Readonly<Record<string, WireBoundaryInput>> = {}) =>
+    call(CODER_TOOL.UPDATE_AGENT, { agentId, archived: true, ...input });
   const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
 
-  assert.deepEqual(await archive(agents.teammates.id), rejected(ARCHIVE_AGENT_REFUSAL.WORKING));
-  assert.deepEqual(await archive(agents.caller.id), rejected(ARCHIVE_AGENT_REFUSAL.SELF));
+  assert.deepEqual(
+    await archive(agents.teammates.id, { title: "Renamed" }),
+    rejected(UPDATE_AGENT_REFUSAL.WORKING),
+  );
+  assert.deepEqual(await archive(agents.caller.id), rejected(UPDATE_AGENT_REFUSAL.SELF));
   assert.deepEqual(
     await archive(agents.otherWorkspaces.id),
     rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
@@ -1660,20 +1643,30 @@ test("archive_agent refuses an agent still working, the caller itself, an agent 
     rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
   );
   assert.deepEqual(
-    await call(CODER_TOOL.UNARCHIVE_AGENT, { agentId: agents.strangers.id }),
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.strangers.id, archived: false }),
     rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT),
   );
-  assert.deepEqual(
-    await call(CODER_TOOL.ARCHIVE_AGENT, {
-      agentId: agents.teammates.id,
-      reason: "r".repeat(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS + 1),
-    }),
-    rejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE),
-  );
+  for (const input of [
+    { reason: "r".repeat(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS + 1) },
+    { archived: false, reason: "Back." },
+  ]) {
+    assert.deepEqual(
+      await call(CODER_TOOL.UPDATE_AGENT, {
+        agentId: agents.teammates.id,
+        archived: true,
+        ...input,
+      }),
+      rejected(UPDATE_AGENT_REFUSAL.UNREADABLE),
+    );
+  }
   for (const agent of [agents.teammates, agents.caller, agents.otherWorkspaces, agents.strangers]) {
     const read = Option.getOrThrow(await database.run(readCodingAgent(agent.userId, agent.id)));
     assert.equal(read.archivedAt, null, agent.id);
   }
+  const teammates = Option.getOrThrow(
+    await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id)),
+  );
+  assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
 test("update_task refuses to archive a task while an agent on it still works, then archives the teammate's task for the caller's starter with its agents, as the Archive task menu does, answers a call run again as done, and brings both back", async () => {
@@ -1874,10 +1867,13 @@ test("archive_agent refuses an agent whose turn a Stop was asked of but which st
     }),
   );
 
-  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ARCHIVE_AGENT_REFUSAL.WORKING,
-  });
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.teammates.id, archived: true }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: UPDATE_AGENT_REFUSAL.WORKING,
+    },
+  );
 });
 
 /** The agent as the caller's `list_agents` and `read_agent` read it: its status, and why where it failed. */
@@ -1949,8 +1945,8 @@ test("an agent whose session eve no longer runs reads as running until a message
     "an idle agent's Stop asks eve nothing",
   );
   const archived = await call(
-    CODER_TOOL.ARCHIVE_AGENT,
-    { agentId: agents.teammates.id, reason: "Its session ended." },
+    CODER_TOOL.UPDATE_AGENT,
+    { agentId: agents.teammates.id, archived: true, reason: "Its session ended." },
     "call-4",
   );
   assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
@@ -2052,7 +2048,11 @@ test("a message eve took that no turn received before the session ended keeps th
     CODING_AGENT_STATUS.FAILED,
     CODING_AGENT_FAILURE.SESSION_ENDED,
   ]);
-  const archived = await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id }, "call-3");
+  const archived = await call(
+    CODER_TOOL.UPDATE_AGENT,
+    { agentId: agents.teammates.id, archived: true },
+    "call-3",
+  );
   assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
 });
 
@@ -2168,10 +2168,13 @@ test("an agent whose starter has left the workspace archives no agent of it", as
   await turnOn(agents.teammates, true);
   await database.run(leaveWorkspace(workspaceId, agents.caller.userId));
 
-  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_AGENT, { agentId: agents.teammates.id }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODER_REFUSAL.NO_AGENT,
-  });
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AGENT, { agentId: agents.teammates.id, archived: true }),
+    {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: CODER_REFUSAL.NO_AGENT,
+    },
+  );
   const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
   assert.equal(Option.getOrThrow(read).archivedAt, null);
 });
@@ -2387,7 +2390,7 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   });
 });
 
-test("create_section, move_task, and delete_section keep the caller's starter's own sidebar sections of its workspace, as list_tasks then names them and the Mac reads them, once under the call's key, and reach no section or task of another workspace", async () => {
+test("create_section, update_task's sectionId, and delete_section keep the caller's starter's own sidebar sections of its workspace, as list_tasks then names them and the Mac reads them, once under the call's key, and reach no section or task of another workspace", async () => {
   const { workspaceId, elsewhere, plans: taskIds, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -2417,12 +2420,17 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
   });
 
   // A teammate's task moves into it, which list_tasks then names, and the teammate's own sidebar wears nothing.
-  const moved = await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing, sectionId: growth });
-  assert.deepEqual(moved, {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    task: { id: taskIds.billing, name: "Billing" },
-    section: { id: growth, title: "Growth" },
-  });
+  const move = (taskId: string, sectionId: string | null, callId?: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId, sectionId }, callId);
+  const moved = await move(taskIds.billing, growth);
+  assert.equal(moved.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(moved));
+  assert.ok(isRecord(moved.task));
+  assert.deepEqual(
+    [moved.task.name, moved.task.section, moved.already],
+    ["Billing", { id: growth, title: "Growth" }, false],
+  );
+  // A move to where it already stands is done.
+  assert.equal((await move(taskIds.billing, growth, "call-again")).already, true);
   const listed = await call(CODER_TOOL.LIST_TASKS, {});
   assert.deepEqual(listed.sections, [{ id: growth, title: "Growth" }]);
   assert.ok(Array.isArray(listed.tasks));
@@ -2445,14 +2453,14 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
     }),
   );
   assert.ok(Option.isSome(madeElsewhere));
-  assert.deepEqual(
-    await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.invitations, sectionId: theirs }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION },
-  );
-  assert.deepEqual(
-    await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.elsewhere, sectionId: growth }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: TASK_SECTION_TOOL_REFUSAL.NO_TASK },
-  );
+  assert.deepEqual(await move(taskIds.invitations, theirs), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.NO_SECTION,
+  });
+  assert.deepEqual(await move(taskIds.elsewhere, growth), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.NO_TASK,
+  });
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: theirs }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
@@ -2462,11 +2470,16 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
   ]);
   assert.equal((await sectionsOf(caller.userId, elsewhere)).sections.length, 1);
 
-  // Moved out with no section named, it stands under Tasks again; moved back in, a delete puts it there too.
-  const out = await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing });
-  assert.equal(out.section, null, JSON.stringify(out));
+  // Moved out under null, it stands under Tasks again; moved back in beside a rename, a delete puts it there too.
+  const out = await move(taskIds.billing, null);
+  assert.equal(isRecord(out.task) && out.task.section, null, JSON.stringify(out));
   assert.deepEqual((await sectionsOf(caller.userId, workspaceId)).entries, []);
-  await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing, sectionId: growth });
+  const both = await call(CODER_TOOL.UPDATE_TASK, {
+    taskId: taskIds.billing,
+    name: "Billing v2",
+    sectionId: growth,
+  });
+  assert.equal(both.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(both));
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     section: { id: growth, title: "Growth" },
