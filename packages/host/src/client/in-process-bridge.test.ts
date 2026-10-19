@@ -117,16 +117,16 @@ it.effect("the document is read on request and every change of it reaches a subs
 );
 
 it.effect(
-  "a voice act is refused in its kind's own words, and a voice subscription ends cleanly",
+  "a microphone act is refused in its kind's own words, and a voice subscription ends cleanly",
   () =>
     Effect.gen(function* () {
       const { bridge } = yield* bridgeFixture;
       const outcome = yield* Effect.promise(() =>
-        bridge.act({ kind: ACT_KIND.VOICE_STOP_SPEAKING }),
+        bridge.act({ kind: ACT_KIND.MICROPHONE_REQUEST }),
       );
       assert.deepEqual(outcome, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.VOICE_STOP_SPEAKING].refusal,
+        reason: ACT[ACT_KIND.MICROPHONE_REQUEST].refusal,
       });
       const unsubscribe = bridge.onVoiceHotkeyPress(() => assert.fail("no talk key in the page"));
       unsubscribe();

@@ -50,6 +50,18 @@ export const ACCOUNT_ASK_ACT_KIND = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
 } as const;
 
+/**
+ * Luke's avatar as the windows reach it: the panel's word on it, starting,
+ * live on its first frame, or ended and why, taken from the panel alone; and
+ * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
+ * for on the standing call or taken down, taken from the panel and the
+ * floating call window, which draw the tile, alone.
+ */
+export const AVATAR_ACT_KIND = {
+  AVATAR_REPORT: "avatar.report",
+  VOICE_SET_VIDEO: "voice.setVideo",
+} as const;
+
 /** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
 export const ISSUE_ACT_KIND = {
   ISSUES_LIST: "issues.list",
@@ -63,6 +75,59 @@ export const SETTINGS_ACT_KIND = {
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   EXPERIMENT_SET: "experiment.set",
+} as const;
+
+/**
+ * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
+ * each repository's run command read and set; and a terminal of this Mac
+ * opened on the agent's branch for the asking panel, and closed with its
+ * tab. What the terminal prints and what is typed travel on the port an open
+ * posts to that panel, never on an act.
+ */
+export const MAC_TERMINAL_ACT_KIND = {
+  MAC_REPOSITORIES: "macRepositories.read",
+  MAC_REPOSITORY_SET: "macRepositories.set",
+  MAC_TERMINAL_OPEN: "macTerminal.open",
+  MAC_TERMINAL_CLOSE: "macTerminal.close",
+} as const;
+
+/**
+ * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
+ * started, named, and ended, its sandbox resumed on the developer's click,
+ * and a shell attached and detached. What a shell prints travels on the port
+ * an attach posts to the asking panel, never on an act.
+ */
+export const TERMINAL_ACT_KIND = {
+  TERMINAL_LIST: "terminal.list",
+  TERMINAL_CREATE: "terminal.create",
+  TERMINAL_RENAME: "terminal.rename",
+  TERMINAL_KILL: "terminal.kill",
+  TERMINAL_RESUME: "terminal.resume",
+  TERMINAL_ATTACH: "terminal.attach",
+  TERMINAL_DETACH: "terminal.detach",
+} as const;
+
+/**
+ * The voice window's runtime: a command to it from a panel or the call
+ * window; the call card's way back, Luke's window brought forward on the
+ * call's own task; the voice window as a GPT Live peer, its SDP offer handed
+ * to the host, which creates the one session and answers the SDP, the
+ * hang-up it asks the host to decide, and the two reports the host reads its
+ * transport and its idle from, none carrying a credential; the stop key;
+ * Stop Luke, on the task named, else the call's, else the open one; the
+ * voice diagnostics; and the microphone's privacy settings opened.
+ */
+export const VOICE_RUNTIME_ACT_KIND = {
+  VOICE_COMMAND: "voice.command",
+  CALL_SHOW_TASK: "call.showTask",
+  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
+  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
+  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
+  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
+  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  LUKE_STOP: "luke.stop",
+  VOICE_DIAGNOSTICS: "voice.diagnostics",
+  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
 } as const;
 
 /**
@@ -108,12 +173,31 @@ export const WORKSPACE_ACT_KIND = {
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
   ...ACCOUNT_ASK_ACT_KIND,
+  ...AVATAR_ACT_KIND,
   ...ISSUE_ACT_KIND,
+  ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
+  ...VOICE_RUNTIME_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
 } as const;
 
 export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
+
+/**
+ * The port kinds the platform shell answers itself, because they reach its
+ * windows, ports, and system, one spread per domain, in alphabetical order;
+ * the host's procedures answer every other.
+ */
+export const PLATFORM_PORT_ACT_KIND = {
+  ...AVATAR_ACT_KIND,
+  ...MAC_TERMINAL_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
+  ...VOICE_RUNTIME_ACT_KIND,
+} as const;
+
+export type PlatformPortActKind =
+  (typeof PLATFORM_PORT_ACT_KIND)[keyof typeof PLATFORM_PORT_ACT_KIND];
 
 /**
  * The handshake that hands a window's act port to main, as oRPC's Electron

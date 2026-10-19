@@ -6,6 +6,7 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import { ACCOUNT_ACT_KIND, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,7 +31,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -800,7 +801,19 @@ async function handBridge(): Promise<void> {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
+  fakeActPortAnswering((request) => {
+    sentActs.push(request.kind);
+    // The account and settings acts answer a view, so each is refused as `app:act` refused it.
+    if (REFUSED_PORT_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    return Promise.resolve(undefined);
+  });
 }
+
+/** The port kinds this suite's window is refused, as `app:act` refused every kind. */
+const REFUSED_PORT_KINDS: ReadonlySet<string> = new Set([
+  ...Object.values(ACCOUNT_ACT_KIND),
+  ...Object.values(SETTINGS_ACT_KIND),
+]);
 
 /** Where the window draws the call card: on which surface, and whether at the foot of the column at the window's left. */
 function cardStanding(page: HTMLElement, place: Place) {

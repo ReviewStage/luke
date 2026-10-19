@@ -1,5 +1,5 @@
 /**
- * mac-terminal-acts.ts -- the act rows that open a coding agent's branch on this Mac: each repository's run command read and set; and a terminal of this Mac opened on the branch for the asking panel, and closed with its tab.
+ * mac-terminal-acts.ts -- the acts that open a coding agent's branch on this Mac, answered on the act port: each repository's run command read and set; and a terminal of this Mac opened on the branch for the asking panel, and closed with its tab.
  *
  * An open asks nothing of the developer first. It reads the repository's
  * run command from this Mac's settings, where it has one, and starts the
@@ -13,7 +13,7 @@
  * output first, which is held in memory here up to a bound and nowhere
  * else, never logged or written to app state. A terminal that ended is
  * started anew by the next open. A closed tab closes its terminal, and a
- * panel whose page is gone has every terminal it opened closed. Only a panel draws a terminal, so the rows refuse the voice and
+ * panel whose page is gone has every terminal it opened closed. Only a panel draws a terminal, so the procedures refuse the voice and
  * call windows.
  */
 
@@ -24,8 +24,9 @@ import {
   type MacTerminalPortOutbound,
   macTerminalPortInboundSchema,
 } from "@luke/features/mac-terminal-wire";
-import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
+import type { ActSender } from "@luke/host/act-router";
+import { MAC_REPOSITORIES_REFUSAL, MAC_TERMINAL_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import {
   cloneFolder,
@@ -39,11 +40,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type { WebContents } from "electron";
 
-type MacTerminalActKind =
-  | typeof ACT_KIND.MAC_REPOSITORIES
-  | typeof ACT_KIND.MAC_REPOSITORY_SET
-  | typeof ACT_KIND.MAC_TERMINAL_OPEN
-  | typeof ACT_KIND.MAC_TERMINAL_CLOSE;
+type MacTerminalActKind = (typeof MAC_TERMINAL_ACT_KIND)[keyof typeof MAC_TERMINAL_ACT_KIND];
 
 /** Main's end of one terminal's channel. */
 interface MainMacTerminalPort {
@@ -92,13 +89,16 @@ interface Panel {
 
 const readInbound = readEither(macTerminalPortInboundSchema);
 
-function refuseUnlessPanel(kind: MacTerminalActKind, sender: ActSender): void {
-  if (!sender.panel) throw new ActRefused({ message: ACT[kind].refusal });
+const macTerminalPort = actPortFor<WebContents>();
+
+/** The refusal a window that draws no terminal hears, in its kind's own words, or nothing for a panel. */
+function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect<void, E> {
+  return actor.panel ? Effect.void : Effect.fail(refused());
 }
 
-export function macTerminalActRows(
+export function macTerminalProcedures(
   dependencies: MacTerminalActsDependencies,
-): Pick<ActRows<WebContents>, MacTerminalActKind> {
+): Pick<PlatformActProcedures<WebContents>, MacTerminalActKind> {
   const { host, worktreesRoot, stateRoot, ports, start } = dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the
@@ -206,57 +206,57 @@ export function macTerminalActRows(
   };
 
   return {
-    [ACT_KIND.MAC_REPOSITORIES]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.MAC_REPOSITORIES, sender);
-      return Effect.flatMap(host.macRepositories(), (answer) =>
-        answer === undefined
-          ? Effect.fail(new ActRefused({ message: ACT[ACT_KIND.MAC_REPOSITORIES].refusal }))
-          : Effect.succeed(answer),
-      );
-    },
-    [ACT_KIND.MAC_REPOSITORY_SET]: (entry, sender) => {
-      refuseUnlessPanel(ACT_KIND.MAC_REPOSITORY_SET, sender);
-      return Effect.flatMap(host.setMacRepository(entry), (answer) =>
-        answer === undefined
-          ? Effect.fail(new ActRefused({ message: ACT[ACT_KIND.MAC_REPOSITORY_SET].refusal }))
-          : Effect.void,
-      );
-    },
-    [ACT_KIND.MAC_TERMINAL_OPEN]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_OPEN, sender);
+    [MAC_TERMINAL_ACT_KIND.MAC_REPOSITORIES]: macTerminalPort[
+      MAC_TERMINAL_ACT_KIND.MAC_REPOSITORIES
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.macRepositories();
+      if (answer === undefined) return yield* Effect.fail(errors.REFUSED());
+      return answer;
+    }),
+    [MAC_TERMINAL_ACT_KIND.MAC_REPOSITORY_SET]: macTerminalPort[
+      MAC_TERMINAL_ACT_KIND.MAC_REPOSITORY_SET
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.setMacRepository(input);
+      if (answer === undefined) return yield* Effect.fail(errors.REFUSED());
+    }),
+    [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_OPEN]: macTerminalPort[
+      MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_OPEN
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const sender = context.actor.sender;
       // A tab drawn again over its running terminal needs nothing read.
-      if (reattached(sender.sender, params)) {
+      if (reattached(sender, input)) {
         // An earlier open of another branch still reading the settings is let go.
-        panelOf(sender.sender).asking.delete(params.agentId);
-        return Effect.void;
+        panelOf(sender).asking.delete(input.agentId);
+        return;
       }
-      const panel = panelOf(sender.sender);
+      const panel = panelOf(sender);
       const ask = ++asks;
-      panel.asking.set(params.agentId, ask);
-      return Effect.gen(function* () {
-        const answer = yield* host.macRepositories();
-        // A tab closed, or a page gone, while the settings were read starts nothing.
-        if (panel.asking.get(params.agentId) !== ask) return;
-        panel.asking.delete(params.agentId);
-        // A read that failed is said, rather than taken for a repository with no command.
-        if (answer === undefined) {
-          return yield* Effect.fail(
-            new ActRefused({ message: ACT[ACT_KIND.MAC_REPOSITORIES].refusal }),
-          );
-        }
-        const key = params.repository.toLowerCase();
-        const entry = answer.repositories.find((each) => each.repository.toLowerCase() === key);
-        opened(sender.sender, params, entry?.command ?? null);
-      });
-    },
-    [ACT_KIND.MAC_TERMINAL_CLOSE]: ({ agentId }, sender) => {
-      refuseUnlessPanel(ACT_KIND.MAC_TERMINAL_CLOSE, sender);
-      const panel = panels.get(sender.sender);
-      panel?.asking.delete(agentId);
-      const drawn = panel?.terminals.get(agentId);
+      panel.asking.set(input.agentId, ask);
+      const answer = yield* host.macRepositories();
+      // A tab closed, or a page gone, while the settings were read starts nothing.
+      if (panel.asking.get(input.agentId) !== ask) return;
+      panel.asking.delete(input.agentId);
+      // A read that failed is said, in the read's own words, rather than taken for a repository with no command.
+      if (answer === undefined) {
+        return yield* Effect.fail(errors.REFUSED({ message: MAC_REPOSITORIES_REFUSAL }));
+      }
+      const key = input.repository.toLowerCase();
+      const entry = answer.repositories.find((each) => each.repository.toLowerCase() === key);
+      opened(sender, input, entry?.command ?? null);
+    }),
+    [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_CLOSE]: macTerminalPort[
+      MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_CLOSE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const panel = panels.get(context.actor.sender);
+      panel?.asking.delete(input.agentId);
+      const drawn = panel?.terminals.get(input.agentId);
       if (drawn === undefined) return;
-      panel?.terminals.delete(agentId);
+      panel?.terminals.delete(input.agentId);
       closed(drawn);
-    },
+    }),
   };
 }

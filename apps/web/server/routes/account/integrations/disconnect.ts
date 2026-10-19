@@ -1,9 +1,7 @@
-import { integrationsAppSeams } from "@luke/service/integrations/integration-seams";
-import { integrationsApp } from "@luke/service/integrations/integrations-app";
-import { routeFromHttpRouter } from "../../../route-effect.js";
+import { orpcRoute } from "../../../orpc-route.js";
 
 /**
- * Ends the account's connection to one provider. The logic lives in
- * `packages/service/src/integrations/integrations-app.ts`; this file only hands it the deployment's real seams.
+ * Ends the account's connection to one provider, answered by the hosted oRPC router
+ * (`packages/service/src/integrations/integrations-procedures.ts`).
  */
-export default routeFromHttpRouter(integrationsApp(integrationsAppSeams()));
+export default orpcRoute;

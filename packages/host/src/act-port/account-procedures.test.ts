@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
+import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
-import { ACCOUNT_ACT_KIND, ACT_ERROR, type ActPortClient } from "../contract/index.js";
-import {
-  type AccountProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-} from "./index.js";
+import { ACCOUNT_ACT_KIND } from "../contract/index.js";
+import { accountProcedures } from "./account-procedures.js";
+import type { AccountProceduresDependencies } from "./index.js";
+import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The account's acts, through the act port as a window calls them: a
@@ -40,16 +36,11 @@ const REFUSAL = {
   [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: "Could not delete that account on this system.",
 } as const;
 
-// SAFETY: these tests call the account procedures alone, and building the others reads none of these.
-const UNREACHED = { accountAsks: {}, workspaces: {}, issues: {}, settings: {} } as unknown as Omit<
-  ActPortDependencies,
-  "account"
->;
-
-const opened: MessagePort[] = [];
+let port: TestActPort<unknown> | undefined;
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  port?.close();
+  port = undefined;
 });
 
 /**
@@ -70,39 +61,23 @@ function windowPort(options: { trusted?: boolean; ended?: Effect.Effect<AccountS
     deleteAccount: () =>
       Effect.sync(() => happened.push(["deleteAccount"])).pipe(Effect.andThen(ended)),
   };
-  const handler = createActPortHandler({
-    ...UNREACHED,
-    account: {
+  port = testActPort(
+    accountProcedures({
       host,
       haltSessionReplay: () => happened.push(["halt"]),
       resumeSessionReplay: () => happened.push(["resume"]),
-    },
-  });
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor: PANEL,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  );
+  const client = port.as(PANEL, { trusted: options.trusted ?? true });
   return { client, happened };
 }
 
 /** A call settled to the sentence of its refusal, or a failure where it answered. */
 async function refusal(call: Promise<unknown>): Promise<string> {
-  try {
-    await call;
-  } catch (error) {
-    assert.ok(error instanceof ORPCError);
-    assert.equal(error.code, ACT_ERROR.REFUSED);
-    return error.message;
-  }
-  return assert.fail("the call was answered rather than refused");
+  const settled = await settledAct(call);
+  return "refused" in settled
+    ? settled.refused
+    : assert.fail("the call was answered rather than refused");
 }
 
 it("a sign-in reaches the host with its provider, and the host's answer crosses back", async () => {

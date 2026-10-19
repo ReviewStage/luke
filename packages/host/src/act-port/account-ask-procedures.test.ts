@@ -19,6 +19,8 @@ import {
   type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type PlatformActProcedures,
+  type WorkspaceProceduresDependencies,
 } from "./index.js";
 
 /**
@@ -126,12 +128,19 @@ function windowPort(
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
   // SAFETY: no issue act is called here, so the issues' host is never reached.
   const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no account, settings, or workspace act is called here, so none of their dependencies is reached.
-  const unreached = { account: {}, settings: {}, workspaces: {} } as unknown as Pick<
+  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
+  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
+  // SAFETY: no platform act is called here, so no platform procedure is reached.
+  const platform = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
+  const unreached = { account: {}, settings: {} } as unknown as Pick<
     ActPortDependencies,
-    "account" | "settings" | "workspaces"
+    "account" | "settings"
   >;
-  const handler = createActPortHandler({ ...unreached, accountAsks: { host }, issues });
+  const handler = createActPortHandler(
+    { ...unreached, accountAsks: { host }, issues, workspaces },
+    platform,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

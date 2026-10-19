@@ -7,7 +7,7 @@ import {
   issueViewSchema,
 } from "@luke/features/issue-view";
 import { Schema as EffectSchema } from "effect";
-import { actProcedure } from "./base.js";
+import { actProcedure, exactInput } from "./base.js";
 import { ISSUE_ACT_KIND } from "./kinds.js";
 
 /**
@@ -19,15 +19,15 @@ import { ISSUE_ACT_KIND } from "./kinds.js";
  */
 export const issueActsContract = {
   [ISSUE_ACT_KIND.ISSUES_LIST]: actProcedure("Could not read the issues on this system.")
-    .input(issueListParamsSchema)
+    .input(exactInput(issueListParamsSchema))
     .output(EffectSchema.flip(issueListViewSchema)),
   [ISSUE_ACT_KIND.ISSUES_READ]: actProcedure("Could not read the issue on this system.")
-    .input(issueIdParamsSchema)
+    .input(exactInput(issueIdParamsSchema))
     .output(EffectSchema.flip(issueViewSchema)),
   [ISSUE_ACT_KIND.ISSUES_CREATE]: actProcedure("Could not create the issue on this system.")
-    .input(issueCreateParamsSchema)
+    .input(exactInput(issueCreateParamsSchema))
     .output(EffectSchema.flip(issueViewSchema)),
   [ISSUE_ACT_KIND.ISSUES_CHANGE]: actProcedure("Could not change the issue on this system.")
-    .input(issueChangeParamsSchema)
+    .input(exactInput(issueChangeParamsSchema))
     .output(EffectSchema.flip(issueViewSchema)),
 };

@@ -631,6 +631,55 @@ test("a place with no link stands at /app: the home page, and Chat though a task
   assert.deepEqual(window.addresses(), ["/app", "/app"]);
 });
 
+test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const none = { workspaces: [], workspace: undefined };
+  const places: TasksControl[] = [
+    tasksControl({
+      ...none,
+      automationsView: { ...tasksControl().automationsView, open: true },
+    }),
+    tasksControl({
+      ...none,
+      automationsView: {
+        ...tasksControl().automationsView,
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
+      },
+    }),
+    tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
+    tasksControl({ ...none, factoryView: { ...tasksControl().factoryView, open: true } }),
+    tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
+    tasksControl({
+      ...none,
+      personView: { ...tasksControl().personView, userId: "user-charles" },
+    }),
+    tasksControl({
+      ...none,
+      issuesView: {
+        ...tasksControl().issuesView,
+        open: true,
+        place: { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" },
+      },
+    }),
+  ];
+  const addresses: string[] = [];
+  for (const tasks of places) {
+    const window = mount(tasks);
+    act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+    await settle();
+    addresses.push(...window.addresses());
+    unmountAll();
+  }
+
+  assert.deepEqual(
+    addresses,
+    places.map(() => "/app"),
+  );
+  assert.deepEqual(copied, []);
+});
+
 test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own", () => {
   const window = mount(onTask([]));
   const before = window.addresses();

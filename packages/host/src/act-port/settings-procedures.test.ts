@@ -4,17 +4,12 @@ import { SETTING_SIDE_EFFECT, SETTINGS_RESET_SCOPE } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import type { ActSender } from "../act-router/router.js";
-import { ACT_ERROR, type ActPortClient, SETTINGS_ACT_KIND } from "../contract/index.js";
-import {
-  type ActPortDependencies,
-  type ClientSettingSideEffects,
-  createActPortHandler,
-  type SettingsProceduresDependencies,
-} from "./index.js";
+import { type ActPortClient, SETTINGS_ACT_KIND } from "../contract/index.js";
+import type { ClientSettingSideEffects, SettingsProceduresDependencies } from "./index.js";
+import { settingsProcedures } from "./settings-procedures.js";
+import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The settings writes, through the act port as a window calls them: a write
@@ -48,16 +43,11 @@ const NO_SIDE_EFFECTS: ClientSettingSideEffects = {
   [SETTING_SIDE_EFFECT.MEDIA_DUCK]: () => {},
 };
 
-// SAFETY: these tests call the settings procedures alone, and building the others reads none of these.
-const UNREACHED = { accountAsks: {}, workspaces: {}, account: {}, issues: {} } as unknown as Omit<
-  ActPortDependencies,
-  "settings"
->;
-
-const opened: MessagePort[] = [];
+let port: TestActPort<unknown> | undefined;
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  port?.close();
+  port = undefined;
 });
 
 /**
@@ -98,42 +88,26 @@ function windowPort(
         return accepted();
       }),
   };
-  const handler = createActPortHandler({
-    ...UNREACHED,
-    settings: {
+  port = testActPort(
+    settingsProcedures({
       host,
       reporterOf:
         options.reporterOf ?? ((actor) => (actor.sender === WINDOW ? "panel" : undefined)),
       lastSettings: () => held,
       sideEffects: options.sideEffects ?? NO_SIDE_EFFECTS,
       stopChordHolder: (chord) => (chord === TALK_CHORD ? "talk" : undefined),
-    },
-  });
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor: PANEL,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  );
+  const client = port.as(PANEL, { trusted: options.trusted ?? true });
   return { client, writes, stored: () => held.stored };
 }
 
 /** A call settled to the sentence of its refusal, or a failure where it answered. */
 async function refusal(call: Promise<unknown>): Promise<string> {
-  try {
-    await call;
-  } catch (error) {
-    assert.ok(error instanceof ORPCError);
-    assert.equal(error.code, ACT_ERROR.REFUSED);
-    return error.message;
-  }
-  return assert.fail("the call was answered rather than refused");
+  const settled = await settledAct(call);
+  return "refused" in settled
+    ? settled.refused
+    : assert.fail("the call was answered rather than refused");
 }
 
 /** Every settings kind called once, each settled to the sentence of its refusal. */

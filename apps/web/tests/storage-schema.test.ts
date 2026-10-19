@@ -63,6 +63,7 @@ const DECLARED_TABLES = [
   "github_installation",
   "hosted_usage",
   "inbox_attachment",
+  "inbox_attachment_moved",
   "inbox_item",
   "inbox_item_read",
   "inbox_message",
