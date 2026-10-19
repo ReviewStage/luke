@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
 import { test } from "vitest";
-import { type ChatTarget, chatMentionAt, chooseTarget, matchingTargets } from "./chat-mention.js";
+import {
+  type ChatTarget,
+  chatDateAt,
+  chatMentionAt,
+  chatRows,
+  chooseDate,
+  chooseTarget,
+  matchingTargets,
+} from "./chat-mention.js";
 
 const TARGETS: readonly ChatTarget[] = [
   { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "maria", detail: undefined },
@@ -87,5 +95,66 @@ test("choosing a target writes it over the word typed, with a space after it and
   assert.deepEqual(chooseTarget("see #te", end, "teammate-invitations"), {
     text: "see #teammate-invitations ",
     caret: 26,
+  });
+});
+
+/** Monday, October 19, 2026, at noon in UTC. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+/** The date the `@` words the caret ends at the end of the text offer, as its row says it, or nothing. */
+function datedAt(text: string): string | undefined {
+  const dated = chatDateAt(text, text.length, MONDAY_NOON, "UTC");
+  return dated === undefined
+    ? undefined
+    : `${dated.target.name} | ${dated.target.detail} @${dated.mention.start}`;
+}
+
+test("words after an @ that read as a date offer it across words, and prose after a handle, an @ inside a word, or one in code offers none", () => {
+  assert.deepEqual(
+    [
+      "ship it @tomorrow",
+      "due @next fri",
+      "out @oct 20 to 24",
+      "@Tomorrow",
+      "@agent-1 please look",
+      "@agent-1 tomorrow",
+      "dev@tomorrow",
+      "`@tomorrow`",
+      "@to",
+    ].map(datedAt),
+    [
+      "Tomorrow | Oct 20, 2026 @8",
+      "Oct 30 | Oct 30, 2026 @4",
+      "Tomorrow → Saturday | Oct 20, 2026 → Oct 24, 2026 @4",
+      "Tomorrow | Oct 20, 2026 @0",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ],
+  );
+});
+
+test("an @ word that reads as a date lists the date first, then the members it matches as before", () => {
+  const listed = (text: string) => {
+    const mention = chatMentionAt(text, text.length);
+    assert.ok(mention, `no mention in ${text}`);
+    const frida = { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "frida", detail: undefined };
+    return chatRows([...TARGETS, frida], mention, MONDAY_NOON, "UTC").map((target) => target.name);
+  };
+  assert.deepEqual(listed("@fri"), ["Friday", "frida"]);
+  assert.deepEqual(listed("@a"), ["agent-1", "agent-2", "maria", "frida"]);
+  assert.deepEqual(listed("#tomorrow"), []);
+});
+
+test("choosing a date writes its link with the date in full over every word typed, a space after it and the caret past the space", () => {
+  const text = "out @oct 20 to 24 sorry";
+  const dated = chatDateAt(text, 17, MONDAY_NOON, "UTC");
+  assert.ok(dated?.target.date);
+  const written = "[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)";
+  assert.deepEqual(chooseDate(text, dated.mention, dated.target.date, "UTC"), {
+    text: `out ${written} sorry`,
+    caret: 4 + written.length + 1,
   });
 });

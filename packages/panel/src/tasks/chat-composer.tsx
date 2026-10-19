@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { readerZone } from "@luke/features/date-mention";
 import { encodeMention, type MentionPlace } from "@luke/features/mention-link";
 import {
   ComboboxList,
@@ -15,9 +16,12 @@ import {
 import {
   type ChatMention,
   type ChatTarget,
+  chatDateAt,
   chatMentionAt,
+  chatRows,
+  chooseDate,
   chooseTarget,
-  matchingTargets,
+  dateLink,
 } from "@luke/ui/chat-mention";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useId, useLayoutEffect, useRef, useState } from "react";
@@ -35,11 +39,12 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { Tooltip } from "../tooltip.js";
-import { useChatMentionPicker } from "./chat-mention-picker.js";
+import { chatOption, useChatMentionPicker } from "./chat-mention-picker.js";
 import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { useMentionDoors } from "./task-mentions.js";
+import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
 
 /**
@@ -57,6 +62,8 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation.js";
  * comment write (`[@ada](…/person/<id>)`), which the service reads to tell
  * them; Luke and a channel are written as their word (`@luke`, `#general`),
  * Luke because every task's answers to `@luke` by the channel it is said in.
+ * Words after an `@` that read as a date offer it first, and a pick writes
+ * the same date link the other boxes write (`[@Oct 20, 2026](luke://date/…)`).
  * The microphone records a dictation and lays its words in at the
  * caret (`use-dictation.ts`), listening for the chat's handles and channel
  * names (`chatKeywords`). Where the editor's bundle could not be loaded, a
@@ -93,11 +100,7 @@ function MentionMenu({
   onHover: (index: number) => void;
   onChoose: (target: ChatTarget) => void;
 }): React.JSX.Element {
-  const options = rows.map((target) => ({
-    id: `${target.sigil}${target.name}`,
-    label: `${target.sigil}${target.name}`,
-    detail: target.detail,
-  }));
+  const options = rows.map(chatOption);
   return (
     <div className="menu-surface searchable-menu chat-mention-menu">
       <ComboboxList
@@ -238,6 +241,11 @@ function EditorChatComposer({
   const picker = useChatMentionPicker({
     targets,
     onChoose: (target) => {
+      // A date is written as its chip, the date in full, wherever the box stands.
+      if (target.date !== undefined) {
+        editor.current?.chooseMention(dateLink(target.date, readerZone()));
+        return;
+      }
       // A person or an agent is written as their chip, the link every box of the app writes; Luke and a channel as their word.
       if (target.mention !== undefined && place !== undefined) {
         editor.current?.chooseMention({
@@ -328,12 +336,22 @@ function PlainChatComposer({
     pendingCaret.current = undefined;
   }, [draft]);
 
-  const mention: ChatMention | undefined =
-    caret === undefined ? undefined : chatMentionAt(draft, caret);
+  const now = useMinute();
+  const zone = readerZone();
+  // Note that a date's `@` words may run on past a handle's one word, so they stand for the word where they read as a date.
+  const dated = caret === undefined ? undefined : chatDateAt(draft, caret, now, zone);
+  const handle = caret === undefined ? undefined : chatMentionAt(draft, caret);
+  const mention: ChatMention | undefined = dated?.mention ?? handle;
   // A word closed with Escape stays closed only while the caret is in it.
   if (closedAt !== undefined && mention?.start !== closedAt) setClosedAt(undefined);
   const open = mention !== undefined && closedAt !== mention.start;
-  const rows = open ? matchingTargets(targets, mention) : [];
+  const rows = !open
+    ? []
+    : handle !== undefined
+      ? chatRows(targets, handle, now, zone)
+      : dated !== undefined
+        ? [dated.target]
+        : [];
   const held =
     highlight !== undefined &&
     mention !== undefined &&
@@ -346,7 +364,10 @@ function PlainChatComposer({
 
   const choose = (target: ChatTarget) => {
     if (mention === undefined) return;
-    const written = chooseTarget(draft, mention, target.name);
+    const written =
+      target.date !== undefined
+        ? chooseDate(draft, mention, target.date, zone)
+        : chooseTarget(draft, mention, target.name);
     if (written.text.length > CHAT_BOUNDS.MAX_TEXT_CHARS) return;
     pendingCaret.current = written.caret;
     setDraft(written.text);

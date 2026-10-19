@@ -735,3 +735,72 @@ test("a fixture chat opens no topic past the bound, and an archive frees a place
   held = archived.chat;
   assert.ok("chat" in open("one-more"));
 });
+
+/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+/** The rows the open list offers, each its name and what it says beside it. */
+function offered(page: HTMLElement): (string | null)[] {
+  return [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+}
+
+test("words after an @ that read as a date offer it first, said as its chip says it with the date in full beside it, and the date sent is drawn as its chip", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "out @oct 20 to 24");
+    const listed = offered(page);
+    pressInComposer(box, "Enter");
+    const chips = [...box.querySelectorAll("[data-mention-ref]")].map((chip) => chip.textContent);
+    typeInComposer(box, "for the offsite");
+    pressInComposer(box, "Enter");
+    await settle();
+
+    assert.deepEqual(listed, ["Tomorrow → SaturdayOct 20, 2026 → Oct 24, 2026"]);
+    assert.deepEqual(chips, ["Tomorrow → Saturday"]);
+    const last = [...page.querySelectorAll(".chat-message")].at(-1);
+    const sent = last?.querySelector<HTMLElement>(".chat-words [data-mention-ref]");
+    assert.equal(sent?.dataset.kind, "date");
+    assert.equal(sent?.textContent, "Tomorrow → Saturday");
+    assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /for the offsite/u);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ word that reads as a date lists it before the members it matches, and words after a handle that name no date open no list", () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const page = mount();
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    typeInComposer(box, "@tomorrow");
+    const dated = offered(page);
+    pressInComposer(box, "Escape");
+    typeInComposer(box, " and @agent-1 please look");
+
+    assert.deepEqual(dated, ["TomorrowOct 20, 2026"]);
+    assert.equal(page.querySelector('[role="listbox"]'), null);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("where the editor's bundle could not be loaded, a date's words after an @ still offer it, and its pick is written and sent as its link", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, field, sent } = await plainChat();
+    writeInto(field, "ship it @next fri");
+    const listed = [...container.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+    pressInField(field, { key: "Enter" });
+    pressInField(field, { key: "Enter" });
+    await settle();
+
+    assert.deepEqual(listed, ["Oct 30Oct 30, 2026"]);
+    assert.deepEqual(sent, ["ship it [@Oct 30, 2026](luke://date/2026-10-30)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
