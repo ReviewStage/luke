@@ -17,11 +17,12 @@ import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
-import { memoryHistory } from "@luke/ui/history-adapter";
 import { Effect, type Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
+import { browserHistory } from "./browser-history";
+import { withLoadLink } from "./load-link";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
 
@@ -54,11 +55,12 @@ export async function mountWebApp(
   );
   try {
     const web = await runtime.runPromise(WebHostTag);
-    installAppBridge(web.bridge);
+    // The address the tab was opened at is said once, as the link it is.
+    installAppBridge(withLoadLink(web.bridge));
     installAppPlatform(web.platform);
     installShellBundles(WEB_BUNDLES);
-    // The panel's back and forward live in memory until the tab's address carries them.
-    installWindowHistory(memoryHistory());
+    // The panel's back and forward are the browser's own, each step in the tab's address.
+    installWindowHistory(browserHistory());
     await Effect.runPromise(appStateFirstRead);
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
