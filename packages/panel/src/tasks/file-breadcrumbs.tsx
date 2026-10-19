@@ -7,6 +7,7 @@ import {
   type Crumb,
   MENU_DROP,
 } from "@luke/ui";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -110,12 +111,13 @@ function CrumbTree({
   // Note that the box stands as tall as its words until the tree counts its rows.
   useLayoutEffect(() => {
     const bounds = opener.getBoundingClientRect();
-    const widest = window.innerWidth - TREE_BOUNDS.WIDTH - TREE_BOUNDS.MARGIN;
+    const seen = visibleViewport();
+    const widest = seen.right - TREE_BOUNDS.WIDTH - TREE_BOUNDS.MARGIN;
     const top = bounds.bottom + MENU_DROP;
-    const left = Math.max(TREE_BOUNDS.MARGIN, Math.min(bounds.left, widest));
+    const left = Math.max(seen.left + TREE_BOUNDS.MARGIN, Math.min(bounds.left, widest));
     if (rows === undefined) return setAt({ left, top });
     const fewest = ROW_HEIGHT + 2 * TREE_BOUNDS.INSET;
-    const room = window.innerHeight - top - TREE_BOUNDS.MARGIN;
+    const room = seen.bottom - top - TREE_BOUNDS.MARGIN;
     const wanted = Math.min(rows * ROW_HEIGHT + 2 * TREE_BOUNDS.INSET, TREE_BOUNDS.MAX_HEIGHT);
     setAt({ left, top, height: Math.max(fewest, Math.min(wanted, room)) });
   }, [opener, rows]);

@@ -10,6 +10,7 @@ import {
   type SettingsRowDensity,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { type ViewportBox, visibleViewport } from "@luke/ui/visible-viewport";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { ChangedMark } from "./marks.js";
@@ -98,14 +99,24 @@ function pickerPlacement(input: {
 /** The overflow values that make an element a scroller, which clips a menu running past its edge. */
 const SCROLLING_OVERFLOW: ReadonlySet<string> = new Set(["auto", "scroll"]);
 
-/** The edges of the nearest scroller above the chip, or of the window where none stands. */
-function roomAround(chip: HTMLElement) {
+/**
+ * The edges of the nearest scroller above the chip, cut to what can be seen
+ * of the window, or of what can be seen where none stands: on a phone the
+ * keyboard covers a scroller's foot.
+ */
+function roomAround(chip: HTMLElement): ViewportBox {
+  const seen = visibleViewport();
   for (let each = chip.parentElement; each !== null; each = each.parentElement) {
     if (!SCROLLING_OVERFLOW.has(getComputedStyle(each).overflowY)) continue;
     const bounds = each.getBoundingClientRect();
-    return { top: bounds.top, bottom: bounds.bottom, left: bounds.left, right: bounds.right };
+    return {
+      top: Math.max(bounds.top, seen.top),
+      bottom: Math.min(bounds.bottom, seen.bottom),
+      left: Math.max(bounds.left, seen.left),
+      right: Math.min(bounds.right, seen.right),
+    };
   }
-  return { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+  return seen;
 }
 
 /** The attributes the box holding a chip and its menu wears, which say where the menu hangs. */

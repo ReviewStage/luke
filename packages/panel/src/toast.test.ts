@@ -30,6 +30,7 @@ afterEach(() => {
   root = undefined;
   registry?.dispose();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
@@ -140,4 +141,30 @@ test("a toast with an action carries a Dismiss button the keyboard reaches, and 
   assert.deepEqual(afterPress, ["Nightly upgrade couldn't start"]);
   assert.ok(focused, "the Dismiss button takes focus");
   assert.deepEqual(standing(), []);
+});
+
+test("a phone's keyboard rising in a tall window leaves room for two toasts, setting the oldest aside until it goes down", () => {
+  const seen: EventTarget & { height: number } = Object.assign(new EventTarget(), {
+    offsetTop: 0,
+    offsetLeft: 0,
+    width: 390,
+    height: WINDOW.TALL,
+  });
+  vi.stubGlobal("visualViewport", seen);
+  mount(WINDOW.TALL);
+  act(() => show?.(persisting("Retry the webhook finished")));
+  act(() => show?.(persisting("Should withdrawn invitations count?")));
+  act(() => show?.(persisting("Nightly upgrade couldn't start")));
+
+  seen.height = WINDOW.SHORT;
+  act(() => seen.dispatchEvent(new Event("resize")));
+  const keyboardUp = standing();
+  seen.height = WINDOW.TALL;
+  act(() => seen.dispatchEvent(new Event("resize")));
+
+  assert.deepEqual(keyboardUp, [
+    "Should withdrawn invitations count?",
+    "Nightly upgrade couldn't start",
+  ]);
+  assert.equal(standing().length, 3);
 });

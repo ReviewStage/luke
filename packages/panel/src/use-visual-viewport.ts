@@ -14,6 +14,7 @@
  * the tokens' own `100vh` and no inset stand.
  */
 
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { useLayoutEffect } from "react";
 
 /** How far down the layout viewport the visible part begins, as a phone pans it to a focused field. */
@@ -38,9 +39,10 @@ export function useVisualViewport(): void {
       // A panned viewport (`offsetTop`) is seen, not covered: what stands
       // above it is the top's, and only what stands below its foot is the
       // keyboard's.
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      root.setProperty(VIEWPORT_TOP, `${viewport.offsetTop}px`);
-      root.setProperty(STAGE_HEIGHT, `${viewport.height}px`);
+      const seen = visibleViewport();
+      const inset = Math.max(0, window.innerHeight - seen.bottom);
+      root.setProperty(VIEWPORT_TOP, `${seen.top}px`);
+      root.setProperty(STAGE_HEIGHT, `${seen.bottom - seen.top}px`);
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
     };
     write();

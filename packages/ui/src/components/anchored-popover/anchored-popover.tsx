@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { visibleViewport } from "../../visible-viewport.js";
 import {
   type Box,
   POPOVER_ALIGN,
@@ -58,14 +59,15 @@ function placeStyle(
     : { ...edge, ...cssCustomProperties({ "--luke-popover-room": `${room}px` }) };
 }
 
-/** The room a popover inside `element` may fill: its marked room cut to the window, or the window. */
+/** The room a popover inside `element` may fill: its marked room cut to what can be seen of the window, or that. */
 function roomAround(element: HTMLElement): Box {
   const marked = element.closest(POPOVER_ROOM)?.getBoundingClientRect();
+  const seen = visibleViewport();
   return {
-    left: Math.max(marked?.left ?? 0, 0),
-    top: Math.max(marked?.top ?? 0, 0),
-    right: Math.min(marked?.right ?? window.innerWidth, window.innerWidth),
-    bottom: Math.min(marked?.bottom ?? window.innerHeight, window.innerHeight),
+    left: Math.max(marked?.left ?? seen.left, seen.left),
+    top: Math.max(marked?.top ?? seen.top, seen.top),
+    right: Math.min(marked?.right ?? seen.right, seen.right),
+    bottom: Math.min(marked?.bottom ?? seen.bottom, seen.bottom),
   };
 }
 
@@ -112,6 +114,12 @@ export function AnchoredPopover({
     const room = anchor.closest(POPOVER_ROOM);
     if (room !== null) observer.observe(room);
     window.addEventListener("resize", measure);
+    // Note that the visual viewport is heard too, because a phone's keyboard
+    // rising under a popover's field shrinks what is seen without resizing
+    // the window.
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", measure);
+    viewport?.addEventListener("scroll", measure);
     // Note that a scroll is heard while it is captured, because a scroll
     // does not bubble and the scroller that moved the anchor may be any box
     // around it.
@@ -119,6 +127,8 @@ export function AnchoredPopover({
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
+      viewport?.removeEventListener("resize", measure);
+      viewport?.removeEventListener("scroll", measure);
       document.removeEventListener("scroll", measure, { capture: true });
     };
   }, [align, width]);

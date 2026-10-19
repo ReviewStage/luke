@@ -46,6 +46,7 @@ import {
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
@@ -1338,7 +1339,8 @@ export function PlanCommentLayer({
       const box = range.getBoundingClientRect();
       const own = element.getBoundingClientRect();
       // Note that a finger's bubble stands under the words, because the system's own selection menu stands over them, unless the window ends first.
-      const below = coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= window.innerHeight;
+      const below =
+        coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= visibleViewport().bottom;
       const top = (below ? box.bottom : box.top) - own.top;
       // In the editor the words are measured through it, and its selection is left as it stands.
       if (editor !== undefined) {

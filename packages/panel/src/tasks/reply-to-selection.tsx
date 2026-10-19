@@ -1,6 +1,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
@@ -98,14 +99,14 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
+  const seen = visibleViewport();
   // Note that a finger's press stands under the words, clear of the system's menu over them, unless the window ends first.
-  const finger =
-    coarsePointerNow() && box.bottom + PRESS_GAP_TOUCH + PRESS_ROOM <= window.innerHeight;
-  const below = finger || box.top < PRESS_ROOM;
+  const finger = coarsePointerNow() && box.bottom + PRESS_GAP_TOUCH + PRESS_ROOM <= seen.bottom;
+  const below = finger || box.top - seen.top < PRESS_ROOM;
   const centre = box.left + box.width / 2;
   return {
     reply,
-    left: Math.min(Math.max(centre, PRESS_MARGIN), window.innerWidth - PRESS_MARGIN),
+    left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
     top: below ? box.bottom + (finger ? PRESS_GAP_TOUCH : PRESS_GAP) : box.top - PRESS_GAP,
     below,
   };
