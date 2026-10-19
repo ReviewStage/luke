@@ -460,7 +460,7 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows, which View settings' foot lands on", () => {
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
   const group =
     [...page.querySelectorAll("section[aria-labelledby]")].find(
