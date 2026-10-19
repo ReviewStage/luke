@@ -142,7 +142,10 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * ask, keeps the answer and its files as its own, deleted when the agent
  * posts the item again. An answer sent again under the key it was taken by
  * finds it taken, and one taken back takes its message with it and opens
- * the ask again. A member of the item's
+ * the ask again. A member may instead close the item without an answer,
+ * at the revision they were shown, which withdraws the ask it holds open
+ * with no reason, an agent's close always giving one, and moves no
+ * revision; a close taken back opens the ask again. A member of the item's
  * workspace, or the item's agent, writes a message on its thread at any
  * point, open or settled: the message and its files are written in one
  * write that moves the item's last change and nothing else of it, so every
@@ -423,6 +426,10 @@ interface AskStanding {
  * 5 leaves by closing the item without a word to the ask; then withdrawn
  * with the item's reason where the item closed on it, answered where the
  * item was answered on it, and replaced where the item holds another.
+ * Note that an ask withdrawn with no reason is a member's close without an
+ * answer, the item's `closedBy` naming the member while the close stands,
+ * because an agent's close always says why: a reader tells the two closes
+ * apart by the reason alone, as it tells a closed item's.
  */
 function standingAsk(ask: InboxReadAsk, messageId: string, item: AskStanding): InboxReadAsk {
   if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
@@ -1756,7 +1763,8 @@ function markdownBlocks(words: string): readonly InboxBlock[] {
  * The item closed by the member without an answer where it is open at the
  * revision named, under the key their client sent the close with, kept
  * where an answer's is, so a close sent again finds the one it made and a
- * close taken back finds its own; nothing where it is not open there.
+ * close taken back finds its own, and no ask held open; its id, or nothing
+ * where it is not open there.
  */
 const memberCloseItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -1766,7 +1774,7 @@ const memberCloseItem = SqlSchema.findOneOption({
     closeKey: Schema.String,
     now: Schema.Date,
   }),
-  Result: InboxRowSchema,
+  Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, itemId, revision, closeKey, now }) =>
     Database.use((db) =>
       db
@@ -1778,6 +1786,7 @@ const memberCloseItem = SqlSchema.findOneOption({
           closedReason: null,
           settledAt: now,
           updatedAt: now,
+          openAskMessageId: null,
         })
         .where(
           and(
@@ -1787,7 +1796,7 @@ const memberCloseItem = SqlSchema.findOneOption({
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
         )
-        .returning(inboxColumns(userId)),
+        .returning({ id: inboxItem.id }),
     ),
 });
 
@@ -2390,9 +2399,12 @@ export function withdrawInboxAnswer(
 
 /**
  * The item closed by a member without an answer, at the revision named and
- * under the key their client sent the close with, where it is open there;
- * nothing where it is not. The close is the member's own, so it leaves the
- * item read for them, as an answer does.
+ * under the key their client sent the close with, where it is open there,
+ * and the ask it held open withdrawn with no reason, which is how a
+ * member's close reads on the thread; nothing where it is not open there.
+ * The revision stays, as an answer's does. The close is the member's own,
+ * so it leaves the item read for them, as an answer does; no message is
+ * written for it.
  */
 export function closeInboxItemAsMember(
   userId: string,
@@ -2406,24 +2418,35 @@ export function closeInboxItemAsMember(
         const now = yield* DateTime.nowAsDate;
         const closed = yield* memberCloseItem({ userId, itemId, revision, closeKey, now });
         if (Option.isNone(closed)) return Option.none();
+        // Note that the reason is left out, because an agent's close always says why and a member's never does.
+        yield* settleOpenAsks({
+          itemId,
+          except: null,
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: null,
+        });
         yield* upsertRead({ userId, itemId });
-        // Note that the row is read again, because what `returning` projected was read before the marker moved.
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),
     ),
   );
 }
 
-/** A member's close taken back off the item it was taken on under the key, opening it again; nothing where that close no longer stands. */
+/**
+ * A member's close taken back off the item it was taken on under the key,
+ * opening it again and holding open again the ask it withdrew, where it
+ * withdrew one; its id, or nothing where that close no longer stands.
+ */
 const withdrawClose = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     itemId: Schema.String,
     closeKey: Schema.String,
+    openAsk: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
-  Result: InboxRowSchema,
-  execute: ({ userId, itemId, closeKey, now }) =>
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, itemId, closeKey, openAsk, now }) =>
     Database.use((db) =>
       db
         .update(inboxItem)
@@ -2433,6 +2456,7 @@ const withdrawClose = SqlSchema.findOneOption({
           closedBy: null,
           settledAt: null,
           updatedAt: now,
+          openAskMessageId: openAsk,
         })
         .where(
           and(
@@ -2444,11 +2468,42 @@ const withdrawClose = SqlSchema.findOneOption({
             isNull(inboxItem.closedReason),
           ),
         )
-        .returning(inboxColumns(userId)),
+        .returning({ id: inboxItem.id }),
     ),
 });
 
-/** The member's close taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */
+/** The item's latest message that asks, with its ask as it was kept. */
+const findLatestAsk = SqlSchema.findOneOption({
+  Request: Schema.Struct({ itemId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, ask: inboxReadAskSchema }),
+  execute: ({ itemId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxMessage.id, ask: inboxMessage.ask })
+        .from(inboxMessage)
+        .where(and(eq(inboxMessage.itemId, itemId), isNotNull(inboxMessage.ask)))
+        .orderBy(desc(inboxMessage.createdAt), desc(inboxMessage.id))
+        .limit(1),
+    ),
+});
+
+/**
+ * The ask a member's close withdrew, by its message: the item's latest ask,
+ * where it stands withdrawn with no reason. Note that no post can have
+ * come since the close, because a post clears the key the close stands
+ * under, so the latest ask is the one it withdrew.
+ */
+function askTheCloseWithdrew(itemId: string): InboxStoreEffect<string | null> {
+  return Effect.map(findLatestAsk({ itemId }), (latest) =>
+    Option.isSome(latest) &&
+    latest.value.ask.status === INBOX_ASK_STATUS.WITHDRAWN &&
+    latest.value.ask.withdrawnReason === undefined
+      ? latest.value.id
+      : null,
+  );
+}
+
+/** The member's close taken under the key withdrawn, the item open again and the ask it withdrew open again, where it still stands; nothing where it does not. */
 export function withdrawInboxClose(
   userId: string,
   itemId: string,
@@ -2458,8 +2513,16 @@ export function withdrawInboxClose(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
-        const withdrawn = yield* withdrawClose({ userId, itemId, closeKey, now });
+        const openAsk = yield* askTheCloseWithdrew(itemId);
+        const withdrawn = yield* withdrawClose({ userId, itemId, closeKey, openAsk, now });
         if (Option.isNone(withdrawn)) return Option.none();
+        if (openAsk !== null) {
+          yield* standAsk({
+            messageId: openAsk,
+            status: INBOX_ASK_STATUS.OPEN,
+            withdrawnReason: null,
+          });
+        }
         yield* upsertRead({ userId, itemId });
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),

@@ -35,6 +35,7 @@ import {
   answerInboxAsk,
   answerInboxItem,
   closeInboxItem,
+  closeInboxItemAsMember,
   INBOX_ASK_ANSWER,
   type InboxPostRefusal,
   postInboxItem,
@@ -45,6 +46,7 @@ import {
   replyInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
+  withdrawInboxClose,
 } from "../../inbox/inbox-store.js";
 
 /**
@@ -315,6 +317,56 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         }
 
         assert.deepEqual(seen, [1, 1, 1, 1, 1, 2, 3]);
+      }),
+  );
+
+  it.effect(
+    "a member's close withdraws the open ask with no reason and its agent's close with its own, the item naming the member and moving no revision for the member's, and a member's close taken back opens the ask again",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const { id } = posted(yield* postInboxItem(agent, REGION));
+        yield* later;
+        const closeKey = randomUUID();
+
+        const closed = Option.getOrThrow(yield* closeInboxItemAsMember(teammate, id, 1, closeKey));
+        assert.deepEqual(
+          [closed.status, closed.revision, closed.closedBy?.userId, closed.closedReason],
+          [INBOX_STATUS.CLOSED, 1, teammate, undefined],
+        );
+        assert.deepEqual(closed.thread?.[0]?.ask?.status, INBOX_ASK_STATUS.WITHDRAWN);
+        assert.equal(
+          closed.thread?.[0]?.ask?.withdrawnReason,
+          undefined,
+          "a member's close gives no reason",
+        );
+        assert.deepEqual([closed.thread?.length, closed.messages], [1, undefined]);
+
+        const reopened = Option.getOrThrow(yield* withdrawInboxClose(teammate, id, closeKey));
+        assert.deepEqual(asksOf(reopened), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, INBOX_ASK.DECIDE, INBOX_ASK_STATUS.OPEN],
+        ]);
+        assert.deepEqual([reopened.status, reopened.closedBy], [INBOX_STATUS.OPEN, undefined]);
+        const taken = Option.getOrThrow(
+          yield* answerInboxAsk(teammate, id, {
+            answers: {
+              ask: reopened.thread?.[0]?.id ?? "",
+              reply: INBOX_REPLY.CHOSE,
+              choices: ["iad1"],
+            },
+            text: "",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(taken.outcome, INBOX_ASK_ANSWER.TAKEN, "the ask opened again takes an answer");
+
+        yield* later;
+        const asked = posted(yield* postInboxItem(agent, REGION));
+        const byAgent = Option.getOrThrow(yield* closeInboxItem(agent, REGION.key, "Picked iad1."));
+        assert.deepEqual(byAgent.thread?.at(-1)?.ask?.withdrawnReason, "Picked iad1.");
+        assert.equal(byAgent.revision, asked.revision + 1);
       }),
   );
 
