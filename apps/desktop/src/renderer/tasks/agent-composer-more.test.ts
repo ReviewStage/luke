@@ -10,6 +10,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -25,7 +26,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { layContainersAt, shown } from "#testing/container-width";
 import { AgentComposer } from "./agent-composer";
-import { useAgentComposer } from "./use-agent-composer";
 
 /**
  * The agent's message box on a card too narrow for every press: the ⋯

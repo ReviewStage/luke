@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import { MenuRow } from "@luke/panel/settings/menu-row";
+import { LinesMenu } from "@luke/panel/tasks/file-menu";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { CopyIcon } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { LinesMenu } from "../tasks/file-menu";
 
 /**
  * The window's menus as the developer opens them: a ⋯ that drops its menu

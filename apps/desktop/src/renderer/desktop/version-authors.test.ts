@@ -6,6 +6,7 @@ import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -14,7 +15,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { HISTORY_READ } from "../tasks/use-plan-history";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 
 /**

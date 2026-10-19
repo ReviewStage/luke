@@ -29,6 +29,11 @@ import { imageFiles } from "@luke/panel/feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { AgentContextRing } from "@luke/panel/tasks/agent-context";
+import { contextHint } from "@luke/panel/tasks/agent-context-model";
+import { AgentModelChip } from "@luke/panel/tasks/agent-model-chip";
+import { BranchChip, type PublishedDoors } from "@luke/panel/tasks/agent-published";
+import { AgentServersButton, type AgentServersControl } from "@luke/panel/tasks/agent-servers";
 import { AttachedFileChips, attachmentChips } from "@luke/panel/tasks/attached-file-chips";
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
@@ -36,6 +41,8 @@ import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip
 import { ComposerQuoteView } from "@luke/panel/tasks/reply-to-selection";
 import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import type { AgentComposerControl } from "@luke/panel/tasks/use-agent-composer";
+import type { AgentModelControl } from "@luke/panel/tasks/use-agent-model";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
@@ -52,15 +59,8 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import { AgentContextRing } from "./agent-context";
-import { contextHint } from "./agent-context-model";
-import { AgentModelChip } from "./agent-model-chip";
-import { BranchChip, type PublishedDoors } from "./agent-published";
-import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { useComposerPickers } from "./composer-pickers";
 import { useMentionBox } from "./task-mentions";
-import type { AgentComposerControl } from "./use-agent-composer";
-import type { AgentModelControl } from "./use-agent-model";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.

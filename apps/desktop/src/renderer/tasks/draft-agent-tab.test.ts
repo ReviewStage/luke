@@ -18,10 +18,12 @@ import {
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { GitHubConnectProvider } from "@luke/panel/github-connect";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { startFailureNote } from "@luke/panel/tasks/coding-agent-model";
 import {
   type RepositoryRemedyDoors,
   RepositoryRemedyProvider,
 } from "@luke/panel/tasks/repository-remedy";
+import type { AgentDraft, CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -36,9 +38,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * A draft agent's first message through the bridge the host answers: a

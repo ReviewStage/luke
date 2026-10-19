@@ -4,10 +4,18 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import {
+  archiveAnswered,
+  archiveItem,
+  archiveQuestion,
+  ISSUE_ACTIONS_LABEL,
+} from "@luke/panel/desktop/issue-actions";
 import { PriorityMenu, StatusMenu } from "@luke/panel/desktop/issue-pickers";
+import { IssueWorkRow, useStartItems } from "@luke/panel/desktop/issue-work";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { ExperimentTag } from "@luke/panel/experiment-marks";
 import { usePerson } from "@luke/panel/member-directory";
+import { DocumentByline, DocumentScroll } from "@luke/panel/tasks/document-frame";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { Tooltip } from "@luke/panel/tooltip";
@@ -27,15 +35,7 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
-import {
-  archiveAnswered,
-  archiveItem,
-  archiveQuestion,
-  ISSUE_ACTIONS_LABEL,
-} from "./issue-actions";
 import { IssueDescription } from "./issue-description";
-import { IssueWorkRow, useStartItems } from "./issue-work";
 
 /**
  * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.

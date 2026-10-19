@@ -1,7 +1,16 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "@luke/panel/actor-ref";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
+import {
+  holderName,
+  INBOX_HOLDER,
+  type InboxListed,
+  NEEDS_YOU,
+  needsReader,
+  waitsOnReader,
+} from "@luke/panel/tasks/inbox-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
@@ -24,16 +33,7 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
-import {
-  holderName,
-  INBOX_HOLDER,
-  type InboxListed,
-  NEEDS_YOU,
-  needsReader,
-  waitsOnReader,
-} from "../tasks/inbox-model";
 import { NewTaskComposer } from "../tasks/new-task-composer";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";

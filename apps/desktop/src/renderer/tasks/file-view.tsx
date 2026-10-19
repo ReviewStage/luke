@@ -10,6 +10,19 @@ import {
 import { type PaneSlide, usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { ReadFolder } from "@luke/panel/file-tree/contract";
 import { FileBreadcrumbs } from "@luke/panel/tasks/file-breadcrumbs";
+import { FileMenu } from "@luke/panel/tasks/file-menu";
+import {
+  FILE_READ,
+  type FileRead,
+  fileUrl,
+  notesOf,
+  shortCommit,
+  WHOLE_TEXT,
+  type WholeText,
+  wholeTextOf,
+} from "@luke/panel/tasks/file-tab-model";
+import { FileTreePane } from "@luke/panel/tasks/file-tree-pane";
+import { keptListings, type ListFolder, listingOf } from "@luke/panel/tasks/folder-listings";
 import {
   FILE_HISTORY_STEP,
   type FileHistoryStep,
@@ -26,21 +39,8 @@ import {
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { FileMenu } from "./file-menu";
 import type { FileNotes } from "./file-note";
 import { FileTab, type ReadFileWindow } from "./file-tab";
-import {
-  FILE_READ,
-  type FileRead,
-  fileUrl,
-  notesOf,
-  shortCommit,
-  WHOLE_TEXT,
-  type WholeText,
-  wholeTextOf,
-} from "./file-tab-model";
-import { FileTreePane } from "./file-tree-pane";
-import { keptListings, type ListFolder, listingOf } from "./folder-listings";
 
 /**
  * file-view.tsx -- a File tab with the task's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.

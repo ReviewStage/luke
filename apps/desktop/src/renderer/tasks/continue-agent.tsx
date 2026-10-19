@@ -1,6 +1,10 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { ActorMark } from "@luke/panel/actor-ref";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "@luke/panel/composer-drafts";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { CONTINUE_LABEL, CONTINUED_IN } from "@luke/panel/tasks/coding-agent-model";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import {
   BANNER_LOOK,
   Banner,
@@ -16,13 +20,9 @@ import {
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
-import { ActorMark } from "../actor-ref";
-import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { useAgentArchive } from "../desktop/agent-archive";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
-import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model";
 import { useContinueDoor } from "./fork-action";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it.

@@ -12,6 +12,18 @@ import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import { RetryButton } from "@luke/panel/retry-button";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { AgentTabCard } from "@luke/panel/tasks/agent-tab-card";
+import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import type { AgentFork } from "@luke/panel/tasks/fork-model";
+import { NEEDS_YOU } from "@luke/panel/tasks/inbox-model";
+import { agentEndMark, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
+import type { ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import {
+  agentTranscript,
+  readWholeTranscript,
+  type TranscriptCopy,
+} from "@luke/panel/tasks/transcript-copy";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "@luke/panel/tasks/use-main-tabs";
 import type { ColumnPinnableTab, PinnedTab } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -21,21 +33,9 @@ import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
 import { agentCardReading } from "../tasks/agent-ref";
 import { AgentTab } from "../tasks/agent-tab";
-import { AgentTabCard } from "../tasks/agent-tab-card";
 import type { ChatNoticeDoors } from "../tasks/chat-notice";
-import { agentTabLabel } from "../tasks/coding-agent-model";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action";
-import type { AgentFork } from "../tasks/fork-model";
-import { NEEDS_YOU } from "../tasks/inbox-model";
-import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
-import type { ToolTarget } from "../tasks/tool-call-model";
-import {
-  agentTranscript,
-  readWholeTranscript,
-  type TranscriptCopy,
-} from "../tasks/transcript-copy";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { useAgentArchive } from "./agent-archive";
 import type { TaskCards } from "./side-panel";
 import {

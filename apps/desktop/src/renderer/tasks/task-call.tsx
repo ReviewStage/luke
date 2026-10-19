@@ -13,8 +13,17 @@ import {
 } from "@luke/panel/ai-elements/conversation";
 import { usePerson } from "@luke/panel/member-directory";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { CallCheckpoint, CallEnded } from "@luke/panel/tasks/call-card";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { REVEAL_MARK, useRevealInLog } from "@luke/panel/tasks/reveal-in-log";
+import {
+  type TaskConversation,
+  type WorkTurnRow,
+  workerJobs,
+  workFailed,
+  workRowsOf,
+} from "@luke/panel/tasks/work-model";
+import { WorkingLine } from "@luke/panel/tasks/working-time";
 import { useAppState } from "@luke/panel/use-app-state";
 import {
   BUTTON_VARIANT,
@@ -46,16 +55,7 @@ import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
-import { CallCheckpoint, CallEnded } from "./call-card";
 import { TranscriptNote } from "./transcript-blocks";
-import {
-  type TaskConversation,
-  type WorkTurnRow,
-  workerJobs,
-  workFailed,
-  workRowsOf,
-} from "./work-model";
-import { WorkingLine } from "./working-time";
 
 /**
  * task-call.tsx -- the open task's Call tab: its calls with Luke as one thread, read as a coding agent's tab reads, Luke's work drawn under the line that asked for it.

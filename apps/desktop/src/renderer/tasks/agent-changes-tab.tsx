@@ -21,6 +21,14 @@ import {
   FILE_NOTE_LINE,
 } from "@luke/panel/diff-view/contract";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { LinesChanged } from "@luke/panel/tasks/agent-published";
+import {
+  type ChangesList,
+  FileHead,
+  FOLD_CHORD,
+  LIST_WORDS,
+  useChangesList,
+} from "@luke/panel/tasks/changes-list";
 import {
   CHANGES_WORDS,
   changedFolders,
@@ -35,11 +43,19 @@ import {
   STATUS_WORDS,
   threadsOn,
 } from "@luke/panel/tasks/changes-model";
+import { agentStillWriting, pullRequestNumberLabel } from "@luke/panel/tasks/coding-agent-model";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "@luke/panel/tasks/diff-list";
 import { DiffSettingsButton } from "@luke/panel/tasks/diff-settings";
 import { useDiffLook, useSplitRoom } from "@luke/panel/tasks/file-diff";
+import { LinesMenu, useSaveText } from "@luke/panel/tasks/file-menu";
+import { FileTreePane } from "@luke/panel/tasks/file-tree-pane";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { ImageDiff, type ImageSides, imageDrawable } from "@luke/panel/tasks/image-diff";
+import { PullRequestMark } from "@luke/panel/tasks/pull-request-mark";
+import { OpenedBy, ReviewersLine } from "@luke/panel/tasks/pull-request-people";
+import { PullRequestWriteNote } from "@luke/panel/tasks/pull-request-writes";
+import type { CodingAgentsControl, HeldPeople } from "@luke/panel/tasks/use-coding-agents";
+import { useViewedFiles } from "@luke/panel/tasks/viewed-files";
 import { Tooltip } from "@luke/panel/tooltip";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -68,19 +84,9 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
-import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
-import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
-import { LinesMenu, useSaveText } from "./file-menu";
-import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
 import { LineComment, type PendingReview } from "./line-comment";
-import { PullRequestMark } from "./pull-request-mark";
-import { OpenedBy, ReviewersLine } from "./pull-request-people";
-import { PullRequestWriteNote } from "./pull-request-writes";
-import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
-import { useViewedFiles } from "./viewed-files";
 
 /**
  * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.

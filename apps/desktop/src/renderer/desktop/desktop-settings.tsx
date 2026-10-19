@@ -17,6 +17,7 @@ import {
   shownSettingsPageGroups,
 } from "@luke/panel/settings/pages";
 import { pageResetControl } from "@luke/panel/settings/reset";
+import { shownWorkspace } from "@luke/panel/settings/workspace-page";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
 import {
   landOnSettingsRow,
@@ -57,7 +58,6 @@ import {
   settingsRowsInput,
   voicePageAttention,
 } from "../settings/settings-panel";
-import { shownWorkspace } from "../settings/workspace-page";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 
 /** What a page's row's right-click menu is called. */

@@ -11,6 +11,9 @@ import { FindScope } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import { useCodingAgents } from "@luke/panel/tasks/use-coding-agents";
 import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { OpenHereProvider, openPullRequestsHere } from "@luke/panel/tasks/use-open-link";
 import { PULL_REQUEST_VIEW } from "@luke/panel/tasks/use-side-panel";
@@ -25,7 +28,6 @@ import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePageWorkspace } from "../links-at-hand";
-import { agentTabLabel } from "../tasks/coding-agent-model";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
   TaskMentions,
@@ -33,8 +35,6 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
-import { useCodingAgents } from "../tasks/use-coding-agents";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { AgentPane } from "./main-tabs";
 import {

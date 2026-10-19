@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { WorkspacePage } from "@luke/panel/settings/workspace-page";
 import { followSettingsLink, useSettingsWorkspace } from "@luke/panel/settings-link";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
@@ -11,7 +12,6 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settin
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { WorkspacePage } from "./settings/workspace-page";
 
 /**
  * A Settings link followed as the window follows it: Settings, then the

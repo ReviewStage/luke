@@ -1,4 +1,5 @@
 import { MarkdownMessage } from "@luke/panel/markdown-message";
+import type { FileNote } from "@luke/panel/tasks/file-tab-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { agoText, useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
@@ -17,7 +18,6 @@ import {
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { CodeXmlIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
-import type { FileNote } from "./file-tab-model";
 import { useMentionLink } from "./task-mentions";
 
 /**

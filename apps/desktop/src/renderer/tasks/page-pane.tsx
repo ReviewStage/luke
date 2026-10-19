@@ -4,6 +4,7 @@ import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
 import { FindScope } from "@luke/panel/find-in-tab";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { LinesMenu } from "@luke/panel/tasks/file-menu";
 import { Tooltip } from "@luke/panel/tooltip";
 import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -16,7 +17,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CodeLineRows } from "./code-pane";
-import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 
 /**

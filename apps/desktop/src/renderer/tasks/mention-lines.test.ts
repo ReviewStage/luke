@@ -5,6 +5,7 @@ import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -22,7 +23,6 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { AgentComposer } from "./agent-composer";
 import { FileTab } from "./file-tab";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
  * A File tab's lines mentioned in the agent's message box on the same task's

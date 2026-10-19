@@ -1,6 +1,6 @@
 import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { listedIn } from "@luke/panel/tasks/inbox-model";
 import { type ReactNode, useCallback } from "react";
-import { listedIn } from "../tasks/inbox-model";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 
 /**

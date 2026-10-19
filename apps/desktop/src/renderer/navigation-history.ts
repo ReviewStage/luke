@@ -38,6 +38,7 @@
 
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import type { HistorySpot } from "@luke/panel/tasks/use-plan-history";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
@@ -50,7 +51,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import type { HistorySpot } from "./tasks/use-plan-history";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,

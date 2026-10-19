@@ -1,12 +1,12 @@
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
-import { useState } from "react";
-import { MarkdownField } from "./markdown-field";
 import {
   PullRequestWriteNote,
   type PullRequestWrites,
   usePullRequestWrites,
-} from "./pull-request-writes";
+} from "@luke/panel/tasks/pull-request-writes";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { useState } from "react";
+import { MarkdownField } from "./markdown-field";
 
 /**
  * pull-request-comment-box.tsx -- the comment box at the foot of an agent's pull request's Conversation, as GitHub's own: a new comment on the pull request itself, in Markdown.

@@ -4,6 +4,19 @@ import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { useFindOpen } from "@luke/panel/find-in-tab";
 import { BusyLabel, SpinnerRegion } from "@luke/panel/spinner";
+import {
+  FILE_READ,
+  type FileLines,
+  type FileRead,
+  type FileWindow,
+  holdsLines,
+  lastLineOf,
+  refusalLine,
+  refusalPasses,
+  windowAt,
+  windowUnread,
+  withWindow,
+} from "@luke/panel/tasks/file-tab-model";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import type { OpenFile } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -19,19 +32,6 @@ import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
-import {
-  FILE_READ,
-  type FileLines,
-  type FileRead,
-  type FileWindow,
-  holdsLines,
-  lastLineOf,
-  refusalLine,
-  refusalPasses,
-  windowAt,
-  windowUnread,
-  withWindow,
-} from "./file-tab-model";
 import { useMentionDrop, useTaskMentions } from "./task-mentions";
 
 /**

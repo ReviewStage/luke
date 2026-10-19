@@ -1,8 +1,11 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/task-wire";
+import { ActorRef, LukeCard, PersonCard } from "@luke/panel/actor-ref";
 import { useMemberDirectory } from "@luke/panel/member-directory";
 import { GLYPH_STATE, type GlyphState } from "@luke/panel/state-glyph";
+import { agentGlyphState, providerOf } from "@luke/panel/tasks/coding-agent-model";
 import { agoText } from "@luke/panel/tasks/task-time";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -19,10 +22,7 @@ import {
   latestActivity,
 } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
-import { ActorRef, LukeCard, PersonCard } from "../actor-ref";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref";
-import { agentGlyphState, providerOf } from "./coding-agent-model";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.

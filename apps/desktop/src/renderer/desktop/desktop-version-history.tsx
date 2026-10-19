@@ -5,6 +5,7 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACTOR_SIZE, ActorMark, LeftWords } from "@luke/panel/actor-ref";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { type CallCardInput, ColumnFoot } from "@luke/panel/call/call-card";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
@@ -13,8 +14,29 @@ import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { Shortcut } from "@luke/panel/shortcut";
 import { BusyLabel } from "@luke/panel/spinner";
+import { DocumentScroll } from "@luke/panel/tasks/document-frame";
+import {
+  type ChangedSection,
+  changedSections,
+  type HistoryReader,
+  opensSections,
+  type RevisionSource,
+  revisionAuthorOf,
+  revisionSource,
+  revisionSummary,
+  sectionName,
+  sourceLabel,
+  VERSION_CHANGE,
+  versionDiff,
+} from "@luke/panel/tasks/plan-history-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import {
+  HISTORY_READ,
+  type OpenedSections,
+  type PlanHistoryControl,
+  type ViewedVersion,
+} from "@luke/panel/tasks/use-plan-history";
 import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
 import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -44,31 +66,9 @@ import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../tasks/code-pane";
-import { DocumentScroll } from "../tasks/document-frame";
-import {
-  type ChangedSection,
-  changedSections,
-  type HistoryReader,
-  opensSections,
-  type RevisionSource,
-  revisionAuthorOf,
-  revisionSource,
-  revisionSummary,
-  sectionName,
-  sourceLabel,
-  VERSION_CHANGE,
-  versionDiff,
-} from "../tasks/plan-history-model";
 import type { MentionedTask } from "../tasks/task-mentions";
-import {
-  HISTORY_READ,
-  type OpenedSections,
-  type PlanHistoryControl,
-  type ViewedVersion,
-} from "../tasks/use-plan-history";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";

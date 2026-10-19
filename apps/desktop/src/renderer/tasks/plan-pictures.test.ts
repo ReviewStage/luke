@@ -5,6 +5,7 @@ import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MarkdownMessage } from "@luke/panel/markdown-message";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -18,7 +19,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { PlanBody } from "./plan-body";
-import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
 
 /**

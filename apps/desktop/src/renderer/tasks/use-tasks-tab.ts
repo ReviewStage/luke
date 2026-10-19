@@ -37,6 +37,7 @@ import {
 import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
+import { useChosenWorkspace } from "@luke/panel/desktop/chosen-workspace";
 import type { FixtureChat, Staged } from "@luke/panel/tasks/chat-fixture";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
@@ -46,6 +47,12 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "@luke/panel/tasks/closed-tabs";
+import {
+  startFailureNote as agentStartFailureNote,
+  agentTabLabel,
+  choiceRequest,
+} from "@luke/panel/tasks/coding-agent-model";
+import { REVISION_SOURCE, type RevisionSource } from "@luke/panel/tasks/plan-history-model";
 import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
 import {
   FIXTURE_TASKS_CALL,
@@ -53,7 +60,10 @@ import {
   fixtureSidePanel,
   fixtureTasksView,
 } from "@luke/panel/tasks/tasks-fixture";
+import type { TranscriptReader } from "@luke/panel/tasks/use-agent-transcript";
+import { type CodingAgentsControl, useCodingAgents } from "@luke/panel/tasks/use-coding-agents";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
+import { useLastTask } from "@luke/panel/tasks/use-last-task";
 import {
   MAIN_TAB,
   type MainTab,
@@ -61,6 +71,12 @@ import {
   useMainTabs,
 } from "@luke/panel/tasks/use-main-tabs";
 import { usePanelArrivals } from "@luke/panel/tasks/use-panel-arrivals";
+import {
+  type HistorySpot,
+  type PlanHistoryControl,
+  type PlanHistorySource,
+  usePlanHistory,
+} from "@luke/panel/tasks/use-plan-history";
 import {
   drawsChanges,
   drawsMacTerminal,
@@ -74,6 +90,13 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "@luke/panel/tasks/use-side-panel";
+import { useWorkspaceChat } from "@luke/panel/tasks/use-workspace-chat";
+import {
+  agentListCallIds,
+  sidebarCallIds,
+  workerCallIds,
+  workRowsOf,
+} from "@luke/panel/tasks/work-model";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
@@ -163,27 +186,9 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import {
-  startFailureNote as agentStartFailureNote,
-  agentTabLabel,
-  choiceRequest,
-} from "./coding-agent-model";
 import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
-import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
-import type { TranscriptReader } from "./use-agent-transcript";
-import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { useLastTask } from "./use-last-task";
-import {
-  type HistorySpot,
-  type PlanHistoryControl,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "./use-plan-history";
-import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {

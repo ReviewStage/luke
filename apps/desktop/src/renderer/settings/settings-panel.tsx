@@ -1,13 +1,24 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { AccountSection } from "@luke/panel/settings/account-section";
 import { AppearanceSection } from "@luke/panel/settings/appearance-page";
+import { CodingAgentsPage } from "@luke/panel/settings/coding-agents-page";
 import { ExperimentalPage } from "@luke/panel/settings/experimental-page";
+import {
+  type IntegrationsFilter,
+  IntegrationsSection,
+} from "@luke/panel/settings/integrations-page";
 import { MacCommandsSection } from "@luke/panel/settings/mac-commands-section";
 import { NotificationsSection } from "@luke/panel/settings/notifications-section";
 import { WindowShortcutSections } from "@luke/panel/settings/shortcuts-page";
 import { UpdatesSection } from "@luke/panel/settings/updates";
 import { ShortcutSection } from "@luke/panel/settings/voice-keys";
 import { VoiceSection } from "@luke/panel/settings/voice-page";
+import {
+  shownWorkspace,
+  WorkspacePage,
+  type WorkspaceSettingsControl,
+} from "@luke/panel/settings/workspace-page";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
 import type { SettingsSearchInput } from "@luke/panel/settings-search";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
@@ -22,10 +33,6 @@ import type {
   UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
-import { AccountSection } from "./account-section";
-import { CodingAgentsPage } from "./coding-agents-page";
-import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
-import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
  * The settings tab, as the grouped controls that draw it. A preference write

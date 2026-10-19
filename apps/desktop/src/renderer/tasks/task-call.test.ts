@@ -10,6 +10,8 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -39,8 +41,6 @@ import { taskCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";
 import { CodeCardHeader } from "./code-pane";
 import { TaskCall } from "./task-call";
-import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import { workRowsOf } from "./work-model";
 
 /** The Call tab as a test draws it: what it is given over a task with no brain turn, which reads no older page and opens nothing. */
 function callTab(

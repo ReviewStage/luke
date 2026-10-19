@@ -23,8 +23,17 @@ import { AttachedFileChips, attachmentChips } from "@luke/panel/tasks/attached-f
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
 import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip";
+import {
+  type InboxDraft,
+  type InboxMissing,
+  inboxMessageOf,
+  inboxMissing,
+  inboxReply,
+  pickedWords,
+} from "@luke/panel/tasks/inbox-model";
 import { ComposerQuoteView, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import type { TaskInboxControl } from "@luke/panel/tasks/use-task-inbox";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
@@ -40,15 +49,6 @@ import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
 import { useComposerPickers } from "./composer-pickers";
-import {
-  type InboxDraft,
-  type InboxMissing,
-  inboxMessageOf,
-  inboxMissing,
-  inboxReply,
-  pickedWords,
-} from "./inbox-model";
-import type { TaskInboxControl } from "./use-task-inbox";
 
 /**
  * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its one Send at its foot, and writing a message on a settled one's thread.

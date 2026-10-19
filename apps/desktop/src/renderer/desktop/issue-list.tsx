@@ -4,6 +4,7 @@ import {
   issueListGroups,
 } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
+import { IssueActions } from "@luke/panel/desktop/issue-actions";
 import { PriorityMark, StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
@@ -18,7 +19,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 
 /**

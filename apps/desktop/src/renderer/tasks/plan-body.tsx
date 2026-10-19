@@ -8,10 +8,12 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { ActorStack } from "@luke/panel/actor-ref";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "@luke/panel/markdown-message";
 import { useCreator } from "@luke/panel/member-directory";
+import { DocumentByline, DocumentScroll } from "@luke/panel/tasks/document-frame";
 import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
 import {
   copyTaskLinkItem,
@@ -44,8 +46,6 @@ import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui"
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActorStack } from "../actor-ref";
-import { DocumentByline, DocumentScroll } from "./document-frame";
 import {
   type EditAgents,
   EditedBy,

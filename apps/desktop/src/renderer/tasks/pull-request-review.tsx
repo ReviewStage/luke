@@ -5,6 +5,10 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { PopoverPanel } from "@luke/panel/popover-panel";
 import {
+  PullRequestWriteNote,
+  type PullRequestWrites,
+} from "@luke/panel/tasks/pull-request-writes";
+import {
   AnchoredPopover,
   BUTTON_VARIANT,
   Button,
@@ -21,7 +25,6 @@ import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { PendingReview } from "./line-comment";
 import { MarkdownField } from "./markdown-field";
-import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
 
 /**
  * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the bar's Review press and the panel it opens, as stage-cli's review panel.

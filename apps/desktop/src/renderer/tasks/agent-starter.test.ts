@@ -17,6 +17,14 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { TOOL_BLOCK, TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import {
+  agentActor,
+  endLineParts,
+  endLineReason,
+  lineSender,
+  macOwnerOf,
+  teammateStarter,
+} from "@luke/panel/tasks/coding-agent-model";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
@@ -25,14 +33,6 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
-import {
-  agentActor,
-  endLineParts,
-  endLineReason,
-  lineSender,
-  macOwnerOf,
-  teammateStarter,
-} from "./coding-agent-model";
 import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks";
 
 /**

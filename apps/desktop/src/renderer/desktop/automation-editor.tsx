@@ -66,6 +66,8 @@ import { useAppCommand } from "@luke/panel/app-commands";
 import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { OWNER_MARK_SIZE, OwnerMark } from "@luke/panel/desktop/automation-owner";
+import { type RunsPanel, useRunsPanel } from "@luke/panel/desktop/folded-groups";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
 import { useAutomationRuns } from "@luke/panel/desktop/use-automation-runs";
 import {
@@ -81,6 +83,9 @@ import { Picker, PickerRow } from "@luke/panel/settings/picker-row";
 import { SelectRow } from "@luke/panel/settings/select-row";
 import { SwitchRow } from "@luke/panel/settings/switch-row";
 import { Spinner } from "@luke/panel/spinner";
+import { AgentModelChip } from "@luke/panel/tasks/agent-model-chip";
+import { AgentServersButton } from "@luke/panel/tasks/agent-servers";
+import { ModelMenu } from "@luke/panel/tasks/model-menu";
 import {
   CHIP_PLACE,
   RepositoryChip,
@@ -134,13 +139,8 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { AgentModelChip } from "../tasks/agent-model-chip";
-import { AgentServersButton } from "../tasks/agent-servers";
-import { ModelMenu } from "../tasks/model-menu";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
-import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
-import { type RunsPanel, useRunsPanel } from "./folded-groups";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.

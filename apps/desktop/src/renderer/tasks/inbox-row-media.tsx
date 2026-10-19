@@ -2,11 +2,11 @@ import type { PageLine } from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { INBOX_MEDIA, type InboxMedia } from "@luke/panel/tasks/inbox-model";
+import type { InboxImage } from "@luke/panel/tasks/use-task-inbox";
 import { AppWindowIcon, ImageOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { INBOX_MEDIA, type InboxMedia } from "./inbox-model";
 import { PAGE_SANDBOX } from "./page-pane";
-import type { InboxImage } from "./use-task-inbox";
 
 /**
  * inbox-row-media.tsx -- the media an Inbox row shows under its preview, where the window's Inbox shows them: each picture its item carries and each page it names, drawn small.
