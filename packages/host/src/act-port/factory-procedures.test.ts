@@ -95,12 +95,12 @@ afterEach(closeWindowPorts);
 /** A window's act port over a host answering each workspace's world, and the workspaces it was asked for. */
 function windowPort(
   actor: ActSender,
-  options: { trusted?: boolean; answer?: (workspaceId: string) => unknown } = {},
+  options: { trusted?: boolean; answer?: (workspaceId: string) => FactoryWorldView } = {},
 ) {
   const asked: string[] = [];
   const answer =
     options.answer ??
-    ((workspaceId: string) => {
+    ((workspaceId: string): FactoryWorldView => {
       if (workspaceId === BUSY_WORKSPACE) return BUSY;
       if (workspaceId === QUIET_WORKSPACE) return QUIET;
       // An answer no service sends, a zone of negative bytes, which the kind's schema refuses.
@@ -119,8 +119,7 @@ function windowPort(
           factoryWorld: ({ workspaceId }) =>
             Effect.sync(() => {
               asked.push(workspaceId);
-              // SAFETY: a fake answering what its test hands it; the port's output schema checks it.
-              return answer(workspaceId) as FactoryWorldView;
+              return answer(workspaceId);
             }),
         },
       },

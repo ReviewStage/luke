@@ -10,7 +10,7 @@ import {
 } from "@luke/features/integration-wire";
 import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
-import { type ActPortClient, INTEGRATION_ACT_KIND } from "../contract/index.js";
+import { type ActPortClient, INTEGRATION_ACT_KIND, type PortActResult } from "../contract/index.js";
 import type { IntegrationProceduresDependencies } from "./index.js";
 import {
   CALL,
@@ -58,7 +58,10 @@ const REFUSAL = {
 type Kind = keyof typeof REFUSAL;
 
 /** One call of each kind, as a panel makes it. */
-const ACTS: readonly { kind: Kind; call: (client: ActPortClient) => Promise<unknown> }[] = [
+const ACTS: readonly {
+  kind: Kind;
+  call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
+}[] = [
   {
     kind: INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS,
     call: (client) => client[INTEGRATION_ACT_KIND.INTEGRATIONS_STATUS](),

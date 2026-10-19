@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
 import { Effect } from "effect";
-import { type ActPortClient, AUTOMATION_ACT_KIND } from "../contract/index.js";
+import {
+  type ActPortClient,
+  AUTOMATION_ACT_KIND,
+  type PortActPayload,
+  type PortActResult,
+} from "../contract/index.js";
 import type { AutomationProceduresDependencies } from "./index.js";
 import {
   CALL,
@@ -42,8 +47,8 @@ type Kind = keyof typeof REFUSAL;
 const ACTS: readonly {
   kind: Kind;
   host: string;
-  payload: unknown;
-  call: (client: ActPortClient) => Promise<unknown>;
+  payload: PortActPayload<Kind>;
+  call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
 }[] = [
   {
     kind: AUTOMATION_ACT_KIND.AUTOMATIONS_LIST,
@@ -158,11 +163,10 @@ it("a panel's ask reaches the host with its payload, and the host's answer is th
 
 it("a payload carrying a key its kind does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
-  const runs = client[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS] as (
-    payload: unknown,
-  ) => Promise<unknown>;
+  // A payload held in a binding, as a window built it, so the compiler leaves its extra key be.
+  const payload = { automationId: AUTOMATION_ID, extra: true };
 
-  assert.deepEqual(await settled(() => runs({ automationId: AUTOMATION_ID, extra: true })), {
+  assert.deepEqual(await settled(() => client[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS](payload)), {
     refused: REFUSAL[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS],
   });
   assert.deepEqual(asked, []);

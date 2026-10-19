@@ -17,17 +17,29 @@ export const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, cal
 export const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 export const CALL: ActSender = { ...PANEL, panel: false, call: true };
 
+/** A host no call reaches: any ask of it fails the test where it is made. */
+function unreachedHost<Host extends object>(): Host {
+  // SAFETY: every member read throws, so no caller ever holds a member this type promises.
+  return new Proxy(
+    {},
+    {
+      get: (_target, name) => {
+        throw new Error(`A test reached ${String(name)}, of a domain it does not test.`);
+      },
+    },
+  ) as Host;
+}
+
 /**
  * Every domain's dependencies, none of them reachable: a test spreads its
- * own domain's over it, and a call to any other domain's procedure throws.
+ * own domain's over it, and an ask of any other domain's host throws.
  */
-// SAFETY: a domain's procedures read their dependencies only when called, and a test calls only its own domain's.
-export const UNREACHED_DEPENDENCIES = {
-  automations: {},
-  factory: {},
-  integrations: {},
-  issues: {},
-} as unknown as ActPortDependencies;
+export const UNREACHED_DEPENDENCIES: ActPortDependencies = {
+  automations: { host: unreachedHost() },
+  factory: { host: unreachedHost() },
+  integrations: { host: unreachedHost() },
+  issues: { host: unreachedHost() },
+};
 
 const opened: MessagePort[] = [];
 
@@ -59,9 +71,9 @@ export function closeWindowPorts(): void {
 }
 
 /** One call on the port, settled to its answer or the sentence of its refusal. */
-export async function settled(
-  call: () => Promise<unknown>,
-): Promise<{ answer: unknown } | { refused: string }> {
+export async function settled<Answer>(
+  call: () => Promise<Answer>,
+): Promise<{ answer: Answer } | { refused: string }> {
   try {
     return { answer: await call() };
   } catch (error) {
