@@ -1582,23 +1582,32 @@
   color: var(--luke-color-working);
 }
 
-/* The Files changed bar's diff settings (diff-settings.tsx): the button,
+/* The Files changed bar's View settings (view-settings.tsx): the button,
    and under it `@luke/ui`'s popover panel, its rows the settings page's
-   own, set apart in groups by a rule. */
-.diff-settings {
+   own, in groups under their names, each set apart by a rule, and a foot
+   that opens Settings. */
+.view-settings {
   position: relative;
   display: flex;
 }
 
-.diff-settings-group {
+.view-settings-group {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-4);
 }
 
-.diff-settings-group + .diff-settings-group {
+.view-settings-group + .view-settings-group,
+.view-settings-foot {
   padding-top: var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
+}
+
+.view-settings-heading {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 /* A Files changed list of diffs (diff-list.tsx), or a review thread's lines

@@ -88,7 +88,6 @@ import {
 import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list.js";
-import { DiffSettingsButton } from "./diff-settings.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
 import { LinesMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
@@ -102,6 +101,7 @@ import { PullRequestMark } from "./pull-request-mark.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
+import { ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles } from "./viewed-files.js";
 
 /**
@@ -130,7 +130,7 @@ import { useViewedFiles } from "./viewed-files.js";
  * the list, as breadcrumbs, whose trees list only the changed files, the
  * same letter and lines quietly beside, then the pull request's files on
  * GitHub, the diff settings, every one stage-cli offers in a popover
- * (`diff-settings.tsx`), Collapse all or Expand all, the ⋯ (the file's name
+ * (`view-settings.tsx`), Collapse all or Expand all, the ⋯ (the file's name
  * or its patch copied, the patch saved, the changes read again, the File
  * tabs' two settings, and two of the diff's as quick checks: Split view,
  * offered dimmed while the list is too narrow to split (`file-diff.tsx`),
@@ -1213,7 +1213,7 @@ export function AgentChangesTab({
         onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
         menu={
           <>
-            <DiffSettingsButton roomy={roomy} />
+            <ViewSettingsButton roomy={roomy} />
             <FoldAllButton list={list} />
             <ChangesMenu file={shownFile} reading={out} onRefresh={refresh} roomy={roomy} />
           </>
