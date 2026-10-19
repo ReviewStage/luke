@@ -520,7 +520,7 @@ export type Settlement =
   | { readonly by: typeof SETTLED_BY.CLOSER };
 
 /** Whether an item was closed by a member without an answer, whom it names, rather than taken back by its agent. */
-export function closedByMember(item: InboxItem): boolean {
+function closedByMember(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.CLOSED && item.closedBy !== undefined;
 }
 

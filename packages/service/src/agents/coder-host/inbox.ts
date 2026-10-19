@@ -248,7 +248,7 @@ function threadLineOf(message: InboxMessage): AgentThreadLine {
  * closed item without a reason or a member is one a member closed whose
  * account is gone.
  */
-function closerOf(item: InboxItem): { readonly closedBy?: string } {
+function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
   if (item.status !== INBOX_STATUS.CLOSED) return {};
   if (item.closedBy !== undefined) return { closedBy: item.closedBy.name };
   return item.closedReason === undefined ? { closedBy: "a former member" } : {};

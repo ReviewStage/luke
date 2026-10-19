@@ -1537,7 +1537,13 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     agent?.querySelector('[aria-hidden="true"] .state-glyph'),
     "the agent's crumb wears its mark",
   );
-  assert.equal(page.querySelectorAll(".inbox-view-items .desktop-toolbar button").length, 2);
+  assert.deepEqual(
+    [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent)
+      .slice(2),
+    ["Close"],
+    "beside the crumbs the bar holds the open item's Close alone",
+  );
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownTasks, [BILLING.id]);
