@@ -10,8 +10,8 @@
  * on stands, and every listener hears it, so the panel goes there
  * (`navigation-history.ts`). A move of the panel's own stands at once, as the
  * memory history's does, and the browser's traversal, which lands later,
- * changes nothing; a write made before it lands waits for it, because the
- * browser would put it on the entry it is leaving.
+ * changes nothing; a write or another move made before it lands waits for
+ * it, because the browser would put it on the entry it is leaving.
  *
  * A tab reloaded on an entry this history wrote starts on it, its state read
  * back from the browser, and learns the entries around it as the browser
@@ -74,9 +74,22 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
       ? EMPTY
       : { entries: [{ address: addressHere(), state: loaded.state }], at: 0 };
   const listeners = new Set<() => void>();
-  // The index a move of the panel's is travelling to, and the writes that wait for it to land.
+  // The index a traversal of the panel's is travelling to, and the browser's writes and moves waiting on it, in order.
   let travelling: number | undefined;
-  let waiting: (() => void)[] = [];
+  const waiting: (() => void)[] = [];
+  const drain = () => {
+    while (travelling === undefined) {
+      const next = waiting.shift();
+      if (next === undefined) return;
+      next();
+    }
+  };
+  // Note that the browser is written in the order the entries were, one traversal at a time,
+  // because a write or a move made while one travels would act on the entry it is leaving.
+  const inTurn = (step: () => void) => {
+    waiting.push(step);
+    drain();
+  };
 
   const stand = (next: HistorySnapshot<State>) => {
     if (next.entries === snapshot.entries && next.at === snapshot.at) return;
@@ -90,8 +103,7 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
       kind === WRITE.PUSH
         ? window.history.pushState(saved, "", entry.address)
         : window.history.replaceState(saved, "", entry.address);
-    if (travelling === undefined) apply();
-    else waiting.push(apply);
+    inTurn(apply);
   };
   // Stands `entries` with `at` among them, dropping the oldest past the bound.
   const keep = (entries: readonly HistoryEntry<State>[], at: number): HistorySnapshot<State> => {
@@ -122,13 +134,11 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
 
   window.addEventListener("popstate", (event) => {
     const saved = savedEntry<State>(event);
-    // Note that a traversal of the panel's own already stands, so its landing only lets the writes waiting on it through.
+    // Note that a traversal of the panel's own already stands, so its landing only lets what waits on it through.
     if (travelling !== undefined) {
       if (saved?.idx !== travelling) return;
       travelling = undefined;
-      const writes = waiting;
-      waiting = [];
-      for (const apply of writes) apply();
+      drain();
       return;
     }
     stand(landed(saved));
@@ -155,9 +165,12 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
     go: (delta) => {
       const at = snapshot.at + delta;
       if (delta === 0 || at < 0 || at >= snapshot.entries.length) return;
-      travelling = base + at;
+      const target = base + at;
+      inTurn(() => {
+        travelling = target;
+        window.history.go(delta);
+      });
       stand({ entries: snapshot.entries, at });
-      window.history.go(delta);
     },
     subscribe: (listener) => {
       listeners.add(listener);

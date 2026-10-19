@@ -446,10 +446,13 @@ function standingOf(trail: Trail): HistoryEntry<Place> | undefined {
  * and the window follows: it goes to the step the adapter stands on, so its
  * arrival records nothing and the steps ahead are kept. A step it cannot
  * reach is passed over the way the move went, as the window's own step
- * passes over one. Note that such a move has already happened when the
- * window hears it and cannot be refused, so while a page holds unsaved work
- * the adapter is stood back on the window's step first, and the move is made
- * again only once the developer says to leave. A window whose adapter
+ * passes over one, and an entry holding no step at all is a page loaded
+ * there, which opens on Home. Note that such a move has already happened
+ * when the window hears it and cannot be refused, so while a page holds
+ * unsaved work the adapter is stood back on the window's step first, along
+ * the trail or, where the trail no longer holds it, written again after
+ * where the trail stands, and the move is made again only once the
+ * developer says to leave. A window whose adapter
  * already stands on a step when it first knows where it is, as a reloaded
  * tab's does, goes there rather than recording where it first stood.
  */
@@ -510,19 +513,35 @@ function useHistory(input: {
   }, [history, place, address, own]);
 
   useEffect(() => {
-    // The window following the adapter to `at`, asking first, or back to `from` where it may not go.
-    const follow = (moved: Trail, from: number, at: number | undefined) => {
-      const back = () => {
-        if (from >= 0) own(() => history.go(from - history.current().at));
-      };
+    // An entry holding no step is a page loaded there, which opens on Home; the window already there writes its step on it.
+    const arriveNowhere = (was: HistoryEntry<Place>) => {
+      const home: Place = { kind: PLACE_KIND.HOME };
+      if (sameStep(was.state, home)) own(() => history.push(was));
+      else latest.current.go(home);
+    };
+    // The window following the adapter where it moved, asking first, or standing it back on the window's step where it may not go.
+    const follow = (moved: Trail, was: HistoryEntry<Place>) => {
+      const from = moved.entries.indexOf(was);
+      const arrived = standingOf(moved);
+      const way = from >= 0 && moved.at > from ? 1 : -1;
+      const { reachable: canReach } = latest.current;
+      const at =
+        arrived === undefined || canReach(arrived.state) ? moved.at : nearest(moved, way, canReach);
       const target = at === undefined ? undefined : moved.entries[at];
-      if (target === undefined) {
+      // Back to the window's step: along the trail where it still holds it, else written again after where the trail stands.
+      const back = () =>
+        own(() => (from >= 0 ? history.go(from - history.current().at) : history.push(was)));
+      if (arrived !== undefined && target === undefined) {
         back();
         return;
       }
       let followed = false;
       latest.current.guard(() => {
         followed = true;
+        if (target === undefined) {
+          arriveNowhere(was);
+          return;
+        }
         const now = history.current();
         const to = now.entries.indexOf(target);
         if (to >= 0 && to !== now.at) own(() => history.go(to - now.at));
@@ -533,13 +552,9 @@ function useHistory(input: {
     };
     return history.subscribe(() => {
       const moved = history.current();
-      const arrived = standingOf(moved);
       const was = standing.current;
-      if (writing.current || was === undefined || arrived === undefined || arrived === was) return;
-      const from = moved.entries.indexOf(was);
-      const way = from >= 0 && moved.at > from ? 1 : -1;
-      const { reachable: canReach } = latest.current;
-      follow(moved, from, canReach(arrived.state) ? moved.at : nearest(moved, way, canReach));
+      if (writing.current || was === undefined || standingOf(moved) === was) return;
+      follow(moved, was);
     });
   }, [history, own]);
 

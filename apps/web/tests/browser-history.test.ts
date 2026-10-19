@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { ReadLink } from "@luke/features/luke-link";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
 import { afterEach, test } from "vitest";
-import { browserHistory } from "../src/app/browser-history";
+import { browserHistory, savedEntry } from "../src/app/browser-history";
 import { withLoadLink } from "../src/app/load-link";
 import {
   addressBar,
@@ -87,6 +88,25 @@ test("a step written while a move of the panel's is still travelling lands on th
   assert.equal(addressBar(), "/acme/settings", "the entry left keeps its own address");
 });
 
+test("a move made while another of the panel's still travels waits for it, so the browser ends on the entry the panel stands on", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  history.push({ address: "/acme/settings", state: "settings" });
+
+  await travel(() => {
+    history.go(-1);
+    history.go(1);
+  });
+  await travel(() => undefined);
+
+  assert.equal(addressBar(), "/acme/settings");
+  assert.equal(history.current().at, 1);
+  await travel(() => window.history.back());
+  assert.equal(addressBar(), "/acme/inbox");
+  assert.equal(history.current().at, 0, "the browser's own Back is heard again");
+});
+
 test("a tab reloaded on an entry the history saved starts on it, and learns the entry behind it as the browser lands there", async () => {
   openAt("/app");
   const first = browserHistory<string>();
@@ -125,22 +145,35 @@ test("the panel's own paths, and an entry holding a saved step, say no link as t
   assert.deepEqual(said, [{ workspace: "acme", place: { kind: "settings", page: "appearance" } }]);
 });
 
-test("a tab opened at a link opens its place, the browser's Back lands on the screen before without a step of its own, and Forward opens the place again", async () => {
-  openAt("/personal/settings/appearance");
-  installPanelDoors();
-  await Effect.runPromise(appStateFirstRead);
-  const panel = await drawPanel();
-  assert.ok(panel.shows("Settings pages"), "the link opens Settings on its page");
-  assert.equal(addressBar(), "/personal/settings/appearance");
-  const entries = window.history.length;
+it.effect(
+  "a tab opened at a link opens its place, the browser's Back lands on the screen before without a step of its own, Forward opens the place again, and an entry holding no step opens Home",
+  () =>
+    Effect.gen(function* () {
+      openAt("/personal/settings/appearance");
+      installPanelDoors();
+      yield* appStateFirstRead;
+      yield* Effect.promise(async () => {
+        const panel = await drawPanel();
+        assert.ok(panel.shows("Settings pages"), "the link opens Settings on its page");
+        assert.equal(addressBar(), "/personal/settings/appearance");
+        const entries = window.history.length;
 
-  await travel(() => window.history.back());
-  assert.ok(panel.shows("Home"), "Back lands on Home");
-  assert.equal(addressBar(), "/app");
-  assert.equal(window.history.length, entries, "and pushes nothing");
+        await travel(() => window.history.back());
+        assert.ok(panel.shows("Home"), "Back lands on Home");
+        assert.equal(addressBar(), "/app");
+        assert.equal(window.history.length, entries, "and pushes nothing");
 
-  await travel(() => window.history.forward());
-  assert.ok(panel.shows("Settings pages"), "Forward opens Settings again");
-  assert.equal(addressBar(), "/personal/settings/appearance");
-  assert.equal(window.history.length, entries);
-});
+        await travel(() => window.history.forward());
+        assert.ok(panel.shows("Settings pages"), "Forward opens Settings again");
+        assert.equal(addressBar(), "/personal/settings/appearance");
+        assert.equal(window.history.length, entries);
+
+        // An entry the page wrote itself, holding no step, gone back from and to again.
+        window.history.pushState(null, "", "/app");
+        await travel(() => window.history.back());
+        await travel(() => window.history.forward());
+        assert.ok(panel.shows("Home"), "the entry holding no step opens Home");
+        assert.ok(savedEntry() !== undefined, "and Home writes its step on it");
+      });
+    }),
+);

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import {
   addressBar,
   drawPanel,
@@ -31,27 +32,33 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("on a phone's width the browser's Back shuts the side panel opened over the plan, and Forward opens it again", async () => {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
-    new DOMRect(0, 0, PHONE_WIDTH, 800),
-  );
-  openAt("/app");
-  // The tasks profile opens the fixture's task with its side panel over it.
-  installPanelDoors(RUN_PROFILE.TASKS);
-  await Effect.runPromise(appStateFirstRead);
-  const panel = await drawPanel();
-  await panel.press("Close");
-  assert.equal(addressBar(), FIXTURE_TASK_PATH);
-  await panel.press("Show panel");
-  const shown = addressBar();
-  const entries = window.history.length;
+it.effect(
+  "on a phone's width the browser's Back shuts the side panel opened over the plan, and Forward opens it again",
+  () =>
+    Effect.gen(function* () {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, PHONE_WIDTH, 800),
+      );
+      openAt("/app");
+      // The tasks profile opens the fixture's task with its side panel over it.
+      installPanelDoors(RUN_PROFILE.TASKS);
+      yield* appStateFirstRead;
+      yield* Effect.promise(async () => {
+        const panel = await drawPanel();
+        await panel.press("Close");
+        assert.equal(addressBar(), FIXTURE_TASK_PATH);
+        await panel.press("Show panel");
+        const shown = addressBar();
+        const entries = window.history.length;
 
-  await travel(() => window.history.back());
-  assert.ok(panel.offers("Show panel"), "Back shuts the side panel");
-  assert.equal(addressBar(), FIXTURE_TASK_PATH);
-  assert.equal(window.history.length, entries, "and pushes nothing");
+        await travel(() => window.history.back());
+        assert.ok(panel.offers("Show panel"), "Back shuts the side panel");
+        assert.equal(addressBar(), FIXTURE_TASK_PATH);
+        assert.equal(window.history.length, entries, "and pushes nothing");
 
-  await travel(() => window.history.forward());
-  assert.ok(!panel.offers("Show panel"), "Forward opens it again");
-  assert.equal(addressBar(), shown);
-});
+        await travel(() => window.history.forward());
+        assert.ok(!panel.offers("Show panel"), "Forward opens it again");
+        assert.equal(addressBar(), shown);
+      });
+    }),
+);
