@@ -198,6 +198,27 @@ test("a click into a section opens the whole text in place, the caret where the 
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
 });
 
+test("the open text wears every class its drawn sections wear, so a list keeps its gutter and nothing moves as it opens or closes", () => {
+  const { container, render } = mount();
+  render({
+    ...DOCUMENT_TASK,
+    document: { body: "- reproduce\n  - twice\n- fix\n", assumptions: [] },
+  });
+  const drawn = container.querySelector<HTMLElement>(".plan-document-block .plan-unit");
+  const worn = [...(drawn?.classList ?? [])];
+  assert.ok(worn.includes("plan-unit"), "the plan's words are drawn");
+
+  act(() => {
+    drawn?.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 40, clientY: 12 }));
+  });
+
+  const wears = new Set(open().className.split(" "));
+  assert.deepEqual(
+    worn.filter((name) => !wears.has(name)),
+    [],
+  );
+});
+
 test("the editor's preview of a Mermaid block is the picture the diagram bundle answered, drawn by the panel until the editor takes it down", async () => {
   const { container } = mount();
   act(() => block(container, "Goal").click());
