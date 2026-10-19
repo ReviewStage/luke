@@ -825,7 +825,7 @@ body,
 
 /* Note that a glyph fills the share its state glyph is given, the working
    mark included, which the window otherwise draws at a fixed size. */
-:is(.actor-mark, .chat-mark) .state-glyph > :is(svg, img) {
+.actor-mark .state-glyph > :is(svg, img) {
   width: 100%;
   height: 100%;
 }
@@ -4878,26 +4878,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-/* A member's mark holds its square (`MemberMark`), in the ink its glyph
-   wears: Luke's face in his blue, as he is drawn everywhere. */
-.chat-mark {
-  /* Note that a working glyph takes the share of the square a glyph does. */
-  --state-glyph-size: 62%;
-
-  display: inline-grid;
-  flex: none;
-  color: var(--luke-color-text);
-}
-
-.chat-mark[data-kind="planner"] {
-  color: var(--voice-luke);
-}
-
-.chat-mark[data-kind="planner"] .luke-face {
-  width: 80%;
-  height: 80%;
-}
-
 .chat-stream {
   display: flex;
   min-width: 0;
@@ -4941,32 +4921,61 @@ polygon.factory-campus-edge[data-edge="selected"] {
   list-style: none;
 }
 
+/* A message is laid out as an Inbox comment is (`.inbox-comment`): its
+   author's face in a column of its own at a list row's 20px, then their
+   name and when on one line in the caption's muted ink, and the words under
+   it at the reading measure's leading. */
 .chat-message,
 .chat-reply {
-  display: flex;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-radius: var(--luke-radius-10);
+  --chat-face: 20px;
+
+  display: grid;
+  grid-template-columns: var(--chat-face) minmax(0, 1fr);
+  column-gap: var(--luke-space-12);
+  padding: var(--luke-space-12) 0;
 }
 
 .chat-reply {
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) 0;
+  padding: var(--luke-space-8) 0;
+}
+
+.chat-face {
+  display: flex;
+  height: var(--chat-face);
 }
 
 .chat-message-body {
   display: flex;
   min-width: 0;
-  flex: 1;
   flex-direction: column;
   gap: var(--luke-space-4);
 }
 
 .chat-byline {
   display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-8);
-  margin: 0;
+  min-width: 0;
+  min-height: var(--chat-face);
+  align-items: center;
+  column-gap: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The author is named by name alone in the stream's own ink, their face
+   already standing beside it, as an Inbox comment's writer is. */
+.chat-byline-name {
+  display: flex;
+  min-width: 0;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.chat-byline-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-byline-action {
@@ -4986,7 +4995,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-words {
-  color: var(--luke-color-text-body);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-reading-leading);
 }
 
 /* An ask draws as a card in its row (`Card`), a step under the byline. */
@@ -4995,16 +5006,20 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-thread {
-  margin-top: var(--luke-space-6);
-  padding-left: var(--luke-space-12);
-  border-left: 2px solid var(--luke-color-border);
+  margin-top: var(--luke-space-4);
 }
 
+/* A folded thread's press leads with its repliers' faces, then how many
+   replied, as a plan comment's thread at rest is summed up. */
 .chat-thread-toggle {
   margin: 0;
-  padding: var(--luke-space-4) 0;
   font-size: var(--luke-type-label-size);
   line-height: var(--luke-type-label-leading);
+}
+
+.chat-thread-toggle .actor-stack {
+  margin-inline-end: var(--luke-space-6);
+  vertical-align: middle;
 }
 
 /* The composer at a place's foot, at the stream's reading measure: the
