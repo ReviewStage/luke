@@ -470,10 +470,16 @@ function TemplateState({
  */
 export function PlanTemplatePage({
   account,
+  bar,
+  hidden,
   onShowHistory,
 }: {
   /** The signed-in account, whose every edit of the template is; none while signed out. */
   account: PersonActor | undefined;
+  /** The head of the page's column, as every Settings page's (`desktop-settings.tsx`). */
+  bar: React.ReactNode;
+  /** Whether the page is hidden, as a narrow room hides it behind the page list. */
+  hidden: boolean;
   onShowHistory: () => void;
 }): React.JSX.Element {
   const signedIn = account !== undefined;
@@ -485,9 +491,10 @@ export function PlanTemplatePage({
       className="settings-page"
       aria-label={TEMPLATE_TITLE}
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
+      hidden={hidden}
     >
       {/* Settings has no top bar: the page's title and its actions stand in the page. */}
-      <div className="desktop-drag-strip" />
+      {bar}
       {drawn ? (
         <TemplateDocument
           template={template}

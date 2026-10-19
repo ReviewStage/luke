@@ -76,7 +76,6 @@ import {
   AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
-  runArchiveAgent,
   runListAgents,
   runListModels,
   runListTasks,
@@ -85,7 +84,6 @@ import {
   runReadPage,
   runStartAgent,
   runStopAgent,
-  runUnarchiveAgent,
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
@@ -98,7 +96,7 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { runCreateSection, runDeleteSection, runMoveTask } from "../task-section-tools.js";
+import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
@@ -467,8 +465,6 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.READ_AGENT
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
-    | typeof CODER_TOOL.ARCHIVE_AGENT
-    | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.STOP_AGENT
     | typeof CODER_TOOL.UPDATE_AGENT
     | typeof CODER_TOOL.READ_PAGE
@@ -477,7 +473,6 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_TASK
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
-    | typeof CODER_TOOL.MOVE_TASK
     | typeof CODER_TOOL.UPDATE_TASK
     | typeof CODER_TOOL.LIST_ISSUES
     | typeof CODER_TOOL.READ_ISSUE
@@ -494,8 +489,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.READ_AGENT]: runReadAgent,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
-  [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
-  [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.STOP_AGENT]: runStopAgent,
   [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
@@ -504,7 +497,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_TASK]: runCreateTask,
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
-  [CODER_TOOL.MOVE_TASK]: runMoveTask,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
   [CODER_TOOL.LIST_ISSUES]: runListIssues,
   [CODER_TOOL.READ_ISSUE]: runReadIssue,

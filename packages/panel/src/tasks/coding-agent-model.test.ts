@@ -431,11 +431,12 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
         call("c4", "message_agent", "output-available", accepted),
         call("c5", "start_coding_agent", "output-available", accepted),
         call("c6", "unarchive_agent", "output-available", accepted),
+        call("c7", "update_agent", "output-available", accepted),
       ],
     },
   ];
 
-  assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6"]);
+  assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6", "c7"]);
   assert.deepEqual(agentListCallIds([]), []);
 });
 

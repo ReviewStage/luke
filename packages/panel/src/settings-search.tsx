@@ -469,6 +469,7 @@ export function SettingsSearchField({
   onQueryChange,
   onSubmit,
   find = true,
+  onFind,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
@@ -476,6 +477,8 @@ export function SettingsSearchField({
   onSubmit: () => void;
   /** Whether Command-F lands here: not while the page shows a search of its own. */
   find?: boolean;
+  /** Shows the field before Command-F lands in it, where it stands hidden, as a narrow room hides the page list behind a page. */
+  onFind?: (() => void) | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   // Whether the caret stands where Settings put it as it opened, untouched since.
@@ -485,7 +488,15 @@ export function SettingsSearchField({
     find
       ? () => {
           setPlaced(false);
-          focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+          if (onFind === undefined) focusSearchField(SETTINGS_SEARCH_INPUT_ID);
+          else {
+            onFind();
+            // Note that the field waits to be shown, because a hidden one refuses the caret.
+            focusSearchField(
+              SETTINGS_SEARCH_INPUT_ID,
+              (field) => field.closest("[hidden]") === null,
+            );
+          }
         }
       : undefined,
   );

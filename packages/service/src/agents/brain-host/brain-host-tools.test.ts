@@ -83,8 +83,6 @@ import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
-  ARCHIVE_AGENT_REFUSAL,
-  ARCHIVE_AGENT_TOOL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
@@ -93,6 +91,8 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
+  UPDATE_AGENT_REFUSAL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_REFUSAL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
@@ -792,15 +792,15 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
   const call = await callerOn(brainHost(seams), task, eve.services, CATALOG);
   const reason = "The developer asked to clean up the finished agents.";
 
-  const archived = await call(ARCHIVE_AGENT_TOOL.name, { agentId: idle.id, reason });
+  const archived = await call(UPDATE_AGENT_TOOL.name, { agentId: idle.id, archived: true, reason });
   assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
   const row = Option.getOrThrow(await database.run(readCodingAgent(opener, idle.id)));
   assert.ok(row.archivedAt !== null);
   assert.deepEqual(row.archivedBy, { by: CODING_AGENT_ARCHIVER.LUKE, userId: opener, reason });
-  assert.deepEqual(await call(ARCHIVE_AGENT_TOOL.name, { agentId: starting.id }, "call-2"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ARCHIVE_AGENT_REFUSAL.WORKING,
-  });
+  assert.deepEqual(
+    await call(UPDATE_AGENT_TOOL.name, { agentId: starting.id, archived: true }, "call-2"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_AGENT_REFUSAL.WORKING },
+  );
 });
 
 test("Luke archives a teammate's task of the call's workspace for the member on the call and brings it back, and refuses the call's own task and one of another workspace", async () => {

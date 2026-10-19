@@ -1,3 +1,6 @@
+import { CHOICE_ROLE } from "../choice/choice-keys.js";
+import { useChoiceKeys } from "../choice/use-choice-keys.js";
+
 /**
  * segmented.tsx -- the one segmented control: a pick-one of a few short options in a trough, the chosen one filled.
  *
@@ -5,20 +8,12 @@
  * the group is named by its legend, each option is a radio checked while it
  * is the value, Tab lands on the checked option (the first while none is) and
  * leaves the group in one press, and the arrow keys move along it and choose
- * as they go. A press on the chosen option does nothing, unless the control
+ * as they go, wrapping at either end, Home and End going to either end. A press on the chosen option does nothing, unless the control
  * is `clearable`, where it takes the choice back — an optional Inbox field's,
  * which has no other way to be left unanswered once picked. What finds the
  * control for an app (the desktop's settings search) is the app's: it hands
  * the group the `data-` attributes its search lands on.
  */
-
-/** The keys that step along the group, and which way. */
-const STEP_KEYS = new Map([
-  ["ArrowRight", 1],
-  ["ArrowDown", 1],
-  ["ArrowLeft", -1],
-  ["ArrowUp", -1],
-]);
 
 /** One option: the value it chooses and the words on it. */
 interface SegmentedOption<Value extends string> {
@@ -55,31 +50,25 @@ export function Segmented<Value extends string>(
   props: (SegmentedFixed<Value> | SegmentedClearable<Value>) & AppAttributes,
 ): React.JSX.Element {
   const { legend, options, value, disabled, clearable: _, onChange: __, ...appAttributes } = props;
-  const tabStop = options.some((option) => option.value === value) ? value : options[0]?.value;
   const press = (pressed: Value) => {
     if (pressed !== value) props.onChange(pressed);
     else if (props.clearable === true) props.onChange(undefined);
   };
-  // An arrow chooses the next option along and takes the keyboard there, wrapping at either end.
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = STEP_KEYS.get(event.key);
-    if (step === undefined || options.length === 0) return;
-    event.preventDefault();
-    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-    const from = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
-    const to = (Math.max(from, 0) + step + options.length) % options.length;
-    const next = options[to];
-    if (next === undefined) return;
-    radios[to]?.focus();
-    if (next.value !== value) props.onChange(next.value);
-  };
+  // An arrow chooses the next option along and takes the keyboard there, wrapping at either end; Home and End go to either end.
+  const keys = useChoiceKeys({
+    options,
+    value,
+    role: CHOICE_ROLE.RADIO,
+    disabled,
+    onChoose: (chosen) => props.onChange(chosen),
+  });
   return (
     <div
       role="radiogroup"
       aria-label={legend}
       {...appAttributes}
       className="luke-segmented"
-      onKeyDown={disabled === true ? undefined : onKeyDown}
+      onKeyDown={keys.onKeyDown}
     >
       {options.map((option) => (
         // biome-ignore lint/a11y/useSemanticElements: a segment is drawn as a button in its trough, which a native radio cannot be, and speaks as the radio it behaves as.
@@ -88,7 +77,7 @@ export function Segmented<Value extends string>(
           type="button"
           role="radio"
           aria-checked={option.value === value}
-          tabIndex={option.value === tabStop ? 0 : -1}
+          tabIndex={keys.tabIndexOf(option.value)}
           className="luke-segment"
           disabled={disabled}
           onClick={() => press(option.value)}

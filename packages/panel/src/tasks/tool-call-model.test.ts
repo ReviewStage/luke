@@ -762,6 +762,22 @@ test("a change to an agent names the agent its answer titles and opens its tab; 
   assert.equal(toolTarget(refused), undefined);
 });
 
+test("a change that archives an agent reads as an archive and opens nothing, its agent gone from the tabs, and one that brings it back reads as an unarchive and opens it", () => {
+  const change = (archived: boolean) => ({
+    tool: "update_agent",
+    callId: "call-1",
+    input: { agentId: "agent-2", archived },
+    output: { status: "accepted", agent: { id: "agent-2", title: "Retry audit", archived } },
+  });
+
+  const archive = toolCallView(change(true));
+  assert.deepEqual([archive.kind, archive.subject], [CALL_KIND.ARCHIVE_AGENT, "Retry audit"]);
+  assert.equal(toolTarget(change(true)), undefined);
+  const back = toolCallView(change(false));
+  assert.deepEqual([back.kind, back.subject], [CALL_KIND.UNARCHIVE_AGENT, "Retry audit"]);
+  assert.deepEqual(toolTarget(change(false)), { kind: TOOL_TARGET.AGENT, agent: "agent-2" });
+});
+
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {
   const call = (isYourTask: boolean) => ({
     tool: "read_page",

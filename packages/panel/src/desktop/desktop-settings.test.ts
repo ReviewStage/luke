@@ -22,6 +22,7 @@ import { runAppCommand } from "../app-commands.js";
 import { type CallCardInput, callControls } from "../call/call-card.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
@@ -191,6 +192,8 @@ function SettingsHarness({
       onBack: ignore,
       onForward: ignore,
     },
+    room: SHELL_ROOM.WIDE,
+    step: { listed: true, onList: ignore },
     settings: {
       ...settingsProps(view, setView, capabilities),
       ...(workspace ? { workspace } : undefined),

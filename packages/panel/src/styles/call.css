@@ -83,7 +83,8 @@ html.call-window #root {
 .call-card[data-surface="floating"] {
   position: fixed;
   z-index: var(--luke-z-toast);
-  bottom: var(--luke-space-16);
+  /* Above the on-screen keyboard, while it is up. */
+  bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   left: var(--luke-space-16);
   width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
   translate: 0
@@ -91,7 +92,7 @@ html.call-window #root {
       -1 *
       min(
         max(0px, var(--column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
-        100vh -
+        var(--luke-stage-height) -
         var(--floating-card, 0px) -
         2 *
         var(--luke-space-16)
@@ -211,12 +212,19 @@ html.call-window[data-pointer-stale="true"]
    grown into a picture. It keeps its height as the transcript under it
    scrolls. However wide the tab is, the tile keeps to the transcript's
    column, centred over it, and no taller than about two fifths of the
-   window (70vh wide at 16:9), so a wide, short tab still leaves the
-   transcript room; 240px is as narrow as its still frame stays readable.
+   stage (as wide as seven tenths of the stage's height, at 16:9), so a
+   wide, short tab still leaves the transcript room; 240px is as narrow as
+   its still frame stays readable.
    The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
-  width: min(100% - 2 * var(--luke-space-16), var(--luke-page-measure), max(240px, 70vh));
+  width: min(
+    100% -
+    2 *
+    var(--luke-space-16),
+    var(--luke-page-measure),
+    max(240px, calc(var(--luke-stage-height) * 0.7))
+  );
   margin: var(--luke-space-4) auto var(--luke-space-8);
 }
 

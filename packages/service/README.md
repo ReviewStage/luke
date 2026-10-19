@@ -1097,17 +1097,16 @@ acting for the agent's starter, kept under the sending agent's name
 agent or one of another workspace refuses; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the Start button's own path, telling
-it which agent started it; `archive_agent` and `unarchive_agent`, which
-archive an idle agent of the workspace, never itself or one still working,
-on the rule the Archive agent menu keeps for the agent's starter, recording
-the archiving agent and its reason on the archived agent's row
-(`archived_by`), and bring one back; `stop_agent`, which stops the turn
+it which agent started it; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
 staying available and an idle one answered as idle; `update_agent`, which
 renames an agent of the workspace, moves it to another model and effort the
 catalog takes, pins one on no task for the starter, or switches its MCP
-servers, every change asked in one transaction; `read_page`, a page shown on any task
+servers, every change asked in one transaction, and archives an idle agent
+of the workspace, never itself or one still working, on the rule the Archive
+agent menu keeps for the agent's starter, recording the archiving agent and
+its reason on the archived agent's row (`archived_by`), or brings one back; `read_page`, a page shown on any task
 of the workspace by its id, its HTML cut on a line to a bound, which a
 mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
@@ -1119,14 +1118,15 @@ confirmed through the workspace's installation, with a brief and a plan to
 start from and no agent on it, under an id drawn from eve's key for the
 call (`src/agents/called-id.ts`), so a call run again makes one, which
 `start_agent` then starts on by its id;
-`create_section`, `delete_section`, and `move_task`
+`create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which make and delete the starter's
-own sections of the workspace's sidebar and move a task into one or out of
-them by the sidebar's own write (`PUT /api/task-sections`), a section made
-under an id drawn from eve's key for the call, so a call run again makes
-one; `update_task`, which renames a task of the workspace, sets or clears
-its repository (confirmed through the workspace's installation), pins it
-for the agent's starter, or archives it or brings it back, by the task
+own sections of the workspace's sidebar by the sidebar's own write
+(`PUT /api/task-sections`), a section made under an id drawn from eve's key
+for the call, so a call run again makes one; `update_task`, which renames a
+task of the workspace, sets or clears its repository (confirmed through the
+workspace's installation), pins it for the agent's starter, moves it into
+one of the starter's sections or out of them by that same write, or
+archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
@@ -1923,11 +1923,11 @@ research reads beside it, `queue_question`
 how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
 `list_agents`, `read_agent`, `message_agent`, `start_agent`,
-`stop_agent`, `update_agent`, `archive_agent`, `unarchive_agent`,
+`stop_agent`, `update_agent`,
 `list_tasks`, `update_task`, and `list_models` every coding agent is
 offered, the same `read_task` and `create_task`
 (`src/agents/task-tools.ts`), and the same
-`create_section`, `delete_section`, and `move_task`
+`create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which keep the call's member's own
 sidebar sections, and `list_issues`, `read_issue`, `create_issue`, and
 `update_issue` (`src/agents/issue-tools.ts`), which keep the workspace's

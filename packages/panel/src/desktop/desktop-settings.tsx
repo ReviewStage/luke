@@ -27,6 +27,7 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
+import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { AttentionMark } from "../settings/marks.js";
 import {
@@ -53,12 +54,23 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search.js";
+import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Shortcut } from "../shortcut.js";
 import { commandKeyshortcuts } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
+
+/** What the way back from a page to the page list says, in a narrow room. */
+const SETTINGS_LIST = "Settings";
+
+/** Whether Settings stands on its page list rather than on a page, which a narrow room draws one at a time. */
+export interface SettingsStep {
+  readonly listed: boolean;
+  /** Goes back from the page to the list. */
+  readonly onList: () => void;
+}
 
 /** What a page's row's right-click menu is called. */
 const PAGE_ACTIONS = "Settings page actions";
@@ -98,6 +110,16 @@ function SettingsPageRow({
         />
       )}
     </li>
+  );
+}
+
+/** The head of a page's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
+function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
+  if (onList === undefined) return <div className="desktop-drag-strip" />;
+  return (
+    <header className="desktop-toolbar">
+      <FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />
+    </header>
   );
 }
 
@@ -156,15 +178,24 @@ function GroupHeading({
  * its title-bar row, where the sidebar keeps them, and Back at the list's
  * head is the one way out a newcomer sees: it and Escape both leave as the
  * back button would.
+ *
+ * A narrow room shows the list or the page, one at a time, the other column
+ * hidden (`hiddenColumns`): Settings opens on its list, a page chosen there,
+ * by a search, or by a link stands alone the whole width, and a way back at
+ * its head returns to the list. The list's edge resizes nothing then.
  */
 export function DesktopSettings({
   sidebar,
+  room,
+  step,
   history,
   settings,
   call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
+  room: ShellRoom;
+  step: SettingsStep;
   history: NavigationHistory;
   settings: SettingsPanelProps;
   /** The call card, at the page list's foot, as the tasks' sidebar draws it above its account row. */
@@ -232,10 +263,13 @@ export function DesktopSettings({
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
-  // The page with a search of its own takes Command-F while it shows.
+  const hidden = hiddenColumns(room, step.listed);
+  const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
+  // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
-    settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
+    settings.account.status === ACCOUNT_STATUS.SIGNED_IN &&
+    !hidden.item;
 
   // The template's version history takes the whole window as a plan's does, and leaves for the template,
   // the call card at the foot of its versions as it was at the page list's.
@@ -243,6 +277,7 @@ export function DesktopSettings({
     return (
       <TemplateVersionHistory
         sidebar={sidebar}
+        room={room}
         history={history}
         account={settings.account}
         call={call}
@@ -252,7 +287,7 @@ export function DesktopSettings({
   }
   return (
     <div className="desktop-settings">
-      <nav className="settings-pages" aria-label="Settings pages">
+      <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
         <NavItem
@@ -266,6 +301,7 @@ export function DesktopSettings({
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
           find={!pageSearched}
+          onFind={hidden.list ? step.onList : undefined}
           query={query}
           onQueryChange={changeQuery}
           onSubmit={() => {
@@ -302,7 +338,7 @@ export function DesktopSettings({
         </LinkWorkspaceProvider>
         <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
-        <SidebarResizeEdge edge={edge} />
+        {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage
@@ -311,11 +347,13 @@ export function DesktopSettings({
               ? accountActor(settings.account)
               : undefined
           }
+          bar={bar}
+          hidden={hidden.item}
           onShowHistory={() => setTemplateHistory(true)}
         />
       ) : (
-        <section className="settings-page" aria-label={title}>
-          <div className="desktop-drag-strip" />
+        <section className="settings-page" aria-label={title} hidden={hidden.item}>
+          {bar}
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
           <SettingsPage key={settings.view} title={title} actions={reset}>
             <SettingsPanel

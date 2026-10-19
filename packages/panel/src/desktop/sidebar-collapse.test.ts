@@ -148,6 +148,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       sidebar,
       room: useShellRoom(stage.width),
+      settingsStep: { listed: true, onList: ignore },
       call: undefined,
       captions: {
         caption: { content: undefined, shown: false },

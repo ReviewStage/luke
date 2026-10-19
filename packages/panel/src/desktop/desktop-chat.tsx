@@ -1,6 +1,7 @@
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
+  BackIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -18,6 +19,8 @@ import {
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
+import { FoldingButton } from "../folding-button.js";
+import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
 import { ChatPane, MemberMark } from "../tasks/chat-pane.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -41,7 +44,10 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * the chat read carries where those name more. With nothing read, it says
  * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
  * stood over; Escape does not, as it does not leave the Inbox, so a stray
- * press never loses the place being read.
+ * press never loses the place being read. A narrow room shows the rail or
+ * the place, one at a time (`hiddenColumns`): Chat opens on its rail, and a
+ * place chosen there, or shown from elsewhere, stands alone the whole width,
+ * under a way back to the rail.
  */
 
 /** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
@@ -50,6 +56,9 @@ function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
   if (workspace === undefined) return undefined;
   return { workspace: workspace.slug ?? workspace.id, repository: null };
 }
+
+/** What the way back from a place to the rail says, in a narrow room. */
+const CHAT_LIST = "Chat";
 
 /** What a row's count is read as. */
 const UNREAD = "unread";
@@ -94,9 +103,11 @@ function RailRow({
 /** The window's Chat, in the plan's place: the rail, and the place chosen beside it. */
 export function DesktopChat({
   tasks,
+  room,
   accountName,
 }: {
   tasks: TasksControl;
+  room: ShellRoom;
   accountName: string | undefined;
 }): React.JSX.Element {
   const view = tasks.chatView;
@@ -130,6 +141,7 @@ export function DesktopChat({
   }
   const chat = read.answer;
   const rail = chatRail(chat, names);
+  const hidden = hiddenColumns(room, view.listed);
   const row = (each: ChatRailRow) => (
     <RailRow
       key={each.channel.id}
@@ -140,7 +152,7 @@ export function DesktopChat({
   );
   return (
     <div className="chat-view">
-      <nav className="chat-rail" aria-label="Chat">
+      <nav className="chat-rail" aria-label="Chat" hidden={hidden.list}>
         <header className="desktop-toolbar chat-rail-bar">
           <div className="desktop-toolbar-heading">
             <h1 className="desktop-toolbar-title">Chat</h1>
@@ -183,6 +195,12 @@ export function DesktopChat({
         openLink={openLink}
         onPost={view.onPost}
         onAnswer={view.onAnswer}
+        lead={
+          room === SHELL_ROOM.NARROW ? (
+            <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
+          ) : undefined
+        }
+        hidden={hidden.item}
       />
     </div>
   );
