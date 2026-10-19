@@ -2135,6 +2135,9 @@
    pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
+  /* Note that the tab isolates its stacking, so its header, raised over its
+     own rows, rises over nothing outside the tab. */
+  isolation: isolate;
 }
 
 /* The tab shown fills the room under the header and the tabs, the others
@@ -2189,6 +2192,11 @@
    standing put while the tab under it scrolls. It answers its own width,
    so a narrow header shortens the merge control's words. */
 .pull-request-header {
+  /* Note that the container makes the header a stacking context of its
+     own, so it stands over the rows after it, or the merge control's panel
+     hung from it would pass under the tabs. */
+  position: relative;
+  z-index: 1;
   flex: none;
   container: pull-request-header / inline-size;
   padding: var(--luke-space-8) var(--column-inset);
