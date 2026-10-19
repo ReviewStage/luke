@@ -11,6 +11,7 @@
     "./acts": "./src/acts.js",
     "./act-router": "./src/act-router/index.js",
     "./act-port": "./src/act-port/index.js",
+    "./act-port/testing": "./src/act-port/testing.js",
     "./client": "./src/client/index.js",
     "./app-state": "./src/app-state.js",
     "./bridge": "./src/bridge.js",
