@@ -167,6 +167,40 @@ export function accountPreferencesFromParts(
   return { ...shared, ...(linkOpen === undefined ? undefined : { [LINK_OPEN_PART]: linkOpen }) };
 }
 
+/**
+ * The preferences a snapshot stands for, as a device merges them over its
+ * own. Note that the shared part counts only once written (`updatedAt`): a
+ * device takes no unwritten shared part over its own, so its own shared
+ * preferences stand in for it; the link part is written apart, so it is
+ * the snapshot's either way, and a choice made on the web reaches a Mac
+ * before any voice was ever synced.
+ */
+export function snapshotAccountPreferences(
+  remote: AccountPreferences,
+  sharedWritten: boolean,
+  local: AccountPreferences,
+): AccountPreferences {
+  if (sharedWritten) return remote;
+  const { preferences: shared } = accountPreferencesParts(local);
+  const { linkOpen } = accountPreferencesParts(remote);
+  return { ...shared, ...(linkOpen === undefined ? undefined : { [LINK_OPEN_PART]: linkOpen }) };
+}
+
+/**
+ * What a device writes of its preferences. A link choice it held when it
+ * last synced and has since cleared is written as the default, since a
+ * write without the link part leaves the service's choice standing, and the
+ * next sync would bring back the choice the device let go of; one it never
+ * held is left out, so it clears no other device's.
+ */
+export function accountPreferencesToWrite(
+  local: AccountPreferences,
+  baseline: AccountPreferences | undefined,
+): AccountPreferences {
+  const cleared = local[LINK_OPEN_PART] === undefined && baseline?.[LINK_OPEN_PART] !== undefined;
+  return cleared ? { ...local, [LINK_OPEN_PART]: APP_SETTING_SCHEMA.linkOpen.default } : local;
+}
+
 const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);

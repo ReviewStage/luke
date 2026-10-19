@@ -18,6 +18,7 @@ import {
   accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  snapshotAccountPreferences,
   THEME,
 } from "@luke/settings";
 import {
@@ -493,6 +494,47 @@ test("a link choice made on one Mac reaches another through the snapshot, beside
   assert.equal(await other.get("linkOpen"), LINK_OPEN.MAC_APP);
   assert.equal(await other.get("voice"), LIVE_VOICE.MARIN);
   assert.equal(appSettingsView(await other.snapshot()).linkOpen, LINK_OPEN.MAC_APP);
+});
+
+test("a link choice made on the web, before any voice was synced, reaches a Mac without costing it its voice", async (t) => {
+  const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await mac.setAccount(TEST_ACCOUNT);
+  await mac.set("voice", LIVE_VOICE.CEDAR);
+  const baseline = await mac.accountPreferences();
+  await mac.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  // The service's answer holds the link part alone, and no shared part was ever written.
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+  await mac.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await mac.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
+  );
+
+  assert.equal(await mac.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await mac.get("voice"), LIVE_VOICE.CEDAR);
+});
+
+test("a Mac takes the web's newer link choice over the one it last synced, and keeps one it made since", async (t) => {
+  const synced = { linkOpen: LINK_OPEN.BROWSER };
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+
+  const untouched = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await untouched.setAccount(TEST_ACCOUNT);
+  await untouched.set("linkOpen", LINK_OPEN.BROWSER);
+  await untouched.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await untouched.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: synced },
+  );
+  assert.equal(await untouched.get("linkOpen"), LINK_OPEN.MAC_APP);
+
+  const changed = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await changed.setAccount(TEST_ACCOUNT);
+  await changed.set("linkOpen", LINK_OPEN.BROWSER);
+  await changed.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await changed.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: {} },
+  );
+  assert.equal(await changed.get("linkOpen"), LINK_OPEN.BROWSER);
 });
 
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {

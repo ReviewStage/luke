@@ -37,6 +37,7 @@ export {
   accountPreferencesFromStored,
   accountPreferencesFromWire,
   accountPreferencesParts,
+  accountPreferencesToWrite,
   describedSettings,
   isAppSettingField,
   isSettingsResetScope,
@@ -49,6 +50,7 @@ export {
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
+  snapshotAccountPreferences,
 } from "./schema-access.js";
 export { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 export {
