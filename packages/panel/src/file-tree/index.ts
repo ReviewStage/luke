@@ -54,7 +54,7 @@ import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
  * git status, in whichever of them stands, and a pull request's draws at
  * each file's row's end its review threads, its lines, and its Viewed
  * toggle (`row-marks.ts`), a press on which marks the file rather than
- * opening it.
+ * opening it, as V does on the row the tree's keyboard stands on.
  *
  * A breadcrumb's tree is this same tree, mounted under the crumb over the
  * folder the crumb stands in, with its rows counted out as they change so
@@ -87,6 +87,9 @@ const FILE_ICON = {
   SLOT: "file-tree-icon-file",
   DEFAULT_TYPE: "default",
 } as const;
+
+/** The key that presses the Viewed toggle of the row the tree's keyboard stands on, as the list's V marks its file. */
+const VIEWED_KEY = "v";
 
 /** What the pane says while the root is listed. */
 const READING = "Reading the files…";
@@ -324,10 +327,26 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     event.stopPropagation();
     if (event.type === "click") props.onViewed(repositoryPath(path));
   };
+  // Note that V on a row whose toggle is drawn is that row's toggle, as
+  // the list's own V is its file's, so it goes no further than the tree.
   const onKey = (event: KeyboardEvent) => {
     const path = standing()?.tree.getFocusedPath() ?? null;
-    if (event.key !== "Enter" || path === null || path.endsWith("/")) return;
-    props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
+    if (path === null || path.endsWith("/")) return;
+    if (event.key === "Enter")
+      return props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
+    const plain = !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey);
+    const toggles = markOf.get(repositoryPath(path))?.viewed !== undefined;
+    if (
+      !plain ||
+      event.key.toLowerCase() !== VIEWED_KEY ||
+      !toggles ||
+      props.onViewed === undefined
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    props.onViewed(repositoryPath(path));
   };
   host.addEventListener("mousedown", onToggle, true);
   host.addEventListener("click", onToggle, true);

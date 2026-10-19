@@ -82,9 +82,10 @@ export interface FileTreeProps {
   /** A file chosen in the tree, by a press or Return: open it, in a tab of its own where ⌘ was held. */
   readonly onOpen: (path: string, newTab: boolean) => void;
   /**
-   * A file's Viewed toggle pressed on its row: mark it viewed, or not, as
-   * its header's box does. The press opens nothing, and the tree's keyboard
-   * stays where it stood.
+   * A file's Viewed toggle pressed on its row, or V pressed on the row the
+   * tree's keyboard stands on: mark it viewed, or not, as its header's box
+   * does. The press opens nothing, and the tree's keyboard stays where it
+   * stood.
    */
   readonly onViewed?: (path: string) => void;
   /**

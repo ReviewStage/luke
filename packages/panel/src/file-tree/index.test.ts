@@ -11,7 +11,8 @@ import { fileTree } from "./index.js";
  * it, the lines it adds and removes, and a Viewed toggle, ticked once the
  * file is viewed; a folder's row says nothing more. A press on the toggle
  * is the toggle's alone, the row neither opening its file nor taking the
- * keyboard, while a press anywhere else on the row opens the file. The
+ * keyboard, while a press anywhere else on the row opens the file, and V
+ * on the row the tree's keyboard stands on presses its toggle. The
  * tree is the bundle's own, Pierre drawing it in jsdom; synthetic paths.
  */
 
@@ -25,9 +26,9 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the tree's listing and Pierre's drawing land. */
-function settle(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 20));
+/** Lets the tree's listing land, which Pierre draws as it lands, on no clock. */
+async function settle(): Promise<void> {
+  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
 }
 
 /** The tree mounted over the change set's files alone, every folder open, marked as given, with what it opened and marked. */
@@ -113,6 +114,26 @@ test("a press on a row's Viewed toggle marks its file and opens nothing; a press
   row("src/seats.ts").click();
   assert.deepEqual(opened, ["src/seats.ts"]);
   assert.deepEqual(viewed, ["src/seats.ts"]);
+});
+
+test("V on the row the tree's keyboard stands on presses that row's toggle and goes no further than the tree", async () => {
+  const { viewed } = await mountMarked(MARKS);
+  let heard = 0;
+  document.body.addEventListener("keydown", () => {
+    heard += 1;
+  });
+
+  row("src/seats.ts").focus();
+  row("src/seats.ts").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "v", bubbles: true, composed: true }),
+  );
+  row("README.md").focus();
+  row("README.md").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "v", bubbles: true, composed: true }),
+  );
+
+  assert.deepEqual(viewed, ["src/seats.ts"]);
+  assert.equal(heard, 1, "V on a row with no toggle is left to the view");
 });
 
 test("marks handed again redraw the rows, a file marked viewed since ticked", async () => {
