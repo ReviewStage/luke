@@ -521,7 +521,7 @@ interface TabRead {
   readonly read: FileRead;
 }
 
-/** The end of a File tab's bar: View settings, offering the two settings its lines follow, then its ⋯. */
+/** The end of a File tab's bar: View settings, offering the settings its lines follow, then its ⋯. */
 export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
   return (
     <>
