@@ -88,6 +88,7 @@ import {
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestReadParamsSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
@@ -1365,7 +1366,7 @@ export const ACT = {
     refusal: "Could not read the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentPullRequestAnswerView>(
       isReadable(codingAgentPullRequestAnswerViewSchema),
     ),
@@ -1379,28 +1380,28 @@ export const ACT = {
     refusal: "Could not read the repository's reviewers and labels on this system.",
   },
   [ACT_KIND.CODING_AGENTS_CHANGES]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentChangesAnswerView>(
       isReadable(codingAgentChangesAnswerViewSchema),
     ),
     refusal: "Could not read the agent's changes on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewPullRequestAnswerView>(
       isReadable(codingAgentOverviewPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewChecksAnswerView>(
       isReadable(codingAgentOverviewChecksAnswerViewSchema),
     ),
     refusal: "Could not read the pull request's checks on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewConversationAnswerView>(
       isReadable(codingAgentOverviewConversationAnswerViewSchema),
     ),
@@ -1419,7 +1420,7 @@ export const ACT = {
     refusal: "Could not change the pull request on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentPullRequestViewedAnswerView>(
       isReadable(codingAgentPullRequestViewedAnswerViewSchema),
     ),

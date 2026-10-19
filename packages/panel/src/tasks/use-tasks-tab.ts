@@ -1570,8 +1570,16 @@ export function useTasksTab(input: {
           pullRequestLabelOf(pullRequest),
         ]),
       ),
+      numbered: new Map(
+        [...agents.numberedPullRequests].map(([agentId, numbered]) => [
+          agentId,
+          new Map(
+            [...numbered].map(([number, pullRequest]) => [number, pullRequestLabelOf(pullRequest)]),
+          ),
+        ]),
+      ),
     }),
-    [agents.agents, agents.models, agents.pullRequests],
+    [agents.agents, agents.models, agents.pullRequests, agents.numberedPullRequests],
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {

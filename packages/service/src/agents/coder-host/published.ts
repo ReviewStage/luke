@@ -23,6 +23,7 @@ import {
   checkSummaryOf,
   type GitHubPullRequest,
   type PullRequestReadFailure,
+  pullRequestByNumber,
   pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
@@ -132,6 +133,23 @@ function areasOf(
   );
 }
 
+/** The wire's pull request from GitHub's, with its head's checks as read. */
+function wirePullRequestOf(
+  found: GitHubPullRequest,
+  checks: CodingAgentPullRequest["checks"],
+): CodingAgentPullRequest {
+  return {
+    number: found.number,
+    title: found.title,
+    url: found.url,
+    state: found.state,
+    checks,
+    additions: found.additions,
+    deletions: found.deletions,
+    changedFiles: found.changedFiles,
+  };
+}
+
 /** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its areas beside that. */
 function withChecks(
   token: Redacted.Redacted,
@@ -147,16 +165,7 @@ function withChecks(
       },
     ),
     ([checks, areas]) => {
-      const pullRequest: CodingAgentPullRequest = {
-        number: found.number,
-        title: found.title,
-        url: found.url,
-        state: found.state,
-        checks,
-        additions: found.additions,
-        deletions: found.deletions,
-        changedFiles: found.changedFiles,
-      };
+      const pullRequest = wirePullRequestOf(found, checks);
       const stored: StoredPullRequest = {
         ...pullRequest,
         headSha: found.headSha,
@@ -243,6 +252,32 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   yield* recordCodingAgentPublished(userId, agent.id, stored);
   return answer;
 });
+
+/**
+ * Another pull request of the agent's repository by its number, as GitHub
+ * holds it now, with its head's checks: one the agent opened from a branch
+ * it has since left, or one no agent opened, which a Pull request tab shows
+ * by its number; none where the repository holds no such one. Note that it
+ * is read afresh on each ask and never written on the agent's row, which
+ * keeps the pull request of the branch the agent stands on.
+ */
+export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPullRequestOfNumber")(
+  function* (
+    userId: string,
+    agent: CodingAgent,
+    number: number,
+  ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+    const { token } = yield* agentPullRequestReach(userId, agent);
+    const found = yield* pullRequestByNumber(token, agent.repository, number);
+    if (Option.isNone(found)) return nothing(agent).answer;
+    const checks = yield* checkSummaryOf(token, agent.repository, found.value.headSha);
+    return {
+      repository: agent.repository,
+      branch: found.value.headRef,
+      pullRequest: wirePullRequestOf(found.value, checks),
+    };
+  },
+);
 
 /** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */
 export class PublishedKey extends Data.Class<{

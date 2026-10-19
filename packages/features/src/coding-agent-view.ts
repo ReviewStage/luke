@@ -23,6 +23,7 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
+import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
@@ -334,6 +335,18 @@ export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentPullRequestParams = typeof codingAgentPullRequestParamsSchema.Type;
 
+/**
+ * One agent's Pull request tab, as the window reads its pull request: the
+ * agent, and the pull request of its repository by number where the tab
+ * shows one other than the one from the agent's branch.
+ */
+export const codingAgentPullRequestReadParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
+});
+
+export type CodingAgentPullRequestReadParams = typeof codingAgentPullRequestReadParamsSchema.Type;
+
 /** What the agent published, as the window hears it: its branch and pull request as GitHub holds them, or why there is no answer. */
 export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
   codingAgentPullRequestAnswerSchema,
@@ -389,6 +402,7 @@ export type CodingAgentReviewOptionsAnswerView =
 /** One change to an agent's pull request, as the window asks it made: the agent, and the change (`pull-request-write-wire.ts`). */
 export const codingAgentPullRequestActionParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
+  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
   request: pullRequestActionRequestSchema,
 });
 

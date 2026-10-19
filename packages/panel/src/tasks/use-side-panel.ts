@@ -31,6 +31,11 @@ import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import {
+  type ByPullRequestTab,
+  ofPullRequestTab,
+  withPullRequestTab,
+} from "./pull-request-number.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
 
 /**
@@ -312,8 +317,11 @@ const sidePanelTabSchema = Schema.Literals([
   ...SIDE_PANEL_TABS,
   ...Object.values(RETIRED_SIDE_PANEL_TAB),
 ]);
-/** An agent's Changes tab as it is kept, on the task it was opened on. */
-const changesTabSchema = Schema.Struct({ changes: Schema.String });
+/** An agent's Changes tab as it is kept, on the task it was opened on, with the number of the pull request it names where it names one. */
+const changesTabSchema = Schema.Struct({
+  changes: Schema.String,
+  number: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+});
 const anyTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
@@ -360,10 +368,11 @@ export interface PinnedTab extends Omit<typeof pinnedTabSchema.Type, "tab"> {
   readonly tab: PinnableTab;
 }
 
-/** What the open task's pins of agents and of their Pull requests are named now, each by agent id: an agent as its tab is, and its Pull request by the pull request's number and title. */
+/** What the open task's pins of agents and of their Pull requests are named now, each by agent id: an agent as its tab is, and its Pull request by the pull request's number and title; and a Pull request tab naming a pull request by its number likewise, by agent and then by number. */
 interface PinNames {
   readonly agents: ReadonlyMap<string, string>;
   readonly pullRequests: ReadonlyMap<string, string>;
+  readonly numbered?: ByPullRequestTab<string>;
 }
 
 /** A tab an earlier version pinned in the strip itself, of any kind it then held but a draft agent's. */
@@ -446,8 +455,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly browsers: readonly OpenBrowser[];
   /** The agent whose Terminal tab was shown last on each task, by task. */
   readonly lastTerminals: Readonly<Record<string, string>>;
-  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
-  readonly pullRequestViews: Readonly<Record<string, PullRequestView>>;
+  /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
+  readonly pullRequestViews: ByPullRequestTab<PullRequestView>;
   /** The open tabs of this Mac's terminals, by agent, in the order opened. */
   readonly macTerminals: readonly MacTerminalStripTab[];
   readonly tasks: Readonly<Record<string, TaskTabs>>;
@@ -539,10 +548,10 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
-  /** What each agent's Pull request tab shows, by agent, of those whose view was chosen; the overview otherwise. */
-  pullRequestViews: Readonly<Record<string, PullRequestView>>;
-  /** Chooses what an agent's Pull request tab shows, its tab open or not. */
-  onPullRequestView: (agentId: string, view: PullRequestView) => void;
+  /** What each Pull request tab shows, by agent and then by the number it names (`pull-request-number.ts`), of those whose view was chosen; the overview otherwise. */
+  pullRequestViews: ByPullRequestTab<PullRequestView>;
+  /** Chooses what a Pull request tab shows, its tab open or not. */
+  onPullRequestView: (tab: ChangesStripTab, view: PullRequestView) => void;
   /** The open task's Browser tabs in the order opened, after the Terminal tabs. */
   browsers: readonly OpenBrowser[];
   /** The open task's tabs of every kind as the strip draws them, in its order. */
@@ -787,7 +796,10 @@ function withPinsPlaced(
 /** The name a pin of an agent's tab or its Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
 function agentPinLabel(tab: PinnableTab, names: PinNames): string | undefined {
   if (isAgentTab(tab)) return names.agents.get(tab.agent);
-  return isChangesTab(tab) ? names.pullRequests.get(tab.changes) : undefined;
+  if (!isChangesTab(tab)) return undefined;
+  return tab.number === undefined
+    ? names.pullRequests.get(tab.changes)
+    : ofPullRequestTab(names.numbered ?? new Map(), tab);
 }
 
 /** The state with each agent, and each agent's Changes, pinned on the task named as `names` names it, and the state as it is where every one already was. */
@@ -1352,7 +1364,7 @@ function settled(state: SidePanelState): HeldState {
     terminals: [],
     browsers: [],
     lastTerminals: {},
-    pullRequestViews: {},
+    pullRequestViews: new Map(),
     macTerminals: [],
     tasks: currentTasks(state.tasks),
     pins:
@@ -1747,11 +1759,11 @@ export function useSidePanel(
     [update],
   );
   const onPullRequestView = useCallback(
-    (agentId: string, view: PullRequestView) =>
+    (tab: ChangesStripTab, view: PullRequestView) =>
       update((held) =>
-        held.pullRequestViews[agentId] === view
+        ofPullRequestTab(held.pullRequestViews, tab) === view
           ? held
-          : { ...held, pullRequestViews: { ...held.pullRequestViews, [agentId]: view } },
+          : { ...held, pullRequestViews: withPullRequestTab(held.pullRequestViews, tab, view) },
       ),
     [update],
   );

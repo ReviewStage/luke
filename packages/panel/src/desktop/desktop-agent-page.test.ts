@@ -563,7 +563,7 @@ test("⌘T on an agent's page opens the panel beside it on its +, the page's one
   );
 });
 
-test("a chip in the agent's words naming the pull request it opened opens its Pull request tab beside its page, and another pull request's opens on GitHub, as does the tab's own way to its earlier comments", async () => {
+test("a chip in the agent's words naming the pull request it opened opens its Pull request tab beside its page, and another repository's pull request opens on GitHub, as does the tab's own way to its earlier comments", async () => {
   const url = "https://github.com/acme/relay/pull/2911";
   earlier = 3;
   published = {
@@ -580,7 +580,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
       changedFiles: 1,
     },
   };
-  const other = "https://github.com/acme/relay/pull/7";
+  const other = "https://github.com/acme/billing/pull/7";
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
@@ -590,7 +590,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
         parts: [
           {
             type: "text",
-            text: `Opened [@relay#2911](${url}#issuecomment-1), beside [@relay#7](${other}).`,
+            text: `Opened [@relay#2911](${url}#issuecomment-1), beside [@billing#7](${other}).`,
           },
         ],
       },
@@ -617,7 +617,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   );
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 
-  act(() => chip("relay#7")?.click());
+  act(() => chip("billing#7")?.click());
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
@@ -992,7 +992,7 @@ test("with the Automations experiment off, an automation's agent names it plainl
   assert.equal(sender?.querySelector("button"), null, "nothing opens it");
 });
 
-test("a GitHub event's run names its pull request beside the automation, which opens on GitHub, and a run now names who ran it", async () => {
+test("a GitHub event's run names its pull request beside the automation, which opens in a Pull request tab beside the page by its number, and a run now names who ran it", async () => {
   const url = "https://github.com/acme/relay/pull/2905";
   pages = [
     {
@@ -1007,13 +1007,20 @@ test("a GitHub event's run names its pull request beside the automation, which o
     },
   ];
   transcript = handedTranscript();
-  const page = mount(tasksControl({ me: "user-dean" }));
+  const chosen: unknown[] = [];
+  const base = tasksControl({ me: "user-dean" });
+  const page = mount({
+    ...base,
+    sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
+  });
   await settle();
 
   const { sender } = origin(page);
   assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
-  assert.deepEqual(openedOnGitHub, [url]);
+  await settle();
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
+  assert.deepEqual(chosen, [{ changes: AGENT_ID, number: 2905 }]);
 });
 
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {

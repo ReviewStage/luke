@@ -98,6 +98,7 @@ import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
 import { PullRequestMark } from "./pull-request-mark.js";
+import { usePullRequestNumber } from "./pull-request-number.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
@@ -1087,7 +1088,15 @@ export function AgentChangesTab({
 }): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
+  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
+  const number = usePullRequestNumber();
+  const { answer, out, ask } = useAgentRead(
+    agentId,
+    shown,
+    ended,
+    (id: string) => control.readChanges(id, number),
+    UNANSWERED,
+  );
   // How many answers have landed, which a changed image is drawn anew on.
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
     of: undefined,
@@ -1107,9 +1116,13 @@ export function AgentChangesTab({
     return { files, paths, ordered: treeOrder(files), folders: changedFolders(paths) };
   }, [pullRequest]);
   // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
+  const readViewed = useCallback(
+    (id: string) => control.readPullRequestViewed(id, number),
+    [control.readPullRequestViewed, number],
+  );
   const viewedFiles = useViewedFiles(
     agentId,
-    control.readPullRequestViewed,
+    readViewed,
     pullRequest === null ? undefined : reads.current.count,
   );
   const viewSettings = useFileViewSettings();

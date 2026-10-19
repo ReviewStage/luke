@@ -112,6 +112,7 @@ import {
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
+import { ofPullRequestTab, PullRequestNumberProvider } from "./pull-request-number.js";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people.js";
 import {
   LabelPicker,
@@ -1626,16 +1627,19 @@ function reviewThreadsOf(
  * says so in its own part, with its own Retry, the others standing. Files
  * changed draws the conversation's review threads on their lines.
  */
-export function AgentPullRequestTab({
-  agentId,
-  control,
-  shown,
-  repository,
-  tree,
-  view,
-  onView,
-}: {
+export function AgentPullRequestTab(props: AgentPullRequestTabProps): React.JSX.Element {
+  // Note that the number is handed down before any of the tab's own hooks run, its writes among them.
+  return (
+    <PullRequestNumberProvider value={props.number}>
+      <PullRequestTabBody {...props} />
+    </PullRequestNumberProvider>
+  );
+}
+
+interface AgentPullRequestTabProps {
   agentId: string;
+  /** The pull request of the agent's repository the tab shows by its number, where it is not the one from the agent's branch (`pull-request-number.ts`); none shows the agent's own. */
+  number?: number | undefined;
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
@@ -1645,7 +1649,19 @@ export function AgentPullRequestTab({
   tree: TreeShown;
   view: PullRequestView;
   onView: (view: PullRequestView) => void;
-}): React.JSX.Element {
+}
+
+/** The Pull request tab under the number it names (`AgentPullRequestTab`). */
+function PullRequestTabBody({
+  agentId,
+  number,
+  control,
+  shown,
+  repository,
+  tree,
+  view,
+  onView,
+}: AgentPullRequestTabProps): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const id = useId();
@@ -1658,21 +1674,21 @@ export function AgentPullRequestTab({
     agentId,
     shown,
     ended,
-    control.readOverviewPullRequest,
+    (id: string) => control.readOverviewPullRequest(id, number),
     UNANSWERED,
   );
   const conversationRead = useAgentRead(
     agentId,
     shown,
     ended,
-    control.readOverviewConversation,
+    (id: string) => control.readOverviewConversation(id, number),
     UNANSWERED,
   );
   const checksRead = useAgentRead(
     agentId,
     shown && view === PULL_REQUEST_VIEW.CHECKS,
     ended,
-    control.readOverviewChecks,
+    (id: string) => control.readOverviewChecks(id, number),
     UNANSWERED,
   );
   const ask = {
@@ -1686,7 +1702,11 @@ export function AgentPullRequestTab({
     ask.pullRequest();
     ask.conversation();
     if (askedYet(checksRead)) ask.checks();
-    void control.readPullRequest(agentId).catch(() => undefined);
+    const read =
+      number === undefined
+        ? control.readPullRequest(agentId)
+        : control.readNumberedPullRequest(agentId, number);
+    void read.catch(() => undefined);
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1695,7 +1715,7 @@ export function AgentPullRequestTab({
     ask,
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
-  const published = control.pullRequests.get(agentId);
+  const published = pullRequestOfTab(control, { changes: agentId, number });
   const bar = barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
@@ -1817,4 +1837,18 @@ export function AgentPullRequestTab({
       </div>
     </ThreadWritesProvider>
   );
+}
+
+/**
+ * The pull request a Pull request tab shows, as the task's agents last read
+ * it: the one it names by its number, kept apart (`numberedPullRequests`),
+ * else its agent's own; none before it is read.
+ */
+export function pullRequestOfTab(
+  control: Pick<CodingAgentsControl, "pullRequests" | "numberedPullRequests">,
+  tab: { readonly changes: string; readonly number?: number | undefined },
+): CodingAgentPullRequest | undefined {
+  return tab.number === undefined
+    ? control.pullRequests.get(tab.changes)
+    : ofPullRequestTab(control.numberedPullRequests, tab);
 }

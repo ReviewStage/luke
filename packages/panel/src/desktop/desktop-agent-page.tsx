@@ -267,10 +267,11 @@ export function DesktopAgentPage({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  const openPullRequest = (published: string) =>
-    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
-  // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
-  const openHere = openPullRequestsHere(control, openPullRequest);
+  const openPullRequest = (published: string, number?: number) =>
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number);
+  // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
+  // and one to any other pull request of its repository a Pull request tab by its number.
+  const openHere = openPullRequestsHere(control, openPullRequest, agentRepository);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,

@@ -13,6 +13,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import type { ViewedMarks } from "./changes-list.js";
+import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 import { noteOf, type WriteNote } from "./pull-request-writes.js";
 
 /**
@@ -78,6 +79,7 @@ export function useViewedFiles(
   reading: number | undefined,
 ): ViewedFiles {
   const { act } = useAct();
+  const number = usePullRequestNumber();
   const [states, setStates] = useState<ReadonlyMap<string, FileViewedState> | undefined>();
   const [pressed, setPressed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
@@ -132,7 +134,10 @@ export function useViewedFiles(
         ? PULL_REQUEST_ACTION.MARK_FILE_VIEWED
         : PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED;
       sentAt.set(path, pressing.current.get(path)?.presses ?? 0);
-      void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request: { action, path } })
+      void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+        ...pullRequestAsked(agentId, number),
+        request: { action, path },
+      })
         .catch(
           (): CodingAgentPullRequestWriteAnswerView => ({
             failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
@@ -165,7 +170,7 @@ export function useViewedFiles(
           for (const tell of now.told) tell(stood);
         });
     },
-    [act, agentId],
+    [act, agentId, number],
   );
 
   const toggle = useCallback(

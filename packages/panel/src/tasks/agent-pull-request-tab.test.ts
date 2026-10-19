@@ -237,6 +237,9 @@ let changes: (readonly [string, PullRequestActionRequest])[] = [];
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
+/** The number of the pull request each change named, none where it was the agent's own. */
+let changeNumbers: (number | undefined)[] = [];
+
 /** What Files changed handed the diff bundle's list, mount first, each draw after it. */
 let lists: DiffListProps[] = [];
 
@@ -248,6 +251,7 @@ beforeEach(() => {
   images = [];
   previews = [];
   changes = [];
+  changeNumbers = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   lists = [];
   changeHeld = undefined;
@@ -258,6 +262,7 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
         changes.push([request.payload.agentId, request.payload.request]);
+        changeNumbers.push(request.payload.number);
         const answer = changeAnswer;
         return (changeHeld ?? Promise.resolve()).then(() => ({
           status: ACT_OUTCOME_STATUS.DONE,
@@ -2757,6 +2762,55 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   );
   assert.equal(withId.querySelector("textarea")?.value, "Done.");
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
+});
+
+test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines, and changes it rather than the agent's own", async () => {
+  const asked: unknown[] = [];
+  const url = "https://github.com/acme/relay/pull/41";
+  const earlier = {
+    ...published(PULL_REQUEST_STATE.OPEN),
+    number: 41,
+    title: "Lay the invitations' base",
+    url,
+    additions: 9,
+    deletions: 2,
+  };
+  const recorded =
+    <A>(kind: string, answer: A) =>
+    (agentId: string, number?: number) => {
+      asked.push([kind, agentId, number]);
+      return Promise.resolve(answer);
+    };
+  const control = {
+    ...controlAnswering({
+      pullRequest: recorded("pull request", {
+        pullRequest: { ...PULL_REQUEST, number: 41, title: earlier.title, url },
+      }),
+      conversation: recorded("conversation", { pullRequest: CONVERSATION }),
+    }),
+    numberedPullRequests: new Map([[AGENT.id, new Map([[41, earlier]])]]),
+  };
+  const tab = await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      onView: () => undefined,
+    }),
+  );
+
+  assert.deepEqual(asked, [
+    ["pull request", AGENT.id, 41],
+    ["conversation", AGENT.id, 41],
+  ]);
+  assert.equal(tabCount(tab, "Files changed"), "+9 −2");
+  await pressAction(tab, "Close pull request");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.deepEqual(changeNumbers, [41]);
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {

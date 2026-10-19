@@ -307,9 +307,9 @@ function fakeService() {
         asked.push(`pull-request:${agentId}`);
         return PUBLISHED;
       }),
-    changes: (agentId) =>
+    changes: (agentId, number) =>
       Effect.sync(() => {
-        asked.push(`changes:${agentId}`);
+        asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
       }),
     overviewPullRequest: (agentId) =>
@@ -332,9 +332,11 @@ function fakeService() {
         asked.push(`overview-conversation:${agentId}`);
         return OVERVIEW.conversation;
       }),
-    pullRequestAction: (agentId, request) =>
+    pullRequestAction: (agentId, request, number) =>
       Effect.sync(() => {
-        asked.push(`pull-request-action:${agentId}:${request.action}`);
+        asked.push(
+          `pull-request-action:${agentId}${number === undefined ? "" : `#${number}`}:${request.action}`,
+        );
         return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
       }),
     pullRequestViewed: (agentId) =>
@@ -621,6 +623,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
+      CHANGES,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
       OVERVIEW.pullRequest,
     );
@@ -646,6 +652,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
         agentId: AGENT_ID,
+        number: 11,
         request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
       }),
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
@@ -771,12 +778,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
+      `changes:${AGENT_ID}#11`,
       `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,
       `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
-      `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
+      `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `pull-request-viewed:${AGENT_ID}`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
