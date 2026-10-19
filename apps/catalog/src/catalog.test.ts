@@ -38,7 +38,7 @@ function open(address: string): HTMLElement {
 
 /** The frame the example is drawn in, if the page frames it. */
 function frameOf(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>("main .catalog-frame");
+  return page.querySelector<HTMLElement>("main .catalog-width-frame");
 }
 
 test("an example asked for at 390 is framed at 390 pixels", () => {

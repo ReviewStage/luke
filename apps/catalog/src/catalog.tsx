@@ -1,4 +1,17 @@
-import { DENSITY, type Density, PROFILE, type Profile, THEME, type Theme } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  DENSITY,
+  type Density,
+  PROFILE,
+  type Profile,
+  TEXT_FIELD_TYPE,
+  TextField,
+  THEME,
+  type Theme,
+} from "@luke/ui";
+import { useState } from "react";
 import { EXAMPLES, type Example } from "./examples";
 
 /**
@@ -106,28 +119,29 @@ function ViewLink({
 }
 
 /**
- * The width field: a form the browser submits as a plain GET, carrying the
- * rest of the view along as hidden fields, so the address stays the whole
- * state and the page keeps none.
+ * The width field: a form the browser submits as a plain GET, by Enter or by
+ * Apply, carrying the rest of the view along as hidden fields, so the address
+ * stays the whole state; the field holds only the draft being typed.
  */
 function WidthField({ view }: { view: CatalogView }): React.JSX.Element {
+  const [draft, setDraft] = useState(view.width);
   const carried = [...new URLSearchParams(hrefOf({ ...view, width: undefined }))];
   return (
     <form className="catalog-width" method="get">
       {carried.map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
-      <label>
-        <span className="catalog-width-label">Width</span>
-        <input
-          type="number"
-          name="width"
-          min={WIDTH_RANGE.min}
-          max={WIDTH_RANGE.max}
-          placeholder="auto"
-          defaultValue={view.width}
-        />
-      </label>
+      <TextField
+        type={TEXT_FIELD_TYPE.NUMBER}
+        name="width"
+        label="Width in pixels"
+        placeholder="Width"
+        value={draft}
+        onChange={setDraft}
+      />
+      <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE}>
+        Apply
+      </Button>
     </form>
   );
 }
@@ -146,7 +160,11 @@ function ExampleFrame({
       {width === undefined ? (
         <example.Render />
       ) : (
-        <div className="catalog-frame" data-catalog-width={width} style={{ inlineSize: width }}>
+        <div
+          className="catalog-width-frame"
+          data-catalog-width={width}
+          style={{ inlineSize: width }}
+        >
           <example.Render />
         </div>
       )}
