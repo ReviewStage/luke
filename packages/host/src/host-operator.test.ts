@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INBOX_REPLY } from "@luke/features/inbox-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import {
   carried,
   GATEWAY_ERROR,
@@ -101,6 +102,35 @@ it.effect(
         ],
       );
     }),
+);
+
+it.effect("a task filed for later carries its status and priority to the host", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+
+    yield* operator.tasksStart({
+      name: "Rate limit search",
+      planning: false,
+      status: TASK_STATUS.BACKLOG,
+      priority: TASK_PRIORITY.HIGH,
+    });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.TASKS_START,
+          {
+            name: "Rate limit search",
+            planning: false,
+            status: TASK_STATUS.BACKLOG,
+            priority: TASK_PRIORITY.HIGH,
+          },
+        ],
+      ],
+    );
+  }),
 );
 
 it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>

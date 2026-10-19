@@ -731,6 +731,34 @@ body,
   pointer-events: none;
 }
 
+/* The Tasks head's status filter stands out of the way until the head is
+   hovered or reached, or its menu stands (`sidebar-task-view.tsx`). */
+.sidebar-status-filter {
+  display: inline-flex;
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.sidebar-section-head:is(:hover, :focus-within) .sidebar-status-filter,
+.sidebar-status-filter[data-menu-open="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .sidebar-status-filter {
+    opacity: 1;
+  }
+}
+
+/* The quiet line under the list saying what the status filter leaves out,
+   inset as a row's words are. */
+.sidebar-hidden-statuses {
+  margin: var(--luke-space-4) var(--row-inset);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
 /* What the view filters by, under the Tasks head: a row of `@luke/ui`'s
    removable filter chips (`sidebar-task-view.tsx`). */
 .sidebar-view-chips {
@@ -7675,4 +7703,119 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 .run-card-figure dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/* The Board (`tasks-board.tsx`): the listed workspace's tasks on a column
+   for each status, boxed and headed as the Issues board's are. The board
+   fills the page's height, so it never scrolls down and each column scrolls
+   its own cards; its columns share the page's width, each at least a
+   card's, past which the page scrolls sideways. */
+.tasks-board {
+  --carried-ground: var(--luke-color-surface);
+  position: relative;
+  display: flex;
+  min-width: min-content;
+  min-height: 0;
+  flex: 1 1 0;
+  gap: var(--luke-space-8);
+  line-height: normal;
+}
+
+.tasks-board-column {
+  display: flex;
+  min-width: 220px; /* off-scale: a card's least readable width */
+  min-height: 0;
+  flex: 1 0 220px; /* off-scale: as above */
+  flex-direction: column;
+  padding: var(--luke-space-8) var(--luke-space-4) var(--luke-space-6);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+/* The column a card is carried over (use-row-drag.ts) is ringed and washed,
+   so it reads as the one the card will land in. */
+.tasks-board-column[data-drop-target="true"] {
+  border-color: var(--luke-color-focus-ring);
+  background:
+    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)),
+    var(--luke-color-surface);
+}
+
+/* A column's head: its status's mark, its name, and how many it holds, on
+   its cards' inset. */
+.tasks-board-column-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  min-height: var(--luke-control-height);
+  margin: 0;
+  padding: 0 var(--row-inset);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-board-column-head > .luke-task-mark {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.tasks-board-column-head > .luke-task-mark + .luke-text {
+  flex: 1;
+}
+
+/* A column with no task says so in one quiet line. */
+.tasks-board-column > p.luke-text {
+  padding: var(--luke-space-2) var(--row-inset) var(--luke-space-6);
+}
+
+/* A column's cards scroll under its head, the ring's reach spared at its
+   sides and foot so a card's ring is never cut off. */
+.tasks-board-column-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 0 1 auto;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
+}
+
+.tasks-board-cards {
+  padding: var(--luke-focus-ring-reach);
+}
+
+/* A card's first line: its priority's mark and key, its creator's face at
+   its end. */
+.tasks-board .sidebar-task-line {
+  gap: var(--luke-space-6);
+}
+
+.tasks-board .sidebar-task-line > .luke-task-mark {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.tasks-board-key {
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-board-face {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+/* A card's name stands whole under its line, wrapping to three lines at
+   most, since a column is too narrow for the list's single line. */
+.tasks-board .home-row .tasks-board-name {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  margin-top: var(--luke-space-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow-wrap: anywhere;
 }

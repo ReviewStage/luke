@@ -1506,6 +1506,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),
           ...("brief" in request ? { brief: request.brief } : undefined),
+          ...("status" in request ? { status: request.status } : undefined),
+          ...("priority" in request ? { priority: request.priority } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok

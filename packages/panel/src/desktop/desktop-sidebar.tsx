@@ -45,10 +45,12 @@ import {
   agentRow,
   type CreatorGroup,
   creatorGroups,
+  hiddenStatuses,
   orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  shownStatuses,
   TASK_GROUPING,
   TASK_ROW,
   type TaskOrder,
@@ -56,6 +58,7 @@ import {
   taskRow,
   taskRowRepository,
   taskRowsCreatedBy,
+  taskRowsInStatuses,
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
@@ -74,6 +77,7 @@ import {
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
+  SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
@@ -120,7 +124,9 @@ import {
   useSectionDialogs,
 } from "./sidebar-sections.js";
 import {
+  HiddenStatusesLine,
   SidebarSectionHead,
+  TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
@@ -1096,6 +1102,32 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Board's row, under the Inbox's: the board's columns, and its name. A
+ * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
+ * and the row is the place shown while it stands. It is always offered.
+ */
+function SidebarBoardRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <NavItem
+      icon={<SquareKanbanIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      Board
+    </NavItem>
+  );
+}
+
+/**
  * The Issues page's row, after the Automations page's and drawn as it is:
  * its glyph, its name, and its chord. A press opens the window's Issues page
  * (`issues-page.tsx`), and the row is the place shown while it stands.
@@ -1311,6 +1343,7 @@ function SidebarColumn({
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inIssues = onTasks && tasks.issuesView.open;
+  const inBoard = onTasks && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1327,6 +1360,7 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inIssues ||
+    inBoard ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Factory, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
@@ -1363,6 +1397,10 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.issuesView.onOpen();
   };
+  const openBoard = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.boardView.onOpen();
+  };
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.automationsView.onOpen();
@@ -1384,6 +1422,8 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
+  // The status filter's menu, which its button on the Tasks head and the hidden tasks' line both open.
+  const statusMenu = useMenu(tasks.shown && overlay.inSight);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has creators to group and filter by.
   const { memberCount } = tasks.workspace ?? {};
@@ -1534,9 +1574,13 @@ function SidebarColumn({
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
+  // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
+  const statuses = shownStatuses(taskView.view);
+  const hidden = archive.shown ? [] : hiddenStatuses(rows, statuses);
+  const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
-    rows,
+    statusRows,
     grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
     order,
     tasks,
@@ -1622,6 +1666,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
+        <SidebarBoardRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow
@@ -1712,6 +1757,13 @@ function SidebarColumn({
                       })}
                     />
                   ) : null}
+                  {archive.shown ? null : (
+                    <TaskStatusFilter
+                      menu={statusMenu}
+                      statuses={statuses}
+                      onStatuses={taskView.onStatuses}
+                    />
+                  )}
                   <TaskViewOptions
                     shown={tasks.shown && overlay.inSight}
                     control={taskView}
@@ -1783,6 +1835,7 @@ function SidebarColumn({
                 onNewTaskIn={chosen(newTaskIn)}
                 context={context}
               />
+              <HiddenStatusesLine menu={statusMenu} hidden={hidden} />
             </nav>
           </div>
         </ScrollArea>

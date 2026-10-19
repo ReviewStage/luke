@@ -12,7 +12,7 @@ import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -136,6 +136,7 @@ async function mount(
   const fromWorkspaceIssues: (string | undefined)[] = [];
   const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
+  const statuses: (TaskStatus | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -173,6 +174,7 @@ async function mount(
           fromWorkspaceIssues.push(from?.issueId);
           briefs.push(from?.brief);
           startedIn.push(workspaceId);
+          statuses.push(from?.status);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -229,6 +231,8 @@ async function mount(
     briefs,
     /** The workspace each start asked for. */
     startedIn,
+    /** The status each start asked its task to stand in, where it asked for one. */
+    statuses,
     /** Whether each start asked for its planning phase. */
     planned,
     /** The coding agent each start handed its words, where it asked for one. */
@@ -1565,4 +1569,30 @@ test("opened as a new agent's card on an issue, it offers no Plan toggle, holds 
   assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
   assert.deepEqual(card.agentsAtOnce, [true]);
+});
+
+test("File for later files the task in the backlog with no call and no agent, named by the words' first line and keeping them as its brief", async () => {
+  const card = await mount();
+  card.type("Rate limit the public search\nThirty a minute per installation.");
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(card.starts, [["Rate limit the public search", "acme/web"]]);
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false]);
+  assert.deepEqual(card.agents, [undefined]);
+  assert.deepEqual(card.agentsAtOnce, [undefined]);
+  assert.deepEqual(card.briefs, [
+    "Rate limit the public search\nThirty a minute per installation.",
+  ]);
+});
+
+test("File for later is held while the box is empty, and Start's task names no status, so it starts to do", async () => {
+  const card = await mount();
+  assert.equal(card.button("File for later").disabled, true);
+
+  card.type("Fix the refresh");
+  await card.key("Enter");
+
+  assert.deepEqual(card.statuses, [undefined]);
 });

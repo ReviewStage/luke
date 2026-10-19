@@ -1,22 +1,34 @@
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import {
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskPriority,
+  type TaskStatus,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { expect, test } from "vitest";
 import {
   agentRow,
   type CreatorGroup,
   createdByOnly,
   creatorGroups,
+  hiddenStatuses,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  shownStatuses,
+  TASK_GROUPING,
   TASK_ORDER,
   TASK_ROW,
   type TaskOrder,
   type TaskRow,
+  taskBoardColumns,
   taskRow,
   taskRowName,
   taskRowsCreatedBy,
+  taskRowsInStatuses,
   taskTime,
+  toggledStatus,
 } from "./task-list-model.js";
 
 const DEAN = "user-dean";
@@ -300,5 +312,67 @@ test("an untitled one-off agent is named by its automation, as its tab names it,
   ];
   expect(names(repositoryGroups(rows, TASK_ORDER.NAME))).toEqual([
     ["Morning Sentry triage", "Zebra notes"],
+  ]);
+});
+
+/** A task standing in `status` at `priority`, last updated at `updatedAt`. */
+function standing(
+  name: string,
+  status: TaskStatus | undefined,
+  priority: TaskPriority | undefined,
+  updatedAt: number,
+): TaskSummary {
+  return {
+    ...task(name, "acme/relay", 1, updatedAt),
+    ...(status === undefined ? undefined : { status }),
+    ...(priority === undefined ? undefined : { priority }),
+  };
+}
+
+test("the list leaves the backlog and the settled out until asked, counting them by status, and keeps a row with no status to leave out by", () => {
+  const rows = [
+    standing("Filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE, 1),
+    standing("Under way", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH, 2),
+    standing("Shipped", TASK_STATUS.DONE, TASK_PRIORITY.LOW, 3),
+    standing("Also filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.LOW, 4),
+    standing("Older service", undefined, undefined, 5),
+  ].map(taskRow);
+  const statuses = shownStatuses({ grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED });
+
+  expect(taskRowsInStatuses(rows, statuses).map(taskRowName)).toEqual([
+    "Under way",
+    "Older service",
+  ]);
+  expect(hiddenStatuses(rows, statuses)).toEqual([
+    { status: TASK_STATUS.BACKLOG, count: 2 },
+    { status: TASK_STATUS.DONE, count: 1 },
+  ]);
+});
+
+test("a status turned on joins the others in the order work moves through them, and turned off leaves them", () => {
+  const shown = toggledStatus([TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS], TASK_STATUS.BACKLOG);
+  expect(shown).toEqual([TASK_STATUS.BACKLOG, TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS]);
+  expect(toggledStatus(shown, TASK_STATUS.TODO)).toEqual([
+    TASK_STATUS.BACKLOG,
+    TASK_STATUS.IN_PROGRESS,
+  ]);
+});
+
+test("the board's columns hold their status's tasks, the most pressing first and the unweighed last, the latest first within a priority", () => {
+  const tasks = [
+    standing("Unweighed", TASK_STATUS.TODO, TASK_PRIORITY.NONE, 9),
+    standing("Low", TASK_STATUS.TODO, TASK_PRIORITY.LOW, 8),
+    standing("Urgent", TASK_STATUS.TODO, TASK_PRIORITY.URGENT, 1),
+    standing("High, older", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 2),
+    standing("High, newer", TASK_STATUS.TODO, TASK_PRIORITY.HIGH, 5),
+    standing("Shipped", TASK_STATUS.DONE, TASK_PRIORITY.HIGH, 3),
+    standing("Older service", undefined, undefined, 4),
+  ];
+
+  const columns = taskBoardColumns(tasks, [TASK_STATUS.TODO, TASK_STATUS.DONE]);
+
+  expect(columns.map((column) => [column.status, column.tasks.map((each) => each.name)])).toEqual([
+    [TASK_STATUS.TODO, ["Urgent", "High, newer", "High, older", "Low", "Unweighed"]],
+    [TASK_STATUS.DONE, ["Shipped"]],
   ]);
 });

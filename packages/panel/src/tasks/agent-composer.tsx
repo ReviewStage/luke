@@ -348,6 +348,7 @@ export function AgentComposer({
   above,
   tools,
   actions,
+  beforeSend,
   sendable = true,
   onKey,
   onLeave,
@@ -398,6 +399,8 @@ export function AgentComposer({
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words: New task's Plan toggle. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
+  /** What stands just before the round button: New task's File for later. */
+  beforeSend?: ReactNode;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -777,6 +780,7 @@ export function AgentComposer({
                 />
                 <DictateButton dictation={dictation} disabled={held || module === undefined} />
                 <ComposerMore foot={foot} offers={offers} />
+                {beforeSend}
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

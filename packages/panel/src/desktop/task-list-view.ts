@@ -1,4 +1,5 @@
 import { useAtom } from "@effect/atom-react";
+import { type TaskStatus, taskStatusSchema } from "@luke/features/task-wire";
 import {
   DEFAULT_TASK_LIST_VIEW,
   TASK_GROUPING,
@@ -20,7 +21,7 @@ import type { ArchivedView } from "./sidebar-task-view.js";
  * renderer's own storage as the folds are, so a list grouped by creator on
  * one Mac stays grouped by repository on another, and one workspace's view
  * never changes another's. A workspace with no view kept draws today's,
- * by repository and last update, everyone's tasks. A fixture run draws that view and keeps
+ * by repository and last update, everyone's tasks to do and under way. A fixture run draws that view and keeps
  * nothing, so its frames never wear a developer's choices.
  */
 
@@ -35,6 +36,7 @@ const storedViews = Schema.fromJsonString(
       grouping: Schema.Literals(Object.values(TASK_GROUPING)),
       order: Schema.Literals(Object.values(TASK_ORDER)),
       createdBy: Schema.optionalKey(Schema.String),
+      statuses: Schema.optionalKey(Schema.Array(taskStatusSchema)),
     }),
   ),
 );
@@ -48,6 +50,8 @@ export interface TaskListViewControl {
   readonly onOrder: (order: TaskOrder) => void;
   /** Lists one member's tasks, by account id, or everyone's for undefined. */
   readonly onCreatedBy: (createdBy: string | undefined) => void;
+  /** Lists the tasks of these statuses, in `TASK_STATUS_ORDER`. */
+  readonly onStatuses: (statuses: readonly TaskStatus[]) => void;
 }
 
 /**
@@ -85,12 +89,18 @@ export function useTaskListView(
     view,
     onGrouping: (grouping) => choose({ ...view, grouping }),
     onOrder: (order) => choose({ ...view, order }),
+    // Note that everyone's tasks is the view with no creator named at all, its statuses kept.
     onCreatedBy: (createdBy) =>
       choose(
         createdBy === undefined
-          ? { grouping: view.grouping, order: view.order }
+          ? {
+              grouping: view.grouping,
+              order: view.order,
+              ...(view.statuses === undefined ? undefined : { statuses: view.statuses }),
+            }
           : { ...view, createdBy },
       ),
+    onStatuses: (statuses) => choose({ ...view, statuses }),
   };
 }
 

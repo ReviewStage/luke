@@ -274,6 +274,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
   // Chat has no link of its own, and the task it stands over is not in sight, so it offers none.
   if (tasks.chatView.open) return [];
+  // The Board has no link of its own either, on the same terms.
+  if (tasks.boardView.open) return [];
   // The Issues list has no link of its own, and the task it stands over is not in sight, so it offers none.
   const issues = tasks.issuesView;
   if (issues.open) {

@@ -1,6 +1,12 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { agentTabLabel } from "@luke/features/model-label";
-import type { TaskSummary } from "@luke/features/task-wire";
+import {
+  TASK_PRIORITY_ORDER,
+  TASK_STATUS,
+  TASK_STATUS_ORDER,
+  type TaskStatus,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 
 /**
  * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
@@ -16,6 +22,13 @@ import type { TaskSummary } from "@luke/features/task-wire";
  * with no task, which stands among the tasks by the same rules rather than
  * in a group of its own: under its repository, under whoever started it, and
  * in the order chosen, a task's row timed as the task is (`taskTime`).
+ *
+ * The list holds the tasks of the statuses the view shows, to do and in
+ * progress until the reader chooses otherwise, so a filed backlog and the
+ * settled tasks stay out of the way of the work under way; an agent with no
+ * task, and a task from a service before statuses, has no status to leave
+ * it out by and always stands. The Board lays the same tasks out by status
+ * instead, a column for each (`taskBoardColumns`).
  */
 
 /** How the list groups its tasks. */
@@ -42,7 +55,12 @@ export interface TaskListView {
   readonly order: TaskOrder;
   /** Whose tasks the list holds: one member's by account id, or everyone's where absent. */
   readonly createdBy?: string;
+  /** The statuses whose tasks the list holds, in `TASK_STATUS_ORDER`; `DEFAULT_SHOWN_STATUSES` where absent. */
+  readonly statuses?: readonly TaskStatus[];
 }
+
+/** The statuses a list shows until its reader chooses: the work to do and under way, the backlog and the settled left out. */
+const DEFAULT_SHOWN_STATUSES: readonly TaskStatus[] = [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS];
 
 export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
   grouping: TASK_GROUPING.REPOSITORY,
@@ -222,6 +240,84 @@ export function taskRowsCreatedBy(
   createdBy: string | undefined,
 ): readonly TaskRow[] {
   return createdBy === undefined ? rows : rows.filter((row) => taskRowCreatorId(row) === createdBy);
+}
+
+/** The statuses a view shows, in `TASK_STATUS_ORDER`. */
+export function shownStatuses(view: TaskListView): readonly TaskStatus[] {
+  return view.statuses ?? DEFAULT_SHOWN_STATUSES;
+}
+
+/** The statuses shown with one turned on or off, kept in `TASK_STATUS_ORDER`. */
+export function toggledStatus(
+  statuses: readonly TaskStatus[],
+  status: TaskStatus,
+): readonly TaskStatus[] {
+  const on = !statuses.includes(status);
+  return TASK_STATUS_ORDER.filter((each) => (each === status ? on : statuses.includes(each)));
+}
+
+/** The status a row is left out by: its task's, or none for an agent with no task or a task from a service before statuses. */
+function taskRowStatus(row: TaskRow): TaskStatus | undefined {
+  return row.kind === TASK_ROW.TASK ? row.task.status : undefined;
+}
+
+/** The rows of the statuses shown, and every row with no status to leave it out by. */
+export function taskRowsInStatuses(
+  rows: readonly TaskRow[],
+  statuses: readonly TaskStatus[],
+): readonly TaskRow[] {
+  return rows.filter((row) => {
+    const status = taskRowStatus(row);
+    return status === undefined || statuses.includes(status);
+  });
+}
+
+/** How many of the rows each status the view leaves out holds, in `TASK_STATUS_ORDER`, a status holding none left unsaid. */
+export interface HiddenStatus {
+  readonly status: TaskStatus;
+  readonly count: number;
+}
+
+/** The rows the statuses shown leave out, counted by status; none where every row stands. */
+export function hiddenStatuses(
+  rows: readonly TaskRow[],
+  statuses: readonly TaskStatus[],
+): readonly HiddenStatus[] {
+  return TASK_STATUS_ORDER.flatMap((status) => {
+    if (statuses.includes(status)) return [];
+    const count = rows.filter((row) => taskRowStatus(row) === status).length;
+    return count === 0 ? [] : [{ status, count }];
+  });
+}
+
+/** One column of the Board: a status, and its tasks in the column's order. */
+export interface TaskBoardColumn {
+  readonly status: TaskStatus;
+  readonly tasks: readonly TaskSummary[];
+}
+
+/** Two tasks in a column's order: the most pressing first, the unweighed last, and within a priority the latest activity first. */
+function byPriority(a: TaskSummary, b: TaskSummary): number {
+  const rank = (task: TaskSummary) =>
+    task.priority === undefined
+      ? TASK_PRIORITY_ORDER.length
+      : TASK_PRIORITY_ORDER.indexOf(task.priority);
+  return rank(a) - rank(b) || taskTime(b, TASK_ORDER.UPDATED) - taskTime(a, TASK_ORDER.UPDATED);
+}
+
+/**
+ * The Board's columns: one for each status asked for, in the order asked,
+ * each holding the tasks standing in it, the most pressing first. A task
+ * from a service before statuses stands in no column.
+ */
+export function taskBoardColumns(
+  tasks: readonly TaskSummary[],
+  statuses: readonly TaskStatus[],
+): readonly TaskBoardColumn[] {
+  return statuses.map((status) => ({
+    status,
+    tasks: tasks.filter((task) => task.status === status).toSorted(byPriority),
+  }));
 }
 
 /**
