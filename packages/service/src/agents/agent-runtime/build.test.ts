@@ -1,3 +1,7 @@
+/**
+ * build.test.ts -- eve's compile-time bundle of an authored file, without the inline source map the eve patch drops.
+ */
+
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { temporaryDirectory } from "@luke/wire/testing";
