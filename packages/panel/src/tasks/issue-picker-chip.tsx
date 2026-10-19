@@ -367,7 +367,15 @@ export function IssuePickerChip({
   const ownIssues = useIssuesRead(issuesIn, workspaceId);
   const [searched, searchLinear] = useLinearSearch(linearIn);
   const [typed, setTyped] = useState("");
-  const [githubStanding, searchGitHub] = useGitHubIssues(githubIn, workspaceId, repository, typed);
+  // How many times the menu has opened, each of which reads the repository's issues afresh.
+  const [openings, setOpenings] = useState(0);
+  const [githubStanding, searchGitHub] = useGitHubIssues(
+    githubIn,
+    workspaceId,
+    repository,
+    typed,
+    openings,
+  );
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const menuId = useId();
@@ -402,6 +410,7 @@ export function IssuePickerChip({
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setTyped("");
     setOpen(true);
+    setOpenings((count) => count + 1);
   }, [openRequest]);
 
   if (!connected) return null;
@@ -434,6 +443,7 @@ export function IssuePickerChip({
   const press = () => {
     opener.current = trigger.current;
     setTyped("");
+    if (!open) setOpenings(openings + 1);
     setOpen(!open);
   };
 

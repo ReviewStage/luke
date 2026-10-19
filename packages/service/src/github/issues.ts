@@ -92,6 +92,9 @@ const SearchedIssuesSchema = Schema.Struct({
 /** How many issues a listing asks for at once: more than a picker answers, since pull requests share the listing and are dropped. */
 const LISTED_PER_PAGE = 100;
 
+/** The most pages a listing reads looking for issues among the pull requests that share it. */
+const LISTED_MAX_PAGES = 3;
+
 /** Where an issue stands, as its mark draws it. */
 function stateOf(record: typeof IssueSchema.Type): IssueState {
   if (record.state !== GITHUB_CLOSED) return ISSUE_STATE.OPEN;
@@ -170,21 +173,29 @@ export function openIssues(
   token: Redacted.Redacted,
   fullName: string,
 ): Effect.Effect<readonly GitHubIssuePick[], GitHubUnavailable, HttpClient.HttpClient> {
-  const request = githubRead(issuesPath(fullName), token).pipe(
-    HttpClientRequest.setUrlParams({
-      state: "open",
-      sort: "updated",
-      direction: "desc",
-      per_page: String(LISTED_PER_PAGE),
-    }),
-  );
-  return Effect.scoped(
-    Effect.flatMap(send(request), (response) =>
-      Effect.map(readBody(response, Schema.Array(PickedIssueSchema)), (records) =>
-        picksOf(fullName, records),
-      ),
-    ),
-  );
+  return Effect.gen(function* () {
+    const records: PickedIssueRecord[] = [];
+    // Note that pull requests share the listing and are dropped, so a page of them is read past, up to a bound.
+    for (let page = 1; page <= LISTED_MAX_PAGES; page += 1) {
+      const request = githubRead(issuesPath(fullName), token).pipe(
+        HttpClientRequest.setUrlParams({
+          state: "open",
+          sort: "updated",
+          direction: "desc",
+          per_page: String(LISTED_PER_PAGE),
+          page: String(page),
+        }),
+      );
+      const read = yield* Effect.scoped(
+        Effect.flatMap(send(request), (response) =>
+          readBody(response, Schema.Array(PickedIssueSchema)),
+        ),
+      );
+      records.push(...read.filter((record) => record.pull_request === undefined));
+      if (read.length < LISTED_PER_PAGE || records.length >= GITHUB_ISSUES_BOUNDS.MAX_ISSUES) break;
+    }
+    return picksOf(fullName, records);
+  });
 }
 
 /**

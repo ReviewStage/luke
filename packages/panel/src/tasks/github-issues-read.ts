@@ -16,7 +16,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * github-issues-read.ts -- the GitHub issues New task's Issue chip offers: the chosen repository's open issues, what GitHub finds for the words typed, or the one issue a pasted key or link names.
  *
  * The repository's open issues are read as the menu's repository is first
- * known and again whenever it changes, newest changed first. Words typed
+ * known, again whenever it changes, and again each time the menu opens, so
+ * issues granted on GitHub since are read, newest changed first. Words typed
  * filter those at once, and once the typing rests GitHub itself is searched
  * for them (`SEARCH_PAUSE`, which keeps the reads under GitHub's search
  * limit); `#N`, `owner/name#N`, or a link to an issue's page pasted asks
@@ -97,11 +98,12 @@ const issueAskAtom = () =>
     }),
   );
 
-/** The repository's open issues, read as the repository is known and again for another; none while they are read. */
+/** The repository's open issues, read as the repository is known, again for another, and again on each opening; none while first read. */
 function useOpenIssues(
   readIn: TasksControl["newTask"]["githubIssuesIn"],
   workspaceId: string | undefined,
   repository: string | null,
+  opening: number,
 ): ReadAnswer | undefined {
   const [listed, setListed] = useState<ReadAnswer | undefined>(undefined);
   // Note that the reader is held through a ref, because the tab hands a new
@@ -121,10 +123,11 @@ function useOpenIssues(
         if (current) setListed({ workspaceId, repository, typed: "", answer: FOUND_NOTHING });
       },
     );
+    // Note that each opening reads afresh, and a read let go answers nothing, so an older read never stands over a newer one.
     return () => {
       current = false;
     };
-  }, [connected, workspaceId, repository]);
+  }, [connected, workspaceId, repository, opening]);
   return listed !== undefined &&
     listed.workspaceId === workspaceId &&
     listed.repository === repository
@@ -165,8 +168,9 @@ export function useGitHubIssues(
   workspaceId: string | undefined,
   repository: string | null,
   typed: string,
+  opening: number,
 ): readonly [GitHubIssuesStanding, (typed: string) => void] {
-  const listed = useOpenIssues(readIn, workspaceId, repository);
+  const listed = useOpenIssues(readIn, workspaceId, repository, opening);
   const [atom] = useState(issueAskAtom);
   const [searched, search] = useAtom(atom);
   const ask = (words: string) => {

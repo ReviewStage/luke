@@ -813,7 +813,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads a repository's open issues newest changed first, those a search finds, and one by its number, each with who opened it and how they stand to the repository, never a pull request and never another repository's, on a token cut to issues read on the one repository",
+    "a member reads a repository's open issues newest changed first, those a search finds, and one by its number, each with who opened it and how they stand to the repository, never a pull request, read past a page of them, and never another repository's, on a token cut to issues read on the one repository",
     () =>
       Effect.gen(function* () {
         const searched: URLSearchParams[] = [];
@@ -831,9 +831,17 @@ it.layer(getTestDB())("the repositories route", (it) => {
           {},
           (sent) => {
             const url = new URL(sent.url);
+            // The first page is all pull requests, which share the listing, and issue 7 stands on the second.
             if (url.pathname === RELAY_ISSUES_PATH) {
               listedWith.push(url.searchParams);
-              return Response.json([RELAY_ISSUES.get(42), RELAY_ISSUES.get(7)]);
+              return Response.json(
+                url.searchParams.get("page") === "1"
+                  ? Array.from({ length: 100 }, (_, at) => ({
+                      ...issueRecord(100 + at, "A pull request", "open", null),
+                      pull_request: {},
+                    }))
+                  : [RELAY_ISSUES.get(7)],
+              );
             }
             if (url.pathname === SEARCH_PATH) {
               searched.push(url.searchParams);
@@ -881,8 +889,11 @@ it.layer(getTestDB())("the repositories route", (it) => {
         });
         assert.deepEqual(pull, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
         assert.deepEqual(
-          listedWith.map((params) => [params.get("state"), params.get("sort")]),
-          [["open", "updated"]],
+          listedWith.map((params) => [params.get("state"), params.get("sort"), params.get("page")]),
+          [
+            ["open", "updated", "1"],
+            ["open", "updated", "2"],
+          ],
         );
         assert.deepEqual(
           searched.map((params) => params.get("q")),

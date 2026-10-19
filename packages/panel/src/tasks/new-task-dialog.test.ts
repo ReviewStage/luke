@@ -1703,7 +1703,7 @@ test("the Issue chip lists the chosen repository's open GitHub issues under its 
     );
     search("cookie");
     await settle();
-    const before = card.githubAsks.length;
+    const before = card.githubAsks.filter(([, ask]) => ask.query !== undefined).length;
     await rest();
 
     assert.deepEqual(
@@ -1712,11 +1712,8 @@ test("the Issue chip lists the chosen repository's open GitHub issues under its 
     );
     assert.deepEqual(headings, ["GitHub · acme/web", "Linear"]);
     assert.deepEqual(outside, ["outside"]);
-    assert.equal(before, 1, "the search waits for the typing to rest");
-    assert.deepEqual(card.githubAsks, [
-      ["acme/web", {}],
-      ["acme/web", { query: "cookie" }],
-    ]);
+    assert.equal(before, 0, "the search waits for the typing to rest");
+    assert.deepEqual(card.githubAsks.at(-1), ["acme/web", { query: "cookie" }]);
     assert.deepEqual(
       issueRows().rows.map((row) => row.split("#")[0]),
       ["Login fails on Safari 18"],
@@ -1833,14 +1830,15 @@ test("a change of repository lets go the GitHub issues picked in the one before,
   assert.deepEqual(chips, ["ENG-1Restack the deploy queueCloses"]);
   assert.equal(listed[0]?.split("#")[0], "Rate limit the search endpoint");
   assert.deepEqual(
-    card.githubAsks.map(([repository]) => repository),
+    [...new Set(card.githubAsks.map(([repository]) => repository))],
     ["acme/web", "acme/api"],
   );
 });
 
-test("a repository whose installation grants Luke no issues says so in the GitHub section, whose row opens the installation's settings on GitHub, while Linear's issues stand beside it", async () => {
+test("a repository whose installation grants Luke no issues says so in the GitHub section, whose row opens the installation's settings on GitHub, while Linear's issues stand beside it, and the menu opened again after a grant lists its issues", async () => {
   const opened: string[] = [];
   fakeAppPlatform({ openGitHub: (url) => opened.push(url) });
+  let granted = false;
   const card = await mount(
     undefined,
     undefined,
@@ -1848,11 +1846,17 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
     ISSUES,
     () => [],
     undefined,
-    acmeGitHub,
+    (repository, ask) =>
+      granted
+        ? { issues: [githubIssue(repository, 4, "Ledger totals drift")] }
+        : acmeGitHub(repository, ask),
   );
   await openLinear();
   const listed = issueRows().rows;
   await card.press("Enter", linearSearch());
+  granted = true;
+  await openLinear();
+  const regranted = issueRows().rows[0]?.split("#")[0];
 
   assert.deepEqual(listed, [
     "Luke can't read acme/ledger's issues yetGrant access",
@@ -1861,6 +1865,7 @@ test("a repository whose installation grants Luke no issues says so in the GitHu
     "Rotate the deploy keyOPS-7",
   ]);
   assert.deepEqual(opened, ["https://github.com/organizations/acme/settings/installations/7"]);
+  assert.equal(regranted, "Ledger totals drift");
   assert.equal(document.querySelector("[data-issue-chip]"), null);
   assert.deepEqual(card.starts, []);
 });
