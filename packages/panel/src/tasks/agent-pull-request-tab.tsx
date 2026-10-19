@@ -125,6 +125,7 @@ import { PierreDiff, useDiffLook } from "./file-diff.js";
 import type { TreeShown } from "./file-view.js";
 import type { PendingReview } from "./line-comment.js";
 import { blockedWords, MergeActions } from "./merge-box.js";
+import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
 import {
   type PullRequestComment,
   PullRequestCommentBox,
@@ -157,12 +158,13 @@ import {
   THREAD_REVEAL_WORDS,
   type ThreadLanding,
   ThreadLandingProvider,
+  useLandedEntry,
   useLandedThread,
   useWindowThreadReveal,
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useOpenLink, useOpenPlace } from "./use-open-link.js";
+import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 import { useWorkingNow, workingTime } from "./working-time.js";
 
@@ -826,6 +828,15 @@ function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): 
   );
 }
 
+/** The tab's opener for a link to one of its pull request's own comments on GitHub, which opens the comment in the tab (`pull-request-anchors.ts`); none outside the tab. */
+const AnchorsContext = createContext<OpenHere | undefined>(undefined);
+
+/** Words of the pull request's own, under which a link to one of its comments on GitHub opens the comment in the tab, and any other link as it would. */
+function Anchored({ children }: { children: ReactNode }): ReactNode {
+  const open = useContext(AnchorsContext);
+  return open === undefined ? children : <OpenHereFirst open={open}>{children}</OpenHereFirst>;
+}
+
 /** Words GitHub rendered, or, where it rendered none the read could carry, the words as markdown. */
 function EntryWords({
   entry,
@@ -838,14 +849,18 @@ function EntryWords({
     return (
       <div className="pull-request-words">
         <EntryPictures html={entry.html}>
-          <GitHubWords html={entry.html} picture={picture} />
+          <Anchored>
+            <GitHubWords html={entry.html} picture={picture} />
+          </Anchored>
         </EntryPictures>
       </div>
     );
   }
   return entry.body === "" ? null : (
     <div className="pull-request-words">
-      <TranscriptWords text={entry.body} />
+      <Anchored>
+        <TranscriptWords text={entry.body} />
+      </Anchored>
     </div>
   );
 }
@@ -1126,8 +1141,16 @@ function EntryCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
+  const landed = useLandedEntry(entry.url);
   return (
-    <li className="pull-request-entry">
+    <li
+      ref={landed.ref}
+      className="pull-request-entry"
+      // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
+      tabIndex={-1}
+      data-search-landed={landed.ringed ? "" : undefined}
+      onAnimationEnd={landed.onAnimationEnd}
+    >
       <span className="changes-comment-head">
         <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
@@ -1370,7 +1393,9 @@ function DescriptionPart({
       ) : (
         <div className="pull-request-words">
           <EntryPictures html={part.value.html}>
-            <GitHubWords html={part.value.html} picture={picture} />
+            <Anchored>
+              <GitHubWords html={part.value.html} picture={picture} />
+            </Anchored>
           </EntryPictures>
         </div>
       )}
@@ -1390,8 +1415,8 @@ function ConversationPart({
 }: {
   parts: OverviewParts;
   filters: ConversationFiltersControl["filters"];
-  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
-  kept: string | undefined;
+  /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
+  kept: ReadonlySet<string>;
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
   now: number;
@@ -1662,9 +1687,9 @@ function ConversationView({
   url: string | undefined;
   /** The comment box's words and its own change, held by the tab so the box may come and go. */
   comment: PullRequestComment;
-  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
-  kept: string | undefined;
-  /** The thread to land on, once; none lands on none. */
+  /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
+  kept: ReadonlySet<string>;
+  /** The thread or entry to land on, once; none lands on none. */
   landing: ThreadLanding | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -1801,7 +1826,7 @@ function useThreadJumps(input: {
   const conversationLanding: ThreadLanding | undefined =
     jump?.view === PULL_REQUEST_THREAD_VIEW.CONVERSATION && target?.id !== undefined
       ? {
-          threadId: target.id,
+          target: target.id,
           ask: jump.ask,
           scroll: centreCard,
           onLanded: letGo,
@@ -1833,6 +1858,64 @@ function useThreadJumps(input: {
     conversationLanding,
     filesReveal,
   };
+}
+
+/** How the tab opens a link to one of its pull request's own comments on GitHub, the entry it is bringing into view, and the last it brought there. */
+interface ConversationAnchors {
+  readonly open: OpenHere;
+  readonly landing: ThreadLanding | undefined;
+  readonly kept: string | undefined;
+}
+
+/**
+ * A link on GitHub to one of the pull request's own comments, pressed in its
+ * words, opens the comment in the Conversation rather than GitHub: a line
+ * comment's thread through the route its own link takes (`jumps`), and a
+ * comment on the pull request or a review brought into view in place; any
+ * other link, and one to a comment the read did not reach, opens as it
+ * would (`anchorIn`).
+ */
+function useConversationAnchors(input: {
+  pullRequestUrl: string | undefined;
+  conversation: readonly ConversationEntry[] | undefined;
+  jumps: ThreadJumps;
+  onView: (view: PullRequestView) => void;
+}): ConversationAnchors {
+  const { pullRequestUrl, conversation, jumps, onView } = input;
+  const [entry, setEntry] = useState<{ readonly url: string; readonly ask: number } | undefined>(
+    undefined,
+  );
+  // Note that the asks are counted apart from the one standing, which a landing lets go, so the same link pressed again is a new ask its card answers.
+  const asks = useRef(0);
+  const [kept, setKept] = useState<string | undefined>(undefined);
+  const open: OpenHere = (href) => {
+    const anchor =
+      pullRequestUrl === undefined || conversation === undefined
+        ? undefined
+        : anchorIn(href, pullRequestUrl, conversation);
+    if (anchor === undefined) return false;
+    if (anchor.kind === ANCHOR_KIND.THREAD) {
+      if (anchor.thread.id === undefined) return false;
+      jumps.jump(anchor.thread, PULL_REQUEST_THREAD_VIEW.CONVERSATION);
+      return true;
+    }
+    onView(PULL_REQUEST_VIEW.CONVERSATION);
+    setKept(anchor.entry.url);
+    asks.current += 1;
+    setEntry({ url: anchor.entry.url, ask: asks.current });
+    return true;
+  };
+  const landing =
+    entry === undefined
+      ? undefined
+      : {
+          target: entry.url,
+          ask: entry.ask,
+          scroll: centreCard,
+          onLanded: (ask: number) => setEntry((was) => (was?.ask === ask ? undefined : was)),
+          onFaded: () => undefined,
+        };
+  return { open, landing, kept };
 }
 
 /**
@@ -1977,104 +2060,115 @@ function PullRequestTabBody({
     conversation: parts.conversation,
     onView,
   });
+  const anchors = useConversationAnchors({
+    pullRequestUrl: title?.url,
+    conversation: conversation?.conversation,
+    jumps: threadJumps.jumps,
+    onView,
+  });
+  const kept = new Set(
+    [threadJumps.kept, anchors.kept].filter((each): each is string => each !== undefined),
+  );
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
-        <div className="file-view pull-request-tab ph-no-capture">
-          <PullRequestBar
-            published={bar}
-            writes={writes}
-            review={review}
-            pending={pendingReview}
-            reading={reading}
-            onRefresh={refresh}
-          />
-          <PullRequestWriteNote writes={writes} />
-          {none ? (
-            <EmptyState icon={<GitPullRequestIcon />}>
-              {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
-            </EmptyState>
-          ) : (
-            <>
-              <header className="pull-request-header">
-                <HeaderTitle title={title} writes={writes} />
-                <PullRequestHead
-                  parts={parts}
-                  now={now}
-                  repository={repository}
-                  shown={shown}
-                  writes={writes}
-                  editing={{ options, refreshing: pullRequestRead.out }}
-                />
-              </header>
-              <div className="pull-request-tabs">
-                <ChoiceBar<PullRequestView>
-                  label="Pull request"
-                  items={tabsOf(parts, published, bar)}
-                  value={view}
-                  onChange={onView}
-                  look={CHOICE_BAR_LOOK.FILL}
-                  panels={ids}
-                  inset={CHOICE_BAR_INSET.READING}
-                />
-              </div>
-              <div
-                className="pull-request-view"
-                role="tabpanel"
-                id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-                aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-                hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-              >
-                <ConversationView
-                  agentId={agentId}
-                  parts={parts}
-                  url={title?.url}
-                  comment={comment}
-                  kept={threadJumps.kept}
-                  landing={threadJumps.conversationLanding}
-                />
-              </div>
-              <div
-                className="pull-request-view"
-                role="tabpanel"
-                id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-                aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-                hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-              >
-                <DetailPage
-                  frame={PAGE_FRAME.TOOLBAR}
-                  label="Pull request checks"
-                  inset={DETAIL_PAGE_INSET.READING}
+        <AnchorsContext.Provider value={anchors.open}>
+          <div className="file-view pull-request-tab ph-no-capture">
+            <PullRequestBar
+              published={bar}
+              writes={writes}
+              review={review}
+              pending={pendingReview}
+              reading={reading}
+              onRefresh={refresh}
+            />
+            <PullRequestWriteNote writes={writes} />
+            {none ? (
+              <EmptyState icon={<GitPullRequestIcon />}>
+                {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+              </EmptyState>
+            ) : (
+              <>
+                <header className="pull-request-header">
+                  <HeaderTitle title={title} writes={writes} />
+                  <PullRequestHead
+                    parts={parts}
+                    now={now}
+                    repository={repository}
+                    shown={shown}
+                    writes={writes}
+                    editing={{ options, refreshing: pullRequestRead.out }}
+                  />
+                </header>
+                <div className="pull-request-tabs">
+                  <ChoiceBar<PullRequestView>
+                    label="Pull request"
+                    items={tabsOf(parts, published, bar)}
+                    value={view}
+                    onChange={onView}
+                    look={CHOICE_BAR_LOOK.FILL}
+                    panels={ids}
+                    inset={CHOICE_BAR_INSET.READING}
+                  />
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
                 >
-                  <ChecksPart
+                  <ConversationView
                     agentId={agentId}
                     parts={parts}
-                    live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                    url={title?.url}
+                    comment={comment}
+                    kept={kept}
+                    landing={threadJumps.conversationLanding ?? anchors.landing}
                   />
-                </DetailPage>
-              </div>
-            </>
-          )}
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.FILES).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-            hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-          >
-            <AgentChangesTab
-              agentId={agentId}
-              control={control}
-              shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-              repository={repository}
-              tree={tree}
-              threads={changesThreads}
-              lineComments={{ pending: pendingReview, onWritten: written }}
-              reveal={threadJumps.filesReveal}
-            />
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+                >
+                  <DetailPage
+                    frame={PAGE_FRAME.TOOLBAR}
+                    label="Pull request checks"
+                    inset={DETAIL_PAGE_INSET.READING}
+                  >
+                    <ChecksPart
+                      agentId={agentId}
+                      parts={parts}
+                      live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                    />
+                  </DetailPage>
+                </div>
+              </>
+            )}
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.FILES).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+              hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+            >
+              <AgentChangesTab
+                agentId={agentId}
+                control={control}
+                shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                repository={repository}
+                tree={tree}
+                threads={changesThreads}
+                lineComments={{ pending: pendingReview, onWritten: written }}
+                reveal={threadJumps.filesReveal}
+              />
+            </div>
           </div>
-        </div>
+        </AnchorsContext.Provider>
       </ThreadJumpContext.Provider>
     </ThreadWritesProvider>
   );

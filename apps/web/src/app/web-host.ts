@@ -56,6 +56,7 @@ import {
   RunMode,
   reporterLayer,
   ServiceOrigin,
+  SettingsChangedElsewhere,
   ShutdownSignal,
   StateRoot,
   VoiceSocket,
@@ -67,7 +68,7 @@ import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
-import { localStorageFileSystem } from "./local-storage-file-system";
+import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
 import { downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
@@ -197,6 +198,20 @@ function onTabFocusChanged(listener: (focused: boolean) => void): () => void {
   };
 }
 
+/**
+ * Each write another tab of this origin made to the files this tab's host
+ * keeps, which the browser says as a `storage` event in every tab but the
+ * writer's. A cleared storage (`key` null) is a change to them too.
+ */
+function filesChangedElsewhere(): Stream.Stream<void> {
+  const changed = Stream.filter(
+    Stream.fromEventListener<StorageEvent>(window, "storage"),
+    (event) =>
+      event.storageArea === localStorage && (event.key === FILES_KEY || event.key === null),
+  );
+  return Stream.as(changed, undefined);
+}
+
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
 function seamLayers() {
   return Layer.mergeAll(
@@ -210,6 +225,7 @@ function seamLayers() {
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
+    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere()),
   );
 }
 

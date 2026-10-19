@@ -4229,6 +4229,75 @@ test("Copy link in a thread's ⋯ copies its Luke link in the view it is drawn i
   ]);
 });
 
+test("a link in the pull request's words to one of its own comments on GitHub opens it in the tab: a line comment through its thread's route, a comment brought into view, ringed and focused; one the read did not reach opens on GitHub", async () => {
+  const heard: ReadLink[] = [];
+  const links = [
+    `<a href="${PAGE}#discussion_r1">the thread</a>`,
+    `<a href="${PAGE}#issuecomment-2">the note</a>`,
+    `<a href="${PAGE}#issuecomment-99">an older note</a>`,
+  ].join(" ");
+  const conversation = reviewWith([thread({ id: JUMPED })]);
+  const tab = await drawn(
+    createElement(Routed, {
+      control: controlAnswering({
+        pullRequest: () =>
+          Promise.resolve({ pullRequest: { ...PULL_REQUEST, html: `<p>See ${links}.</p>` } }),
+        conversation: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...conversation,
+              conversation: [...conversation.conversation, ...CONVERSATION.conversation.slice(-1)],
+            },
+          }),
+      }),
+      heard,
+    }),
+  );
+  const press = async (words: string) => {
+    const link =
+      [...tab.querySelectorAll<HTMLElement>(".pull-request-words a")].find(
+        (each) => each.textContent === words,
+      ) ?? assert.fail(`the description links ${words}`);
+    await act(async () => link.click());
+    await settle();
+  };
+
+  await press("the thread");
+  assert.deepEqual(heard.at(-1)?.place, {
+    kind: LINK_PLACE.PULL_REQUEST_THREAD,
+    planId: AGENT.planId,
+    agentId: AGENT.id,
+    threadId: JUMPED,
+    view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,
+  });
+
+  await press("the note");
+  await frames();
+  const note =
+    [...tab.querySelectorAll<HTMLElement>(".pull-request-entry")].find((each) =>
+      each.textContent?.includes("GitHub sent no rendering of"),
+    ) ?? assert.fail("the note is drawn");
+  assert.equal(note.hasAttribute("data-search-landed"), true, "the note is ringed");
+  assert.equal(document.activeElement, note, "the note takes the focus");
+  ringEnds(note);
+  act(() => note.blur());
+  await press("the note");
+  await frames();
+  assert.equal(
+    note.hasAttribute("data-search-landed"),
+    true,
+    "the same link pressed again lands again",
+  );
+  assert.equal(document.activeElement, note);
+
+  await press("an older note");
+  assert.deepEqual(
+    opened,
+    [`${PAGE}#issuecomment-99`],
+    "only the note the read did not reach leaves for GitHub",
+  );
+});
+
 test("a thread on a changed image a filter left out lands above its picture once the filter is cleared, the list scrolled to the file's header rather than a line the picture draws none of", async () => {
   const logo = {
     path: "assets/logo.svg",

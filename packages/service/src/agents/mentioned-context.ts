@@ -321,6 +321,8 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.LUKE:
     // An issue is handed as its link in the words alone, which names it by its id.
     case MENTION_KIND.ISSUE:
+    // A date's words are the date in full, which is all there is to hand.
+    case MENTION_KIND.DATE:
       return undefined;
   }
 }
