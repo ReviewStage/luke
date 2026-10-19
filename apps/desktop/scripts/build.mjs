@@ -7,6 +7,7 @@ import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
+import { bundleCeiling } from "./bundle-budget.mjs";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
@@ -587,20 +588,16 @@ if (uploadsSourceMaps) {
   for (const bundle of unrecorded) {
     console.error(`error: ${bundle} has no baseline in bundle-budget.json`);
   }
-  // Note that a build with Sentry's plugin gets a fixed floor of slack, because the plugin
-  // adds its debug-id snippet, about 400 gzipped bytes, to every file: more than 5% of a
-  // bundle of a few kilobytes, and nothing a build without it records.
-  const sentrySlack = process.env.SENTRY_AUTH_TOKEN ? budget.sentrySlackBytes : 0;
+  const withSentry = Boolean(process.env.SENTRY_AUTH_TOKEN);
   const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {
     if (!(bundle in budget.gzipBytes)) return [];
-    const baseline = budget.gzipBytes[bundle];
-    const ceiling = Math.max(Math.floor(baseline * (1 + budget.slack)), baseline + sentrySlack);
+    const ceiling = bundleCeiling(budget.gzipBytes[bundle], budget, withSentry);
     return bytes > ceiling ? [{ bundle, bytes, ceiling }] : [];
   });
   if (exceeded.length > 0 || unrecorded.length > 0) {
     for (const { bundle, bytes, ceiling } of exceeded) {
       console.error(
-        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%, or ${sentrySlack} bytes with Sentry)`,
+        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%${withSentry ? `, or ${budget.sentrySlackBytes} bytes with Sentry` : ""})`,
       );
     }
     console.error(
