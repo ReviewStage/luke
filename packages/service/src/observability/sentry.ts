@@ -31,7 +31,7 @@ import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/s
 import { Effect, ErrorReporter, Exit, Layer, type Logger, Predicate, Tracer } from "effect";
 import { redactCredentials } from "./credentials.js";
 
-const SENTRY_ENVIRONMENT = {
+export const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
   DSN: "SENTRY_DSN",
   /** Vercel's own name for the deployment: `production`, `preview`, or `development`. */

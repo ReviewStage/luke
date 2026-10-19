@@ -611,7 +611,16 @@ word for why, and whether its pull request is open, merged, or closed; which
 providers you saved a key for or connected, and whether each key or
 connection works; your coding-agent model and effort, and the experiments
 you turned on; and when a call of yours dropped or an automation of yours
-failed to start, with the fixed word for why. Past those names, nothing you
+failed to start, with the fixed word for why.
+Across every account, the same page counts how many of Luke's turns, coding
+agents' runs, calls, and automation runs ended and how many failed, were
+dropped, or were skipped, each by the fixed word the service records for why.
+Where one of your own API keys stands refused, out of quota, or unreadable,
+one of your integrations stands expired, or a workspace you belong to has its
+GitHub installation suspended or removed, the page lists your account with
+which provider or integration it is and that status, when it last changed,
+and how many of your coding agents failed in the past week; that list names
+no workspace and no repository. Past those names, nothing you
 type, say, or run appears on it: no task's title, plan, prompt, or message,
 no pull request's title, no key, and no error's own words.
 
