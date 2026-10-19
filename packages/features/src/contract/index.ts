@@ -14,6 +14,7 @@ import { integrationsContract } from "./integrations.js";
 import { issuesContract } from "./issues.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
+import { planCommentsContract } from "./plan-comments.js";
 import { repositoryPinsContract } from "./repository-pins.js";
 import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
@@ -39,6 +40,7 @@ export const hostedContract = {
   issues: issuesContract,
   messages: messagesContract,
   models: modelsContract,
+  planComments: planCommentsContract,
   plans: tasksContract,
   repositoryPins: repositoryPinsContract,
   taskFiles: taskFilesContract,

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, type JsonValue, recordedRoutes } from "@luke/wire/testing";
-import { Effect } from "effect";
+import {
+  fakeCloudApi,
+  type JsonValue,
+  recordedRoutes,
+  recordingHttpClient,
+} from "@luke/wire/testing";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
@@ -377,6 +383,30 @@ it.effect(
       assert.deepEqual(
         api.requests().map((request) => request.body),
         [JSON.stringify({ picture })],
+      );
+    }),
+);
+
+it.effect(
+  "a comments read is asked under the held deadline: it outlasts the usual one and is unanswered past the hold",
+  () =>
+    Effect.gen(function* () {
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+
+      const held = yield* Effect.forkChild(
+        Effect.provide(client().comments(TASK_ID, "0"), silent.layer),
+      );
+      while (silent.requests.length === 0) yield* Effect.yieldNow;
+      yield* TestClock.adjust("34 seconds");
+      assert.equal(held.pollUnsafe(), undefined, "still held past the usual deadline");
+      yield* TestClock.adjust("1 second");
+
+      assert.deepEqual(yield* Fiber.join(held), {
+        failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED,
+      });
+      assert.equal(
+        silent.requests[0]?.url,
+        `https://tryluke.dev/api/plans/${TASK_ID}/comments?after=0`,
       );
     }),
 );

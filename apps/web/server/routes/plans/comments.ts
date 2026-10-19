@@ -1,9 +1,7 @@
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** A plan's comment threads, read as they change (GET) or started (POST), by the id its path carries. */
-export default routeFromHttpRouter(
-  planCommentsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
-);
+/**
+ * A plan's comment threads, read as they change (GET) or started (POST),
+ * answered by the hosted oRPC router (`packages/service/src/tasks/plan-comments-procedures.ts`).
+ */
+export default orpcRoute;
