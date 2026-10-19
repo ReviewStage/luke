@@ -43,6 +43,7 @@ import {
 import { FileTreePane } from "./file-tree-pane.js";
 import { keptListings, type ListFolder, listingOf } from "./folder-listings.js";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel.js";
+import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
  * file-view.tsx -- a File tab with the task's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.
@@ -643,7 +644,10 @@ export function FileView({
         }
         onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
         menu={
-          <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
+          <>
+            <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+            <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
+          </>
         }
         tree={browsing ? tree.toggles : undefined}
       />

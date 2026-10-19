@@ -111,6 +111,28 @@ test("View source draws the version's HTML as a File tab's numbered, coloured li
   assert.equal(frame().getAttribute("src"), versionUrl(3));
 });
 
+test("over the source, View settings offers only the two settings its lines follow, and the ⋯ its actions alone", async () => {
+  const { container, press } = mount(FUNNEL);
+  assert.equal(container.querySelector('button[aria-label="View settings"]'), null);
+
+  await press("View source");
+  await press("View settings");
+  const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  assert.deepEqual(
+    [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
+      (control) => control.getAttribute("aria-label"),
+    ),
+    ["Word wrap", "Line numbers"],
+  );
+  await press("View settings");
+
+  await press("Source actions");
+  assert.deepEqual(
+    [...document.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent),
+    ["Copy source"],
+  );
+});
+
 test("the source stays shown while the versions are stepped, each version's own", async () => {
   const { press, sourceLines, container } = mount(FUNNEL);
 
