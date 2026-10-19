@@ -3155,12 +3155,16 @@
    feed. Note that they opt back into selection, because the window selects
    nothing by default (`base.css`): a File tab's, a card's, and an inbox
    item's code is read to be copied, the gutter's numbers left out of it. */
+/* A run of lines in the type View settings sets, a File tab's and a page
+   source's alike (`code-lines.tsx`), or the window's code type where its
+   box names none. */
 .code-lines {
   padding: var(--luke-space-6) 0;
   color: var(--code-text);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-reading-leading);
+  font-family: var(--code-font, var(--luke-font-mono));
+  font-size: var(--code-font-size, var(--luke-type-caption-size));
+  font-feature-settings: var(--code-font-features, normal);
+  line-height: var(--code-line-height, var(--luke-type-reading-leading));
   -webkit-user-select: text;
   user-select: text;
 }

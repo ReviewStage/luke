@@ -9,6 +9,7 @@ import {
 } from "@luke/ui";
 import { isPointed } from "@luke/voice/code-pane-model";
 import { type CSSProperties, Fragment, type ReactNode, type Ref } from "react";
+import { type CodeType, FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
@@ -112,16 +113,38 @@ export function CodeLineRows({
   );
 }
 
-/** How a run of lines is drawn: its numbers shown or not, wrapped or not. */
+/** How a run of lines is drawn: its numbers shown or not, wrapped or not, and the type it is set in. */
 export interface LinesLook {
   readonly lineNumbers: boolean;
   readonly wrap: boolean;
+  /** The type the lines are set in, as View settings sets it; the window's code type where none is named. */
+  readonly type?: CodeType | undefined;
 }
 
 /** The look every File tab's lines, and a page's source, are drawn in: the File tabs' settings (`file-view-settings.ts`). */
 export function useLinesLook(): LinesLook {
   const { settings } = useFileViewSettings();
-  return { lineNumbers: settings.lineNumbers, wrap: settings.wordWrap };
+  return {
+    lineNumbers: settings.lineNumbers,
+    wrap: settings.wordWrap,
+    type: {
+      font: settings.diffFont,
+      fontSize: settings.diffFontSize,
+      lineHeight: settings.diffLineHeight,
+      ligatures: settings.diffLigatures,
+    },
+  };
+}
+
+/** A run's type as its box's custom properties, which the stylesheet sets its lines in (`.code-lines`); none for the window's own. */
+function typeStyle(type: CodeType | undefined): CSSProperties | undefined {
+  if (type === undefined) return undefined;
+  return cssCustomProperties({
+    "--code-font": FONT_STACK[type.font],
+    "--code-font-size": `${type.fontSize}px`,
+    "--code-line-height": LINE_HEIGHT_RATIO[type.lineHeight],
+    "--code-font-features": type.ligatures ? LIGATURES.ON : LIGATURES.OFF,
+  });
 }
 
 /** Lines numbered from `firstLine`, those `pointed` names lit, scrolling in the place they fill as `look` says. */
@@ -160,6 +183,7 @@ export function CodeLinesView({
       <div className="code-lines-frame">
         <div
           className="code-lines"
+          style={typeStyle(look.type)}
           data-line-numbers={String(look.lineNumbers)}
           data-wrap={String(look.wrap)}
         >

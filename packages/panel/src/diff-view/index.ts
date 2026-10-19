@@ -1,4 +1,4 @@
-import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -14,6 +14,7 @@ import {
   parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
+import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
 import {
   DIFF_SELECTION_SIDE,
@@ -114,25 +115,6 @@ import { wholeOf } from "./whole-diff.js";
  * words stand, which the view offers a comment on. A press in the list or a
  * scroll lets the offer go.
  */
-
-/** Each font's stack, ending in the window's own code type should the Mac lack it. */
-const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
-} as const satisfies Record<DiffLook["font"], string>;
-
-/** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */
-const LINE_HEIGHT_RATIO = {
-  [DIFF_LINE_HEIGHT.COMPACT]: "1.45",
-  [DIFF_LINE_HEIGHT.NORMAL]: "1.6",
-  [DIFF_LINE_HEIGHT.SPACIOUS]: "1.85",
-} as const satisfies Record<DiffLook["lineHeight"], string>;
-
-/** The font features ligatures turn on or off. */
-const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as const;
 
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;

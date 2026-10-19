@@ -42,7 +42,7 @@ import {
 } from "./file-view-settings.js";
 
 /**
- * view-settings.tsx -- the View settings button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes; over a File tab's or a page's source only the two its lines follow.
+ * view-settings.tsx -- the View settings button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes; over a File tab's or a page's source only those its lines follow.
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each
@@ -52,8 +52,9 @@ import {
  * turns them); and Text, how code looks (the syntax theme of the appearance
  * chosen, the type, its size and line height, and ligatures). Its foot opens
  * Settings › Appearance › Diffs, which holds the same settings. A File
- * tab's lines and a page's source follow only wrap and numbers, so there it
- * offers those alone, never a row that changes nothing on the tab. Each row
+ * tab's lines and a page's source follow wrap, numbers, and the type, not
+ * yet the syntax theme, so there it offers those alone, never a row that
+ * changes nothing on the tab. Each row
  * carries the settings' mark while it differs from its default. A diff too
  * narrow to split says so under its layout, the choice kept for a wider one.
  * It closes on Escape, its ×, the button, or focus leaving it, and hands the
@@ -192,16 +193,15 @@ function currentAppearance(): Appearance {
 /** What the popover's foot says, and where it goes. */
 const ALL_SETTINGS = "All diff and code settings\u2026";
 
-/** A group of the popover's rows under its name, set apart from the one before by a rule; a popover's one group stands unnamed. */
+/** A group of the popover's rows under its name, set apart from the one before by a rule. */
 function SettingsGroup({
   title,
   children,
 }: {
-  title?: string | undefined;
+  title: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   const id = useId();
-  if (title === undefined) return <div className="view-settings-group">{children}</div>;
   return (
     <section className="view-settings-group" aria-labelledby={id}>
       <h3 className="view-settings-heading" id={id}>
@@ -212,7 +212,7 @@ function SettingsGroup({
   );
 }
 
-/** What a View settings button sets: a diff's every setting, its layout's room said, or the two a File tab's lines follow. */
+/** What a View settings button sets: a diff's every setting, its layout's room said, or those a File tab's lines follow, its wrap, its numbers, and its type. */
 export const VIEW_SETTINGS_SCOPE = {
   DIFF: "diff",
   LINES: "lines",
@@ -245,6 +245,50 @@ function LinesRows(): React.JSX.Element {
         checked={settings.lineNumbers}
         changed={changed("lineNumbers")}
         onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
+      />
+    </>
+  );
+}
+
+/** The type every run of code is set in: its font, its size, its line height, and its ligatures, a File tab's lines and a diff's alike. */
+function TypeRows(): React.JSX.Element {
+  const { settings, change } = useFileViewSettings();
+  const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
+  return (
+    <>
+      <SelectRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Font"
+        value={settings.diffFont}
+        options={FONT_OPTIONS}
+        parse={(raw) => optionOf(FONT_OPTIONS, raw)}
+        changed={changed("diffFont")}
+        onChange={(diffFont) => change("diffFont", diffFont)}
+      />
+      <SelectRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Font size"
+        value={settings.diffFontSize}
+        options={FONT_SIZE_OPTIONS}
+        parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
+        changed={changed("diffFontSize")}
+        onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
+      />
+      <SelectRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Line height"
+        value={settings.diffLineHeight}
+        options={LINE_HEIGHT_OPTIONS}
+        parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
+        changed={changed("diffLineHeight")}
+        onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
+      />
+      <SwitchRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Ligatures"
+        checked={settings.diffLigatures}
+        changed={changed("diffLigatures")}
+        onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
       />
     </>
   );
@@ -335,40 +379,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
             onChange={(diffLightTheme) => change("diffLightTheme", diffLightTheme)}
           />
         )}
-        <SelectRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Font"
-          value={settings.diffFont}
-          options={FONT_OPTIONS}
-          parse={(raw) => optionOf(FONT_OPTIONS, raw)}
-          changed={changed("diffFont")}
-          onChange={(diffFont) => change("diffFont", diffFont)}
-        />
-        <SelectRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Font size"
-          value={settings.diffFontSize}
-          options={FONT_SIZE_OPTIONS}
-          parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
-          changed={changed("diffFontSize")}
-          onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
-        />
-        <SelectRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Line height"
-          value={settings.diffLineHeight}
-          options={LINE_HEIGHT_OPTIONS}
-          parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
-          changed={changed("diffLineHeight")}
-          onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
-        />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Ligatures"
-          checked={settings.diffLigatures}
-          changed={changed("diffLigatures")}
-          onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
-        />
+        <TypeRows />
       </SettingsGroup>
     </>
   );
@@ -400,9 +411,14 @@ function ViewSettingsPopover({
       {scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
         <DiffSettingsRows roomy={scope.roomy} />
       ) : (
-        <SettingsGroup>
-          <LinesRows />
-        </SettingsGroup>
+        <>
+          <SettingsGroup title={GROUP_TITLE.LINES}>
+            <LinesRows />
+          </SettingsGroup>
+          <SettingsGroup title={GROUP_TITLE.TEXT}>
+            <TypeRows />
+          </SettingsGroup>
+        </>
       )}
       <div className="view-settings-foot">
         <TextButton
