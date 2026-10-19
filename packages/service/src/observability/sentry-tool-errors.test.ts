@@ -15,10 +15,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import { Effect } from "effect";
 import { recordingEveSentry, sentOfType } from "../testing/sentry-transport.js";
 
-/** The exception messages of every error event sent. */
+/** The message of the error each error event sent reports, its causes left out (Sentry lists the error itself last). */
 function exceptionValues(sent: ReturnType<typeof recordingEveSentry>["sent"]): string[] {
-  return sentOfType(sent, "event").flatMap((item) =>
-    (item.payload.exception?.values ?? []).map((value) => value.value ?? ""),
+  return sentOfType(sent, "event").map(
+    (item) => item.payload.exception?.values?.at(-1)?.value ?? "",
   );
 }
 
@@ -67,7 +67,7 @@ function modelCallingReadFile() {
 }
 
 it.effect(
-  "a tool call that fails and is answered to the model is a breadcrumb, not an issue; a later crash still is",
+  "a tool call that is refused and answered to the model is a breadcrumb, not an issue; a later crash still is",
   () =>
     Effect.gen(function* () {
       const sentry = recordingEveSentry();
@@ -108,6 +108,14 @@ it.effect(
       );
     }),
 );
+
+/** A refusal explained `links` times over, each a bare `Error` whose cause is the one before. */
+function refusalChain(links: number, words: string): Error {
+  let failure = new Error(`${words} (1 of ${links})`);
+  for (let link = 2; link <= links; link += 1)
+    failure = new Error(`${words} (${link} of ${links})`, { cause: failure });
+  return failure;
+}
 
 /** A model that calls each named tool once, then answers in words once it has read their results. */
 function modelCalling(toolNames: readonly string[]) {
@@ -154,6 +162,9 @@ it.effect("a tool's refusal is not an issue, and a failure beneath a tool still 
       bash: throwing(missing),
       read_file: throwing(new Error("The sandbox could not be read.", { cause: missing })),
       connection_execute: throwing(looping),
+      // Note that the causes are read 5 deep: a refusal of 5 bare errors is a refusal, and one of 6 is reported.
+      edit_file: throwing(refusalChain(5, "Patch contains overlapping file operations.")),
+      grep: throwing(refusalChain(6, "The pattern did not parse.")),
     };
     const input = jsonSchema<Record<string, never>>({ type: "object", properties: {} });
     const answer = yield* Effect.promise(() =>
@@ -173,6 +184,7 @@ it.effect("a tool's refusal is not an issue, and a failure beneath a tool still 
     assert.deepEqual([...new Set(exceptionValues(sentry.sent))].sort(), [
       "Status code 404 is not ok",
       "The connection answered in circles.",
+      "The pattern did not parse. (6 of 6)",
       "The sandbox could not be read.",
     ]);
   }),

@@ -80,8 +80,9 @@ const AI_TOOL_ERROR = {
  * An error event that is an agent's tool call failing, which the AI SDK
  * answered the model with as the call's result: the AI SDK integration
  * captures every one as unhandled (`captureToolError`), though the agent
- * reads it and carries on, so it is an outcome of the turn rather than an
- * error of the app.
+ * reads it and carries on. Only a refusal among them is an outcome of the
+ * turn rather than an error of the app (`isRefusal`); a failure beneath the
+ * tool is still reported.
  */
 function isAnsweredToolError(event: ErrorEvent): boolean {
   return (
