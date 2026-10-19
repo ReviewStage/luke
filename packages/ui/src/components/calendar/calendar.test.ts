@@ -10,8 +10,9 @@ import { Calendar } from "./calendar.js";
  * today marked and the selection selected; the arrows, Home, End, PageUp,
  * and PageDown move the keyboard, across a month's edge and the shown month
  * with it; Enter, Space, and a press pick a day, alone or as a range's end,
- * and a neighbouring month's day is picked like any other. Synthetic days,
- * with today handed in.
+ * and a neighbouring month's day is picked like any other; the keyboard
+ * waits for a caller slow to show the month it stepped into; and paging stops
+ * at the four-digit years. Synthetic days, with today handed in.
  */
 
 declare global {
@@ -29,10 +30,11 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What a caller heard from the calendar, in order. */
+/** What a caller heard from the calendar, in order, and how a slow caller shows a month later. */
 interface Heard {
   readonly picks: string[];
   readonly months: string[];
+  show?: (month: string) => void;
 }
 
 /** A drawn calendar's container and what its caller heard. */
@@ -47,13 +49,17 @@ function Shown({
   start,
   end,
   heard,
+  slow = false,
 }: {
   from: string;
   start?: string | undefined;
   end?: string | undefined;
   heard: Heard;
+  /** Whether the caller holds a month asked for until the test shows it. */
+  slow?: boolean | undefined;
 }): React.JSX.Element {
   const [month, setMonth] = useState(from);
+  heard.show = setMonth;
   return createElement(Calendar, {
     month,
     today: TODAY,
@@ -62,13 +68,16 @@ function Shown({
     onPick: (day) => heard.picks.push(day),
     onShowMonth: (next) => {
       heard.months.push(next);
-      setMonth(next);
+      if (!slow) setMonth(next);
     },
   });
 }
 
 /** Draws the calendar at `from` and hands back its container and what it heard. */
-function draw(from: string, selection: { start?: string; end?: string } = {}): Drawn {
+function draw(
+  from: string,
+  selection: { start?: string; end?: string; slow?: boolean } = {},
+): Drawn {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -241,4 +250,34 @@ test("the steps above the grid ask for the month either side", () => {
   act(() => step("Next month")?.click());
   act(() => step("Next month")?.click());
   expect(heard.months).toEqual(["2025-12", "2026-01", "2026-02"]);
+});
+
+test("a step into a month the caller shows later takes the keyboard there once it does", () => {
+  const { container, heard } = draw("2026-10", { start: "2026-10-20", slow: true });
+  enterGrid(container);
+
+  press("PageDown", { shiftKey: true });
+  expect(heard.months).toEqual(["2027-10"]);
+  expect(gridName(container)).toBe("October 2026");
+  act(() => heard.show?.("2027-10"));
+  expect(focused()).toBe("Wednesday, October 20, 2027");
+});
+
+test("the calendar pages no further than the four-digit years", () => {
+  const { container, heard } = draw("9999-12", { start: "9999-12-31" });
+  const step = (name: string) =>
+    container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+  enterGrid(container);
+
+  press("ArrowRight");
+  press("PageDown");
+  expect(focused()).toBe("Friday, December 31, 9999");
+  expect(step("Next month")?.disabled).toBe(true);
+  expect(container.querySelectorAll('[role="grid"] td button')).toHaveLength(31 + 3);
+  expect(heard.months).toEqual([]);
+  expect(
+    draw("0001-01").container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Previous month"]',
+    )?.disabled,
+  ).toBe(true);
 });

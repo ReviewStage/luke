@@ -24,7 +24,9 @@ import { BUTTON_SIZE, IconButton } from "../button/button.js";
  * step by a day or a week, Home and End go to the week's Sunday and
  * Saturday, PageUp and PageDown by a month (with Shift, a year), and Enter
  * or Space picks. A step that leaves the shown month asks the caller to show
- * the month it lands in, and the keyboard follows it there once it does.
+ * the month it lands in, and the keyboard follows it there once it does,
+ * however many renders later. The calendar pages through the four-digit
+ * years alone, 0001 to 9999, the span a `YYYY-MM-DD` day spells.
  */
 
 /** Weeks drawn whatever the month, enough for any month to fit. */
@@ -35,6 +37,13 @@ const MONTHS_PER_YEAR = 12;
 
 /** The locale every name the calendar spells is in, as a date mention's are. */
 const LOCALE = "en-US";
+
+/** The first and last days a four-digit year spells, the span the calendar pages through. */
+const FIRST_DAY = "0001-01-01";
+const LAST_DAY = "9999-12-31";
+
+/** A day as the calendar reads and writes one. */
+const DAY_SHAPE = /^\d{4}-\d{2}-\d{2}$/u;
 
 /** A Sunday, from which the weekday headings are spelled in order. */
 const A_SUNDAY = "2026-10-18";
@@ -85,10 +94,22 @@ function shiftedDay(day: string, count: number): string {
 /** The same day of the month `count` months from `day`, held to that month's last. */
 function monthShiftedDay(day: string, count: number): string {
   const date = dateOf(day);
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + count;
-  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return dayOfDate(new Date(Date.UTC(year, month, Math.min(date.getUTCDate(), last))));
+  const wanted = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + count);
+  const last = new Date(date);
+  last.setUTCMonth(last.getUTCMonth() + 1, 0);
+  date.setUTCDate(Math.min(wanted, last.getUTCDate()));
+  return dayOfDate(date);
+}
+
+/**
+ * Whether `day` is one the calendar draws and steps to: a four-digit year's,
+ * since a date past 9999 spells an extended year (`+010000-…`) that no
+ * `YYYY-MM-DD` reader takes.
+ */
+function onCalendar(day: string): boolean {
+  return DAY_SHAPE.test(day) && day >= FIRST_DAY && day <= LAST_DAY;
 }
 
 /** Sunday is 0 and Saturday 6. */
@@ -101,15 +122,23 @@ function spelled(day: string, options: Intl.DateTimeFormatOptions): string {
   return dateOf(day).toLocaleDateString(LOCALE, { ...options, timeZone: "UTC" });
 }
 
+/** One drawn week: its place in the grid, and its seven days, a day past the calendar's span left empty. */
+interface DrawnWeek {
+  readonly row: number;
+  readonly days: readonly (string | undefined)[];
+}
+
 /** The six weeks drawn for `month`, each seven days from its Sunday. */
-function weeksOf(month: string): readonly (readonly string[])[] {
+function weeksOf(month: string): readonly DrawnWeek[] {
   const first = `${month}-01`;
   const sunday = shiftedDay(first, -weekdayOf(first));
-  return Array.from({ length: WEEKS_SHOWN }, (_, week) =>
-    Array.from({ length: DAYS_PER_WEEK }, (_, slot) =>
-      shiftedDay(sunday, week * DAYS_PER_WEEK + slot),
-    ),
-  );
+  return Array.from({ length: WEEKS_SHOWN }, (_, row) => ({
+    row,
+    days: Array.from({ length: DAYS_PER_WEEK }, (_, slot) => {
+      const day = shiftedDay(sunday, row * DAYS_PER_WEEK + slot);
+      return onCalendar(day) ? day : undefined;
+    }),
+  }));
 }
 
 /** Where `day` stands against the selection from `start` to `end`, in either order. */
@@ -126,8 +155,14 @@ function placeOf(
   return day > low && day < high ? DAY_PLACE.BETWEEN : undefined;
 }
 
-/** The day a key moves the keyboard to from `day`, or none for a key that moves nothing. */
+/** The day a key moves the keyboard to from `day`, or none for a key that moves nothing or past the calendar's span. */
 function keyTarget(event: KeyboardEvent<HTMLElement>, day: string): string | undefined {
+  const target = keyStep(event, day);
+  return target !== undefined && onCalendar(target) ? target : undefined;
+}
+
+/** The day a key steps to from `day`, wherever it lands. */
+function keyStep(event: KeyboardEvent<HTMLElement>, day: string): string | undefined {
   const step = ARROW_STEPS.get(event.key);
   if (step !== undefined) return shiftedDay(day, step);
   const months = event.shiftKey ? MONTHS_PER_YEAR : 1;
@@ -183,7 +218,8 @@ export function Calendar({
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   const grid = useRef<HTMLTableElement>(null);
-  const following = useRef(false);
+  // The day a key moved the keyboard to, until the grid draws it and it takes the focus.
+  const following = useRef<string | undefined>(undefined);
   const [moved, setMoved] = useState<string | undefined>(undefined);
   const focusDay =
     moved !== undefined && monthOf(moved) === month ? moved : restingDay(month, start, today);
@@ -191,16 +227,26 @@ export function Calendar({
   const first = `${month}-01`;
 
   // Note that the keyboard is moved after the render that draws the day it
-  // lands on, because a step into another month waits for the caller to show it.
+  // lands on, and waits for it, because a step into another month waits for
+  // the caller to show that month, which it may do renders later.
   useEffect(() => {
-    if (!following.current) return;
-    following.current = false;
-    grid.current?.querySelector<HTMLElement>(`[data-day="${focusDay}"]`)?.focus();
+    const target = following.current;
+    if (target === undefined || monthOf(target) !== month) return;
+    const button = grid.current?.querySelector<HTMLElement>(`[data-day="${target}"]`);
+    if (button === null || button === undefined) return;
+    following.current = undefined;
+    button.focus();
   });
 
   const pick = (day: string) => {
+    following.current = undefined;
     setMoved(day);
     onPick(day);
+  };
+
+  const showMonth = (count: number) => {
+    following.current = undefined;
+    onShowMonth(monthOf(monthShiftedDay(first, count)));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
@@ -214,7 +260,7 @@ export function Calendar({
     const target = keyTarget(event, day);
     if (target === undefined) return;
     event.preventDefault();
-    following.current = true;
+    following.current = target;
     setMoved(target);
     if (monthOf(target) !== month) onShowMonth(monthOf(target));
   };
@@ -230,13 +276,15 @@ export function Calendar({
             icon={<BackIcon />}
             label="Previous month"
             size={BUTTON_SIZE.COMPACT}
-            onClick={() => onShowMonth(monthOf(monthShiftedDay(first, -1)))}
+            disabled={month <= monthOf(FIRST_DAY)}
+            onClick={() => showMonth(-1)}
           />
           <IconButton
             icon={<ForwardIcon />}
             label="Next month"
             size={BUTTON_SIZE.COMPACT}
-            onClick={() => onShowMonth(monthOf(monthShiftedDay(first, 1)))}
+            disabled={month >= monthOf(LAST_DAY)}
+            onClick={() => showMonth(1)}
           />
         </span>
       </div>
@@ -265,8 +313,9 @@ export function Calendar({
         </thead>
         <tbody>
           {weeksOf(month).map((week) => (
-            <tr key={week[0]}>
-              {week.map((day) => {
+            <tr key={week.row}>
+              {week.days.map((day, slot) => {
+                if (day === undefined) return <td key={WEEKDAYS[slot]?.day} />;
                 const place = placeOf(day, start, end);
                 return (
                   // biome-ignore lint/a11y/useAriaPropsSupportedByRole: inside a grid a cell is a gridcell, which takes aria-selected; the rule reads it as a plain table's cell.
