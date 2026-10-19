@@ -47,7 +47,16 @@ const EVERYTHING_ON = {
 const sent: URL[] = [];
 const captured: CaptureResult[] = [];
 let posthog: PostHog;
-/** The runtime's own `CompressionStream`, taken off the global while the file runs. */
+
+/**
+ * The runtime's own `CompressionStream`, taken off the global while the file
+ * runs. The recorder gzips a full snapshot on it where there is one, and
+ * every event after it waits in line behind that gzip, which runs on real
+ * stream I/O the fake clock does not drive: a flush the clock fires before it
+ * finishes ships the page's address and holds back the snapshot and the
+ * recorder's options. Without one the recorder gzips in line (its own
+ * fallback), so every event is buffered before the clock moves.
+ */
 const compressionStream = globalThis.CompressionStream;
 
 /** The file names of the scripts the client asked the browser to load. */
@@ -67,14 +76,7 @@ beforeAll(async () => {
   window.history.replaceState(null, "", LANDING_WITH_CODE);
   document.body.innerHTML = "<main><h1>Luke</h1></main>";
   Reflect.set(window, "_POSTHOG_REMOTE_CONFIG", { [PROJECT_KEY]: { config: EVERYTHING_ON } });
-  // The recorder gzips a full snapshot on the runtime's native
-  // `CompressionStream` where there is one, and every event after it waits
-  // in line behind that gzip, which runs on real time the fake clock does
-  // not drive. A flush the clock fires before it finishes ships the page's
-  // address and holds back the snapshot and the recorder's options. Without
-  // one the recorder gzips in line (its own fallback), so every event is
-  // buffered before the clock moves. It decides as it loads, so this comes
-  // before the import.
+  // Note that native gzip is removed before the import, because the recorder checks for it as it loads.
   Reflect.deleteProperty(globalThis, "CompressionStream");
   // Note that the module reads its key as it loads, so it is loaded afresh
   // under the stubbed key, beside the client it will start. The recorder is
