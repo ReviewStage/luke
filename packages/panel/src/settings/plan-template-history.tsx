@@ -10,6 +10,7 @@ import type { CallCardInput } from "../call/call-card.js";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history.js";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse.js";
 import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history.js";
+import type { ShellRoom } from "../shell-room.js";
 import { revisionSummary } from "../tasks/plan-history-model.js";
 import { type PlanHistorySource, usePlanHistory } from "../tasks/use-plan-history.js";
 import { sayRestored } from "../tasks/version-view.js";
@@ -86,12 +87,14 @@ function useStepOverTemplate(history: NavigationHistory, onExit: () => void): Na
  */
 export function TemplateVersionHistory({
   sidebar,
+  room,
   history,
   account,
   call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
+  room: ShellRoom;
   history: NavigationHistory;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
@@ -143,6 +146,7 @@ export function TemplateVersionHistory({
   return (
     <DesktopVersionHistory
       sidebar={sidebar}
+      room={room}
       history={steps}
       subject={subject}
       account={account}

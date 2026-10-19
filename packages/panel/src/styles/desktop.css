@@ -273,6 +273,36 @@ body,
   width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
 }
 
+/* A narrow room shows a screen's list or the item chosen in it, one at a
+   time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
+   list or its page, a version history's versions or the version, each the
+   shell's one column, and Chat's rail or its place, the view's one column.
+   The one shown stands alone, so no edge parts it from the other. */
+.desktop-shell[data-room="narrow"]:not([data-sidebar-collapsed]),
+.desktop-shell[data-room="narrow"] .chat-view {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktop-shell[data-room="narrow"]
+  :is(.desktop-settings, .desktop-version-history, .chat-view)
+  > [hidden] {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] :is(.settings-pages, .version-log, .chat-rail) {
+  border-right: 0;
+}
+
+/* A place standing alone in a narrow room leads its head with the way back,
+   so its name keeps the room left and what is said beside it gives way. */
+.desktop-shell[data-room="narrow"] .chat-head > h2 ~ * {
+  display: none;
+}
+
+.app-stage[data-surface="desktop"]:has(.desktop-shell[data-room="narrow"]) {
+  --work-left: 0px;
+}
+
 /* Where the pointer peeks the folded sidebar out: a strip at the window's
    left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {
@@ -322,7 +352,9 @@ body,
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
+.desktop-shell[data-sidebar-collapsed="true"]:has(
+    .desktop-main > .chat-view > .chat-rail:not([hidden])
+  )
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--luke-color-sidebar);
 }

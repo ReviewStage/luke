@@ -5,7 +5,9 @@
  * the shell's root and handed down from there, so every layout that answers
  * it answers the same room. A narrow room floats the sidebar as a drawer and
  * holds the side panel only full screen (`desktop-shell.tsx`,
- * `use-side-panel.ts`); the stylesheet reads it off the shell's `data-room`.
+ * `use-side-panel.ts`), and shows a screen's list or the item chosen in it
+ * one at a time (`hiddenColumns`); the stylesheet reads it off the shell's
+ * `data-room`.
  * The desktop's window is never narrower than its least width, wider than
  * either line here, so the desktop is always wide.
  */
@@ -50,4 +52,21 @@ export function useShellRoom(stageWidth: number | undefined): ShellRoom {
   const nowNarrow = stageWidth === undefined ? narrow : narrowStage(stageWidth, narrow);
   if (nowNarrow !== narrow) setNarrow(nowNarrow);
   return nowNarrow ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
+}
+
+/** Which of a list-and-item screen's two columns are hidden. */
+export interface HiddenColumns {
+  readonly list: boolean;
+  readonly item: boolean;
+}
+
+/**
+ * Which columns of a screen that lists things beside the one chosen, as
+ * Settings, a version history, and Chat do, a room hides: neither where it
+ * is wide, and where it is narrow the item while the list stands, or the
+ * list while the item does, so the one shown takes the whole width.
+ */
+export function hiddenColumns(room: ShellRoom, listed: boolean): HiddenColumns {
+  const narrow = room === SHELL_ROOM.NARROW;
+  return { list: narrow && !listed, item: narrow && listed };
 }

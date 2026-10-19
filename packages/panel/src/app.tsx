@@ -13,7 +13,7 @@ import {
   sessionReplayBootstrap,
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
@@ -66,7 +66,7 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
-import { followSettingsLink, useSettingsWorkspace } from "./settings-link.js";
+import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { useShellRoom } from "./shell-room.js";
 import { useStageWidth } from "./stage-width.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
@@ -118,7 +118,8 @@ export function App(): React.JSX.Element {
   useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
-  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
+  const settingsPlace = useSettingsPlace();
+  const { onEnter: enterSettings, onChoose: chooseSettingsView } = settingsPlace;
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -167,18 +168,18 @@ export function App(): React.JSX.Element {
     (next: PanelTab) =>
       guardLeave((tab: PanelTab) => {
         setTab(tab);
-        // Arriving at the tab is arriving at its first page, Profile: a page
+        // Arriving at the tab is arriving at its page list and its first page, Profile: a page
         // left open behind a tab switch would greet the next visit with a
         // corner of the settings rather than the settings. A flow that needs
         // another page sets it right after this reset.
-        setSettingsView(SETTINGS_VIEW.ACCOUNT);
+        enterSettings();
         // `PanelTab` and the counted tab are the same union: both are
         // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
         appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
           panel_tab: tab,
         });
       })(next),
-    [guardLeave, setSettingsView, setTab],
+    [guardLeave, enterSettings, setTab],
   );
   // Where a link's workspace is handed, read through a ref, because the
   // workspace Settings shows is held beside the Tasks tab, built after the opener.
@@ -194,11 +195,11 @@ export function App(): React.JSX.Element {
       guardLeave(() =>
         followSettingsLink(link, {
           changeTab,
-          changeView: setSettingsView,
+          changeView: chooseSettingsView,
           chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
         }),
       )(),
-    [changeTab, guardLeave, setSettingsView],
+    [changeTab, guardLeave, chooseSettingsView],
   );
 
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
@@ -326,7 +327,7 @@ export function App(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const shownView = shownSettingsView(settingsView, state?.run.capabilities ?? []);
+  const shownView = shownSettingsView(settingsPlace.view, state?.run.capabilities ?? []);
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
@@ -506,7 +507,7 @@ export function App(): React.JSX.Element {
     tab,
     onTabChange: changeTab,
     settingsView: shownView,
-    onSettingsViewChange: setSettingsView,
+    onSettingsViewChange: chooseSettingsView,
     tasks,
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
@@ -745,6 +746,7 @@ export function App(): React.JSX.Element {
                               history={history}
                               sidebar={sidebar}
                               room={room}
+                              settingsStep={settingsPlace}
                               call={call}
                               captions={{
                                 caption,
@@ -774,7 +776,7 @@ export function App(): React.JSX.Element {
                                   }
                                 },
                                 view: shownView,
-                                onViewChange: setSettingsView,
+                                onViewChange: chooseSettingsView,
                                 microphone,
                                 notifications: {
                                   status: state.notifications.status,
@@ -820,7 +822,7 @@ export function App(): React.JSX.Element {
                               workspace,
                             }),
                             capabilities: state.run.capabilities,
-                            onViewChange: setSettingsView,
+                            onViewChange: chooseSettingsView,
                           }}
                           readFiles={(taskId) =>
                             act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })

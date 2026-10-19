@@ -1,5 +1,5 @@
-import type { SettingsLink, SettingsView } from "@luke/settings/settings-views";
-import { useState } from "react";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { useCallback, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { landOnSettingsRow } from "./settings-search.js";
 
@@ -16,6 +16,11 @@ import { landOnSettingsRow } from "./settings-search.js";
  * behind Settings must still be the listed workspace's when Back returns to
  * it, and an open of another task answered late must not move what Settings
  * shows.
+ *
+ * Settings stands on its page list or on a page, which only a narrow room
+ * draws apart (`desktop-settings.tsx`): entered, it stands on its list, and a
+ * page chosen, by its row, a link, a search, or the history, stands on that
+ * page (`useSettingsPlace`).
  */
 
 /** The window's own ways to turn to a place in Settings. */
@@ -72,4 +77,32 @@ export function useSettingsWorkspace(input: {
     shownId: named ?? input.listedId,
     link: (workspaceId) => setLinked({ workspaceId, over: input.listedId }),
   };
+}
+
+/** Where Settings stands: its page, and whether its page list stands instead. */
+export interface SettingsPlace {
+  readonly view: SettingsView;
+  readonly listed: boolean;
+  /** Settings entered: its first page, Profile, under its page list. */
+  readonly onEnter: () => void;
+  /** A page chosen, which stands in the list's place. */
+  readonly onChoose: (view: SettingsView) => void;
+  /** Back from the page to the list. */
+  readonly onList: () => void;
+}
+
+/** Where Settings stands, entered on its list at Profile. */
+export function useSettingsPlace(): SettingsPlace {
+  const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
+  const [listed, setListed] = useState(true);
+  const onEnter = useCallback(() => {
+    setView(SETTINGS_VIEW.ACCOUNT);
+    setListed(true);
+  }, []);
+  const onChoose = useCallback((next: SettingsView) => {
+    setView(next);
+    setListed(false);
+  }, []);
+  const onList = useCallback(() => setListed(true), []);
+  return { view, listed, onEnter, onChoose, onList };
 }

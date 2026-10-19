@@ -8,6 +8,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -95,6 +96,7 @@ function drawn(): HTMLElement {
             onResize: ignore,
             staged: false,
           },
+          room: SHELL_ROOM.WIDE,
           history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
           subject: taskVersionSubject(tasks),
           account: {
