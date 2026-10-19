@@ -10,7 +10,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { PICKER_ALIGN, usePickerPlacement } from "../settings/picker-row.js";
+import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
@@ -19,7 +19,9 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * Drawn only where that workspace has Linear connected, as Linear's mark
  * and its name, the chip opens the app's one searchable menu, hung from its
- * leading edge and placed as a Settings picker's is. With nothing typed in
+ * leading edge, or its trailing edge where it ends its row as at the right of
+ * the New task dialog's head (`align`), and placed as a Settings picker's
+ * is. With nothing typed in
  * the menu's field it lists the issues read as the card opened, as Linear
  * listed them, newest changed first; as soon as anything is typed, the
  * issues whose title or key holds every word stand nearest first, and once
@@ -173,6 +175,7 @@ export function LinearIssueChip({
   workspaceId,
   disabled,
   openRequest,
+  align = PICKER_ALIGN.START,
   onChoose,
 }: {
   /** The read of a workspace's Linear issues, none where it has no Linear connected (`TasksControl`'s). */
@@ -182,6 +185,8 @@ export function LinearIssueChip({
   disabled: boolean;
   /** Counts the asks from elsewhere to open the menu, such as the field's ⌘L, each opening it. */
   openRequest?: number | undefined;
+  /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
+  align?: PickerAlign | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
 }): React.JSX.Element | null {
   const connected = readIn(workspaceId) !== undefined;
@@ -193,7 +198,7 @@ export function LinearIssueChip({
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, trigger, PICKER_ALIGN.START);
+  const placement = usePickerPlacement(open, trigger, align);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,
@@ -241,7 +246,7 @@ export function LinearIssueChip({
   };
 
   return (
-    <div className="linear-issue-chip" data-align={PICKER_ALIGN.START} {...placement} ref={box}>
+    <div className="linear-issue-chip" data-align={align} {...placement} ref={box}>
       <Tooltip label={LINEAR_WORDS.LABEL} chord={LINEAR_CHORD}>
         <Chip
           ref={trigger}

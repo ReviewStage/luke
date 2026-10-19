@@ -10,8 +10,8 @@
      shows through it: opaque, a step of ink over the ground. */
   --actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
   --actor-tile-ink: var(--luke-color-text);
-  /* A top row and its hairline, its middle level with the traffic lights'. */
-  --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
+  /* A top row and its hairline, its middle level with the title bar's. */
+  --desktop-bar-height: calc(2 * var(--title-bar-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
      with --luke-space-4 above and below it. Every tab that leads with a bar, in
      the side panel or in a task's column, stands it this tall, so moving
@@ -46,22 +46,16 @@
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
-  /* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
-     `main/window/zoom.ts`): where the green one ends, its x plus the three
-     lights' 61px on macOS 26, and the height their middle sits at, its y plus
-     half a 14px light. The lights never scale with the page, so their width
-     is divided by the zoom; main moves them down with it instead, so their
-     middle stays where it is drawn here. */
-  --traffic-lights-end: calc(79px / var(--zoom));
-  --traffic-lights-middle: 25px;
-  /* The title bar's own buttons beside them, each a toolbar icon button and
-     the first this far past the green light: about what the lights leave
-     between themselves. The buttons stand edge to edge, so each glyph is as
-     far from the next as the first is from the light, and the row reads as one. */
-  --title-bar-inset: var(--luke-space-8);
-  --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
+  /* The title bar's row, where its own buttons stand: the height its middle
+     sits at, which every top row is twice as tall as, and where its first
+     button starts. With no window chrome beside it (the web profile) the row
+     is as tall as a control and the toolbar's padding make it, and its
+     buttons stand at the window's edge, as in full screen; the desktop
+     profile sets both by the traffic lights (below). */
+  --title-bar-middle: calc(var(--luke-control-height) / 2 + var(--luke-space-8));
+  --title-bar-left: var(--column-inset);
   /* Where the work column's toolbar starts its tab while the sidebar is
-     folded: clear of the traffic lights and both buttons beside them, by a
+     folded: clear of where the title bar starts and both buttons there, by a
      row's own gap between its items. */
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
@@ -88,6 +82,24 @@
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
+}
+
+/* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
+   `main/window/zoom.ts`), which only the desktop's window has: where the
+   green one ends, its x plus the three lights' 61px on macOS 26, and the
+   height their middle sits at, its y plus half a 14px light. The lights never
+   scale with the page, so their width is divided by the zoom; main moves them
+   down with it instead, so their middle stays where it is drawn here. */
+:root[data-luke-profile="desktop"] {
+  --traffic-lights-end: calc(79px / var(--zoom));
+  --traffic-lights-middle: 25px;
+  --title-bar-middle: var(--traffic-lights-middle);
+  /* The title bar's own buttons beside them, each a toolbar icon button and
+     the first this far past the green light: about what the lights leave
+     between themselves. The buttons stand edge to edge, so each glyph is as
+     far from the next as the first is from the light, and the row reads as one. */
+  --title-bar-inset: var(--luke-space-8);
+  --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
@@ -156,9 +168,17 @@ body,
   inset: 0;
 }
 
+/* The title bar's row atop a column with no toolbar of its own, which the
+   title bar's buttons stand over. Only the desktop's window is dragged by it:
+   a page in a browser is no window to drag, so every drag region, and every
+   control claiming its presses back from one, is a rule of its own under the
+   desktop profile, right after the rule it belongs to. */
 .desktop-drag-strip {
   flex: 0 0 auto;
   height: var(--desktop-bar-height);
+}
+
+[data-luke-profile="desktop"] .desktop-drag-strip {
   -webkit-app-region: drag;
 }
 
@@ -260,7 +280,7 @@ body,
   --luke-button-ground: var(--title-bar-ground);
   position: absolute;
   z-index: 2;
-  top: calc(var(--traffic-lights-middle) - var(--luke-control-height) / 2);
+  top: calc(var(--title-bar-middle) - var(--luke-control-height) / 2);
   left: var(--title-bar-left);
   display: flex;
 }
@@ -577,6 +597,9 @@ body,
   align-items: center;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-4) 0 0;
+}
+
+[data-luke-profile="desktop"] .sidebar-section-head {
   -webkit-app-region: no-drag;
 }
 
@@ -1221,6 +1244,9 @@ ul.actor-stack {
   padding-right: var(--luke-space-4);
   border-radius: var(--luke-control-radius);
   transition: background-color var(--duration-hover) ease;
+}
+
+[data-luke-profile="desktop"] .sidebar-repository-header {
   -webkit-app-region: no-drag;
 }
 
@@ -1629,6 +1655,9 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
+}
+
+[data-luke-profile="desktop"] .offline-mark {
   -webkit-app-region: no-drag;
 }
 
@@ -1707,6 +1736,9 @@ ul.actor-stack {
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
+}
+
+[data-luke-profile="desktop"] .desktop-toolbar {
   -webkit-app-region: drag;
 }
 
@@ -1803,14 +1835,14 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
 }
 
-.toolbar-button,
-.luke-button,
-.luke-chip,
-.luke-segment,
-.luke-nav-item,
-.desktop-toolbar-actions,
-.desktop-toolbar .inbox-crumbs,
-.sidebar-task {
+[data-luke-profile="desktop"] .toolbar-button,
+[data-luke-profile="desktop"] .luke-button,
+[data-luke-profile="desktop"] .luke-chip,
+[data-luke-profile="desktop"] .luke-segment,
+[data-luke-profile="desktop"] .luke-nav-item,
+[data-luke-profile="desktop"] .desktop-toolbar-actions,
+[data-luke-profile="desktop"] .desktop-toolbar .inbox-crumbs,
+[data-luke-profile="desktop"] .sidebar-task {
   -webkit-app-region: no-drag;
 }
 
@@ -1937,6 +1969,9 @@ ul.actor-stack {
    over. */
 .luke-menu {
   z-index: var(--luke-z-menu);
+}
+
+[data-luke-profile="desktop"] .luke-menu {
   -webkit-app-region: no-drag;
 }
 
@@ -2567,10 +2602,11 @@ ul.actor-stack {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
-/* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
-   repository chip in the card's foot and hangs its menu from its leading
-   edge, placed as a Settings picker's is, wide enough for an issue's title
-   with its key and state after it. */
+/* New task's Linear chip (`linear-issue-chip.tsx`) stands at the right end
+   of the dialog's head row, its menu hung from its trailing edge, or after
+   the repository chip in Home's card foot, hung from its leading edge;
+   placed as a Settings picker's is, wide enough for an issue's title with
+   its key and state after it. */
 .linear-issue-chip {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
   position: relative;
@@ -2580,6 +2616,11 @@ ul.actor-stack {
 .linear-issue-chip .searchable-menu {
   width: 420px;
   max-width: var(--settings-picker-width-max, 420px);
+}
+
+.linear-issue-chip[data-align="end"] .searchable-menu {
+  right: 0;
+  left: auto;
 }
 
 .linear-issue-chip[data-side="above"] .searchable-menu {
@@ -5162,6 +5203,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
+}
+
+[data-luke-profile="desktop"] .find-bar {
   -webkit-app-region: no-drag;
 }
 
@@ -5805,6 +5849,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   cursor: col-resize;
   outline: none; /* no ring: the edge fills in the focus colour */
   transition: background-color var(--duration-hover) ease;
+}
+
+[data-luke-profile="desktop"] .side-panel-resize,
+[data-luke-profile="desktop"] .sidebar-resize {
   -webkit-app-region: no-drag;
 }
 
@@ -5848,6 +5896,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--panel-toggle-clearance) var(--luke-space-8) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
+}
+
+[data-luke-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
 }
 
@@ -5878,7 +5929,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex: 0 0 auto;
 }
 
-.tab-add-menu {
+[data-luke-profile="desktop"] .tab-add-menu {
   -webkit-app-region: no-drag;
 }
 
@@ -6089,6 +6140,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
     color var(--duration-hover) ease,
     opacity var(--duration-hover) ease,
     transform var(--duration-fast) var(--spring-fast);
+}
+
+[data-luke-profile="desktop"] .tab {
   -webkit-app-region: no-drag;
 }
 
@@ -6483,6 +6537,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   inset: 0;
   background: var(--luke-color-scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
+}
+
+[data-luke-profile="desktop"] .command-palette-backdrop {
   -webkit-app-region: no-drag;
 }
 
@@ -6505,6 +6562,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) backwards,
     command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
+}
+
+[data-luke-profile="desktop"] .command-palette {
   -webkit-app-region: no-drag;
 }
 
@@ -6966,16 +7026,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-12);
 }
 
-/* New task's head: the title and its workspace chip. */
+/* New task's head row (`new-task-composer.tsx`, over the card): the title
+   with the repository chip, and the Linear chip at its right end. */
 .new-task-head {
   display: flex;
   min-width: 0;
   align-items: center;
+  justify-content: space-between;
   gap: var(--luke-space-12);
 }
 
-/* The title says where the task starts, "New task in", then the workspace's
-   chip in the title's own line, as Linear's team chip stands in its title. */
+/* The title says what starts, "New task", then the repository's chip in
+   the title's own line, as Linear's team chip stands in its title. */
 .new-task-title {
   display: flex;
   min-width: 0;
@@ -7016,6 +7078,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .new-task-composer .agent-composer {
   padding: 0;
+}
+
+/* The words field stands at least five lines tall, so a task's prompt has
+   room before it is written; it still grows to the agent box's eight. */
+.new-task-composer .agent-composer-input {
+  min-height: calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+}
+
+/* In the dialog, which does not scroll, a window too short for five lines,
+   as a small one zoomed in, has the minimum yield to a quarter of the
+   window, so the card's foot and its Start stay in view. Home scrolls, so
+   its composer keeps the five lines. */
+.new-task .new-task-composer .agent-composer-input {
+  min-height: min(
+    calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
+    25vh
+  );
 }
 
 /* Where the card is too narrow for one row, as in a narrow window zoomed

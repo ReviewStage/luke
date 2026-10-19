@@ -143,10 +143,10 @@ export const DIFF_INDICATORS_LABEL = {
 
 /** What each inline diff is called on a control. */
 export const INLINE_DIFF_LABEL = {
-  [INLINE_DIFF.WORD_ALT]: "Word-alt",
-  [INLINE_DIFF.WORD]: "Word",
-  [INLINE_DIFF.CHAR]: "Character",
-  [INLINE_DIFF.NONE]: "None",
+  [INLINE_DIFF.WORD_ALT]: "Words (smart)",
+  [INLINE_DIFF.WORD]: "Words",
+  [INLINE_DIFF.CHAR]: "Characters",
+  [INLINE_DIFF.NONE]: "Off",
 } as const satisfies Record<(typeof INLINE_DIFF)[keyof typeof INLINE_DIFF], string>;
 
 /** What each font is called on a control: its own name. */

@@ -294,6 +294,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onChoose: ignore,
       pages: undefined,
       onRereadPages: () => undefined,
+      onTaskAgents: () => undefined,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     personView: {

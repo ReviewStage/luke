@@ -523,6 +523,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     url: opened.url,
   }));
   const { pages, onRereadPages } = view;
+  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws.
+  const { onTaskAgents } = view;
+  const taskAgents = agents.agents;
+  useEffect(() => {
+    if (taskId === undefined || taskAgents === undefined) return;
+    onTaskAgents(
+      taskId,
+      taskAgents.map((agent) => agent.id),
+    );
+  }, [taskId, taskAgents, onTaskAgents]);
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,

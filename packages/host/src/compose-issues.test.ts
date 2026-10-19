@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HostedIssueClient } from "@luke/features";
+import { fixedBearer, HostedIssueClient } from "@luke/features";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
@@ -141,8 +141,7 @@ it.effect("the service is asked over the HTTP client the host was handed", () =>
       account: { capabilitiesActive: () => true },
       client: new HostedIssueClient({
         serviceBaseUrl: "https://tryluke.test",
-        readAccessToken: () => Effect.succeed("bearer-1"),
-        refreshAccount: () => Effect.void,
+        credential: fixedBearer("bearer-1"),
       }),
     }).pipe(Effect.provide(http.layer));
     const list = composer.methods[GATEWAY_METHOD.ISSUES_LIST];

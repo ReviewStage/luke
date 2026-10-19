@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH, HostedFactoryWorldClient } from "@luke/features";
+import {
+  fixedBearer,
+  HOSTED_API_ERROR,
+  HOSTED_SERVICE_PATH,
+  HostedFactoryWorldClient,
+} from "@luke/features";
 import { FACTORY_WORLD_CALL_FAILURE } from "@luke/features/factory-world-view";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
@@ -46,8 +51,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: new HostedFactoryWorldClient({
         serviceBaseUrl: ORIGIN,
-        readAccessToken: () => Effect.succeed("bearer-1"),
-        refreshAccount: () => Effect.void,
+        credential: fixedBearer("bearer-1"),
       }),
     }).pipe(Effect.provide(http.layer));
     const world = (params: WireRecord) => {

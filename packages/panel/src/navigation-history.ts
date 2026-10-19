@@ -12,8 +12,13 @@
  *
  * The history is held by the adapter the window's root installs
  * (`@luke/ui/history-adapter`), each place as the state a step back reopens
- * it from, the way a browser's `history.state` stands beside its URL. The
- * desktop keeps it in memory and writes no address.
+ * it from, the way a browser's `history.state` stands beside its URL, and
+ * the path of its Luke link as its address: the link Copy link names for
+ * the step (`links-at-hand.ts`), so the two never disagree, or `/app` for a
+ * place with none. The step standing takes its address again whenever that
+ * link changes, as when a workspace's slug is read after the visit; a step
+ * behind takes it when the window is back on it. The desktop keeps the
+ * history in memory, and nothing there reads an address.
  *
  * Settings is one step however many of its pages are turned: entering it is
  * a visit, and choosing another of its pages turns the page that visit holds
@@ -36,6 +41,7 @@
  * is deleted, as it does a deleted plan.
  */
 
+import { linkOf, type ReadLink } from "@luke/features/luke-link";
 import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
@@ -203,33 +209,40 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The entry a place is held as: the place itself, as the state the window
- * reopens it from, and no address, since the desktop keeps its history in
- * memory and nothing here reads one.
+ * The address of a place with no link: the home page, Chat, the Issues list,
+ * a new automation's page.
+ * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
+ * so it names no workspace's place.
  */
-function entryOf(place: Place): HistoryEntry<Place> {
-  return { address: undefined, state: place };
+const NO_LINK_ADDRESS = "/app";
+
+/** The address a step is held at: its link's path, with the query and fragment it carries, since a browser holds a same-origin path; `/app` where it has none. */
+function addressOf(link: ReadLink | undefined): string {
+  if (link === undefined) return NO_LINK_ADDRESS;
+  const url = new URL(linkOf(link.place, link.workspace));
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**
- * Records the window standing on `place`. A step already standing is left
- * as it is, but for a Settings page turned or a version history moved
- * within, which the standing step takes in place, and so does the automation
- * a new automation's page made. Any other place is a visit, whichever door
- * opened it.
+ * Records the window standing on `place`, at `address`. A step already
+ * standing is left as it is, but for a Settings page turned or a version
+ * history moved within, which the standing step takes in place, and so does
+ * the automation a new automation's page made, and an address changed under
+ * it. Any other place is a visit, whichever door opened it.
  */
-function visit(history: HistoryAdapter<Place>, place: Place): void {
+function visit(history: HistoryAdapter<Place>, place: Place, address: string): void {
   const trail = history.current();
-  const standing = trail.entries[trail.at]?.state;
-  if (standing !== undefined && madeFromNew(standing, place)) {
-    history.replace(entryOf(place));
+  const standing = trail.entries[trail.at];
+  const entry: HistoryEntry<Place> = { address, state: place };
+  if (standing !== undefined && madeFromNew(standing.state, place)) {
+    history.replace(entry);
     return;
   }
-  if (standing !== undefined && sameStep(standing, place)) {
-    if (!samePlace(standing, place)) history.replace(entryOf(place));
+  if (standing !== undefined && sameStep(standing.state, place)) {
+    if (!samePlace(standing.state, place) || standing.address !== address) history.replace(entry);
     return;
   }
-  history.push(entryOf(place));
+  history.push(entry);
 }
 
 /**
@@ -285,12 +298,14 @@ function windowHistory(): HistoryAdapter<Place> {
  */
 function useHistory(input: {
   place: Place | undefined;
+  /** The address the place stands at. */
+  address: string;
   reachable: (place: Place) => boolean;
   go: (place: Place) => void;
   /** Asks first, while a page holds unsaved work, before a step moves the trail at all. */
   guard: LeaveGuard["guard"];
 }): NavigationHistory & { backTo: (place: Place) => boolean } {
-  const { place, reachable, guard } = input;
+  const { place, address, reachable, guard } = input;
   const history = windowHistory();
   const trail = useSyncExternalStore(history.subscribe, history.current);
   // Note that the presses read the trail from the adapter as they land, because a
@@ -303,8 +318,8 @@ function useHistory(input: {
   });
 
   useEffect(() => {
-    if (place !== undefined) visit(history, place);
-  }, [history, place]);
+    if (place !== undefined) visit(history, place, address);
+  }, [history, place, address]);
 
   // Note that the whole step is what asks, the trail's move with the window's, so a step
   // cancelled at the ask leaves the trail standing where the window still stands.
@@ -358,6 +373,8 @@ function useHistory(input: {
 export function useWindowHistory(input: {
   /** Whether the window knows where it stands: its state has arrived, and no sign-in stands over it. */
   known: boolean;
+  /** The link of the step the window stands on, as Copy link names it (`CopyLink.standing`); none where it has none. */
+  link: ReadLink | undefined;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   settingsView: SettingsView;
@@ -541,6 +558,7 @@ export function useWindowHistory(input: {
   };
   const { backTo, ...history } = useHistory({
     place,
+    address: addressOf(input.link),
     reachable,
     go,
     guard: tasks.leaveGuard.guard,

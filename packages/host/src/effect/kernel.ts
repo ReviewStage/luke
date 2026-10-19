@@ -26,6 +26,7 @@ import {
   IdSource,
   Reporter,
   RunMode,
+  ServiceOrigin,
   StateRoot,
 } from "./seams.js";
 
@@ -135,6 +136,7 @@ const kernelLayer = Layer.effect(
     const reporter = yield* Reporter;
     const service = yield* HostService;
     const override = yield* accountBaseUrlOverride;
+    const serviceOrigin = yield* Effect.serviceOption(ServiceOrigin);
     const clock = yield* Clock.Clock;
     const emit = yield* kernelEmit(service);
 
@@ -144,6 +146,7 @@ const kernelLayer = Layer.effect(
       accountBaseUrl: accountBaseUrlFor({
         packaged: identity.packaged,
         override: Option.getOrUndefined(override),
+        serviceOrigin: Option.getOrUndefined(serviceOrigin),
       }),
       // Effect's own `Clock`: the real one at every edge, and a `TestClock`
       // under `it.effect`, so a test drives `kernel.now()` the same way it
@@ -159,7 +162,9 @@ const kernelLayer = Layer.effect(
 
 /**
  * The kernel over the seams, with the late service beside it. Every seam is a
- * requirement, so a composition that did not state one cannot build.
+ * requirement, so a composition that did not state one cannot build; the one
+ * exception is `ServiceOrigin`, read where it was provided and otherwise left
+ * to the desktop's derivation.
  */
 export const hostKernelLayer: Layer.Layer<HostKernelTag | HostService, never, HostSeamTags> =
   Layer.provideMerge(kernelLayer, hostServiceLayer);

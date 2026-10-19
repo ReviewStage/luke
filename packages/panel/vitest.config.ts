@@ -12,6 +12,13 @@ const MARKDOWN_HTML_PARSER = fileURLToPath(
   new URL("./src/markdown-html-parser.ts", import.meta.url),
 );
 
+/**
+ * The panel's own stylesheets, which vitest answers as their text where a test
+ * imports one `?raw` (`testing/container-width.ts`), rather than as the empty
+ * module it answers any other stylesheet with.
+ */
+const PANEL_STYLESHEETS = /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$/;
+
 export default defineConfig({
   plugins: [
     {
@@ -27,6 +34,7 @@ export default defineConfig({
     name: "panel",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/testing/resize-observer.ts"],
+    css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown"] } },
   },
 });

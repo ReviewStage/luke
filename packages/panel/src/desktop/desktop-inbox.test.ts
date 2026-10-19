@@ -457,6 +457,7 @@ function mount(
           onChoose: setChosen,
           pages: undefined,
           onRereadPages: () => undefined,
+          onTaskAgents: () => undefined,
         },
         onShowTask: (taskId) => asked.shownTasks.push(taskId),
         onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),

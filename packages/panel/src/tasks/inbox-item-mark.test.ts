@@ -7,8 +7,9 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/h
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ItemMark } from "./inbox-list.js";
 import { taskHolder } from "./inbox-model.js";
@@ -36,6 +37,8 @@ const TASK: TaskSummary = {
 };
 
 let root: Root | undefined;
+
+beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(() => {
   act(() => root?.unmount());

@@ -1,8 +1,7 @@
 import {
   type AccountCallEffects,
-  type AccountToken,
-  accountBearer,
   accountCall,
+  type CallCredential,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
 import {
@@ -35,7 +34,9 @@ export interface AccountPreferencesAnswer {
   experiments: ExperimentChoices;
 }
 
-interface AccountPreferencesClientOptions extends AccountToken {
+interface AccountPreferencesClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
@@ -101,7 +102,7 @@ export class AccountPreferencesClient {
   constructor(options: AccountPreferencesClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;

@@ -120,7 +120,8 @@ export const CREATE_SECTION_TOOL = {
     "Make a section in your workspace's sidebar, for the developer you work for, to keep tasks " +
     "in: it stands in their sidebar alone, as one they made from the sidebar would, with the " +
     `title and the emoji given, and holds no task until ${AGENT_TOOL.MOVE_TASK} moves one in. ` +
-    "Make one when the developer asks for it, never on your own. Answers `accepted` with the " +
+    "Make one when the developer asks for it, or when you orchestrate, to keep the tasks you " +
+    "make for one piece of work together; never otherwise on your own. Answers `accepted` with the " +
     "section's id and title, or `rejected` and why.",
   inputSchema: CREATE_SECTION_INPUT,
 } as const;
@@ -144,7 +145,8 @@ export const MOVE_TASK_TOOL = {
     "the section it stood in, a task stands in one section at most, and it lands at the top of " +
     "the one named. Leave sectionId out to take it out of its section, back under Tasks. A " +
     "task already where it is asked to go stays as it stands. Move tasks when the developer " +
-    "asks you to sort or file them. Answers `accepted` with the task's id and name and the " +
+    "asks you to sort or file them, or to file the tasks you made when you orchestrate. " +
+    "Answers `accepted` with the task's id and name and the " +
     "section it now stands in (null for none), or `rejected` and why.",
   inputSchema: MOVE_TASK_INPUT,
 } as const;

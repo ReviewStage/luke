@@ -281,6 +281,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -2891,6 +2892,8 @@ test("Files changed draws each review thread under its line, its comments throug
       },
     });
   handSettings();
+  // The View settings popover opens on the window's appearance.
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
   const tab = await draw(
     controlAnswering(
       {
@@ -2904,13 +2907,13 @@ test("Files changed draws each review thread under its line, its comments throug
   await act(async () => option(tab, "Files changed").click());
   await settle();
   const minimize = async () => {
-    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
     const toggle = [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
       (each) => each.getAttribute("aria-label") === "Minimize inline comments",
     );
     act(() => toggle?.click());
     await settle();
-    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
+    act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
   };
 
   const drawn = lists.at(-1) ?? assert.fail("the files are drawn");

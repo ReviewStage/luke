@@ -118,6 +118,9 @@ html.call-window #root {
   width: 248px;
   box-shadow: 0 2px 6px var(--luke-color-shadow);
   animation: none;
+}
+
+[data-luke-profile="desktop"] .call-card[data-surface="window"] {
   -webkit-app-region: drag;
 }
 
@@ -164,7 +167,7 @@ html.call-window[data-pointer-stale="true"]
 }
 
 /* Its buttons each answer one press; the rest of the card drags the window. */
-.call-card[data-surface="window"] button {
+[data-luke-profile="desktop"] .call-card[data-surface="window"] button {
   -webkit-app-region: no-drag;
 }
 

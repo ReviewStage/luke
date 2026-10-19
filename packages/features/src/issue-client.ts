@@ -9,13 +9,12 @@ import { Duration, Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   type CallRequest,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
   ISSUE_CALL_FAILURE,
   type IssueCallFailure,
@@ -47,7 +46,9 @@ import {
  * the service would refuse by shape is refused here without traveling.
  */
 
-export interface HostedIssueClientOptions extends AccountToken {
+export interface HostedIssueClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -144,7 +145,7 @@ export class HostedIssueClient {
   constructor(options: HostedIssueClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

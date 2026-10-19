@@ -25,9 +25,10 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -145,6 +146,8 @@ const MESSAGES: readonly CodingAgentMessage[] = [
 type Seen = readonly [id: string, kind: string, name: string, picture?: string];
 
 let root: Root | undefined;
+
+beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(() => {
   act(() => root?.unmount());

@@ -3,13 +3,11 @@ import { Effect, type Schema as EffectSchema, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
   sendInSession,
-  sessionBearer,
 } from "./account-call.js";
-import type { AccountSessionToken, AccountToken } from "./account-token.js";
 import {
   type GitHubConnectAnswer,
   type GitHubConnection,
@@ -62,7 +60,11 @@ function asked<Answer, Encoded>(
   );
 }
 
-export interface HostedGitHubConnectionClientOptions extends AccountToken, AccountSessionToken {
+export interface HostedGitHubConnectionClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
+  /** The Mac's own Better Auth session, for the calls that write through Better Auth's organization endpoints. */
+  sessionCredential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -76,16 +78,16 @@ export class HostedGitHubConnectionClient {
   constructor(options: HostedGitHubConnectionClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#inSession = sendInSession(
       accountCall({
         baseUrl: options.serviceBaseUrl,
-        credential: sessionBearer(options),
+        credential: options.sessionCredential,
         requestTimeoutMs: options.requestTimeoutMs,
       }),
-      options,
+      options.sessionCredential,
     );
   }
 

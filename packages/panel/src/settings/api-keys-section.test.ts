@@ -21,6 +21,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ApiKeysSection } from "./api-keys-section.js";
 
@@ -93,6 +94,7 @@ function answer(request: Act): Promise<ActOutcome> {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   stored = [];
   sent = [];
   refuseSave = undefined;
