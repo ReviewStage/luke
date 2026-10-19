@@ -114,6 +114,7 @@ import {
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
+  Cause,
   Clock,
   Data,
   Duration,
@@ -1053,12 +1054,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
   }
 
-  /** Colours a code shown and draws it after the rest, where it is still for the screen once coloured. */
+  /**
+   * Colours a code shown and draws it after the rest, where it is still for
+   * the screen once coloured. Note that a showing whose colouring failed, as
+   * where the highlighter's modules could not be loaded, is dropped and
+   * logged rather than ending the loop that draws every showing after it;
+   * the next showing tries the load again.
+   */
   function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
     return Effect.flatMap(showingOf(shown), (showing) =>
       Effect.sync(() => {
         if (showsCode(taskId, shown)) write({ shownCode: [...(view.shownCode ?? []), showing] });
       }),
+    ).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.interrupt
+          : Effect.logWarning("A code shown on a task's call could not be coloured", cause),
+      ),
     );
   }
 
