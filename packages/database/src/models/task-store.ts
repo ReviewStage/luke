@@ -17,11 +17,11 @@ import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { attachment } from "../schemas/attachment.js";
 import { organization } from "../schemas/auth.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent, type StoredArchive } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { issue } from "../schemas/issue.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
@@ -1107,7 +1107,7 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
     db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.taskId, taskId)),
   );
   yield* Database.use((db) =>
-    db.update(inboxAttachment).set({ organizationId }).where(eq(inboxAttachment.taskId, taskId)),
+    db.update(attachment).set({ organizationId }).where(eq(attachment.taskId, taskId)),
   );
 });
 
