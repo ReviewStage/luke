@@ -7,6 +7,7 @@ import {
   WORLD_LAYER,
   type WorldLayer,
 } from "@luke/panel/factory-world/world";
+import { LinesChanged } from "@luke/panel/tasks/agent-published";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -46,7 +47,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { LinesChanged } from "../tasks/agent-published";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 
 /**

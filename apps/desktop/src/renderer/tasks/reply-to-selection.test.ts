@@ -13,6 +13,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
+import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -33,7 +34,6 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
-import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
  * Words selected in an agent's message, answered from its box: Reply stands

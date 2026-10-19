@@ -3,6 +3,9 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
 import { Shortcut } from "@luke/panel/shortcut";
+import { agentStillWriting, agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { AgentGlyph } from "@luke/panel/tasks/tab-look";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   COMBOBOX_LIST_HEIGHT,
@@ -17,9 +20,6 @@ import {
 } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
-import { AgentGlyph } from "./tab-look";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * terminal-picker.tsx -- the palette asking which coding agent's sandbox a terminal is for, when the rules leave it to the developer.

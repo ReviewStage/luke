@@ -9,11 +9,11 @@ import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import type { SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useContext, useState } from "react";
 import { TerminalPicker } from "./terminal-picker";
-import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the picker where the rules ask.

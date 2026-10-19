@@ -10,6 +10,12 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
+import {
+  EMPTY_INBOX_DRAFT,
+  type InboxDraft,
+  inboxReply,
+  pressesOf,
+} from "@luke/panel/tasks/inbox-model";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BADGE_TONE,
@@ -37,7 +43,6 @@ import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
 import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
-import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, choiceOptions, FormFields } from "./inbox-pane";
 
 /** Reads a chat ask's response as the Inbox's answer parts take one, the two sharing one wire shape. */

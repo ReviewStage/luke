@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TOOL_STATE, ToolLine, type ToolState } from "@luke/panel/ai-elements/tool";
+import { AgentGlyph, agentEndMark } from "@luke/panel/tasks/tab-look";
 import { TerminalIcon } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TaskStatusMark } from "./desktop/task-card";
-import { AgentGlyph, agentEndMark } from "./tasks/tab-look";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for

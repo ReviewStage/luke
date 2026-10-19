@@ -14,6 +14,7 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "@luke/panel/desktop/sideb
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { fixtureChat } from "@luke/panel/tasks/chat-fixture";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { HISTORY_READ } from "@luke/panel/tasks/use-plan-history";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -33,7 +34,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import type { SettingsPanelProps } from "../settings/settings-panel";
-import { HISTORY_READ } from "../tasks/use-plan-history";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopShell } from "./desktop-shell";
 

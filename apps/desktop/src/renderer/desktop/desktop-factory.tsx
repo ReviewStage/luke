@@ -1,11 +1,29 @@
 import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "@luke/panel/actor-ref";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import {
+  agentMovedAt,
+  FACTORY_BLOCK,
+  FACTORY_STEP,
+  FACTORY_STOP,
+  FACTORY_WORK,
+  type FactoryBlock,
+  type FactoryBoard,
+  type FactoryShipped,
+  type FactoryStep,
+  type FactoryStop,
+  type FactoryWork,
+  factoryBoard,
+  factoryMovedAt,
+  factoryOneOffWaiting,
+  factoryWaiting,
+} from "@luke/panel/desktop/factory-model";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
@@ -13,8 +31,12 @@ import { FACTORY_CAMPUS } from "@luke/panel/factory-world/registry";
 import { useFactoryWorlds, WorldPicker } from "@luke/panel/factory-world/world-picker";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
+import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { NEEDS_YOU } from "@luke/panel/tasks/inbox-model";
 import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
+import { PullRequestMark } from "@luke/panel/tasks/pull-request-mark";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { AgentGlyph, agentEndMark } from "@luke/panel/tasks/tab-look";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "@luke/panel/tasks/use-side-panel";
 import { RowHint, RowHintOptions } from "@luke/panel/tooltip";
@@ -53,31 +75,9 @@ import {
   MessageCircleQuestionIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { FactoryWorldPage } from "../factory-world/world-page";
-import { agentTabLabel } from "../tasks/coding-agent-model";
-import { NEEDS_YOU } from "../tasks/inbox-model";
-import { PullRequestMark } from "../tasks/pull-request-mark";
-import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
-import {
-  agentMovedAt,
-  FACTORY_BLOCK,
-  FACTORY_STEP,
-  FACTORY_STOP,
-  FACTORY_WORK,
-  type FactoryBlock,
-  type FactoryBoard,
-  type FactoryShipped,
-  type FactoryStep,
-  type FactoryStop,
-  type FactoryWork,
-  factoryBoard,
-  factoryMovedAt,
-  factoryOneOffWaiting,
-  factoryWaiting,
-} from "./factory-model";
 import { taskCardOf } from "./task-card";
 
 /**

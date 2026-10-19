@@ -13,10 +13,13 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { ACTOR_SIZE, ActorMark } from "@luke/panel/actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "@luke/panel/integration-tools";
 import { useMemberDirectory } from "@luke/panel/member-directory";
 import type { ComposerTrigger, MentionNode } from "@luke/panel/plan-editor/contract";
 import { FileTypeIcon } from "@luke/panel/tasks/file-type-icon";
+import { PullRequestMark } from "@luke/panel/tasks/pull-request-mark";
+import { AgentMark } from "@luke/panel/tasks/tab-look";
 import {
   ArrowLeftIcon,
   type ComboboxGroup,
@@ -45,9 +48,6 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { PullRequestMark } from "./pull-request-mark";
-import { AgentMark } from "./tab-look";
 import { NO_TASK } from "./task-mentions";
 
 /**

@@ -1,7 +1,13 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { agentPlace, useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { AgentTabCard } from "@luke/panel/tasks/agent-tab-card";
+import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { FileCard, newestFileNote } from "@luke/panel/tasks/file-ref";
+import { type InboxBoardView, NEEDS_YOU } from "@luke/panel/tasks/inbox-model";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import {
   HoverCard,
@@ -23,14 +29,8 @@ import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../tasks/agent-ref";
-import { AgentTabCard } from "../tasks/agent-tab-card";
-import { agentTabLabel } from "../tasks/coding-agent-model";
-import { FileCard, newestFileNote } from "../tasks/file-ref";
-import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model";
 import { PageCard } from "../tasks/page-card";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { workRowsOf } from "../tasks/work-model";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {

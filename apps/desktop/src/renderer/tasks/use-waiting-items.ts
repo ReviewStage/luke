@@ -1,9 +1,6 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
-import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
-import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
-import { useCallback, useMemo } from "react";
 import {
   INBOX_GROUPING,
   INBOX_SHOW,
@@ -12,8 +9,11 @@ import {
   listedItems,
   taskHolder,
   tasklessGroups,
-} from "./inbox-model";
-import { useInboxItems } from "./use-inbox-items";
+} from "@luke/panel/tasks/inbox-model";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
+import { useInboxItems } from "@luke/panel/tasks/use-inbox-items";
+import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
+import { useCallback, useMemo } from "react";
 import type { TasksControl } from "./use-tasks-tab";
 
 /**

@@ -8,6 +8,8 @@ import {
 import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "@luke/panel/find-matches";
 import { MarkdownMessage } from "@luke/panel/markdown-message";
+import { CallCheckpoint, CallEnded } from "@luke/panel/tasks/call-card";
+import { FileRef } from "@luke/panel/tasks/file-ref";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import { cssCustomProperties, IconButton, SCROLL_FADE_INSET } from "@luke/ui";
@@ -21,8 +23,6 @@ import {
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
-import { CallCheckpoint, CallEnded } from "./call-card";
-import { FileRef } from "./file-ref";
 import { useMentionLink } from "./task-mentions";
 
 /**

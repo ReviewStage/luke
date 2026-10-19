@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { StartAgentButton } from "./start-agent-button";
 
 /**

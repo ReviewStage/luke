@@ -13,6 +13,7 @@ import {
   RepositoryRemedyProvider,
 } from "@luke/panel/tasks/repository-remedy";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -32,7 +33,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { AgentComposer } from "./agent-composer";
-import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
  * The agent's message box as the developer works it, on the editor bundle's

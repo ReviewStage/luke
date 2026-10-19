@@ -19,9 +19,13 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { readKept, writeKept } from "@luke/panel/desktop/folded-groups";
+import { type IssueFilterControl, useIssueFilter } from "@luke/panel/desktop/issue-filter-view";
 import { PRIORITY_ORDER, PriorityGlyph } from "@luke/panel/desktop/issue-pickers";
+import { type IssueWork, IssueWorkProvider } from "@luke/panel/desktop/issue-work";
 import { type IssueDraft, NewIssueDialog } from "@luke/panel/desktop/new-issue-dialog";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
+import { createdByEntries } from "@luke/panel/desktop/sidebar-task-view";
 import { type IssueChange, useIssue, useIssues } from "@luke/panel/desktop/use-issues";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
@@ -62,14 +66,10 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { openPullRequest } from "./desktop-factory";
-import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
-import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
 import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits } from "./issue-peek";
-import { type IssueWork, IssueWorkProvider } from "./issue-work";
-import { createdByEntries } from "./sidebar-task-view";
 
 /**
  * issues-page.tsx -- the window's Issues page: the listed workspace's issues on a board of a column for each status, or listed under a heading for each, and a new one filed from a card.

@@ -5,7 +5,9 @@ import {
   issueIdentifier,
 } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
+import { IssueActions } from "@luke/panel/desktop/issue-actions";
 import { PriorityMark, StatusGlyph } from "@luke/panel/desktop/issue-pickers";
+import { IssueCardPullRequest } from "@luke/panel/desktop/issue-work";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
@@ -26,9 +28,7 @@ import {
 } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
-import { IssueCardPullRequest } from "./issue-work";
 
 /**
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.

@@ -30,6 +30,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { archiveWords } from "@luke/panel/tasks/coding-agent-model";
 import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import {
@@ -59,7 +60,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { archiveWords } from "../tasks/coding-agent-model";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopAgentPage } from "./desktop-agent-page";
 

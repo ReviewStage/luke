@@ -14,6 +14,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { RUNS_PANEL_WIDTH, type RunsPanel } from "@luke/panel/desktop/folded-groups";
 import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { RunsRead } from "@luke/panel/desktop/use-automation-runs";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
@@ -43,7 +44,6 @@ import {
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
-import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.

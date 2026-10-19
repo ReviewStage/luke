@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { taskHolder } from "@luke/panel/tasks/inbox-model";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -11,7 +12,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ItemMark } from "./inbox-list";
-import { taskHolder } from "./inbox-model";
 
 /**
  * inbox-item-mark.test.ts -- an Inbox item whose agent was archived still

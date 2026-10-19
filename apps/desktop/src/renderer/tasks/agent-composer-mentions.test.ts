@@ -33,6 +33,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
@@ -63,7 +64,6 @@ import {
   useMentionAgentsReader,
 } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
-import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
  * `@` in an agent's message box and its transcript, on a task's page and

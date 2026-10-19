@@ -18,6 +18,14 @@ import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+} from "@luke/panel/actor-ref";
+import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
@@ -38,61 +46,12 @@ import { InlineRef } from "@luke/panel/inline-ref";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
+import { type PublishedDoors, PublishedRow } from "@luke/panel/tasks/agent-published";
+import type { AgentServersControl } from "@luke/panel/tasks/agent-servers";
+import type { HeldTranscript } from "@luke/panel/tasks/agent-tab-card";
+import { ArchivedComposerNote } from "@luke/panel/tasks/archived-task";
 import { AttachedFileChips, messageFileChips } from "@luke/panel/tasks/attached-file-chips";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
-import { PlanPictures } from "@luke/panel/tasks/plan-pictures";
-import { REPLY_SCOPE, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
-import { SentTime } from "@luke/panel/tasks/sent-time";
-import type { SkillSource } from "@luke/panel/tasks/skill-picker";
-import { SkillCard } from "@luke/panel/tasks/skill-ref";
-import { useMinute } from "@luke/panel/tasks/task-time";
-import {
-  UndeliveredLines,
-  UndeliveredMark,
-  useUndeliveredLines,
-} from "@luke/panel/tasks/undelivered-mark";
-import { useKnownNames } from "@luke/panel/tasks/use-known-names";
-import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
-import {
-  BUTTON_VARIANT,
-  Button,
-  DisclosureChevron,
-  DocumentIcon,
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
-  HoverCard,
-  HoverCardHead,
-  INLINE_REF_LOOK,
-  TEXT_LINK_LOOK,
-  TEXT_TONE,
-  Text,
-  TextLink,
-} from "@luke/ui";
-import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
-import { MESSAGE_ROLE } from "@luke/wire";
-import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
-import {
-  ACTOR_SIZE,
-  ActorLine,
-  ActorMark,
-  ActorRef,
-  AutomationCard,
-  automationActor,
-} from "../actor-ref";
-import { AgentComposer } from "./agent-composer";
-import {
-  AgentPicturesProvider,
-  CallPictures,
-  ShownPictures,
-  useAgentPictureDoor,
-} from "./agent-pictures";
-import { type PublishedDoors, PublishedRow } from "./agent-published";
-import type { AgentServersControl } from "./agent-servers";
-import type { HeldTranscript } from "./agent-tab-card";
-import { ArchivedComposerNote } from "./archived-task";
-import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
   type AgentPart,
@@ -128,24 +87,16 @@ import {
   workerLines,
   workerStatusOf,
   workerToolState,
-} from "./coding-agent-model";
-import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent";
-import { CopyMessageAction } from "./copy-message";
-import { ForkedToLine, useForkOffered } from "./fork-action";
-import { type ForkCut, forkCutOf, openReply } from "./fork-model";
-import { linkChip } from "./mention-chip";
-import { MentionedAgentCard } from "./mentioned-agent-card";
-import {
-  agentMessagePlace,
-  MESSAGE_GONE,
-  MessagePlaceProvider,
-  useMessageReveal,
-} from "./message-links";
-import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
-import { briefAgent, replayOpening } from "./replay-card-model";
-import { MentionedServers, SentToAgent } from "./server-card";
-import { SentWords, useSkill } from "./skill-chip";
-import { useMentionDoors } from "./task-mentions";
+} from "@luke/panel/tasks/coding-agent-model";
+import { type ForkCut, forkCutOf, openReply } from "@luke/panel/tasks/fork-model";
+import { PlanPictures } from "@luke/panel/tasks/plan-pictures";
+import { briefAgent, replayOpening } from "@luke/panel/tasks/replay-card-model";
+import { REPLY_SCOPE, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
+import { SentTime } from "@luke/panel/tasks/sent-time";
+import { MentionedServers, SentToAgent } from "@luke/panel/tasks/server-card";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import { SkillCard } from "@luke/panel/tasks/skill-ref";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   calledAgent,
   cardTitle,
@@ -160,7 +111,66 @@ import {
   toolCallView,
   toolTarget,
   type WorkerJobs,
-} from "./tool-call-model";
+} from "@luke/panel/tasks/tool-call-model";
+import {
+  UndeliveredLines,
+  UndeliveredMark,
+  useUndeliveredLines,
+} from "@luke/panel/tasks/undelivered-mark";
+import { type AgentComposerControl, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
+import { type AgentModelControl, useAgentModel } from "@luke/panel/tasks/use-agent-model";
+import { useAgentPullRequest } from "@luke/panel/tasks/use-agent-pull-request";
+import { useAgentServers } from "@luke/panel/tasks/use-agent-servers";
+import {
+  type AgentTranscriptControl,
+  useAgentTranscript,
+} from "@luke/panel/tasks/use-agent-transcript";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
+import { WorkedFor, WorkingLine } from "@luke/panel/tasks/working-time";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import {
+  BUTTON_VARIANT,
+  Button,
+  DisclosureChevron,
+  DocumentIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+  INLINE_REF_LOOK,
+  TEXT_LINK_LOOK,
+  TEXT_TONE,
+  Text,
+  TextLink,
+} from "@luke/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { MESSAGE_ROLE } from "@luke/wire";
+import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { AgentComposer } from "./agent-composer";
+import {
+  AgentPicturesProvider,
+  CallPictures,
+  ShownPictures,
+  useAgentPictureDoor,
+} from "./agent-pictures";
+import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
+import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent";
+import { CopyMessageAction } from "./copy-message";
+import { ForkedToLine, useForkOffered } from "./fork-action";
+import { linkChip } from "./mention-chip";
+import { MentionedAgentCard } from "./mentioned-agent-card";
+import {
+  agentMessagePlace,
+  MESSAGE_GONE,
+  MessagePlaceProvider,
+  useMessageReveal,
+} from "./message-links";
+import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
+import { SentWords, useSkill } from "./skill-chip";
+import { useMentionDoors } from "./task-mentions";
 import {
   MacOwnerProvider,
   TranscriptNote,
@@ -173,13 +183,6 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
-import { type AgentModelControl, useAgentModel } from "./use-agent-model";
-import { useAgentPullRequest } from "./use-agent-pull-request";
-import { useAgentServers } from "./use-agent-servers";
-import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
-import type { CodingAgentsControl } from "./use-coding-agents";
-import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
  * agent-tab.tsx -- one coding agent's tab in the task's column: its transcript live, and the message box under it wearing what it runs on and what it published.

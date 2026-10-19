@@ -36,6 +36,7 @@ import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { threadPreview } from "@luke/panel/tasks/changes-model";
+import { agentStillWriting, pullRequestNumberLabel } from "@luke/panel/tasks/coding-agent-model";
 import {
   type ConversationFiltersControl,
   type ConversationHidden,
@@ -45,12 +46,36 @@ import {
 } from "@luke/panel/tasks/conversation-filters";
 import { PierreDiff, useDiffLook } from "@luke/panel/tasks/file-diff";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import { blockedWords, MergeActions } from "@luke/panel/tasks/merge-box";
 import { PullRequestLabels } from "@luke/panel/tasks/pull-request-labels";
+import {
+  HeaderReviewers,
+  OpenedBy,
+  PersonRef,
+  ReviewStanding,
+} from "@luke/panel/tasks/pull-request-people";
+import {
+  LabelPicker,
+  ReviewerPicker,
+  type ReviewOptions,
+  useReviewOptions,
+} from "@luke/panel/tasks/pull-request-pickers";
+import { Reactions } from "@luke/panel/tasks/pull-request-reactions";
 import { PullRequestStack } from "@luke/panel/tasks/pull-request-stack";
+import { ThreadActions, ThreadWritesProvider } from "@luke/panel/tasks/pull-request-thread-actions";
+import {
+  PullRequestStateMenu,
+  PullRequestTitle,
+  PullRequestWriteNote,
+  type PullRequestWrites,
+  usePullRequestWrites,
+} from "@luke/panel/tasks/pull-request-writes";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "@luke/panel/tasks/use-side-panel";
+import { useWorkingNow, workingTime } from "@luke/panel/tasks/working-time";
 import { Tooltip } from "@luke/panel/tooltip";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -109,39 +134,19 @@ import {
   type ThreadPlace,
   useAgentRead,
 } from "./agent-changes-tab";
-import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import type { PendingReview } from "./line-comment";
-import { blockedWords, MergeActions } from "./merge-box";
 import {
   type PullRequestComment,
   PullRequestCommentBox,
   usePullRequestComment,
 } from "./pull-request-comment-box";
-import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
-import {
-  LabelPicker,
-  ReviewerPicker,
-  type ReviewOptions,
-  useReviewOptions,
-} from "./pull-request-pickers";
-import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
-import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
-import {
-  PullRequestStateMenu,
-  PullRequestTitle,
-  PullRequestWriteNote,
-  type PullRequestWrites,
-  usePullRequestWrites,
-} from "./pull-request-writes";
 import {
   type GitHubPictureDrawer,
   GitHubPictureLink,
   GitHubWords,
   TranscriptWords,
 } from "./transcript-blocks";
-import type { CodingAgentsControl } from "./use-coding-agents";
-import { useWorkingNow, workingTime } from "./working-time";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, and its files.

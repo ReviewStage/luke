@@ -8,12 +8,12 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { PublishedRow } from "@luke/panel/tasks/agent-published";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card";
 import { ChangesCard } from "./agent-changes-tab";
-import { PublishedRow } from "./agent-published";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**

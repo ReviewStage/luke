@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ArchivedBanner, ArchivedComposerNote } from "@luke/panel/tasks/archived-task";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { ArchivedBanner, ArchivedComposerNote } from "./tasks/archived-task";
 
 /**
  * banner.test.ts -- an archived task's notices: each strip is named by its

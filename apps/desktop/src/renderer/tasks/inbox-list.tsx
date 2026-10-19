@@ -1,23 +1,65 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "@luke/panel/actor-ref";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { useAutomation } from "@luke/panel/automation-directory";
+import { useInboxItemDrafted } from "@luke/panel/composer-drafts";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import {
+  INBOX_LIST_WIDTH,
+  type InboxShowChoice,
+  type InboxTaskFolds,
+  type InboxViewChoices,
+  type InboxWhoseChoice,
+  useInboxListWidth,
+} from "@luke/panel/desktop/folded-groups";
 import { SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { providerOf } from "@luke/panel/tasks/coding-agent-model";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
   type InboxRowPresses,
   listHeadControl,
 } from "@luke/panel/tasks/inbox-columns";
+import {
+  EVERYONES,
+  holderKey,
+  holderName,
+  INBOX_GROUPING,
+  INBOX_HOLDER,
+  INBOX_SHOW,
+  INBOX_SORT,
+  INBOX_STATUS_GROUP,
+  INBOX_WHOSE,
+  type InboxCounts,
+  type InboxGrouping,
+  type InboxHolder,
+  type InboxListed,
+  type InboxListView,
+  type InboxPersonGroup,
+  type InboxShow,
+  type InboxSort,
+  type InboxStarter,
+  type InboxStatusGroup,
+  type InboxStatusGroupKind,
+  type InboxWhose,
+  inboxMedia,
+  inboxPreview,
+  isUnread,
+  listedItems,
+  NEEDS_YOU,
+  needsYou as needsYouOf,
+  readersItem,
+} from "@luke/panel/tasks/inbox-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { cardTitle } from "@luke/panel/tasks/tool-call-model";
 import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -72,52 +114,10 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
-import { useInboxItemDrafted } from "../composer-drafts";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
-import {
-  INBOX_LIST_WIDTH,
-  type InboxShowChoice,
-  type InboxTaskFolds,
-  type InboxViewChoices,
-  type InboxWhoseChoice,
-  useInboxListWidth,
-} from "../desktop/folded-groups";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
-import { providerOf } from "./coding-agent-model";
-import {
-  EVERYONES,
-  holderKey,
-  holderName,
-  INBOX_GROUPING,
-  INBOX_HOLDER,
-  INBOX_SHOW,
-  INBOX_SORT,
-  INBOX_STATUS_GROUP,
-  INBOX_WHOSE,
-  type InboxCounts,
-  type InboxGrouping,
-  type InboxHolder,
-  type InboxListed,
-  type InboxListView,
-  type InboxPersonGroup,
-  type InboxShow,
-  type InboxSort,
-  type InboxStarter,
-  type InboxStatusGroup,
-  type InboxStatusGroupKind,
-  type InboxWhose,
-  inboxMedia,
-  inboxPreview,
-  isUnread,
-  listedItems,
-  NEEDS_YOU,
-  needsYou as needsYouOf,
-  readersItem,
-} from "./inbox-model";
 import { RowMedia, type RowMediaReads, useRowMediaAsks, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
-import { cardTitle } from "./tool-call-model";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ActorRef } from "@luke/panel/actor-ref";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { githubPageOf, OpenPersonProvider } from "@luke/panel/person-door";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -12,7 +13,6 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { ActorRef } from "./actor-ref";
 
 /**
  * A press on a person goes where the window can take it: a member's page,

@@ -35,9 +35,33 @@ import {
   glyphStateWords,
   stateEndMark,
 } from "@luke/panel/state-glyph";
+import {
+  AgentTabCard,
+  type CardReading,
+  cardCorner,
+  delegatedChoice,
+  heldLatest,
+  lastFinished,
+} from "@luke/panel/tasks/agent-tab-card";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "@luke/panel/tasks/browser-pane";
+import {
+  agentGlyphState,
+  agentStateWords,
+  agentTabLabel,
+} from "@luke/panel/tasks/coding-agent-model";
+import { FileCard, fileLook, newestFileNote } from "@luke/panel/tasks/file-ref";
+import { snippetOf } from "@luke/panel/tasks/file-tab-model";
 import { MacTerminalTab } from "@luke/panel/tasks/mac-terminal-tab";
+import { type KindLook, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import { TaskBoard } from "@luke/panel/tasks/task-board";
+import { cardTitle, TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
+import {
+  agentTranscript,
+  readWholeTranscript,
+  type TranscriptCopy,
+} from "@luke/panel/tasks/transcript-copy";
+import type { TranscriptReader } from "@luke/panel/tasks/use-agent-transcript";
+import type { CodingAgentsControl } from "@luke/panel/tasks/use-coding-agents";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
 import {
   type DrawnTabs,
@@ -57,6 +81,17 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "@luke/panel/tasks/use-side-panel";
+import {
+  type TaskConversation,
+  type WorkTurnRow,
+  type WorkWorkerBlock,
+  workerCallIds,
+  workerChoice,
+  workerJob,
+  workerOf,
+  workFailed,
+  workRowsOf,
+} from "@luke/panel/tasks/work-model";
 import { Tooltip } from "@luke/panel/tooltip";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -110,45 +145,14 @@ import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab";
-import {
-  AgentTabCard,
-  type CardReading,
-  cardCorner,
-  delegatedChoice,
-  heldLatest,
-  lastFinished,
-} from "../tasks/agent-tab-card";
 import { CodePane, centreWithin } from "../tasks/code-pane";
-import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model";
-import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
-import { snippetOf } from "../tasks/file-tab-model";
 import { FileView } from "../tasks/file-view";
 import { PageCard } from "../tasks/page-card";
 import { PagePane } from "../tasks/page-pane";
-import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look";
 import { TaskCall } from "../tasks/task-call";
 import { useOpenTerminal } from "../tasks/terminal-commands";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells";
 import { TerminalTab } from "../tasks/terminal-tab";
-import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
-import {
-  agentTranscript,
-  readWholeTranscript,
-  type TranscriptCopy,
-} from "../tasks/transcript-copy";
-import type { TranscriptReader } from "../tasks/use-agent-transcript";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import {
-  type TaskConversation,
-  type WorkTurnRow,
-  type WorkWorkerBlock,
-  workerCallIds,
-  workerChoice,
-  workerJob,
-  workerOf,
-  workFailed,
-  workRowsOf,
-} from "../tasks/work-model";
 import {
   type AddEntry,
   AddTabButton,
