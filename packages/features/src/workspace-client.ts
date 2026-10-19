@@ -5,20 +5,18 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountCall,
   type CallCredential,
-  type CallRequest,
   callAnswered,
-  sendInSession,
 } from "./account-call.js";
 import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
-import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
+import { workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -45,7 +43,6 @@ import {
   type WorkspaceMember,
   type WorkspacePhotoType,
   type WorkspacesAnswer,
-  workspaceAnswerSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -128,8 +125,6 @@ function hostedResult<Answer, Picked>(
 
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
-  /** The send for the calls that write through Better Auth under the Mac's session. */
-  readonly #inSession: AccountCallEffects["send"];
   /** The hosted contract's client under the account's credential. */
   readonly #hosted: HostedClient;
   /** The hosted contract's client under the Mac's session, for the procedures that write through Better Auth. */
@@ -152,14 +147,6 @@ export class HostedWorkspaceClient {
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#inSession = sendInSession(
-      accountCall({
-        baseUrl: options.serviceBaseUrl,
-        credential: options.sessionCredential,
-        requestTimeoutMs: options.requestTimeoutMs,
-      }),
-      options.sessionCredential,
-    );
   }
 
   /** Every workspace the account is a member of, its first one first; nothing where the service refused or did not answer. */
@@ -444,22 +431,5 @@ export class HostedWorkspaceClient {
       askHosted(this.#hostedInSession.workspaceInvitations.cancel, admitted),
       (answer) => answer.invitations,
     );
-  }
-
-  /** One call's answer read under its schema and picked, or its refusal named. */
-  #answered<A, Encoded, Picked>(
-    request: CallRequest,
-    schema: Schema.Codec<A, Encoded>,
-    pick: (answer: A) => Picked,
-    send: (request: CallRequest) => ReturnType<AccountCallEffects["send"]> = this.#call.send,
-  ): Effect.Effect<WorkspaceCallResult<Picked>, never, HttpClient.HttpClient> {
-    return Effect.gen(function* () {
-      const answer = yield* send(request);
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) return refusedAs(payload);
-      const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
-      return read === undefined ? UNANSWERED : { ok: true, answer: pick(read) };
-    });
   }
 }
