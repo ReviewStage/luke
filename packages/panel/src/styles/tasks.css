@@ -1572,6 +1572,28 @@
   font-family: var(--luke-font-mono);
 }
 
+/* Each path in a header copies itself on a press (changes-list.tsx), laid
+   out as the path it names; the path a file moved from is quiet whole. */
+.diff-list-path-part {
+  display: flex;
+  min-width: 0;
+}
+
+.diff-list-path-part > .luke-text-button {
+  display: flex;
+  min-width: 0;
+}
+
+.diff-list-path-part[data-moved] {
+  flex: 0 1 auto;
+  color: var(--luke-color-text-muted);
+}
+
+.diff-list-path-part[data-moved] .diff-list-name {
+  color: var(--luke-color-text-muted);
+  font-weight: inherit;
+}
+
 .diff-list-folder {
   min-width: 0;
   overflow: hidden;

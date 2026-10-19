@@ -520,6 +520,7 @@ function entryOf(
         collapsed={collapsed}
         standing={list.standing === path}
         onToggle={() => list.toggle(path)}
+        onToggleAll={list.toggleAll}
         onStand={() => list.stand(path)}
       />
     ),
@@ -544,6 +545,7 @@ function entryInputs(
     list.viewed?.(path),
     list.asSource(path),
     list.toggle,
+    list.toggleAll,
     list.stand,
     list.toggleSource,
     list.markViewed,
