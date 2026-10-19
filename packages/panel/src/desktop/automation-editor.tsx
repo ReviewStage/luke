@@ -126,6 +126,7 @@ import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/rep
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
+import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel } from "./automation-runs-panel.js";
@@ -674,6 +675,7 @@ function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
+  codeReview,
   dirty,
   saving,
   onBack,
@@ -685,6 +687,8 @@ function EditorToolbar({
   runsPanel,
 }: {
   automation: AutomationSummary | undefined;
+  /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
+  codeReview: boolean;
   dirty: boolean;
   saving: boolean;
   onBack: () => void;
@@ -715,10 +719,10 @@ function EditorToolbar({
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
           </nav>
-          <ExperimentTag />
+          {codeReview ? <ExperimentTag /> : null}
         </div>
         <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
+          {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
           <span className="automation-editor-status">
             <Text
               variant={TEXT_VARIANT.CAPTION}
@@ -1431,6 +1435,7 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
+  codeReviewOn,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1445,10 +1450,12 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
+  /** Whether the account has Code review's experiment on, without which no code review's settings stand apart from its prompt. */
+  codeReviewOn: boolean;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
-  const review = readCodeReviewSettings(draft.prompt);
+  const review = codeReviewOn ? readCodeReviewSettings(draft.prompt) : undefined;
   // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
@@ -1598,6 +1605,7 @@ export function AutomationEditor({
   leaveGuard: LeaveGuard;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
+  const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
@@ -1731,6 +1739,7 @@ export function AutomationEditor({
     <div className="automations-view">
       <EditorToolbar
         automation={automation}
+        codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
         dirty={dirty}
         saving={saving}
         onBack={onBack}
@@ -1775,6 +1784,7 @@ export function AutomationEditor({
               shownSecret={shownSecret}
               onSecret={setShownSecret}
               savedAgentId={savedAgentId}
+              codeReviewOn={codeReviewOn}
               onDraft={editDraft}
             />
           </div>

@@ -20,9 +20,7 @@ import {
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -372,6 +370,7 @@ test("a teammate's page names them as the members read does and lists their work
     "Waiting on their answer": ["Retry 429s too?"],
     Created: ["Relay retries on 502", "Retry budget dashboard"],
     Agents: ["Tenant cache keys"],
+    Automations: ["Morning Sentry triage"],
   });
 });
 
@@ -384,6 +383,7 @@ test("the reader's own page says You and what waits on them", async () => {
     "Working now": ["Limiter flag"],
     "Waiting on you": ["Ship the limiter at 10%?"],
     "Created by you": ["Edge cache keys"],
+    Automations: ["Weekly dependency bumps"],
   });
 });
 
@@ -571,23 +571,16 @@ test("someone who left heads their page with their own picture", async () => {
   assert.equal(face?.querySelector("img")?.getAttribute("src"), PRIYA_PICTURE);
 });
 
-test("with Automations on, a person's page lists the workspace's automations they made, never their own personal ones", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+test("a person's page lists the workspace's automations they made, never their own personal ones", async () => {
+  handState({});
   const { page } = mount(CHARLES.userId);
   await settle();
 
   assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
 });
 
-test("with Automations off, a person's page reads no automations and lists none", async () => {
-  const { page } = mount(CHARLES.userId);
-  await settle();
-
-  assert.equal(sections(page).Automations, undefined);
-});
-
 test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   automationsRefused = true;
   const { page } = mount("user-sam");
   await settle();
@@ -604,7 +597,7 @@ test("automations that could not be read say so and offer Retry, never passing f
 });
 
 test("automations that could not be read leave the Inbox still being read saying so, each read saying its own state", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   automationsRefused = true;
   inboxHeld = true;
   const { page } = mount("user-sam");
@@ -617,7 +610,7 @@ test("automations that could not be read leave the Inbox still being read saying
 });
 
 test("while the Inbox and the automations are read, placeholder rows stand for each, never a spinner", async () => {
-  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  handState({});
   inboxHeld = true;
   automationsHeld = true;
   const { page } = mount("user-sam");

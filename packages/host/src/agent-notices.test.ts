@@ -105,7 +105,6 @@ function fixture() {
   const taskless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   const openedAutomations: string[] = [];
-  let automationsOn = true;
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -184,7 +183,6 @@ function fixture() {
         failedRuns.push(next.failedRuns);
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
-      automationsOn: () => automationsOn,
       openChat: (workspaceId) => chatOpened.push(workspaceId),
       chatOn: () => chatOn,
       openInbox: (taskId) => openedInboxes.push(taskId),
@@ -245,10 +243,6 @@ function fixture() {
     /** The account's Chat experiment. */
     turnChat: (on: boolean) => {
       chatOn = on;
-    },
-    /** The account's Automations experiment. */
-    turnAutomations: (on: boolean) => {
-      automationsOn = on;
     },
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
@@ -947,22 +941,18 @@ it.effect(
     }),
 );
 it.effect(
-  "a failed run the first answer carries is where the account stands and is announced nowhere, nor is one while the account has Automations off, though both are written for the window",
+  "a failed run the first answer carries is where the account stands and is announced nowhere, though it is written for the window",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       yield* f.notices;
       f.focus(false);
-      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "1", readAt: READ_AT + 2 });
-      yield* settled;
-      f.turnAutomations(false);
-      const later = failedRun({ id: ITEM_B, failedAt: READ_AT + 3 });
-
-      f.answerInbox({ items: [], failedRuns: [later], cursor: "2", readAt: READ_AT + 4 });
+      const first = failedRun();
+      f.answerInbox({ items: [], failedRuns: [first], cursor: "1", readAt: READ_AT + 2 });
       yield* settled;
 
       assert.deepEqual(f.posted, []);
-      assert.deepEqual(f.failedRuns.at(-1), [later]);
+      assert.deepEqual(f.failedRuns.at(-1), [first]);
     }),
 );
 

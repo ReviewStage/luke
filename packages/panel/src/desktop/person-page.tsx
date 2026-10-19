@@ -2,7 +2,6 @@ import { automationOwner, automationTriggerText } from "@luke/features/automatio
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -55,7 +54,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RecentRow } from "./desktop-home.js";
 import { useArchivedView, useTaskListView } from "./task-list-view.js";
@@ -310,20 +308,14 @@ interface PersonAutomations {
 }
 
 /**
- * The workspace's automations the person made, read while the Automations
- * page is on (`EXPERIMENT.AUTOMATIONS`): the workspace's alone, never their
- * personal ones, which only they read. None while the list is read or where
+ * The workspace's automations the person made: the workspace's alone,
+ * never their personal ones, which only they read. None while the list is read or where
  * it could not be, which the page says rather than pass for a person with none.
  */
-function usePersonAutomations(
-  workspaceId: string | undefined,
-  userId: string,
-  on: boolean,
-): PersonAutomations {
-  const asked = on ? workspaceId : undefined;
-  const { read, reload } = useAutomations(asked);
+function usePersonAutomations(workspaceId: string | undefined, userId: string): PersonAutomations {
+  const { read, reload } = useAutomations(workspaceId);
   const none = { automations: [], reading: false, failed: false, onRetry: reload };
-  if (asked === undefined) return none;
+  if (workspaceId === undefined) return none;
   if (read === undefined) return { ...none, reading: true };
   if ("failure" in read) return { ...none, failed: true };
   const automations = read.automations.filter(
@@ -437,11 +429,7 @@ function PersonColumn({
   };
   const page = personPage(userId, listed);
   const you = userId === tasks.me;
-  const theirAutomations = usePersonAutomations(
-    tasks.workspace?.id,
-    userId,
-    useExperiment(EXPERIMENT.AUTOMATIONS),
-  );
+  const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
   // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.

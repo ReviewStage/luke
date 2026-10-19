@@ -3,7 +3,7 @@ import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   Button,
@@ -74,7 +74,7 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js"
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
+import { useCapability } from "../use-app-state.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -430,7 +430,6 @@ function PlanDocument({
   const summaryCard = useId();
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
   const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
   const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
@@ -776,7 +775,6 @@ function PlanDocument({
           <MemberDirectory workspace={home} readerId={tasks.me}>
             <AutomationDirectory
               workspace={home}
-              on={automationsOn}
               wanted={[...(agents.agents ?? []), ...(agents.archived ?? [])].some(
                 (each) => each.automationId !== undefined,
               )}

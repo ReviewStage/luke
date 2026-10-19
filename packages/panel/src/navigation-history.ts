@@ -413,7 +413,6 @@ export function useWindowHistory(input: {
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = tasks.automationsView.open;
   const automationsPage = tasks.automationsView.place;
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const chatOpen = tasks.chatView.open;
   const chatOn = useChatOn();
   const issuesOpen = tasks.issuesView.open;
@@ -476,11 +475,10 @@ export function useWindowHistory(input: {
     pageIssue,
   ]);
   const reachable = (to: Place) => {
-    // Factory, the Automations page, and the Issues page are experiments, so back and forward pass over each while it is off.
+    // Factory and the Issues page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      if (!automationsOn) return false;
       if (to.page.kind !== AUTOMATIONS_PAGE.EDIT) return true;
       return to.workspaceId === listedWorkspace && !deletedAutomations.has(to.page.automationId);
     }

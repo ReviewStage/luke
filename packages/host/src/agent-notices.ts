@@ -274,8 +274,6 @@ export interface AgentNoticesDependencies {
   /** Brings Luke forward on the window's Inbox with an item of an agent with no task chosen: that item's notification's click. */
   /** Brings Luke forward on a failed run, in its automation's workspace: its notification's click. */
   openFailedRun: (place: FailedRunPlace) => void;
-  /** Whether the account has Automations on, without which no failed run is announced. */
-  automationsOn: () => boolean;
   openTasklessItem: (item: {
     readonly agentId: string;
     readonly itemId: string;
@@ -748,7 +746,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** A run failed to start: told in the toast in front, and as a notification behind, each opening its automation. */
     function announceFailedRun(run: AccountFailedRun): void {
-      if (!dependencies.automationsOn()) return;
       const words = failedRunText(run.reason);
       const place = { automationId: run.automationId, runId: run.id, workspaceId: run.workspaceId };
       if (focused) {

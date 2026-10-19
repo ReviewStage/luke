@@ -545,7 +545,7 @@ test("an archived agent of the open task is still found, after the standing ones
   assert.deepEqual(shown, ["agent-8"]);
 });
 
-test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window while the experiment is on, and none read while it is off", async () => {
+test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window", async () => {
   const automation = {
     id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
     planId: null,
@@ -608,8 +608,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       agentIds: ["agent-7"],
     }),
   });
-  /** The words "Started by" says on the agent's row's card in ⌘K, the experiment `on` or off. */
-  const startedBy = async (on: boolean): Promise<string | null | undefined> => {
+  /** The words "Started by" says on the agent's row's card in ⌘K. */
+  const startedBy = async (): Promise<string | null | undefined> => {
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
     roots.push(root);
@@ -630,7 +630,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
     });
-    act(() => root.render(createElement(ListedAutomations, { tasks, on, children: palette })));
+    act(() => root.render(createElement(ListedAutomations, { tasks, children: palette })));
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
@@ -653,11 +653,8 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     return words;
   };
 
-  assert.equal(await startedBy(true), "Morning Sentry triage");
+  assert.equal(await startedBy(), "Morning Sentry triage");
   assert.deepEqual(listed, ["workspace-acme"]);
-  listed.length = 0;
-  assert.equal(await startedBy(false), undefined);
-  assert.deepEqual(listed, []);
 });
 
 test("an agent's Pull request row is named as its tab is, by its pull request's number and title, with the agent beside it, and is found by that number, that title, and the agent's name", () => {

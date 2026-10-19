@@ -1,14 +1,13 @@
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { HashIcon, InboxIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref.js";
 import { AutomationDirectory, useAutomation } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
-import { useAppState, useExperiment } from "../use-app-state.js";
+import { useAppState } from "../use-app-state.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
 import { RelativeTime } from "./relative-time.js";
@@ -270,8 +269,8 @@ function KnownAutomationCard({
  * An automation's card, the workspace's automations read as it is first
  * hung where no directory around the chip reads them yet, and shared with
  * one that does (`AutomationDirectory`), of the workspace the link names,
- * else the one the words are of; `fallback` while the read is out,
- * with the experiment off, or where the workspace lists no such automation.
+ * else the one the words are of; `fallback` while the read is out, or
+ * where the workspace lists no such automation.
  */
 export function AutomationChipCard({
   automationId,
@@ -286,12 +285,11 @@ export function AutomationChipCard({
   wordsWorkspaceId: string | undefined;
   fallback: ReactNode;
 }): ReactNode {
-  const on = useExperiment(EXPERIMENT.AUTOMATIONS);
   const named = useLinkWorkspace(slug);
   const words = useAppState()?.tasks?.workspaces.find((each) => each.id === wordsWorkspaceId);
   const workspace = named ?? words;
   return (
-    <AutomationDirectory workspace={workspace} on={on} wanted onOpen={OPEN_NOTHING}>
+    <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
       <KnownAutomationCard automationId={automationId} fallback={fallback} />
     </AutomationDirectory>
   );

@@ -1,7 +1,6 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
@@ -35,7 +34,6 @@ import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AgentPane } from "./main-tabs.js";
 import {
@@ -248,7 +246,6 @@ export function DesktopAgentPage({
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   };
   const tab = { agent: agentId };
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -344,7 +341,6 @@ export function DesktopAgentPage({
         <MemberDirectory workspace={workspace} readerId={tasks.me}>
           <AutomationDirectory
             workspace={listed}
-            on={automationsOn}
             wanted={agent.automationId !== undefined}
             onOpen={openAutomation}
           >

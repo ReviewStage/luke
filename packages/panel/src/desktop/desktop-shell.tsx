@@ -273,11 +273,9 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // The Automations page is an experiment on the same terms as Factory.
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   useAppCommand(
     APP_COMMAND.AUTOMATIONS,
-    pastGate && tasks.signedIn && automationsOn
+    pastGate && tasks.signedIn
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.automationsView.onOpen();
@@ -451,11 +449,6 @@ export function DesktopShell({
   useEffect(() => {
     if (factoryShown && !factoryOn) closeFactory();
   }, [factoryShown, factoryOn, closeFactory]);
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
-  const { open: automationsShown, onClose: closeAutomations } = tasks.automationsView;
-  useEffect(() => {
-    if (automationsShown && !automationsOn) closeAutomations();
-  }, [automationsShown, automationsOn, closeAutomations]);
   // Chat is an experiment on the same terms: turned off while it stands, it puts itself away.
   const chatOn = useChatOn();
   const { open: chatShown, onClose: closeChat } = tasks.chatView;
@@ -594,7 +587,7 @@ export function DesktopShell({
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
-  const automationsOpen = tasks.automationsView.open && automationsOn;
+  const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const issuesOpen = tasks.issuesView.open && issuesOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;

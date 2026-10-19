@@ -77,15 +77,11 @@ describe("the menu bar's gate", () => {
 });
 
 describe("the Automations item", () => {
-  test("stands under Go only while the account has its experiment on", () => {
-    const off = appMenuTemplate("Luke", undefined, (command) =>
+  test("stands under Go with no experiment on", () => {
+    const menu = appMenuTemplate("Luke", undefined, (command) =>
       shortcutShown(command, {}, DESKTOP_CAPABILITIES),
     );
-    assert.ok(!labelsOf(off, "Go").includes("Automations"));
-    const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.AUTOMATIONS), DESKTOP_CAPABILITIES),
-    );
-    assert.ok(labelsOf(on, "Go").includes("Automations"));
+    assert.ok(labelsOf(menu, "Go").includes("Automations"));
   });
 });
 
