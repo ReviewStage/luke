@@ -815,9 +815,9 @@ type ConversationAsk = readonly [taskId: string, read: ConversationRead, from?: 
 
 /**
  * The service's side of each task's conversation. A read from the newest
- * turns or past a cursor waits for the page the test hands it, as the
- * service holds a read open while a turn runs; a read before a turn is
- * answered at once from the older pages.
+ * turns or past a cursor waits for the page the test hands it; a read
+ * before a turn is answered at once from the older pages. Its mark is
+ * sealed for following unless a test says otherwise.
  */
 interface FakeConversations extends TasksConversationClient {
   /** Every read asked, in order. */
@@ -828,7 +828,7 @@ interface FakeConversations extends TasksConversationClient {
   answer: (taskId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
   /** The older pages, by the turn each is read before. */
   older: Record<string, CodingAgentMessagesAnswer>;
-  /** What the service seals for following a plan's conversation; none answers unanswered, as a service without Realtime does. */
+  /** What the service seals for following a plan's conversation; none answers unanswered. */
   sealed: TaskConversationLiveAnswer | undefined;
   /** Every plan a seal was asked for, in order. */
   readonly seals: string[];
@@ -845,7 +845,7 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
       asks: [],
       nextAsk: Queue.take(asked),
       older: {},
-      sealed: undefined,
+      sealed: SEALED_CONVERSATION,
       seals: [],
       taskConversationLive: (taskId) =>
         Effect.sync(() => {
@@ -1488,19 +1488,20 @@ it.effect(
 );
 
 it.effect(
-  "a held read joins a journal rewritten in place where it stands and appends a new one, past each cursor",
+  "a look past the cursor joins a journal rewritten in place where it stands and appends a new one",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, viewLands, conversations } = yield* subject(service);
+      const { call, viewLands, conversations, realtime } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
       yield* conversations.answer(
         INVITES,
         conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
       );
+      yield* realtime.deliver([markRow(2, "running")]);
 
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
       const landed = yield* viewLands((view) => view.conversation?.cursor === "2:3");
       yield* conversations.answer(
         INVITES,
@@ -1521,11 +1522,11 @@ it.effect(
 );
 
 it.effect(
-  "the earlier page lays older turns before the rest, and the held read goes on from its own cursor",
+  "the earlier page lays older turns before the rest, and the follow goes on from its own cursor",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, last, viewLands, conversations } = yield* subject(service);
+      const { call, last, viewLands, conversations, realtime } = yield* subject(service);
       conversations.older["turn-1"] = conversationPage(
         [journal("turn-0", "Opened the plan.")],
         "9:9",
@@ -1542,6 +1543,7 @@ it.effect(
           "turn-1",
         ),
       );
+      yield* realtime.deliver([markRow(2, "running")]);
       yield* conversations.nextAsk;
 
       yield* call(GATEWAY_METHOD.TASKS_CONVERSATION_EARLIER);
@@ -1564,7 +1566,7 @@ it.effect(
         status: CODING_AGENT_STATUS.RUNNING,
         title: null,
       });
-      assert.deepEqual(conversations.asks.at(1), [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      assert.deepEqual(conversations.asks.at(1), [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
       assert.deepEqual(view.conversation?.messages, [
         journal("turn-0", "Opened the plan."),
         journal("turn-1", "Reading"),
@@ -1579,13 +1581,14 @@ it.effect("opening another plan stops the conversation read of the one left behi
       task(INVITES, "Teammate invitations", "# Draft", 10),
       task(BILLING, "Billing export", "# Billing export", 20),
     ]);
-    const { call, viewLands, conversations } = yield* subject(service);
+    const { call, viewLands, conversations, realtime } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
     yield* conversations.nextAsk;
     yield* conversations.answer(
       INVITES,
       conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
     );
+    yield* realtime.deliver([markRow(2, "running")]);
     yield* conversations.nextAsk;
 
     yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
@@ -1606,7 +1609,7 @@ it.effect("opening another plan stops the conversation read of the one left behi
 
     assert.deepEqual(conversations.asks, [
       [INVITES, CONVERSATION_READ.NEWEST],
-      [INVITES, CONVERSATION_READ.AFTER, "1:1"],
+      [INVITES, CONVERSATION_READ.LOOK, "1:1"],
       [BILLING, CONVERSATION_READ.NEWEST],
     ]);
   }),
@@ -1632,42 +1635,6 @@ it.effect(
 
       assert.equal(beforeBackoff, 1);
       assert.deepEqual((yield* landed).conversation, newest);
-    }),
-);
-
-it.effect(
-  "a word of the open plan's call wakes its parked conversation read from the cursor held",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* conversations.nextAsk;
-      const parked = yield* viewLands((view) => view.conversation !== undefined);
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
-      );
-      yield* parked;
-
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        planId: INVITES,
-        planner: {},
-        notes: false,
-      });
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
-      const landed = yield* viewLands((view) => view.conversation?.cursor === "2:2");
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([journal("turn-2", "Reading")], "2:2", CODING_AGENT_STATUS.COMPLETED),
-      );
-
-      assert.deepEqual((yield* landed).conversation?.messages, [
-        journal("turn-1", "Done."),
-        journal("turn-2", "Reading"),
-      ]);
     }),
 );
 
@@ -1717,7 +1684,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
@@ -1726,6 +1693,7 @@ it.effect(
         INVITES,
         conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
       );
+      yield* realtime.deliver([markRow(2, "settled")]);
       yield* conversations.nextAsk;
       yield* conversations.answer(
         INVITES,
@@ -1771,40 +1739,11 @@ it.effect(
 );
 
 it.effect(
-  "a call's end wakes the open plan's parked conversation read, and wakes it again once the call's last writes have had time to land",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
-      yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* conversations.nextAsk;
-      const parked = yield* viewLands((view) => view.conversation !== undefined);
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
-      );
-      yield* parked;
-
-      tasks.callEnded(INVITES);
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([], "1:1", CODING_AGENT_STATUS.COMPLETED),
-      );
-      yield* TestClock.adjust(Duration.seconds(5));
-
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
-    }),
-);
-
-it.effect(
-  "where the service seals the conversation's mark, the open plan's conversation is asked in one look each time the mark moves, an idle one included, and never on a hold or a word of the call",
+  "the open plan's conversation is asked in one look each time its mark moves, an idle one included, and never on a hold or a word of the call",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
-      conversations.sealed = SEALED_CONVERSATION;
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
@@ -1839,12 +1778,11 @@ it.effect(
 );
 
 it.effect(
-  "a conversation mark that stops goes on from the cursor held on reads the service holds",
+  "a conversation mark that stops is sealed again after a pause, and the conversation asked on from the cursor held",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
-      conversations.sealed = SEALED_CONVERSATION;
+      const { call, tasks, conversations, realtime } = yield* subject(service);
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
@@ -1853,43 +1791,29 @@ it.effect(
         conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
       );
       yield* realtime.fail;
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
-      const parked = yield* viewLands((view) => view.conversation?.cursor === "2:2");
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([], "2:2", CODING_AGENT_STATUS.COMPLETED),
-      );
-      yield* parked;
-
       assert.deepEqual(conversations.seals, [INVITES]);
+      yield* TestClock.adjust(Duration.seconds(2));
+
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
+      assert.deepEqual(conversations.seals, [INVITES, INVITES]);
     }),
 );
 
 it.effect(
-  "a plan the service seals no conversation mark for is read on held reads, woken by its call as before without asking for a mark again until it is opened again",
+  "a plan the service seals no conversation mark for is asked for one again after a pause, and read once it is sealed",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const { call, tasks, conversations } = yield* subject(service);
+      conversations.sealed = undefined;
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* conversations.nextAsk;
-      const parked = yield* viewLands((view) => view.conversation !== undefined);
-      yield* conversations.answer(
-        INVITES,
-        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
-      );
-      yield* parked;
-
-      tasks.showActivity({
-        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-        planId: INVITES,
-        planner: {},
-        notes: false,
-      });
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      yield* TestClock.adjust(Duration.seconds(1));
       assert.deepEqual(conversations.seals, [INVITES]);
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(conversations.asks, []);
+
+      conversations.sealed = SEALED_CONVERSATION;
+      yield* TestClock.adjust(Duration.seconds(1));
       assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
       assert.deepEqual(conversations.seals, [INVITES, INVITES]);
     }),
@@ -1900,7 +1824,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, viewLands, conversations } = yield* subject(service);
+      const { call, viewLands, conversations, realtime } = yield* subject(service);
       const worker = (callId: string, status: CodingAgentStatus) => ({
         callId,
         status,
@@ -1915,6 +1839,7 @@ it.effect(
         subagents: [worker("call-models", CODING_AGENT_STATUS.RUNNING)],
         subagentTitles: [{ callId: "call-models", title: "Read the invite model" }],
       });
+      yield* realtime.deliver([markRow(2, "running")]);
       yield* conversations.nextAsk;
 
       const landed = yield* viewLands((view) => view.conversation?.cursor === "2:3");

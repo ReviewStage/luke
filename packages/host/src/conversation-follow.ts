@@ -42,7 +42,7 @@ export interface ConversationMarkDependencies {
  * The conversation's mark as Realtime delivers it, followed from the first
  * seal for as long as the caller's scope stands; broken for good where the
  * subscription stops or a row does not decode, which the caller answers by
- * holding its read open as before.
+ * sealing it again.
  */
 export function conversationMark(
   dependencies: ConversationMarkDependencies,

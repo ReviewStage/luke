@@ -441,8 +441,8 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * conversation and asks it once, unheld, each time the mark moves, rather
  * than holding a read the service looks again for on a clock. The service
  * answers `not-found` for a plan the account does not reach, and
- * `unavailable` where its deployment has no Realtime, and the desktop holds
- * its read open as before.
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
  */
 export const taskConversationLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,

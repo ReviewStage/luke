@@ -865,9 +865,8 @@ export class HostedCodingAgentClient {
   /**
    * One plan's planning conversation, its mark sealed for following over
    * Neon Realtime, answered at once: not found where the account reaches no
-   * such plan, unanswered where the deployment has no Realtime and for
-   * anything else, which the caller answers by holding its read open as
-   * before.
+   * such plan, unanswered for anything else, which the caller answers by
+   * sealing it again.
    */
   taskConversationLive(
     taskId: string,

@@ -175,9 +175,8 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
  * title and newest version alone, and again whenever the call's activity
  * says a page the brain showed just settled or it stopped working;
  * a page's HTML is answered to the frame that draws it and held nowhere
- * here. Beside the work, the open task's conversation is read as
- * an agent's transcript is, on the service's held read, and held on the
- * view for the Call tab to switch to; the brain's worker's transcript is
+ * here. Beside the work, the open task's conversation is followed over
+ * Neon Realtime, and held on the view for the Call tab to switch to; the brain's worker's transcript is
  * answered to the tab that asks for it and held nowhere here.
  *
  * The workspaces the account is a member of are carried on the view beside
@@ -230,6 +229,9 @@ const CONVERSATION_BACKOFF = Schedule.exponential(CONVERSATION_RETRY.FIRST).pipe
     Effect.succeed(Duration.min(duration, CONVERSATION_RETRY.LONGEST)),
   ),
 );
+
+/** How long after a seal the service did not answer, or a mark that stopped, the conversation is sealed again. */
+const CONVERSATION_RESEAL = Duration.seconds(2);
 
 /** The statuses a conversation page reads as still writing: a brain's turn, or a worker of one, that may add to it. */
 const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
@@ -454,29 +456,17 @@ export interface TasksComposer extends Composer {
  * while the open task and its call stand through the tab hiding. Behind a
  * closed account gate, or on a run that sends nothing, nothing is read.
  *
- * The open task's conversation is read the way an agent's tab reads its
- * transcript: its newest page when the task opens, starts, or is refreshed,
- * then one held read past the cursor after another, which the service holds
- * open while a brain turn or one of its workers runs and nothing new
- * stands. The read follows while the last page says the brain or a worker
- * still writes, and parks once a page says neither, because the service
- * answers an idle conversation at once and asking again would be a loop on
- * no clock at all. Note that it reads the workers the page names rather
- * than the list held, because a worker no page names any more reads as it
- * last did and would keep the read asking. Any word of the open task's call (its activity, or its
- * end) wakes a parked read, from the cursor held, since a turn begins only
- * on a call and its activity says so. One read stands at a time: opening
+ * The open task's conversation is followed over Neon Realtime
+ * (`conversation-follow.ts`): its newest page is read when the task opens,
+ * starts, or is refreshed, the host subscribes to the conversation's mark
+ * while the plan is open, and asks the conversation past its cursor in one
+ * look, unheld, each time the mark moves, so the service never looks again
+ * on a clock and nothing parks or needs waking. A seal the service did not
+ * answer, or a mark that stops, is sealed again after
+ * `CONVERSATION_RESEAL`, and the read goes on from the cursor held; a task
+ * the service no longer holds ends it. One read stands at a time: opening
  * another task replaces it, and leaving the task or a sign-out stops it. A
- * read the service did not answer is asked again after a backoff; a task the
- * service no longer holds parks it.
- *
- * Where the service seals the conversation's mark for Neon Realtime
- * (`conversation-follow.ts`), the read is held here instead: the host
- * subscribes to the mark while the plan is open, and asks the conversation
- * past its cursor in one look, unheld, each time the mark moves, so the
- * service never looks again on a clock and nothing parks or needs waking.
- * A service that seals nothing, or a subscription that stops, is read as
- * before, from the cursor held.
+ * read the service did not answer is asked again after a backoff.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
@@ -550,20 +540,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
-
-  /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
-  const conversationWakes = yield* Queue.sliding<string>(1);
-
-  /**
-   * Whether the open task's call said something since the conversation read
-   * last asked. Note that a read already out when a turn began can answer
-   * the conversation idle, so the read checks this before it parks rather
-   * than miss the turn until the call's next word.
-   */
-  let conversationWoken = false;
-
-  /** The open plan the service sealed no conversation mark for, read on held reads until it is opened again. */
-  let unsealedTaskId: string | undefined;
 
   /**
    * The task whose call is telling its turns' work as they run, and the
@@ -998,35 +974,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Follows `taskId`'s conversation on reads the service holds, while it is
-   * the open task: from its newest page, or past `after`, then past each
-   * page's cursor while the page says it is still written or the call woke
-   * it meanwhile.
-   */
-  function followHeld(
-    taskId: string,
-    from: string | undefined,
-    landed: ReturnType<typeof pageLanding>,
-  ) {
-    return Effect.gen(function* () {
-      let after = from;
-      while (gate() && view.activeTaskId === taskId) {
-        conversationWoken = false;
-        const page = yield* readConversation(taskId, after === undefined ? {} : { after });
-        if (Option.isNone(page) || view.activeTaskId !== taskId) return;
-        const writing = landed(page.value);
-        if (!writing && !conversationWoken) return;
-        after = page.value.cursor;
-      }
-    });
-  }
-
-  /**
    * Follows `taskId`'s conversation on its live mark, while it is the open
-   * plan: from its newest page, or past `after`, then past each page's
-   * cursor in one look each time the mark moves from where it stood as the
-   * read before left. A mark that stops goes on from the cursor held on
-   * reads the service holds.
+   * plan: from its newest page, or past `from`, then past each page's cursor
+   * in one look each time the mark moves from where it stood as the read
+   * before left. Answers where the read stands once the mark stops, or
+   * nothing once the follow ends.
    */
   function followLive(
     taskId: string,
@@ -1038,67 +990,63 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let after = from;
       let seen: ConversationMark = { kind: "waiting" };
       while (gate() && view.activeTaskId === taskId) {
-        if (seen.kind === "broken") return yield* followHeld(taskId, after, landed);
+        if (seen.kind === "broken") return Option.some(after);
         const page = yield* readConversation(
           taskId,
           after === undefined ? {} : { after, unheld: true },
         );
-        if (Option.isNone(page) || view.activeTaskId !== taskId) return;
+        if (Option.isNone(page) || view.activeTaskId !== taskId) return Option.none();
         landed(page.value);
         after = page.value.cursor;
         seen = yield* markMoved(mark, seen);
       }
+      return Option.none();
     });
   }
 
   /**
-   * Follows `taskId`'s conversation while it is the open task, from its
-   * newest page or past the cursor held: on its live mark where the service
-   * seals one, and on held reads otherwise. A task the service answered no
-   * mark for is not asked for one again until it is opened again, since
-   * every word of a call would otherwise ask. A read the service did not
-   * answer is asked again after the backoff; a task it no longer holds, or
-   * a gate that closed, ends the follow. Each page lands as `pageLanding`
-   * says.
+   * Follows `taskId`'s conversation over its live mark while it is the open
+   * task, from its newest page. A seal the service did not answer, or a mark
+   * that stops, is sealed again after `CONVERSATION_RESEAL` and followed on
+   * from the cursor held; a task the service no longer holds, or a gate
+   * that closed, ends the follow. Each page lands as `pageLanding` says.
    */
-  function followConversation(taskId: string, newest: boolean) {
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const after = newest ? undefined : view.conversation?.cursor;
-        const landed = pageLanding(taskId);
-        if (newest) unsealedTaskId = undefined;
-        if (unsealedTaskId === taskId || !gate()) return yield* followHeld(taskId, after, landed);
+  function followConversation(taskId: string) {
+    return Effect.gen(function* () {
+      let after: string | undefined;
+      const landed = pageLanding(taskId);
+      while (gate() && view.activeTaskId === taskId) {
         const sealed = yield* served(conversations.taskConversationLive(taskId));
         if ("failure" in sealed) {
-          unsealedTaskId = taskId;
-          return yield* followHeld(taskId, after, landed);
+          if (sealed.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+        } else {
+          const stopped = yield* Effect.scoped(
+            Effect.flatMap(
+              conversationMark(
+                {
+                  seal: () =>
+                    gate()
+                      ? served(conversations.taskConversationLive(taskId))
+                      : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+                  openLive: dependencies.openLive ?? openRealtimeClient,
+                  now: kernel.now,
+                },
+                sealed,
+              ),
+              (mark) => followLive(taskId, after, mark, landed),
+            ),
+          );
+          if (Option.isNone(stopped)) return;
+          after = stopped.value;
         }
-        const mark = yield* conversationMark(
-          {
-            seal: () =>
-              gate()
-                ? served(conversations.taskConversationLive(taskId))
-                : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-            openLive: dependencies.openLive ?? openRealtimeClient,
-            now: kernel.now,
-          },
-          sealed,
-        );
-        return yield* followLive(taskId, after, mark, landed);
-      }),
-    );
+        yield* Effect.sleep(CONVERSATION_RESEAL);
+      }
+    });
   }
 
   /** Reads `taskId`'s conversation from its newest turns and follows it, in place of any read standing. */
   function openConversation(taskId: string) {
-    return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId, true)));
-  }
-
-  /** Wakes the open task's parked conversation read, where `taskId` is the open task. */
-  function wakeConversation(taskId: string): void {
-    if (view.activeTaskId !== taskId) return;
-    conversationWoken = true;
-    Queue.offerUnsafe(conversationWakes, taskId);
+    return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId)));
   }
 
   /**
@@ -1143,7 +1091,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       write({ callActivity: activity });
       return;
     }
-    wakeConversation(taskId);
     const was = view.activity?.planner;
     const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
@@ -1199,7 +1146,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
     if (view.activeTaskId !== taskId) return;
     Queue.offerUnsafe(callEndReads, taskId);
-    wakeConversation(taskId);
   }
 
   /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
@@ -2300,12 +2246,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(callEndReads), (taskId) => {
-            // The conversation's parked read is woken with each read too, since its last journal may land after the call's end.
             const read = Effect.suspend(() =>
               gate() && view.activeTaskId === taskId
-                ? serial(Effect.andThen(readTranscript(taskId), readWork(taskId))).pipe(
-                    Effect.andThen(Effect.sync(() => wakeConversation(taskId))),
-                  )
+                ? serial(Effect.andThen(readTranscript(taskId), readWork(taskId)))
                 : Effect.void,
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
@@ -2327,23 +2270,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                     )
                   : Effect.void,
               ),
-            ),
-          ),
-        ),
-      );
-      // Note that a read still following is left alone, because it already
-      // reads past what the call just said.
-      yield* Effect.forkScoped(
-        Effect.forever(
-          Effect.flatMap(Queue.take(conversationWakes), (taskId) =>
-            Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId
-                ? Effect.asVoid(
-                    FiberHandle.run(conversationRead, followConversation(taskId, false), {
-                      onlyIfMissing: true,
-                    }),
-                  )
-                : Effect.void,
             ),
           ),
         ),
