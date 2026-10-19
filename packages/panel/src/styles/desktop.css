@@ -5947,6 +5947,21 @@ polygon.factory-campus-edge[data-edge="selected"] {
   background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
 }
 
+/* A finger takes an edge across a finger's width, centred on the strip it
+   draws, which keeps its width and its place. */
+@media (pointer: coarse) {
+  .side-panel-resize::before,
+  .sidebar-resize::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: var(--luke-touch-target);
+    transform: translateX(-50%);
+    content: "";
+  }
+}
+
 /* The panel's top row, level with the plan's toolbar and, like it, the
    window's drag handle wherever no control stands. It runs to the window's
    right edge, so its full-screen button stops short of the toggle there. */

@@ -247,7 +247,7 @@ export interface ComposerEditorProps {
   readonly onDraft: (text: string) => void;
   /** A key, heard before the editor's own handling; answers whether the owner took it. */
   readonly onKey: (event: KeyboardEvent) => boolean;
-  /** Enter with no Shift, while no input method is composing. */
+  /** Enter with no Shift, while no input method is composing; on a coarse pointer, where Enter is a new line, only with ⌘ or Ctrl. */
   readonly onEnter: () => void;
   /** Files pasted; answers whether the owner took them, which keeps them out of the words. */
   readonly onPasteFiles: (files: readonly File[]) => boolean;

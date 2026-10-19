@@ -2894,8 +2894,8 @@ test("what an item's box said of a dictation that failed stays with that item, a
   // The strip draws still under reduced motion, which jsdom has no answer to.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: () => ({
-      matches: true,
+    value: (query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }),

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
 import { act } from "react";
 import { test } from "vitest";

@@ -19,7 +19,7 @@ const SPACE_STEPS = [0, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96];
 
 const SHEETS = ["scale", "profiles", "palettes", "display", "viewport"] as const;
 
-/** The rules of `tokens/<sheet>.css`, comments dropped; the sheets hold no nested block. */
+/** The rules of `tokens/<sheet>.css`, comments dropped; a rule inside a media query is read as any other, since the sheets nest nothing deeper. */
 function rulesOf(sheet: (typeof SHEETS)[number]): TokenRule[] {
   const source = readFileSync(new URL(`./${sheet}.css`, import.meta.url), "utf8").replace(
     /\/\*[\s\S]*?\*\//g,

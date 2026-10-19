@@ -76,7 +76,11 @@ import {
  * The bound is a transaction filter, so no keystroke, pick, or command
  * carries the words past it; a paste past it is cut to the room left, as a
  * textarea cuts one. Enter with no Shift is the owner's send, unless an
- * input method is composing, when the key is the input method's.
+ * input method is composing, when the key is the input method's. On a
+ * coarse pointer, a phone's or a tablet's, Enter is a new line, since its
+ * keyboard has no Shift+Enter to type one, and the visible Send beside the
+ * box sends; ⌘ or Ctrl with Enter, from a keyboard attached to it, still
+ * sends. The return key's label (`enterkeyhint`) says which Enter does.
  */
 
 /** The element class the editor wears beside the owner's. */
@@ -84,6 +88,15 @@ const EDITOR_CLASS = "composer-editor";
 
 /** The key code a browser gives a key an input method takes. */
 const COMPOSING_KEY_CODE = 229;
+
+/** The pointer a phone or a tablet has, a finger, whose keyboard Enter is a new line on. */
+const COARSE_POINTER = "(pointer: coarse)";
+
+/** The label the on-screen keyboard draws on its return key: Send where Enter sends, a return where it is a new line. */
+const ENTER_KEY_HINT = {
+  SEND: "send",
+  NEW_LINE: "enter",
+} as const;
 
 /** What a transaction from one of the handle's commands is tagged with, which read-only still takes. */
 const COMMAND_META = "luke-composer-command";
@@ -120,6 +133,17 @@ function inlineText(node: PmNode): string {
 /** Whether a node is a quote block. */
 function isQuote(node: PmNode): boolean {
   return node.type.name === QUOTE_NODE;
+}
+
+/** Whether the device's pointer is a finger. */
+function coarsePointer(): boolean {
+  return window.matchMedia(COARSE_POINTER).matches;
+}
+
+/** Whether an Enter is the owner's send: always with a mouse, and on a coarse pointer only with ⌘ or Ctrl. */
+function sends(event: KeyboardEvent): boolean {
+  if (event.key !== "Enter" || event.shiftKey) return false;
+  return event.metaKey || event.ctrlKey || !coarsePointer();
 }
 
 /** A quote block's words. */
@@ -679,17 +703,19 @@ function pasted(
 /** How the box's editor hears keys, input, focus, a paste, a drop, and the clipboard. */
 function composerProps(state: ComposerState, props: ComposerEditorProps): EditorProps {
   return {
-    attributes: {
+    // Note that the attributes are read again on every update, so the return key's label follows a pointer that changes.
+    attributes: () => ({
       class: `${props.className} ${EDITOR_CLASS}`,
       role: "textbox",
       "aria-multiline": "true",
       "aria-label": props.label,
-    },
+      enterkeyhint: coarsePointer() ? ENTER_KEY_HINT.NEW_LINE : ENTER_KEY_HINT.SEND,
+    }),
     // Note that a key an input method is composing is the input method's alone, the owner's included.
     handleKeyDown: (view, event) => {
       if (composing(view, event)) return false;
       if (props.onKey(event) || removedChip(view, event.key)) return true;
-      if (event.key !== "Enter" || event.shiftKey) return false;
+      if (!sends(event)) return false;
       props.onEnter();
       return true;
     },
