@@ -245,7 +245,7 @@ async function mount(
       await settle();
     },
     /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
-    list: async (workspaceId: string) => {
+    list: async (workspaceId: string | undefined) => {
       listed = workspaceId;
       act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
@@ -515,8 +515,13 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
 });
 
-test("words typed before the workspaces are read stay in the box as the workspace lands, and are its draft", async () => {
+test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {
   const card = await mount();
+  await card.list("workspace-personal");
+  card.type("Fix login");
+  await card.relaunch();
+  await card.list(undefined);
+  assert.equal(card.field().textContent, "");
   card.type("Dark mode");
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");
