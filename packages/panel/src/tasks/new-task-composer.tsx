@@ -6,8 +6,10 @@ import {
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
@@ -23,8 +25,11 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
+import { appPlatform } from "../app-platform.js";
 import {
   DRAFT_PLACE,
   type DraftPlace,
@@ -38,6 +43,9 @@ import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip.js";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { keptSkills } from "./repository-skills.js";
+import { SkillFiles } from "./skill-chip.js";
+import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
@@ -106,6 +114,16 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
  * that was refused keeps the card and its words, with why under it and
  * Retry. Nothing typed here reaches the model as conversation.
+ *
+ * An `@` offers what it offers on the page of an agent no task holds
+ * (`task-mentions.tsx`'s `tasklessMentions`): the servers and the
+ * workspace's coding agents, and, once a repository is chosen, its files,
+ * folders, and skills; a `/` offers its skills too, whose chip opens the
+ * skill's `SKILL.md` on GitHub. Note that the box takes mentions with or
+ * without a repository, because its editor reads that as it mounts, and a
+ * repository is often chosen after. A mention is written into the words as
+ * its link, so the agent's prompt or Luke's brief holds it as any message
+ * does.
  *
  * The words and files are New task's draft in the workspace it starts in,
  * or on the workspace's own issue it was opened from, kept apart from the
@@ -326,6 +344,36 @@ export function NewTaskComposer({
   const blocked = !planning && repository === null;
   const canStart = planning || (!blocked && (filled || onIssue));
   const issueName = issue === undefined ? from?.title : taskNameOfIssue(issue);
+  // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
+  const { act } = useAct();
+  const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
+  const slug = workspace?.slug;
+  const { onShowMention } = newTask;
+  const mentions = useMemo(
+    () =>
+      workspaceId === undefined
+        ? undefined
+        : tasklessMentions(
+            { workspace: slug ?? workspaceId, workspaceId, repository },
+            onShowMention,
+            readMentionAgents,
+          ),
+    [workspaceId, slug, repository, onShowMention, readMentionAgents],
+  );
+  const skills = useMemo(
+    () =>
+      workspaceId === undefined || repository === null
+        ? undefined
+        : keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { workspaceId, repository })),
+    [act, workspaceId, repository],
+  );
+  // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
+  const openSkill = (skill: SkillOption) => {
+    if (mentions === undefined || repository === null) return;
+    appPlatform().openGitHub(
+      encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, mentions.doors.place),
+    );
+  };
 
   const begin = (
     name: string,
@@ -456,7 +504,7 @@ export function NewTaskComposer({
     sent: [],
   };
 
-  return (
+  const card = (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
     <div className="new-task-composer" data-mode={mode} onKeyDown={onCardKey}>
       {heading === undefined ? null : (
@@ -480,6 +528,7 @@ export function NewTaskComposer({
         readModels={newTask.readModels}
         usage={undefined}
         servers={undefined}
+        skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
         onStop={() => Promise.resolve()}
@@ -519,5 +568,13 @@ export function NewTaskComposer({
         </Text>
       ) : null}
     </div>
+  );
+  // Note that the card stands under the providers with or without a repository, so one chosen or let go keeps the card mounted.
+  return (
+    <TaskMentions value={mentions}>
+      <SkillFiles source={skills} onOpen={openSkill}>
+        {card}
+      </SkillFiles>
+    </TaskMentions>
   );
 }
