@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import assert from "node:assert/strict";
 import { CHAT_BLOCK, type ChatMessage } from "@luke/features/chat-wire";
 import { test } from "vitest";
@@ -47,4 +49,6 @@ test("a preview drops a fence and its language, nested emphasis, and emphasis ac
 test("a preview says the words inside raw HTML, as the message draws them, and none of its tags or comments", () => {
   assert.equal(previewWords(said("<div>Release ready</div>")), "Release ready");
   assert.equal(previewWords(said("Ship <b>now</b><!-- not this -->")), "Ship now");
+  assert.equal(previewWords(said('<div title="a>b">Ready</div>')), "Ready");
+  assert.equal(previewWords(said("<div>Tom &amp; Jerry</div>")), "Tom & Jerry");
 });

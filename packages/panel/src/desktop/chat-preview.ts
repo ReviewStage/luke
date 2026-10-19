@@ -24,15 +24,22 @@ const PHRASING_PARENTS: ReadonlySet<Nodes["type"]> = new Set([
   "tableCell",
 ]);
 
-/** Raw HTML's tags and comments, which the message draws as no words of its own. */
-const HTML_MARKUP = /<!--[\s\S]*?-->|<[^>]*>/gu;
+/**
+ * Raw HTML's words as the message draws them: the text between its tags,
+ * its entities decoded, read by the window's own HTML parser, which builds
+ * an inert document that runs and loads nothing. Note that the rail is only
+ * ever drawn in a window, so the parser is always there.
+ */
+function htmlWords(html: string): string {
+  return new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+}
 
 /** A node's words as drawn: text and code by their own words, a picture by its alt, raw HTML by the text between its tags. */
 function nodeWords(node: Nodes): string {
   switch (node.type) {
     case "html":
       // Note that the message draws the text inside ordinary HTML, so the preview keeps it; React escapes it as plain text.
-      return node.value.replace(HTML_MARKUP, " ");
+      return htmlWords(node.value);
     case "image":
     case "imageReference":
       return node.alt ?? "";
