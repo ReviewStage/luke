@@ -333,11 +333,10 @@ test("a count's glyph says its state in words beside the count", () => {
 });
 
 test("a bar folding together folds every option once their names no longer fit its width, and names them again once they would, measured as they stand", () => {
-  // Note that jsdom lays nothing out, so the bar's width, its options' widths, each name's, and when it resizes are the test's.
+  // Note that jsdom lays nothing out, so the bar's width, each option's, each name's, and when it resizes are the test's; a bar's scrollWidth is never less than its own width, as a browser's is not.
   const NAME = 40;
-  const GLYPHS = 280;
   let room = 500;
-  let glyphs = GLYPHS;
+  let glyph = 90;
   const observers: (() => void)[] = [];
   vi.stubGlobal(
     "ResizeObserver",
@@ -349,13 +348,24 @@ test("a bar folding together folds every option once their names no longer fit i
       disconnect() {}
     },
   );
+  const folded = () =>
+    document.querySelector('[data-fold="together"]')?.getAttribute("data-folded") === "true";
+  const optionWidth = () => glyph + (folded() ? 0 : NAME);
+  const optionsOf = (element: HTMLElement) => [
+    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+  ];
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => room);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(optionWidth);
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return optionsOf(this).indexOf(this) * optionWidth();
+  });
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
     if (this.classList.contains("luke-choice-bar-label")) return NAME;
-    // A folded bar's options stand by their glyphs and counts alone; drawn, each name stands beside them.
-    return this.getAttribute("data-folded") === "true" ? glyphs : glyphs + 3 * NAME;
+    return Math.max(room, 3 * optionWidth());
   });
   const resize = (width: number) => {
     room = width;
@@ -368,7 +378,7 @@ test("a bar folding together folds every option once their names no longer fit i
     { value: VIEW.CHECKS, label: "Checks", icon: "K" },
     { value: VIEW.FILES, label: "Files", icon: "F", count: linesCount(214, 38) },
   ];
-  const page = render(
+  render(
     createElement(ChoiceBar<View>, {
       label: "Pull request",
       items,
@@ -378,18 +388,16 @@ test("a bar folding together folds every option once their names no longer fit i
       fold: CHOICE_BAR_FOLD.TOGETHER,
     }),
   );
-  const folded = () =>
-    page.querySelector('[role="radiogroup"]')?.getAttribute("data-folded") === "true";
   try {
     assert.equal(folded(), false, "names that fit stand");
     resize(300);
     assert.equal(folded(), true, "names that no longer fit fold, every option at once");
     resize(380);
     assert.equal(folded(), true, "short of the room the names take, the bar stays folded");
-    resize(420);
-    assert.equal(folded(), false, "with the room they take, the names come back");
+    resize(600);
+    assert.equal(folded(), false, "widened well past what the names take, they come back");
     resize(300);
-    glyphs = GLYPHS - 40;
+    glyph = 75;
     resize(370);
     assert.equal(
       folded(),

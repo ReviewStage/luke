@@ -236,6 +236,20 @@ function useThumb() {
   return { bar, barRef, optionRef };
 }
 
+/**
+ * The width the options take as they stand, from the bar's start to the
+ * last one's end and the bar's own inset after it. Note that this is read
+ * from the options rather than the bar's `scrollWidth`, which is never less
+ * than the bar's own width, so it says how little folded options take.
+ */
+function optionsWidth(bar: HTMLElement): number {
+  const options = bar.querySelectorAll<HTMLElement>(".luke-choice-bar-option");
+  const last = options[options.length - 1];
+  if (last === undefined) return 0;
+  const inset = Number.parseFloat(getComputedStyle(bar).paddingInlineEnd) || 0;
+  return last.offsetLeft + last.offsetWidth + inset;
+}
+
 /** The room the folded options' names would take back: each name's own width and the gap it would stand in. */
 function foldedNames(bar: HTMLElement): number {
   let room = 0;
@@ -255,8 +269,8 @@ const UNFOLD_SLACK = 2;
 /**
  * Whether a bar folding together draws its options by their glyphs alone:
  * while their names do not fit its width. The width the names take is
- * measured as the bar stands, drawn or folded, a folded name read by its own
- * width (`foldedNames`), so a change that makes them fit, a tighter step's
+ * measured from the options as they stand, drawn or folded (`optionsWidth`),
+ * a folded name read by its own width (`foldedNames`), so a change that makes them fit, a tighter step's
  * padding among them, unfolds the bar at once. It is measured on every draw,
  * before the frame is painted, and whenever the bar or an option resizes.
  */
@@ -265,7 +279,7 @@ function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null
   const measure = useCallback(() => {
     const element = bar.current;
     if (!on || element === null) return;
-    const named = element.scrollWidth + (folded ? foldedNames(element) : 0);
+    const named = optionsWidth(element) + (folded ? foldedNames(element) : 0);
     setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
   }, [on, bar, folded]);
   useLayoutEffect(measure);
