@@ -16,8 +16,8 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { TOOL_BLOCK, type ToolBlock } from "@luke/panel/ai-elements/tool";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import {
   AGENT_PART,
   type AgentPart,

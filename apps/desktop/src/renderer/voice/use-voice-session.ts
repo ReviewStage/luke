@@ -322,17 +322,13 @@ export function useVoiceSession(
       }),
     [drive, orchestrator],
   );
-  // The stop key asks for quiet from any app, exactly as Escape asks for it
-  // from the panel: the microphone closes, and where Luke is speaking the
-  // host tells the model to stop; a press over no session simply does
-  // nothing. Luke's avatar, a second behind him, is flushed at once.
+  // The stop key stops Luke from any app, call or no call (`LUKE_STOP`); a call is told back as the stop command above.
   useEffect(
     () =>
       appBridge().onStopHotkeyPress(() => {
-        callRef.current?.interruptAvatar();
-        drive(orchestrator.stopSpeaking());
+        tell(ACT_KIND.LUKE_STOP, {});
       }),
-    [drive, orchestrator],
+    [tell],
   );
 
   useEffect(

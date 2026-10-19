@@ -137,7 +137,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
-| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
+| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `LUKE_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
 | `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Luke@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 

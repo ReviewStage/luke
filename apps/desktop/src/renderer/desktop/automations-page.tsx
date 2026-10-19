@@ -25,6 +25,7 @@ import {
   READING_AUTOMATIONS,
 } from "@luke/panel/desktop/automation-words";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { ExperimentTag, SendFeedbackButton } from "@luke/panel/experiment-marks";
 import { FoldingButton } from "@luke/panel/folding-button";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "@luke/panel/state-glyph";
@@ -62,7 +63,6 @@ import {
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
-import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";

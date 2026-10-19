@@ -29,11 +29,13 @@ import { imageFiles } from "@luke/panel/feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { AttachedFileChips, attachmentChips } from "@luke/panel/tasks/attached-file-chips";
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
 import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip";
 import { ComposerQuoteView } from "@luke/panel/tasks/reply-to-selection";
 import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
@@ -55,9 +57,7 @@ import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
 import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
-import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { useComposerPickers } from "./composer-pickers";
-import type { SkillSource } from "./skill-picker";
 import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
@@ -336,6 +336,7 @@ export function AgentComposer({
   sendsEmpty = false,
   closedRemedy,
   wording,
+  maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   above,
   tools,
   actions,
@@ -380,6 +381,8 @@ export function AgentComposer({
   closedRemedy?: ReactNode;
   /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
   wording?: ComposerWords | undefined;
+  /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
+  maxLength?: number;
   /** What stands over the words inside the card, before the files attached: New task's Linear issue. */
   above?: ReactNode;
   /** What stands after the "+" at the foot's left: New task's repository and Linear chips. */
@@ -680,7 +683,7 @@ export function AgentComposer({
                 ? COMPOSER_INPUT.READ_ONLY
                 : COMPOSER_INPUT.EDITABLE
           }
-          maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
+          maxLength={maxLength}
           takesFocus={!(focusedByOwner && mountedFirst)}
           {...pickers.field}
           onKey={(event) =>

@@ -3,11 +3,11 @@ import { ISSUE_STATUS_ORDER, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog, type useMenu } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon } from "lucide-react";
-import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "./issue-pickers";
 import { useStartItems } from "./issue-work";
 
 /**

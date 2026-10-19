@@ -2,7 +2,11 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
-import type { CodingAgentDefaultAnswer } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
+  type CodingAgentDefaultAnswer,
+} from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -33,6 +37,7 @@ import {
 import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useCopyToast } from "@luke/panel/copy-feedback";
+import type { FixtureChat, Staged } from "@luke/panel/tasks/chat-fixture";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
   CLOSED_TAB_STRIP,
@@ -41,6 +46,13 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "@luke/panel/tasks/closed-tabs";
+import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
+import {
+  FIXTURE_TASKS_CALL,
+  fixtureRepositories,
+  fixtureSidePanel,
+  fixtureTasksView,
+} from "@luke/panel/tasks/tasks-fixture";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import {
   MAIN_TAB,
@@ -152,18 +164,14 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import type { FixtureChat, Staged } from "./chat-fixture";
-import { agentTabLabel } from "./coding-agent-model";
+import {
+  startFailureNote as agentStartFailureNote,
+  agentTabLabel,
+  choiceRequest,
+} from "./coding-agent-model";
 import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
-import type { RepositoryChooser } from "./repository-chip";
-import {
-  FIXTURE_TASKS_CALL,
-  fixtureRepositories,
-  fixtureSidePanel,
-  fixtureTasksView,
-} from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastTask } from "./use-last-task";
@@ -200,7 +208,10 @@ interface PendingSectionWrite {
  * coding agents are the tab's too (`use-coding-agents.ts`): read when the
  * task opens, started from the toolbar or the column's "+", and each drawn
  * on a tab of the task's column beside the task's own (`use-main-tabs.ts`),
- * their workers' in the side panel. Main is told which agent's tab is shown, so the notification it
+ * their workers' in the side panel; New task's Agent mode starts the task
+ * and its agent in the one start, and the task opens on that agent's tab,
+ * or on a draft holding the words with why where the agent was refused.
+ * Main is told which agent's tab is shown, so the notification it
  * posts when an agent ends is held back while the developer is looking at
  * that agent, and the agents main says ended unseen read in semibold until their
  * tab is shown (`@luke/host/agent-notices`). The open plan's history is the
@@ -386,7 +397,7 @@ interface ChatViewControl {
 }
 
 /** The fixture's staging, as a fixture run imports it. */
-type ChatStager = typeof import("./chat-fixture");
+type ChatStager = typeof import("@luke/panel/tasks/chat-fixture");
 
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
@@ -399,11 +410,27 @@ export interface NewTaskIssue {
   readonly title: string;
 }
 
-/** The coding agent New task's Agent mode starts on the task it started: its prompt, the files attached, and the model its chip named, none for the account's default. */
+/**
+ * The coding agent New task's Agent mode starts on the task it started:
+ * the key its start carries, which the card keeps for a press asking the
+ * same again (`new-task-composer.tsx`), its prompt, the files attached, and
+ * the model its chip named, none for the account's default.
+ */
 export interface NewTaskAgent {
+  readonly idempotencyKey: string;
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
+}
+
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where it named one. */
+function agentRequest(handed: NewTaskAgent) {
+  return {
+    idempotencyKey: handed.idempotencyKey,
+    prompt: handed.prompt,
+    ...(handed.attachments.length === 0 ? undefined : { attachments: handed.attachments }),
+    ...(handed.choice === undefined ? undefined : choiceRequest(handed.choice)),
+  };
 }
 
 /**
@@ -421,14 +448,17 @@ export interface NewTaskPreset {
 /**
  * What a start comes from beyond its name, repository, workspace, and
  * planning: a Linear issue, one of the workspace's own issues, whether an
- * agent starts on the task's plan at once (`agent`), and the agent New
- * task's composer starts on its words (`handed`).
+ * agent starts on the task's plan once the task opens (`agent`), the
+ * agent New task's composer starts on its words in the task's own start
+ * (`handed`), and the words Plan mode hands Luke as the task's brief
+ * (`brief`), trimmed and none where blank.
  */
 export interface NewTaskStart {
   readonly linearIssueId?: string;
   readonly issueId?: string;
   readonly agent?: boolean;
   readonly handed?: NewTaskAgent;
+  readonly brief?: string;
 }
 
 /** Which Issues page stands: the list, or one issue's. */
@@ -696,7 +726,8 @@ export interface TasksControl {
      * Starts the plan on the repository given, or none, in the workspace
      * given, with its planning phase or without it, from the Linear issue
      * given where one was picked, or from the workspace's own issue the
-     * dialog was opened on, which closes the dialog and opens the plan; with
+     * dialog was opened on, with the brief Plan mode hands Luke where words
+     * were written, which closes the dialog and opens the plan; with
      * an agent asked for at once it presses the task's Start once it stands
      * open, and with an agent handed over it opens the task on a draft
      * agent's tab holding the agent's prompt, files, and model, which starts
@@ -1113,7 +1144,7 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (!fixtureMode) return;
     let live = true;
-    import("./chat-fixture").then((loaded) => {
+    import("@luke/panel/tasks/chat-fixture").then((loaded) => {
       if (!live) return;
       setStager(loaded);
       setChat(loaded.fixtureChat({ fixtureMode }, Date.now()));
@@ -2370,10 +2401,15 @@ export function useTasksTab(input: {
   // which main leaves for this question to end or keep. A start without
   // planning opens no call, so it asks nothing about the one standing; it
   // names its planning only where it is off, so a request with planning is
-  // the one every service has read. New task's Agent mode hands the task it
-  // started a draft agent holding the prompt, files, and model, and opens
-  // the task on that draft's tab, which starts the agent at once, so a
-  // refused agent leaves the words in that tab's box with why and Retry.
+  // the one every service has read. New task's Plan mode hands its words
+  // over as the task's brief, which Luke reads beside the plan, and a blank
+  // brief is not sent. New task's Agent mode starts the task
+  // and its agent in that one start, under the key its card holds
+  // (`agentRequest`), and opens the task on the agent's tab, or on a draft
+  // holding the words with why where the agent was refused (`openAgent`).
+  // Note that a start whose task was refused, or never answered, is never
+  // sent again by itself, because the service keeps no key for a task, so a
+  // second start could make a second task; the card says why with Retry.
   const startTask = (
     name: string,
     repository: string | null,
@@ -2393,7 +2429,9 @@ export function useTasksTab(input: {
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
       ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
+      ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
       ...(planning ? undefined : { planning }),
+      ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
       (answer) => {
         if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
@@ -2408,17 +2446,37 @@ export function useTasksTab(input: {
           askedTaskOpened.current = false;
           setAgentAskedFor(answer.planId);
         }
-        // An agent handed over starts from a draft the task is handed, its tab
-        // the one the task opens on, so a refusal leaves the words there with Retry.
         if (from.handed !== undefined) {
-          const draftId = crypto.randomUUID();
-          agents.onHandDraft(answer.planId, { id: draftId, ...from.handed });
-          mainTabs.onShow(answer.planId, { draft: draftId });
+          openAgent(answer.planId, from.handed, answer.agentStart);
         }
         return undefined;
       },
       (refused: Error) => refusedWith(refused.message),
     );
+  };
+
+  // A task started with an agent opens on the agent's tab, as a landed
+  // Start opens it; one whose agent was refused opens on a draft holding
+  // the words, the files, and the model under the start's key, with why
+  // under its box, whose Retry is the agent's own Start on the task. Note
+  // that an answer naming neither is read as one the service never gave.
+  const openAgent = (
+    planId: string,
+    handed: NewTaskAgent,
+    started: CodingAgentAgentAnswer | undefined,
+  ) => {
+    if (started !== undefined && !("failure" in started)) {
+      agents.onTaskStarted(planId, started.agent);
+      mainTabs.onShow(planId, { agent: started.agent.id });
+      return;
+    }
+    const refused = agentStartFailureNote(
+      started ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      planId,
+    );
+    const { idempotencyKey: id, ...words } = handed;
+    agents.onHandDraft(planId, { id, ...words, refused });
+    mainTabs.onShow(planId, { draft: id });
   };
 
   // The dialog matches its name against the Linear issues of the workspace

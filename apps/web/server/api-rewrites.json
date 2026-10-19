@@ -64,6 +64,10 @@
     "dest": "/api/default.js?route=plans/edit&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/stop",
+    "dest": "/api/default.js?route=plans/stop&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/comments/([^/]+)",
     "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
   },

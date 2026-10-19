@@ -326,6 +326,11 @@ export function taskBoardPath(taskId: string): string {
 }
 
 /** The developer's edit of one task's document (POST). */
+/** Stops the turn Luke is running on one task (POST). */
+export function taskStopPath(taskId: string): string {
+  return `${taskPath(taskId)}/stop`;
+}
+
 export function planEditPath(taskId: string): string {
   return `${taskPath(taskId)}/edit`;
 }

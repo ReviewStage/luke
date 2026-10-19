@@ -11,9 +11,9 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool";
 import {
   AGENT_PART,
   agentLines,

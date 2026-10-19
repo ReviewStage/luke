@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "@luke/panel/markdown-message";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "@luke/panel/testing/composer";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
@@ -11,7 +12,6 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-message";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions";

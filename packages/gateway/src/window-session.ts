@@ -15,7 +15,8 @@
 export interface SessionReplayBootstrap {
   /**
    * Whether this run may record at all. False for a fixture and a capture
-   * run, which must stay deterministic and send nothing, and false after an
+   * run, which must stay deterministic and send nothing, false for an
+   * unpackaged development run, and false after an
    * account is deleted until the next sign-in.
    * Being signed out is not one of the reasons: recording begins at the first
    * paint, before an account exists.
@@ -28,6 +29,12 @@ export interface SessionReplayBootstrap {
    * fact of the packaged app around it.
    */
   appVersion: string;
+  /**
+   * Whether this build runs from a packaged bundle rather than a development
+   * checkout, registered beside the version so a recording can be told apart
+   * the way the counted events are.
+   */
+  packaged: boolean;
   /**
    * The account's opaque id, absent while signed out. It is the same id the
    * hosted endpoints resolve a bearer token to, so a recording lands on the

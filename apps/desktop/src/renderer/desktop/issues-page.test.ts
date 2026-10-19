@@ -24,6 +24,7 @@ import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { playMotions } from "@luke/panel/testing/pane-motion";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
@@ -35,7 +36,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { playMotions } from "#testing/pane-motion";
 import { tasksControl } from "#testing/tasks-control";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
@@ -944,7 +944,7 @@ test("an issue's page opened before its issue is read, as a link opens it, stand
 
   assert.equal(readingWords, "Reading the issue");
   assert.ok(
-    reading?.closest(".desktop-document .plan-document-scroll"),
+    reading?.closest(".desktop-document .plan-document-body"),
     "the blocks stand in the issue's own document, in a plan's own column",
   );
   assert.equal(readingTitle, undefined);
@@ -971,7 +971,7 @@ test("an issue's document stands in a plan's own scrolling column and body, its 
   standing = [issue(1, { title: "Fix login", description: "Fails on CI." })];
   const page = await openIssue(issue(1).id);
 
-  const body = page.querySelector(".desktop-document > .plan-document-scroll > .plan-body");
+  const body = page.querySelector(".desktop-document .plan-document-body > .plan-body");
   assert.ok(body, "the issue's body stands where a plan's does");
   assert.equal(body.querySelector("[aria-label='Issue title']")?.textContent, "Fix login");
   assert.ok(body.querySelector(".plan-byline"), "the line under the title is a plan's");
@@ -1041,21 +1041,23 @@ test("a click into the description opens the plan's editor in its place, the car
 function layPageOut(): void {
   const sheet = document.createElement("style");
   sheet.dataset.laidOut = "";
-  sheet.textContent = ".plan-document-scroll { overflow-y: auto; }";
+  // Note that the column is the `ScrollArea` its document's block stands in.
+  sheet.textContent = ".luke-scroll-area:has(> .plan-document-body) { overflow-y: auto; }";
   document.head.append(sheet);
   const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
   const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.classList.contains("plan-document-scroll") ? wide : words;
+    return this.firstElementChild?.classList.contains("plan-document-body") ? wide : words;
   });
 }
 
 /** The document's column, whose room is the description's way in. */
 function columnOf(page: HTMLElement): HTMLElement {
   return (
-    page.querySelector<HTMLElement>(".plan-document-scroll") ?? assert.fail("the document's column")
+    page.querySelector<HTMLElement>(".plan-document-body")?.parentElement ??
+    assert.fail("the document's column")
   );
 }
 

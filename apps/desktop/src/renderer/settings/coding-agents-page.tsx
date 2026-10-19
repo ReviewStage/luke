@@ -14,6 +14,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { HarnessMark } from "@luke/panel/harness-marks";
 import { Segmented } from "@luke/panel/segmented";
+import { ApiKeysSection } from "@luke/panel/settings/api-keys-section";
+import { PickerRow } from "@luke/panel/settings/picker-row";
 import { SwitchRow } from "@luke/panel/settings/switch-row";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
@@ -47,8 +49,6 @@ import {
   windowLabel,
   windowOf,
 } from "../tasks/coding-agent-model";
-import { ApiKeysSection } from "./api-keys-section";
-import { PickerRow } from "./picker-row";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.

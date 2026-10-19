@@ -7,6 +7,7 @@ import {
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import { usePrefetchEditorBundle, useSideBundles } from "@luke/panel/bundle-loader";
+import { DiagramPreview } from "@luke/panel/plan-diagram";
 import {
   type EditorDiagram,
   type MentionNode,
@@ -17,6 +18,7 @@ import {
   type PlanEditorProps,
 } from "@luke/panel/plan-editor/contract";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { RetryButton } from "@luke/panel/retry-button";
 import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import {
   EDITOR_PLACE,
@@ -28,8 +30,6 @@ import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { DiagramPreview } from "../plan-diagram";
-import { RetryButton } from "../retry-button";
 import { useEditorPictures } from "./editor-pictures";
 import {
   type MentionDoors,

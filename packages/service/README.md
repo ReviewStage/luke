@@ -1853,6 +1853,10 @@ a task deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.
 `readTask` is the read Luke starts and resumes from, with the
 conversation `attachTaskConversation` associated, and it moves nothing.
+
+`POST /api/plans/{id}/stop` stops the turn Luke is running on a task, the stop
+key's and the Call tab's Stop's one action, through `stopAsk` under the
+conversation's owner. Hanging up a call stops nothing.
 `src/tasks/tasks.test.ts` and `apps/web/tests/tasks-app.test.ts` hold both halves
 against a real dialect.
 

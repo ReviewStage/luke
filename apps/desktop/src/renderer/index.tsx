@@ -8,12 +8,12 @@
  */
 
 import { SideBundlesContext } from "@luke/panel/bundle-loader";
+import { callAvatarAtom } from "@luke/panel/call/call-avatar";
+import { PanelAvatarVoice } from "@luke/panel/call/panel-avatar";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { App } from "./app";
-import { callAvatarAtom } from "./call/call-avatar";
-import { PanelAvatarVoice } from "./call/panel-avatar";
 import { DESKTOP_BUNDLES, DESKTOP_SIDE_BUNDLES } from "./desktop-bundles";
 import { installWindowHistory } from "./navigation-history";
 import { mountWindow } from "./window-root";

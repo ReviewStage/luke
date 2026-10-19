@@ -13,6 +13,7 @@ import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { INBOX_COLUMNS, useInboxColumns } from "@luke/panel/tasks/inbox-columns";
+import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
 import { taskLinkPlace } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { CallBar } from "@luke/panel/tasks/tasks-parts";
@@ -60,7 +61,6 @@ import {
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane";
 import { PlanBody, type SectionLinks } from "../tasks/plan-body";
-import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
   mentionablePullRequests,

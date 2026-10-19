@@ -55,6 +55,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |
   | `--luke-scroll-fade` | 26px | 24px | 24px |
+  | `--luke-scroll-band` | 32px | 32px | 32px |
 
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`

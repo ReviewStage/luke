@@ -139,17 +139,6 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/**
- * The name a task New task starts in Plan mode takes from the words in its
- * box: their first line, its ends trimmed and cut to a task name's bound;
- * nothing for a blank box, which starts the task as Untitled. Note that this
- * stands only until Plan mode hands the words to Luke as the task's brief.
- */
-export function taskNameOfWords(words: string): string {
-  const [first = ""] = words.trim().split("\n");
-  return first.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
-}
-
 /** Where an issue's mention is written; its target is the issue's own address, so neither part is read. */
 const ISSUE_MENTION_PLACE = { workspace: "", repository: null } as const;
 

@@ -12,6 +12,7 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -29,7 +30,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import { NewTaskDialog } from "./new-task-dialog";
-import type { RepositoryChooser } from "./repository-chip";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab";
 
 /**
@@ -121,6 +121,7 @@ async function mount(
   const agentsAtOnce: (boolean | undefined)[] = [];
   const fromIssues: (string | undefined)[] = [];
   const fromWorkspaceIssues: (string | undefined)[] = [];
+  const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
@@ -152,6 +153,7 @@ async function mount(
           agentsAtOnce.push(from?.agent);
           fromIssues.push(from?.linearIssueId);
           fromWorkspaceIssues.push(from?.issueId);
+          briefs.push(from?.brief);
           startedIn.push(workspaceId);
           return Promise.resolve(answer);
         },
@@ -204,6 +206,8 @@ async function mount(
     fromIssues,
     /** The workspace's own issue each start came from, where it came from one. */
     fromWorkspaceIssues,
+    /** The brief each start handed Luke, where it handed one. */
+    briefs,
     /** The workspace each start asked for. */
     startedIn,
     /** Whether each start asked for its planning phase. */
@@ -285,9 +289,14 @@ test("Agent mode: Return starts the task without planning, Untitled, on the repo
 
   assert.deepEqual(card.starts, [["", "acme/web"]]);
   assert.deepEqual(card.planned, [false]);
-  assert.deepEqual(card.agents, [
-    { prompt: "Make the sidebar keep its folds.", attachments: [], choice: DEFAULT_CHOICE },
-  ]);
+  const [{ idempotencyKey, ...agent } = { idempotencyKey: "" }] = card.agents;
+  assert.deepEqual(agent, {
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: DEFAULT_CHOICE,
+  });
+  assert.ok(idempotencyKey, "the agent's start carries the card's key");
+  assert.deepEqual(card.briefs, [undefined], "an agent's words are no brief");
 });
 
 test("a model picked on the chip runs this agent alone, and the account's default is not written", async () => {
@@ -359,18 +368,19 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
   assert.equal(card.agents[0]?.prompt, "Fix the refresh\nand add a test");
 });
 
-test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, named by the words' first line", async () => {
+test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, Untitled, handing Luke the words as its brief", async () => {
   const card = await mount();
   await card.key("Tab", { shiftKey: true });
   const placeholder = card.placeholder();
   const modelChip = document.querySelector(".agent-model-chip");
-  card.type("Rethink automations\nwhich agent they reuse");
+  card.type("  Rethink automations\nwhich agent they reuse  ");
   await card.key("Enter");
 
   assert.equal(modeToggle().getAttribute("aria-pressed"), "true");
   assert.equal(placeholder, "What should you and Luke plan? (optional)");
   assert.equal(modelChip, null);
-  assert.deepEqual(card.starts, [["Rethink automations", "acme/web"]]);
+  assert.deepEqual(card.starts, [["", "acme/web"]], "the words name nothing");
+  assert.deepEqual(card.briefs, ["Rethink automations\nwhich agent they reuse"]);
   assert.deepEqual(card.planned, [true]);
   assert.deepEqual(card.agents, [undefined], "no agent is started");
 });
@@ -384,6 +394,8 @@ test("Plan mode starts with nothing typed and with no repository, as today's bla
 
   assert.deepEqual(card.starts, [["", null]]);
   assert.deepEqual(card.planned, [true]);
+  assert.deepEqual(card.briefs, [undefined], "an empty box hands no brief");
+  assert.deepEqual(card.fromIssues, [undefined]);
 });
 
 test("Agent mode with no repository holds Start and says why under the card, and turning on Plan lets it go", async () => {
@@ -405,7 +417,8 @@ test("Agent mode with no repository holds Start and says why under the card, and
 
   assert.deepEqual(held, { disabled: true, why: true });
   assert.equal(why, false);
-  assert.deepEqual(card.starts, [["Write the migration", null]]);
+  assert.deepEqual(card.starts, [["", null]]);
+  assert.deepEqual(card.briefs, ["Write the migration"]);
   assert.deepEqual(card.planned, [true]);
 });
 
@@ -472,6 +485,21 @@ test("a refusal keeps the card and the words, says why under it, and Retry start
   act(() => card.button("Retry").click());
   await settle();
   assert.equal(card.starts.length, 2);
+});
+
+test("Retry after an agent's start that did not land carries the same key, and other words carry another", async () => {
+  const card = await mount("The service did not answer.");
+  card.type("Dark mode toggle");
+  await card.key("Enter");
+  act(() => card.button("Retry").click());
+  await settle();
+  card.type(" for the sidebar");
+  await card.key("Enter");
+  const keys = card.agents.map((agent) => agent?.idempotencyKey);
+
+  assert.equal(keys.length, 3);
+  assert.equal(keys[1], keys[0], "a press asking the same again is the same start");
+  assert.notEqual(keys[2], keys[1], "other words are another start");
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
@@ -635,7 +663,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
     "the stranded repository is not offered",
   );
   assert.equal(dialog.button("No repository").textContent, "No repository");
-  assert.deepEqual(dialog.starts, [["Tmp", null]]);
+  assert.deepEqual(dialog.starts, [["", null]]);
 });
 
 test("a pick the workspace's GitHub turns out not to list is let go, while one it lists stays chosen", async () => {
@@ -667,8 +695,8 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
   listed.type("Rate limits");
   await listed.key("Enter");
 
-  assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
-  assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
+  assert.deepEqual(unlisted.starts, [["", null]]);
+  assert.deepEqual(listed.starts, [["", "acme/api"]]);
 });
 
 test("the repository menu names each repository first and its owner after it, so two that share an owner tell apart, and finds one by its owner/name", async () => {
@@ -719,7 +747,7 @@ test("the repository menu names each repository first and its owner after it, so
   dialog.type("Ledger");
   await dialog.key("Enter");
 
-  assert.deepEqual(dialog.starts, [["Ledger", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
+  assert.deepEqual(dialog.starts, [["", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
 });
 
 /** A workspace's Linear issues, in the order Linear lists them. */
@@ -905,6 +933,21 @@ test("an issue picked and Return with no words starts an agent on the issue alon
   assert.deepEqual(card.planned.at(-1), true);
   assert.deepEqual(card.fromIssues.at(-1), "issue-1");
   assert.equal(card.agents.at(-1), undefined);
+});
+
+test("Plan mode with an issue picked and words written names the task by the issue, links it, and hands Luke the words as its brief beside it", async () => {
+  keptInLukeMode();
+  const card = await mount(undefined, undefined, {}, ISSUES);
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  card.type("Keep the queue order stable.");
+  await card.key("Enter");
+
+  assert.deepEqual(card.starts, [["Restack the deploy queue", "acme/web"]]);
+  assert.deepEqual(card.planned, [true]);
+  assert.deepEqual(card.fromIssues, ["issue-1"]);
+  assert.deepEqual(card.briefs, ["Keep the queue order stable."]);
+  assert.deepEqual(card.agents, [undefined]);
 });
 
 test("typing in the Linear search narrows the issues at once, and once it rests Linear itself is searched, an issue it finds beyond those read standing after them", async () => {

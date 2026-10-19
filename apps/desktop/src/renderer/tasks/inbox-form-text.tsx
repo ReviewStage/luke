@@ -5,12 +5,12 @@ import { useSideBundles } from "@luke/panel/bundle-loader";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import type { FieldControl } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
 import { useComposerPickers } from "./composer-pickers";
-import type { SkillSource } from "./skill-picker";
 
 /**
  * inbox-form-text.tsx -- a text field of an Inbox form, written in the composer's own field, as the item's box is.

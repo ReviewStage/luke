@@ -35,6 +35,9 @@ import {
   STATUS_WORDS,
   threadsOn,
 } from "@luke/panel/tasks/changes-model";
+import { type DiffListEntry, type DiffNote, PierreDiffList } from "@luke/panel/tasks/diff-list";
+import { DiffSettingsButton } from "@luke/panel/tasks/diff-settings";
+import { useDiffLook, useSplitRoom } from "@luke/panel/tasks/file-diff";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { ImageDiff, type ImageSides, imageDrawable } from "@luke/panel/tasks/image-diff";
 import { Tooltip } from "@luke/panel/tooltip";
@@ -69,9 +72,6 @@ import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
-import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list";
-import { DiffSettingsButton } from "./diff-settings";
-import { useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";

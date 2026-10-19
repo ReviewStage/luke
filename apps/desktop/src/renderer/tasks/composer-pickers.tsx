@@ -6,6 +6,7 @@ import type {
   ComposerTrigger,
 } from "@luke/panel/plan-editor/contract";
 import type { ComposerFieldMentions } from "@luke/panel/tasks/composer-field";
+import { type SkillSource, useSkillPicker } from "@luke/panel/tasks/skill-picker";
 import {
   DICTATION_PHASE,
   type DictationControl,
@@ -18,7 +19,6 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { MentionedServers, type MentionedServersPlace } from "./server-card";
 import { useSkillOpener } from "./skill-chip";
-import { type SkillSource, useSkillPicker } from "./skill-picker";
 import { useTaskMentions } from "./task-mentions";
 
 /**

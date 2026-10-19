@@ -5,12 +5,16 @@ import {
   issueIdentifier,
 } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
+import { PriorityMark, StatusGlyph } from "@luke/panel/desktop/issue-pickers";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   IconButton,
+  SCROLL_FADE,
+  SCROLL_SIZE,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -24,7 +28,6 @@ import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
-import { PriorityMark, StatusGlyph } from "./issue-pickers";
 import { IssueCardPullRequest } from "./issue-work";
 
 /**
@@ -314,21 +317,25 @@ function IssueColumn({
           {NO_ISSUES}
         </Text>
       ) : (
-        <ul className="sidebar-tasks issue-column-cards scroll-fade" onPointerDown={drag}>
-          {column.issues.map((issue) => (
-            <IssueCard
-              key={issue.id}
-              issue={issue}
-              workspaceName={workspaceName}
-              now={now}
-              focused={issue.id === focused}
-              peeked={issue.id === peeked}
-              shown={shown}
-              onOpen={(opening) => onOpen(issue, opening)}
-              onChange={(change) => onChange(issue, change)}
-            />
-          ))}
-        </ul>
+        <div className="issue-column-scroll">
+          <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+            <ul className="sidebar-tasks issue-column-cards" onPointerDown={drag}>
+              {column.issues.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  workspaceName={workspaceName}
+                  now={now}
+                  focused={issue.id === focused}
+                  peeked={issue.id === peeked}
+                  shown={shown}
+                  onOpen={(opening) => onOpen(issue, opening)}
+                  onChange={(change) => onChange(issue, change)}
+                />
+              ))}
+            </ul>
+          </ScrollArea>
+        </div>
       )}
     </section>
   );
@@ -410,17 +417,21 @@ export function IssueBoardSkeleton({ label }: { label: string }): React.JSX.Elem
                     <Skeleton width={shape.heading} />
                   </Text>
                 </div>
-                <div className="sidebar-tasks issue-column-cards">
-                  {shape.cards.map((title, card) => (
-                    // oxlint-disable-next-line react/no-array-index-key -- a placeholder's cards have nothing but their place.
-                    <div key={card} className="issue-card-skeleton">
-                      <span className="issue-card-skeleton-line">
-                        <Skeleton width={SKELETON_IDENTIFIER} />
-                        <Skeleton width={SKELETON_TIME} />
-                      </span>
-                      <Skeleton width={title} />
+                <div className="issue-column-scroll">
+                  <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+                    <div className="sidebar-tasks issue-column-cards">
+                      {shape.cards.map((title, card) => (
+                        // oxlint-disable-next-line react/no-array-index-key -- a placeholder's cards have nothing but their place.
+                        <div key={card} className="issue-card-skeleton">
+                          <span className="issue-card-skeleton-line">
+                            <Skeleton width={SKELETON_IDENTIFIER} />
+                            <Skeleton width={SKELETON_TIME} />
+                          </span>
+                          <Skeleton width={title} />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </ScrollArea>
                 </div>
               </div>
             );

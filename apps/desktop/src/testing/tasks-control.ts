@@ -93,6 +93,7 @@ export function codingAgentsControl(
     onDropFork: ignore,
     onDraftChange: ignore,
     onHandDraft: ignore,
+    onTaskStarted: ignore,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
     startPrompt: () => Promise.resolve(undefined),

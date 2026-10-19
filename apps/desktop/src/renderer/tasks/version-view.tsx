@@ -1,3 +1,5 @@
+import { MarkdownMessage } from "@luke/panel/markdown-message";
+import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
 import { dayAndTimeText, momentText } from "@luke/panel/tasks/task-time";
 import { TaskTitle } from "@luke/panel/tasks/task-title";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
@@ -16,10 +18,8 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { MarkdownMessage } from "../markdown-message";
 import { DocumentScroll } from "./document-frame";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
-import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 

@@ -28,6 +28,8 @@ import { useAutomation } from "@luke/panel/automation-directory";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { PictureBlock } from "@luke/panel/picture-block";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { AttachedFileChips } from "@luke/panel/tasks/attached-file-chips";
+import { AttachmentViewer } from "@luke/panel/tasks/attachment-viewer";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { REPLY_SCOPE } from "@luke/panel/tasks/reply-to-selection";
 import { useMinute } from "@luke/panel/tasks/task-time";
@@ -56,6 +58,8 @@ import {
   type FoldingButtonHint,
   FormField,
   GAP,
+  SCROLL_FADE,
+  ScrollArea,
   Stack,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
@@ -77,8 +81,6 @@ import {
   NOTHING_HELD,
 } from "./agent-ref";
 import { ArchivedComposerNote } from "./archived-task";
-import { AttachedFileChips } from "./attached-file-chips";
-import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
@@ -1820,69 +1822,70 @@ export function InboxPane({
         )}
       </header>
       <div className="desktop-inbox">
-        <div
-          // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture"
-          data-item-id={item.id}
-          ref={board}
-        >
-          <WordsWorkspace value={workspaceId}>
-            <Subject item={item} by={by} readerId={agents.me} now={now} archived={archived} />
-            <ol className="inbox-thread" aria-label="Thread">
-              <Comment
-                kind={COMMENT.ASKED}
-                face={by.subject.tile}
-                head={
-                  <>
-                    <CommentName>
-                      <AgentName by={by} nameOnly />
-                    </CommentName>
-                    <span className="inbox-comment-when">
-                      <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
-                    </span>
-                  </>
-                }
-              >
-                <Blocks
-                  item={item}
-                  images={control.images}
-                  onImage={control.onImage}
-                  onRetryImage={control.onRetryImage}
-                  openLink={doors.openLink}
-                  code={doors.code}
-                />
-                {open ? (
-                  // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
-                  <div className="inbox-response" onKeyDown={(event) => onResponseKey(pane, event)}>
-                    {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
-                    <AnswerMentions value={mentions}>
-                      <ResponseControls
-                        item={item}
-                        draft={draft}
-                        disabled={!answerable || control.sending.has(item.id)}
-                        text={{
-                          self: item.agentId,
-                          agent: by.subject.agent,
-                          skills: agents.readSkills,
-                          keywords: answerKeywords(holder, item),
-                          onEnter: () => sendFromPane(pane.current),
-                        }}
-                        onDraft={(next) => control.onDraft(item, next)}
-                      />
-                    </AnswerMentions>
-                  </div>
-                ) : (
-                  // Keyed by its item, so the fold opened on one item stands closed on the next.
-                  <Offered key={item.id} item={item} />
-                )}
-              </Comment>
-              <ThreadAfter item={item} by={by} now={now} control={control} />
-            </ol>
-          </WordsWorkspace>
-          {control.failed ? (
-            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
-          ) : null}
-        </div>
+        {/* The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there. */}
+        <ScrollArea fade={SCROLL_FADE.BOTH} data-item-id={item.id} ref={board}>
+          <div className="inbox-board agent-log-over-composer ph-no-capture">
+            <WordsWorkspace value={workspaceId}>
+              <Subject item={item} by={by} readerId={agents.me} now={now} archived={archived} />
+              <ol className="inbox-thread" aria-label="Thread">
+                <Comment
+                  kind={COMMENT.ASKED}
+                  face={by.subject.tile}
+                  head={
+                    <>
+                      <CommentName>
+                        <AgentName by={by} nameOnly />
+                      </CommentName>
+                      <span className="inbox-comment-when">
+                        <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
+                      </span>
+                    </>
+                  }
+                >
+                  <Blocks
+                    item={item}
+                    images={control.images}
+                    onImage={control.onImage}
+                    onRetryImage={control.onRetryImage}
+                    openLink={doors.openLink}
+                    code={doors.code}
+                  />
+                  {open ? (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
+                    <div
+                      className="inbox-response"
+                      onKeyDown={(event) => onResponseKey(pane, event)}
+                    >
+                      {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
+                      <AnswerMentions value={mentions}>
+                        <ResponseControls
+                          item={item}
+                          draft={draft}
+                          disabled={!answerable || control.sending.has(item.id)}
+                          text={{
+                            self: item.agentId,
+                            agent: by.subject.agent,
+                            skills: agents.readSkills,
+                            keywords: answerKeywords(holder, item),
+                            onEnter: () => sendFromPane(pane.current),
+                          }}
+                          onDraft={(next) => control.onDraft(item, next)}
+                        />
+                      </AnswerMentions>
+                    </div>
+                  ) : (
+                    // Keyed by its item, so the fold opened on one item stands closed on the next.
+                    <Offered key={item.id} item={item} />
+                  )}
+                </Comment>
+                <ThreadAfter item={item} by={by} now={now} control={control} />
+              </ol>
+            </WordsWorkspace>
+            {control.failed ? (
+              <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
+            ) : null}
+          </div>
+        </ScrollArea>
         {open || archived || next === undefined ? null : <InboxNextUp next={next} />}
         {archived ? (
           doors.onUnarchive === undefined ? null : (

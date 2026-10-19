@@ -70,6 +70,8 @@ export const GATEWAY_METHOD = {
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
+  /** The turn Luke is running on one task stopped on the service. */
+  TASKS_STOP_WORK: "tasks.stopWork",
   /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */

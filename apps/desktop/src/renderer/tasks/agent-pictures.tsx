@@ -10,6 +10,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { PictureBlock } from "@luke/panel/picture-block";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { AttachmentViewer, type ViewerAction } from "@luke/panel/tasks/attachment-viewer";
 import { Tooltip } from "@luke/panel/tooltip";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
 import {
@@ -31,7 +32,6 @@ import {
   useState,
 } from "react";
 import { useAddToPlan } from "./add-to-plan";
-import { AttachmentViewer, type ViewerAction } from "./attachment-viewer";
 
 /**
  * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, and the pictures an integration's call answered, under the call's row.

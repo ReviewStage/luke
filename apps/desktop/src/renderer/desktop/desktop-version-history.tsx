@@ -6,6 +6,7 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { type CallCardInput, ColumnFoot } from "@luke/panel/call/call-card";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
@@ -31,6 +32,8 @@ import {
   ListRow,
   NavItem,
   RetryRowLabel,
+  SCROLL_FADE,
+  ScrollArea,
   Skeleton,
   SkeletonRegion,
   TEXT_BUTTON_LINES,
@@ -42,7 +45,6 @@ import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
-import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../tasks/code-pane";
 import { DocumentScroll } from "../tasks/document-frame";
@@ -730,84 +732,94 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
-            <div ref={log} className="sidebar-section scroll-fade">
-              {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-              <List label="Version list">
-                {revisions.map((line) => {
-                  const author = revisionAuthorOf(line, reader, agents, subject.own);
-                  return (
-                    <RevisionRow
-                      key={line.seq}
-                      line={line}
-                      author={author}
-                      source={sourceOf(line, author)}
-                      selected={line.seq === versions.selected}
-                      now={now}
-                      rowRef={(row) => {
-                        if (row === null) rows.delete(line.seq);
-                        else rows.set(line.seq, row);
-                      }}
-                      onSelect={() => versions.onSelect(line.seq)}
-                      onOpenSections={
-                        opensSections(line) ? () => openSections(line.seq) : undefined
-                      }
-                      onRestore={restoreOf(line)}
-                      onCopyLink={
-                        linked === undefined
-                          ? undefined
-                          : () =>
-                              copy(
-                                linkOf(
-                                  {
-                                    kind: LINK_PLACE.VERSION,
-                                    planId: linked.taskId,
-                                    revision: line.seq,
-                                  },
-                                  linked.place.workspace,
-                                ),
-                                LINK_COPY.COPIED,
-                              )
-                      }
-                      summary={subject.summary(line)}
-                    />
-                  );
-                })}
-              </List>
-              {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
-                <EarlierRow onRead={versions.onLoadEarlier} />
-              ) : null}
+            <div className="sidebar-section">
+              <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
+                <div className="sidebar-section-body">
+                  {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
+                  <List label="Version list">
+                    {revisions.map((line) => {
+                      const author = revisionAuthorOf(line, reader, agents, subject.own);
+                      return (
+                        <RevisionRow
+                          key={line.seq}
+                          line={line}
+                          author={author}
+                          source={sourceOf(line, author)}
+                          selected={line.seq === versions.selected}
+                          now={now}
+                          rowRef={(row) => {
+                            if (row === null) rows.delete(line.seq);
+                            else rows.set(line.seq, row);
+                          }}
+                          onSelect={() => versions.onSelect(line.seq)}
+                          onOpenSections={
+                            opensSections(line) ? () => openSections(line.seq) : undefined
+                          }
+                          onRestore={restoreOf(line)}
+                          onCopyLink={
+                            linked === undefined
+                              ? undefined
+                              : () =>
+                                  copy(
+                                    linkOf(
+                                      {
+                                        kind: LINK_PLACE.VERSION,
+                                        planId: linked.taskId,
+                                        revision: line.seq,
+                                      },
+                                      linked.place.workspace,
+                                    ),
+                                    LINK_COPY.COPIED,
+                                  )
+                          }
+                          summary={subject.summary(line)}
+                        />
+                      );
+                    })}
+                  </List>
+                  {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
+                    <EarlierRow onRead={versions.onLoadEarlier} />
+                  ) : null}
+                </div>
+              </ScrollArea>
             </div>
           </div>
           <section
-            className="sidebar-section version-log-pane scroll-fade"
+            className="sidebar-section version-log-pane"
             aria-label="Sections changed"
             inert={opened === undefined}
           >
-            {openedLine === undefined ? null : (
-              <>
-                <SectionsHead
-                  author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)}
-                  source={openedSource}
-                  onBack={closeSections}
-                />
-                {sections === undefined ? <LogSkeleton /> : null}
-                <List label="Sections changed">
-                  {sections?.map((section) => (
-                    <SectionRow
-                      key={section.unit}
-                      section={section}
-                      selected={section.unit === unit}
-                      rowRef={(row) => {
-                        if (row === null) sectionRows.delete(section.unit);
-                        else sectionRows.set(section.unit, row);
-                      }}
-                      onSelect={() => chooseUnit(section.unit)}
+            <ScrollArea fade={SCROLL_FADE.BOTH}>
+              <div className="sidebar-section-body">
+                {openedLine === undefined ? null : (
+                  <>
+                    <SectionsHead
+                      author={
+                        openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)
+                      }
                       source={openedSource}
+                      onBack={closeSections}
                     />
-                  ))}
-                </List>
-              </>
-            )}
+                    {sections === undefined ? <LogSkeleton /> : null}
+                    <List label="Sections changed">
+                      {sections?.map((section) => (
+                        <SectionRow
+                          key={section.unit}
+                          section={section}
+                          selected={section.unit === unit}
+                          rowRef={(row) => {
+                            if (row === null) sectionRows.delete(section.unit);
+                            else sectionRows.set(section.unit, row);
+                          }}
+                          onSelect={() => chooseUnit(section.unit)}
+                          source={openedSource}
+                        />
+                      ))}
+                    </List>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
           </section>
         </div>
         <ColumnFoot call={call} />

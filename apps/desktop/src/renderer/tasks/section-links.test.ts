@@ -146,7 +146,7 @@ test("the plan's first words, under no heading, offer no link", () => {
 
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
   const { container } = drawn();
-  const scroller = container.querySelector<HTMLElement>(".plan-document-scroll");
+  const scroller = container.querySelector<HTMLElement>(".plan-document-body")?.parentElement;
   assert.ok(scroller);
   const units = container.querySelectorAll<HTMLElement>(".plan-unit");
   // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.

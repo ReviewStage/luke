@@ -1,4 +1,5 @@
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   type CodingAgentAttachment,
   hasWordsOrFiles,
@@ -7,7 +8,10 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { PICKER_ALIGN } from "@luke/panel/settings/picker-row";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
+import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
 import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
@@ -24,19 +28,12 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import {
-  agentPromptOf,
-  taskNameOfIssue,
-  taskNameOfWords,
-  workspaceReaches,
-} from "@luke/ui/tasks-model";
+import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
-import { PICKER_ALIGN } from "../settings/picker-row";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { AgentComposerControl } from "./use-agent-composer";
-import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
+import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, or Luke plans with, and the chips that say where and how the task starts.
@@ -59,31 +56,41 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   stands once there are words, files, or a Linear issue, and a
  *   repository, without which it is held and the card says so under it. It
  *   starts the task with an empty plan and no call, named by the issue where
- *   one was picked and else Untitled until the agent names it, then opens
- *   it on a draft agent's tab holding the words, the files, and the model on
- *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
- *   agent refused leaves the words there with why and Retry. The model chip
- *   starts on the account's default, and a pick here runs this one agent
- *   alone: only Settings changes the default.
+ *   one was picked and else Untitled until the agent names it, and the agent
+ *   on the words, the files, and the model on the chip, in the one start
+ *   (`use-tasks-tab.ts`), then opens the task on the agent's tab; an agent
+ *   refused opens it on a draft agent's tab holding the words, why under
+ *   the box, and Retry (`draft-agent-tab.tsx`). The model chip starts on the
+ *   account's default, and a pick here runs this one agent alone: only
+ *   Settings changes the default.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the
- *   call runs on no model of the developer's. Note that until Luke is
- *   handed the words as the task's brief, they name the task: their first
- *   line, cut to a name's bound.
+ *   call runs on no model of the developer's. The words are handed to Luke
+ *   as the task's brief, which he reads beside the plan, bounded as a brief
+ *   is (`TASK_BOUNDS.MAX_BRIEF_CHARS`), and name nothing: the task is named
+ *   by its issue where one was picked, and else stands Untitled until Luke
+ *   names it, as a planned task always has.
  *
  * Choosing a Linear issue lays it over the words as a chip, its key, title,
  * and state, with the × that lets it go, rather than starting anything; a
  * switch of workspace lets it go too. The task is linked to it in either
  * mode and named by it, Luke researches it in Plan mode as he always did,
- * and in Agent mode the agent is handed a mention of it before the words
- * (`agentPromptOf`), so an issue picked and Return starts an agent on it.
+ * beside the brief, and in Agent mode the agent is handed a mention of it
+ * before the words (`agentPromptOf`), so an issue picked and Return starts
+ * an agent on it.
  *
  * Opened on one of the workspace's own issues, the task is named by it and
  * linked to it, and Agent mode's Start stands with nothing written, which
  * starts an agent on the task's plan at once, the issue's, rather than on
  * words. Opened from that issue's Start agent…, the card stands in Agent mode
  * and offers no Plan toggle.
+ *
+ * An agent's start carries a key the card mints, and a press asking the
+ * same again, as Retry after a start the service never answered does,
+ * carries the same key, so a service that made the task and its agent
+ * answers them rather than a second pair; a press asking anything else
+ * mints another, and so does the card mounted afresh.
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
  * box with neither words nor files starts a bare task: an empty plan, no
@@ -100,6 +107,12 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
 
 /** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
+
+/** The most the words may spell in each mode: an agent's prompt's bound, or a brief's. */
+const MODE_MAX_CHARS = {
+  [NEW_TASK_MODE.AGENT]: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+  [NEW_TASK_MODE.PLAN]: TASK_BOUNDS.MAX_BRIEF_CHARS,
+} as const satisfies Record<NewTaskMode, number>;
 
 /** The field's name in either mode; note that it is one name, because the editor mounts afresh on a new one. */
 const FIELD_LABEL = "Task prompt";
@@ -126,6 +139,33 @@ const COMPOSER_WORDS = {
   DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
 } as const;
+
+/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
+interface AgentAsk {
+  readonly name: string;
+  readonly repository: string | null;
+  readonly workspaceId: string | undefined;
+  readonly linearIssueId: string | undefined;
+  readonly issueId: string | undefined;
+  readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
+}
+
+/** Whether two presses ask the same: the same task, words, files in the same order, and model. */
+function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
+  return (
+    a.name === b.name &&
+    a.repository === b.repository &&
+    a.workspaceId === b.workspaceId &&
+    a.linearIssueId === b.linearIssueId &&
+    a.issueId === b.issueId &&
+    a.agent.prompt === b.agent.prompt &&
+    a.agent.attachments.length === b.agent.attachments.length &&
+    a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
+    a.agent.choice?.model === b.agent.choice?.model &&
+    a.agent.choice?.effort === b.agent.choice?.effort &&
+    a.agent.choice?.contextWindow === b.agent.choice?.contextWindow
+  );
+}
 
 /** Whether a key press is Shift+Tab alone, which turns the mode from the field. */
 function turnsMode(event: KeyboardEvent): boolean {
@@ -216,6 +256,8 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
+  // The last agent press's key and what it asked, until a start lands.
+  const pressed = useRef<{ ask: AgentAsk; key: string } | undefined>(undefined);
   // How many times ⌘L asked the Linear chip to open its menu.
   const [linearAsks, setLinearAsks] = useState(0);
   // Note that a task from one of the workspace's issues starts from that issue alone, so it offers no Linear chip.
@@ -254,7 +296,7 @@ export function NewTaskComposer({
   const begin = (
     name: string,
     withCall: boolean,
-    agent: Pick<NewTaskStart, "agent" | "handed"> = {},
+    handing: Pick<NewTaskStart, "agent" | "handed" | "brief"> = {},
   ) => {
     if (starting) return;
     setStarting(true);
@@ -264,9 +306,10 @@ export function NewTaskComposer({
       .start(name, repository, workspaceId, withCall, {
         ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
         ...(from === undefined ? undefined : { issueId: from.id }),
-        ...agent,
+        ...handing,
       })
       .then((refused) => {
+        if (refused === undefined) pressed.current = undefined;
         setNote(
           refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused },
         );
@@ -280,11 +323,22 @@ export function NewTaskComposer({
   // started on the task's plan, the issue's, as its Start agent… starts one.
   const start = () => {
     if (!canStart) return;
-    if (planning) begin(issueName ?? taskNameOfWords(said), true);
+    if (planning) begin(issueName ?? "", true, said === "" ? {} : { brief: said });
     else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
     else {
-      const handed = { prompt: agentPromptOf(issue, said), attachments, choice };
-      begin(issueName ?? "", false, { handed });
+      const name = issueName ?? "";
+      const ask: AgentAsk = {
+        name,
+        repository,
+        workspaceId,
+        linearIssueId: issue?.id,
+        issueId: from?.id,
+        agent: { prompt: agentPromptOf(issue, said), attachments, choice },
+      };
+      const held = pressed.current;
+      const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
+      pressed.current = { ask, key };
+      begin(name, false, { handed: { idempotencyKey: key, ...ask.agent } });
     }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
@@ -336,6 +390,7 @@ export function NewTaskComposer({
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
         wording={MODE_WORDS[mode]}
+        maxLength={MODE_MAX_CHARS[mode]}
         sendsEmpty={planning || onIssue}
         sendable={!blocked}
         model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}

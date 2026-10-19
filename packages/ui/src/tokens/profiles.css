@@ -105,6 +105,9 @@
   /* How deep a scroller's edge dissolves where content runs past it
      (`ScrollArea`'s fade); the window's has stood a step off the scale. */
   --luke-scroll-fade: 26px;
+  /* How tall a band stuck at a scroller's start stands, a call's checkpoint,
+     which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
+  --luke-scroll-band: var(--luke-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
@@ -217,6 +220,8 @@
 
   /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
   --luke-scroll-fade: var(--luke-space-24);
+  /* How tall a band stuck at a scroller's start stands, which its fade begins beneath. */
+  --luke-scroll-band: var(--luke-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is

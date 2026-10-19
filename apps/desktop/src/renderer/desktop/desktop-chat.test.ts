@@ -4,6 +4,13 @@ import assert from "node:assert/strict";
 import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { ChatComposer } from "@luke/panel/tasks/chat-composer";
+import {
+  type FixtureChat,
+  fixtureChat,
+  type Staged,
+  stagedAnswer,
+  stagedPost,
+} from "@luke/panel/tasks/chat-fixture";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -13,13 +20,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import {
-  type FixtureChat,
-  fixtureChat,
-  type Staged,
-  stagedAnswer,
-  stagedPost,
-} from "../tasks/chat-fixture";
 import { DesktopChat, TaskChatTab } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */

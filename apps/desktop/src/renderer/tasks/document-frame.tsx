@@ -1,4 +1,5 @@
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref";
@@ -6,9 +7,10 @@ import { ActorRef } from "../actor-ref";
 /**
  * document-frame.tsx -- what every document of the window is drawn in, a plan's, a version's, and an issue's alike: the column it scrolls in, and the line under its title.
  *
- * A document scrolls in its own column (`.plan-document-scroll`): its
- * page's inset around it and the room for its last line under it, its
- * edges faded, its words selectable, and Luke's accent for its caret; its
+ * A document scrolls in its own column, a `ScrollArea` with its edges
+ * faded, its bar's room kept, and one block inside it (`.plan-document-body`):
+ * its page's inset around it and the room for its last line under it, its
+ * words selectable, and Luke's accent for its caret; its
  * body stands at the page's measure in the plan's type (`.plan-body` under
  * `.desktop-document`). Under its title one muted line says who created
  * it and when, then what its page says of its last edit, each phrase
@@ -17,10 +19,16 @@ import { ActorRef } from "../actor-ref";
  * its versions, and an issue the same width, inset, and look.
  */
 
-/** The class of a document's own scrolling column, which a part of it finds its scroller by. */
-export const DOCUMENT_SCROLL_CLASS = "plan-document-scroll";
+/** The class of the block a document stands in, inside its scrolling column. */
+const DOCUMENT_BODY_CLASS = "plan-document-body";
 
-/** A document's own scrolling column, at the page's inset, its edges faded. */
+/** The scrolling column a part of a document stands in; none outside one. */
+export function documentScrollerOf(element: Element): HTMLElement | undefined {
+  const body = element.closest(`.${DOCUMENT_BODY_CLASS}`);
+  return body?.parentElement ?? undefined;
+}
+
+/** A document's own scrolling column, its edges faded, the block inside it at the page's inset. */
 export function DocumentScroll({
   ref,
   children,
@@ -29,9 +37,9 @@ export function DocumentScroll({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div ref={ref} className={`${DOCUMENT_SCROLL_CLASS} scroll-fade`}>
-      {children}
-    </div>
+    <ScrollArea ref={ref} fade={SCROLL_FADE.BOTH} gutter={SCROLL_GUTTER.STABLE}>
+      <div className={DOCUMENT_BODY_CLASS}>{children}</div>
+    </ScrollArea>
   );
 }
 
