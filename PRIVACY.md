@@ -308,7 +308,11 @@ someone else posted, and the last direct message or mention of you that you
 have not read, each named only by who posted it, its plan, and its place,
 never its words. While Luke's window is behind, a Mac notification says no
 more than that, such as "@agent-2 messaged you" under the plan's name,
-unless you turn notifications off in Settings › Coding agents.
+unless you turn notifications off in Settings › Coding agents. Luke in a
+browser tells you of the same things, in the same words, through the
+browser's own notifications, only while its tab is hidden and only once you
+allowed them from Settings › Notifications; the browser shows and keeps them
+as it does any site's, and nothing more leaves for it.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,

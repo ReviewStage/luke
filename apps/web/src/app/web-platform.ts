@@ -11,6 +11,7 @@ import { inAppScheme, LINK_ORIGIN } from "@luke/features/link-home";
 import { openTargetOf } from "@luke/features/open-address";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
+import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
 
 /**
  * Where the web serves the panel's static files, Excalidraw's fonts and the
@@ -58,7 +59,8 @@ function macAppLink(): string {
  * The tab's platform. A browser has no menu bar, no global keys, and no
  * session recording here, so those answer nothing; focus is the tab's own,
  * so bringing the panel forward is asking the window for it; and a surface
- * event is counted by the host in the tab, as every other event is.
+ * event is counted by the host in the tab, as every other event is; and
+ * notifications are the browser's to grant, for the site.
  */
 export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): AppPlatform {
   return {
@@ -74,6 +76,7 @@ export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): 
     openWeb: openTab,
     applySessionReplay: ignore,
     macAppLink,
+    notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
   };
 }
 

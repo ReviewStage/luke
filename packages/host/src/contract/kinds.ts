@@ -143,17 +143,19 @@ export const TASKS_ACT_KIND = {
 } as const;
 
 /**
- * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
- * each repository's run command read and set; and a terminal of this Mac
- * opened on the agent's branch for the asking panel, and closed with its
- * tab. What the terminal prints and what is typed travel on the port an open
- * posts to that panel, never on an act.
+ * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
+ * each repository's run command read and set; a run of the agent's branch
+ * started for the asking panel, stopped with Stop, and closed with its tab;
+ * and its worktree opened in the Mac's own Terminal. What the run prints
+ * travels on the port an open posts to that panel, never on an act.
  */
 export const MAC_TERMINAL_ACT_KIND = {
   MAC_REPOSITORIES: "macRepositories.read",
   MAC_REPOSITORY_SET: "macRepositories.set",
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
+  MAC_TERMINAL_STOP: "macTerminal.stop",
+  MAC_TERMINAL_REVEAL: "macTerminal.reveal",
 } as const;
 
 /**

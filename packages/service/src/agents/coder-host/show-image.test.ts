@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import { conversationAttachment } from "@luke/database/schemas/conversation-attachment";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
@@ -172,9 +172,9 @@ it.layer(getTestDB())("show_image", (it) => {
         );
         const db = yield* Database;
         const kept = yield* db
-          .select({ id: conversationAttachment.id })
-          .from(conversationAttachment)
-          .where(eq(conversationAttachment.conversationId, target.conversationId));
+          .select({ id: attachment.id })
+          .from(attachment)
+          .where(eq(attachment.conversationId, target.conversationId));
         assert.deepEqual(kept, [], "the file read before a refused one is not kept either");
       }),
   );
@@ -210,7 +210,7 @@ it.layer(getTestDB())("show_image", (it) => {
       const db = yield* Database;
       // Note that the row stands in for pictures kept up to the budget, because two hundred
       // megabytes of real bytes would only slow the test.
-      yield* db.insert(conversationAttachment).values({
+      yield* db.insert(attachment).values({
         userId: target.userId,
         conversationId: target.conversationId,
         sha256: "f".repeat(64),
@@ -242,7 +242,7 @@ it.layer(getTestDB())("show_image", (it) => {
         const db = yield* Database;
         // Note that the row leaves room for the first picture below and not the second, so the
         // refusal falls between them.
-        yield* db.insert(conversationAttachment).values({
+        yield* db.insert(attachment).values({
           userId: target.userId,
           conversationId: target.conversationId,
           sha256: "e".repeat(64),
@@ -271,9 +271,9 @@ it.layer(getTestDB())("show_image", (it) => {
 
         assert.deepEqual(answer, refused(SHOW_IMAGE_REFUSAL.FULL));
         const kept = yield* db
-          .select({ sha256: conversationAttachment.sha256 })
-          .from(conversationAttachment)
-          .where(eq(conversationAttachment.conversationId, target.conversationId));
+          .select({ sha256: attachment.sha256 })
+          .from(attachment)
+          .where(eq(attachment.conversationId, target.conversationId));
         assert.deepEqual(kept, [{ sha256: "e".repeat(64) }], "the first picture was not kept");
       }),
   );

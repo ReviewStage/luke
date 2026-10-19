@@ -1637,8 +1637,7 @@
   gap: var(--luke-space-4);
 }
 
-.view-settings-group + .view-settings-group,
-.view-settings-foot {
+.view-settings-group + .view-settings-group {
   padding-top: var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
 }

@@ -12,7 +12,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -136,6 +136,7 @@ function settingsProps(
     },
     notifications: {
       status: NOTIFICATIONS_STATUS.UNKNOWN,
+      grantor: NOTIFICATIONS_GRANTOR.MACOS,
       packaged: true,
       onOpenSettings: ignore,
       onTest: ignore,
@@ -464,7 +465,7 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows, which View settings' foot lands on", () => {
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
   const group =
     [...page.querySelectorAll("section[aria-labelledby]")].find(
