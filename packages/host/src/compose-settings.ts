@@ -22,6 +22,7 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
+  accountPreferencesToPush,
   accountPreferencesToWrite,
   EXPERIMENT_COUNTED_AS,
   type Experiment,
@@ -356,7 +357,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
             return;
           }
           const written = yield* accountPreferencesClient.writePreferences(
-            accountPreferencesToWrite(preferences, baseline),
+            accountPreferencesToPush(preferences, baseline),
           );
           if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return;
           yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);

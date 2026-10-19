@@ -205,6 +205,22 @@ export function accountPreferencesToWrite(
   return cleared ? { ...local, [LINK_OPEN_PART]: APP_SETTING_SCHEMA.linkOpen.default } : local;
 }
 
+/**
+ * What a device pushes as one of its own preferences changes: what it
+ * writes, less a link choice it has not changed since it last synced, since
+ * the service may hold a newer one another device made meanwhile, which a
+ * push of the voice beside it must not put back.
+ */
+export function accountPreferencesToPush(
+  local: AccountPreferences,
+  baseline: AccountPreferences | undefined,
+): AccountPreferences {
+  const written = accountPreferencesToWrite(local, baseline);
+  if (written[LINK_OPEN_PART] !== baseline?.[LINK_OPEN_PART]) return written;
+  const { [LINK_OPEN_PART]: _unchanged, ...rest } = written;
+  return rest;
+}
+
 const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);
