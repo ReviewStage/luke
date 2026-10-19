@@ -22,6 +22,9 @@ catalogs:
     '@effect/vitest':
       specifier: 4.0.4
       version: 4.0.4
+    '@orpc/client':
+      specifier: 2.0.0-beta.44
+      version: 2.0.0-beta.44
     '@orpc/contract':
       specifier: 2.0.0-beta.44
       version: 2.0.0-beta.44
@@ -703,6 +706,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 2.0.0-beta.44
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44

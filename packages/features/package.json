@@ -117,6 +117,7 @@
     "@luke/live": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@orpc/client": "catalog:",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
     "@orpc/openapi": "catalog:",
