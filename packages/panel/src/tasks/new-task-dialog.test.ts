@@ -134,7 +134,7 @@ async function mount(
   };
   const links: SettingsLink[] = [];
   let registry = AtomRegistry.make();
-  let openAgain = () => undefined as void;
+  let openAgain = (): void => undefined;
   function Owner() {
     const [open, setOpen] = useState(true);
     openAgain = () => setOpen(true);
