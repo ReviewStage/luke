@@ -37,8 +37,12 @@ const SAMPLE_RATE = 24_000;
 const BYTES_PER_SAMPLE = 2;
 /** How much silence is sent as the microphone each step, paced in real time as the guide asks. */
 const INPUT_STEP_MS = 100;
-/** How long the model may go without sending audio, once it has spoken, before the take is over. */
-const QUIET_AFTER_SPEECH_MS = 2_500;
+/**
+ * How long the model's audio may stay quiet, once it has spoken, before the
+ * take is over. Note that this is measured on the audio's level rather than
+ * on when audio arrives, because the session sends its silence too.
+ */
+const QUIET_AFTER_SPEECH_MS = 2_000;
 const TAKE_TIMEOUT_MS = 30_000;
 const CLOSE_TIMEOUT_MS = 15_000;
 const TAKES_PER_VOICE = 3;
@@ -54,6 +58,14 @@ function wordsOf(text) {
     .replace(/[’']/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+/** Whether any sample of the PCM is louder than quiet. */
+function audible(pcm) {
+  for (let offset = 0; offset + 1 < pcm.length; offset += BYTES_PER_SAMPLE) {
+    if (Math.abs(pcm.readInt16LE(offset)) > QUIET_LEVEL) return true;
+  }
+  return false;
 }
 
 /** The take's PCM without the quiet before and after the speech, keeping a short pad. */
@@ -99,13 +111,14 @@ function recordTake(voice, apiKey) {
     const socket = new WebSocket(LIVE_URL, { headers: { Authorization: `Bearer ${apiKey}` } });
     const audio = [];
     let transcript = "";
-    let lastAudioAt = 0;
+    let lastSpokeAt = 0;
     let microphone;
     let closing = false;
     const timers = [];
     const finish = (error) => {
       clearInterval(microphone);
       for (const timer of timers) clearTimeout(timer);
+      closing = true;
       if (socket.readyState === WebSocket.OPEN) socket.close();
       if (error) reject(error);
       else resolve({ pcm: Buffer.concat(audio), transcript });
@@ -134,7 +147,8 @@ function recordTake(voice, apiKey) {
                 content: [
                   {
                     type: "input_text",
-                    text: `Say this sentence now, in English, exactly as written and nothing else, then stop and stay silent: ${SAMPLE_LINE}`,
+                    // Worded as the guide words a greeting, the one way it documents to have the model speak first.
+                    text: `Greet the caller now in English by saying exactly this, and nothing more: ${SAMPLE_LINE} Then pause and listen.`,
                   },
                 ],
               },
@@ -158,11 +172,12 @@ function recordTake(voice, apiKey) {
               audio: silence.toString("base64"),
             }),
           );
-          if (lastAudioAt > 0 && Date.now() - lastAudioAt > QUIET_AFTER_SPEECH_MS) close();
+          if (lastSpokeAt > 0 && Date.now() - lastSpokeAt > QUIET_AFTER_SPEECH_MS) close();
         }, INPUT_STEP_MS);
       } else if (event.type === "session.output_audio.delta") {
-        audio.push(Buffer.from(event.delta, "base64"));
-        lastAudioAt = Date.now();
+        const chunk = Buffer.from(event.delta, "base64");
+        audio.push(chunk);
+        if (audible(chunk)) lastSpokeAt = Date.now();
       } else if (event.type === "session.output_transcript.delta") {
         transcript += event.delta;
       } else if (event.type === "session.closed") {
@@ -171,7 +186,11 @@ function recordTake(voice, apiKey) {
         finish(new Error(`${voice}: ${JSON.stringify(event.error ?? event)}`));
       }
     });
-    socket.addEventListener("error", () => finish(new Error(`${voice}: the connection failed`)));
+    // Note that the socket reports an error as the service drops it after
+    // `session.closed`, which is no failure once the take is closing.
+    socket.addEventListener("error", () => {
+      if (!closing) finish(new Error(`${voice}: the connection failed`));
+    });
     socket.addEventListener("close", () => finish());
   });
 }
