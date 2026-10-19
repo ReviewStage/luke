@@ -409,49 +409,27 @@ export interface NewTaskIssue {
   readonly title: string;
 }
 
-/** The coding agent New task's Agent mode starts on the task it started: its prompt, the files attached, and the model its chip named, none for the account's default. */
+/**
+ * The coding agent New task's Agent mode starts on the task it started:
+ * the key its start carries, which the card keeps for a press asking the
+ * same again (`new-task-composer.tsx`), its prompt, the files attached, and
+ * the model its chip named, none for the account's default.
+ */
 export interface NewTaskAgent {
+  readonly idempotencyKey: string;
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
 }
 
-/** The agent a task's start starts on it, as the act carries it: the press's key, the prompt, the files where any, and the chip's model where it named one. */
-function agentRequest(idempotencyKey: string, handed: NewTaskAgent) {
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where it named one. */
+function agentRequest(handed: NewTaskAgent) {
   return {
-    idempotencyKey,
+    idempotencyKey: handed.idempotencyKey,
     prompt: handed.prompt,
     ...(handed.attachments.length === 0 ? undefined : { attachments: handed.attachments }),
     ...(handed.choice === undefined ? undefined : choiceRequest(handed.choice)),
   };
-}
-
-/** What one Agent-mode start asked, beside the key it carried. */
-interface AgentTaskStart {
-  readonly name: string;
-  readonly repository: string | null;
-  readonly workspaceId: string | undefined;
-  readonly planning: boolean;
-  readonly from: NewTaskStart;
-  readonly handed: NewTaskAgent;
-}
-
-/** Whether two Agent-mode starts ask the same: the same task, the same words, the same files in the same order, and the same model. */
-function sameAgentTaskStart(a: AgentTaskStart, b: AgentTaskStart): boolean {
-  return (
-    a.name === b.name &&
-    a.repository === b.repository &&
-    a.workspaceId === b.workspaceId &&
-    a.planning === b.planning &&
-    a.from.linearIssueId === b.from.linearIssueId &&
-    a.from.issueId === b.from.issueId &&
-    a.handed.prompt === b.handed.prompt &&
-    a.handed.attachments.length === b.handed.attachments.length &&
-    a.handed.attachments.every((file, index) => file === b.handed.attachments[index]) &&
-    a.handed.choice?.model === b.handed.choice?.model &&
-    a.handed.choice?.effort === b.handed.choice?.effort &&
-    a.handed.choice?.contextWindow === b.handed.choice?.contextWindow
-  );
 }
 
 /**
@@ -2420,17 +2398,12 @@ export function useTasksTab(input: {
   // planning opens no call, so it asks nothing about the one standing; it
   // names its planning only where it is off, so a request with planning is
   // the one every service has read. New task's Agent mode starts the task
-  // and its agent in that one start, under a key minted for the press
+  // and its agent in that one start, under the key its card holds
   // (`agentRequest`), and opens the task on the agent's tab, or on a draft
   // holding the words with why where the agent was refused (`openAgent`).
   // Note that a start whose task was refused, or never answered, is never
   // sent again by itself, because the service keeps no key for a task, so a
   // second start could make a second task; the card says why with Retry.
-  // A press after a start the service never answered carries the key that
-  // start minted while it asks the same, as an agent's own Start does, so a
-  // service that made the task and its agent answers them rather than a
-  // second pair; a press asking anything else mints a key of its own.
-  const unansweredStart = useRef<{ asked: AgentTaskStart; key: string } | undefined>(undefined);
   const startTask = (
     name: string,
     repository: string | null,
@@ -2444,20 +2417,6 @@ export function useTasksTab(input: {
       if (panelWasOpen) sidePanel.onSetOpen(true);
       return note;
     };
-    const asked: AgentTaskStart | undefined =
-      from.handed === undefined
-        ? undefined
-        : { name, repository, workspaceId, planning, from, handed: from.handed };
-    const held = unansweredStart.current;
-    const agentKey =
-      held !== undefined && asked !== undefined && sameAgentTaskStart(held.asked, asked)
-        ? held.key
-        : crypto.randomUUID();
-    unansweredStart.current = undefined;
-    // Only a start the service never answered is asked again under its key.
-    const unanswered = () => {
-      if (asked !== undefined) unansweredStart.current = { asked, key: agentKey };
-    };
     return act(ACT_KIND.TASKS_START, {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
@@ -2465,13 +2424,10 @@ export function useTasksTab(input: {
       ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
       ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
       ...(planning ? undefined : { planning }),
-      ...(from.handed === undefined ? undefined : { agent: agentRequest(agentKey, from.handed) }),
+      ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
       (answer) => {
-        if ("failure" in answer) {
-          if (answer.failure === TASK_CALL_FAILURE.UNANSWERED) unanswered();
-          return refusedWith(startFailureNote(answer.failure));
-        }
+        if ("failure" in answer) return refusedWith(startFailureNote(answer.failure));
         setNewTaskAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
@@ -2484,14 +2440,11 @@ export function useTasksTab(input: {
           setAgentAskedFor(answer.planId);
         }
         if (from.handed !== undefined) {
-          openAgent(answer.planId, agentKey, from.handed, answer.agentStart);
+          openAgent(answer.planId, from.handed, answer.agentStart);
         }
         return undefined;
       },
-      (refused: Error) => {
-        unanswered();
-        return refusedWith(refused.message);
-      },
+      (refused: Error) => refusedWith(refused.message),
     );
   };
 
@@ -2502,7 +2455,6 @@ export function useTasksTab(input: {
   // that an answer naming neither is read as one the service never gave.
   const openAgent = (
     planId: string,
-    key: string,
     handed: NewTaskAgent,
     started: CodingAgentAgentAnswer | undefined,
   ) => {
@@ -2515,8 +2467,9 @@ export function useTasksTab(input: {
       started ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
       planId,
     );
-    agents.onHandDraft(planId, { id: key, ...handed, refused });
-    mainTabs.onShow(planId, { draft: key });
+    const { idempotencyKey: id, ...words } = handed;
+    agents.onHandDraft(planId, { id, ...words, refused });
+    mainTabs.onShow(planId, { draft: id });
   };
 
   // The dialog matches its name against the Linear issues of the workspace

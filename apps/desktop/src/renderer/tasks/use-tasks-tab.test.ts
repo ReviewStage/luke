@@ -2706,6 +2706,9 @@ const AGENT_TASK: TasksView = {
   },
 };
 
+/** The key New task's card minted for its agent's start. */
+const AGENT_KEY = "5b7e2c1a-9d4f-4a3b-8e6c-2f1d0a9b8c7e";
+
 /** Agent mode's start pressed with the words and the chip's model, answering why the card holds it, then the task standing open. */
 async function startAgentTask(tab: ReturnType<typeof mount>) {
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
@@ -2714,7 +2717,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   let note: string | undefined = "unanswered";
   await act(async () => {
     note = await tab.control().newTask.start("", "acme/web", undefined, false, {
-      handed: { prompt, attachments: [], choice },
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
     });
   });
   tab.stand({ tasks: AGENT_TASK });
@@ -2747,7 +2750,7 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
     { prompt, ...choice },
     "the agent carries the words and the chip's model",
   );
-  assert.ok(idempotencyKey, "the agent carries a key of the press's own");
+  assert.equal(idempotencyKey, AGENT_KEY, "the agent carries the card's key");
   assert.deepEqual(
     tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
     [],
@@ -2755,42 +2758,6 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   );
   assert.equal(tab.control().agents.draft, undefined, "no draft stands in its place");
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
-});
-
-test("a press after an Agent-mode start the service never answered carries that start's key while it asks the same, and mints another once the words change", async () => {
-  const answers: (() => Promise<ActResultFor<typeof ACT_KIND.TASKS_START>>)[] = [
-    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    () => Promise.reject(new Error("Could not start that task on this system.")),
-    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    () => Promise.resolve({ failure: TASK_CALL_FAILURE.NOT_FOUND }),
-    () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-  ];
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_START]: () => answers.shift()?.() ?? Promise.reject(new Error("none")) },
-  );
-  const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
-  act(() => tab.control().onNewTask());
-  const press = (prompt: string) =>
-    act(async () => {
-      await tab.control().newTask.start("", "acme/web", undefined, false, {
-        handed: { prompt, attachments: [], choice },
-      });
-    });
-  await press("Make the sidebar keep its folds.");
-  await press("Make the sidebar keep its folds.");
-  await press("Make the sidebar keep its folds.");
-  await press("Make the sidebar keep its folds.");
-  await press("Make the sidebar keep its folds.");
-  await press("Keep the folds per workspace.");
-  const keys = tab.payloads
-    .filter(({ kind }) => kind === ACT_KIND.TASKS_START)
-    .map(({ payload }) => Option.getOrUndefined(readAgentNamed(payload))?.agent?.idempotencyKey);
-
-  assert.equal(keys.length, 6);
-  assert.equal(new Set(keys.slice(0, 4)).size, 1, "unanswered presses ask again under one key");
-  assert.notEqual(keys[4], keys[3], "a start the service refused leaves nothing to ask again");
-  assert.notEqual(keys[5], keys[4], "other words are another request");
 });
 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
@@ -2825,7 +2792,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
   );
   assert.match(draft.refused?.text ?? "", /could not be started/u);
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "the task opens on its tab");
-  assert.equal(draft.id, starts[0]?.agent?.idempotencyKey, "the draft holds the start's key");
+  assert.equal(draft.id, AGENT_KEY, "the draft holds the start's key");
   assert.deepEqual(
     tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
     [],
