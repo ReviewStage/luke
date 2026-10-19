@@ -310,13 +310,21 @@ test("a thread stands in a chapter where one of its hunks counts the thread's li
   assert.deepEqual(where(thread({ line: 4, path: "src/invite.ts" })), []);
 });
 
-test("a thread on a whole file stands in every chapter holding a hunk of it, or naming it where it has none", () => {
+test("a thread on a whole file stands in every chapter holding a hunk of it, and any thread on a file with no hunks in the chapter naming it", () => {
   const whole = thread({});
   assert.equal(threadInChapter(whole, story("Second", [seatsSecond]), HUNKS), true);
   assert.equal(threadInChapter(whole, story("Invites", [added]), HUNKS), false);
   assert.equal(
     threadInChapter({ ...whole, path: "assets/logo.png" }, story("Assets", [logo]), HUNKS),
     true,
+  );
+  assert.equal(
+    threadInChapter(thread({ path: "src/moved.ts", line: 8 }), story("Moves", [moved]), HUNKS),
+    true,
+  );
+  assert.equal(
+    threadInChapter(thread({ path: "src/moved.ts", line: 8 }), story("Seats", [seatsFirst]), HUNKS),
+    false,
   );
 });
 

@@ -373,7 +373,9 @@ function within(line: number, start: number, count: number): boolean {
  * Whether a review thread stands in a chapter, as ReviewStage counts a
  * chapter's comments: a thread on a whole file, which names no line where
  * it stands or where it was made, stands in every chapter holding a hunk
- * of its file, or naming the file where it has none; a thread on lines
+ * of its file; any thread on a file with no hunks, a pure rename or a
+ * binary file, stands in the one chapter naming the file, since no hunk
+ * places it elsewhere; a thread on lines
  * stands where a hunk of the chapter in its file counts its line, a
  * thread on the old side's line among the hunk's old lines and one on the
  * new side's among its new; and a thread a later push outdated, which
@@ -390,7 +392,8 @@ export function threadInChapter(
   );
   if (thread.line === null && thread.originalLine === null) return own.length > 0;
   return own.some(({ hunk }) => {
-    if (hunk === null) return false;
+    // A file with no hunks stands in this chapter alone, so every thread on it does too.
+    if (hunk === null) return true;
     if (thread.line === null) {
       return (
         thread.originalLine !== null && within(thread.originalLine, hunk.oldStart, hunk.oldLines)
