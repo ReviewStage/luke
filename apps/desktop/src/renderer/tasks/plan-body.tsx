@@ -141,7 +141,7 @@ const TITLE_MENU_LABEL = "Title actions";
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
 
-/** The room left above a section the scroller reveals: its scroll padding where that is wider, which clears its faded top edge (`scroll-fade`). */
+/** The room left above a section the scroller reveals: its scroll padding where that is wider, which clears its faded top edge (its `ScrollArea`'s fade). */
 function revealMargin(scroller: HTMLElement): number {
   const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
   return Number.isNaN(padding) ? REVEAL_MARGIN : Math.max(padding, REVEAL_MARGIN);

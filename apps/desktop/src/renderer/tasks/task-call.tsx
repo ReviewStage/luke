@@ -3,6 +3,8 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import {
   Conversation,
   ConversationContent,
@@ -13,12 +15,16 @@ import { usePerson } from "@luke/panel/member-directory";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { REVEAL_MARK, useRevealInLog } from "@luke/panel/tasks/reveal-in-log";
+import { useAppState } from "@luke/panel/use-app-state";
 import {
+  BUTTON_VARIANT,
+  Button,
   CallIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   RetryRowLabel,
+  SCROLL_FADE_INSET,
   TEXT_BUTTON_LINES,
   TextButton,
 } from "@luke/ui";
@@ -184,6 +190,22 @@ interface WorkDoors {
   readonly revealed: string | undefined;
 }
 
+/** The Stop Luke's working line ends on: the stop key's own action, on the task open. */
+function StopLuke(): React.JSX.Element {
+  const { tell } = useAct();
+  const taskId = useAppState()?.tasks.activeTaskId;
+  return (
+    <span className="ml-2">
+      <Button
+        variant={BUTTON_VARIANT.QUIET}
+        onClick={() => tell(ACT_KIND.LUKE_STOP, taskId === undefined ? {} : { taskId })}
+      >
+        Stop
+      </Button>
+    </span>
+  );
+}
+
 /** One turn's work as one of Luke's messages, its words folded with its work where he said them, ending on the working line while it moves and on how it ended where it did not answer. */
 function TurnWork({
   turn,
@@ -212,7 +234,12 @@ function TurnWork({
         delegation={doors.delegation}
         said={spoken}
       />
-      {turn.moving ? <WorkingLine startedAt={doors.counting ? turn.startedAt : undefined} /> : null}
+      {turn.moving ? (
+        <WorkingLine
+          startedAt={doors.counting ? turn.startedAt : undefined}
+          action={<StopLuke />}
+        />
+      ) : null}
       {ended === undefined ? null : (
         <p className="agent-end-line" data-ended="">
           {workFailed(ended) ? ENDED_WORD.FAILED : ENDED_WORD.STOPPED}
@@ -456,7 +483,7 @@ export function TaskCall({
       {drawn ? (
         <Conversation>
           {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; lines fade beneath it. */}
-          <ConversationContent className="checkpoint-log scroll-fade">
+          <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
               <div className="pt-(--luke-section-gap)">

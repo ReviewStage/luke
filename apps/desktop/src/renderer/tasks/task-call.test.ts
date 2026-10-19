@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
-import { TASK_WORK_STATE } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW, TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import { MemberDirectory } from "@luke/panel/member-directory";
-import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
@@ -515,4 +515,38 @@ test("on the Call tab, a chat call's row opens the task's Chat while the account
 
   const off = await drawn(false);
   assert.equal(off.page.querySelector('button[data-call-id="p"]'), null);
+});
+
+test("Luke's working line ends on a Stop that takes the stop key's action on the open task, and a finished turn draws none", async () => {
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, activeTaskId: "task-open" } });
+  const sent: Act[] = [];
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+    },
+  });
+  const working = workTurn(TASK_WORK_STATE.RUNNING, [words("Reading.")], { startedAt: 5_000 });
+  const container = mounted(
+    onRegistry(
+      AtomRegistry.make(),
+      callTab({ region: said(0), conversation: conversationOf([working]) }),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const stop = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Stop",
+  );
+  assert.ok(stop);
+  await act(async () => {
+    stop.click();
+  });
+  assert.deepEqual(sent.at(-1), { kind: ACT_KIND.LUKE_STOP, payload: { taskId: "task-open" } });
+
+  const finished = workTurn(TASK_WORK_STATE.DONE, [words("Done.")]);
+  const after = mounted(callTab({ region: said(0), conversation: conversationOf([finished]) }));
+  assert.ok(![...after.querySelectorAll("button")].some((each) => each.textContent === "Stop"));
 });

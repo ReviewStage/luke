@@ -427,6 +427,8 @@ export interface HostOperator {
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
+  /** The turn Luke is running on a task stopped on the service. */
+  tasksStopWork(taskId: string): Effect.Effect<void>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
@@ -1241,6 +1243,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
+    tasksStopWork: (taskId) =>
+      Effect.asVoid(client.call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId })),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
     githubDisconnect: () =>
       Effect.map(

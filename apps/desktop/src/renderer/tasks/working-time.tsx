@@ -146,16 +146,20 @@ export function WorkedFor({
 export function WorkingLine({
   startedAt,
   words = WORKING_LINE,
+  action,
 }: {
   startedAt: number | undefined;
   /** What the agent is doing, as far as its transcript shows it: "Working…" unless said otherwise. */
   words?: string;
+  /** A control the line ends on, such as the Call tab's Stop; none where the line only reports. */
+  action?: ReactNode;
 }): ReactNode {
   // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
     <p className={STATUS_LINE_CLASS} data-working="" aria-live="polite">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
+      {action}
     </p>
   );
 }
