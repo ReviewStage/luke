@@ -329,6 +329,23 @@
   max-width: 100%;
 }
 
+/* The date picker (`date-picker.tsx`), hung from a chip or an @ word in
+   the room the @ list stands in, over the editor. Its anchor stands over
+   the chip and takes no press, so the chip under it still does. */
+.date-picker-anchor {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.date-picker-anchor > * {
+  pointer-events: auto;
+}
+
+.date-picker {
+  padding: var(--luke-space-12);
+}
+
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */

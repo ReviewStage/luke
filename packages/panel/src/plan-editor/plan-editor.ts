@@ -13,7 +13,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { anchorsLaidIn, anchorsOf, commentAnchorMark, spanIn } from "./comment-anchors.js";
 import type {
   EditorSpan,
-  MentionNode,
+  MentionDrawer,
   PlanEditorHandle,
   PlanEditorPictures,
   PlanEditorPlacement,
@@ -166,7 +166,7 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
  * every other link a plain one.
  */
 export function markdownExtensions(
-  drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  drawMention?: MentionDrawer | undefined,
   namesMention?: ((target: string) => boolean) | undefined,
   pictures?: PlanEditorPictures | undefined,
 ): AnyExtension[] {

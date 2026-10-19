@@ -581,6 +581,72 @@ export function dateDistance(span: DateSpan, now: number, zone: string): string 
   return named === undefined ? away(days, "day") : named.word;
 }
 
+/* ----- A date as a picker edits it ----- */
+
+/** One end of a date as a picker edits it: its day, `YYYY-MM-DD`, and its time of day, `HH:MM`, where it names one. */
+export interface DateWallMoment {
+  readonly day: string;
+  readonly time?: string | undefined;
+}
+
+/** A date as a picker edits it, each end as the reader's zone reads it. */
+export interface DateWall {
+  readonly start: DateWallMoment;
+  readonly end?: DateWallMoment | undefined;
+}
+
+/** A time of day as a picker holds it. */
+const WALL_TIME = /^(\d{2}):(\d{2})$/u;
+
+/** A moment as a picker holds it, its day and time as `zone` reads them. */
+function wallMoment(moment: string, zone: string): DateWallMoment | undefined {
+  const wall = wallOf(moment, zone);
+  if (wall === undefined) return undefined;
+  const day = isoDay(wall.day);
+  if (wall.clock === undefined) return { day };
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return { day, time: `${pad(wall.clock.hour)}:${pad(wall.clock.minute)}` };
+}
+
+/** A date's ends as a picker edits them, as `zone` reads them; nothing where its start is no moment. */
+export function dateWall(span: DateSpan, zone: string): DateWall | undefined {
+  const start = wallMoment(span.start, zone);
+  if (start === undefined) return undefined;
+  const end = span.end === undefined ? undefined : wallMoment(span.end, zone);
+  return end === undefined ? { start } : { start, end };
+}
+
+/** A picker's moment spelled as a mention holds it, a time with the offset `zone` stands at then; nothing where it names no real day or time. */
+function spelledWall(moment: DateWallMoment, zone: string): string | undefined {
+  const day = dayOfIso(moment.day);
+  if (day === undefined) return undefined;
+  if (moment.time === undefined) return spelled({ day, clock: undefined }, zone);
+  const time = WALL_TIME.exec(moment.time);
+  const clock = time === null ? undefined : clockOf(Number(time[1]), Number(time[2]), undefined);
+  return clock === undefined ? undefined : spelled({ day, clock }, zone);
+}
+
+/**
+ * The date a picker's ends name, a time in `zone`: a range whose end came
+ * before its start put in order, and one whose ends are the same moment,
+ * or a day and a time, read as its start alone; nothing where its start
+ * names no real day.
+ */
+export function dateOfWall(wall: DateWall, zone: string): DateSpan | undefined {
+  const start = spelledWall(wall.start, zone);
+  if (start === undefined) return undefined;
+  const end = wall.end === undefined ? undefined : spelledWall(wall.end, zone);
+  if (end === undefined) return { start };
+  if (isDateRange(start, end)) return { start, end };
+  return isDateRange(end, start) ? { start: end, end: start } : { start };
+}
+
+/** Today in `zone`, as a picker marks it: `YYYY-MM-DD`; nothing where `zone` is no zone. */
+export function dateToday(now: number, zone: string): string | undefined {
+  const today = todayIn(now, zone);
+  return today === undefined ? undefined : isoDay(today);
+}
+
 /** The zone the reader's clock reads in, as the runtime resolves it. */
 export function readerZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;

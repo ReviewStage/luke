@@ -19,6 +19,7 @@ import {
   type EditorAnchors,
   type EditorDiagram,
   type MentionNode,
+  type MentionNodeDoors,
   PLACEMENT_END,
   type PlanEditorHandle,
   type PlanEditorModule,
@@ -603,8 +604,8 @@ export function MountedPlanEditor({
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               onKey: (event) => latest.current.mentions?.onKey(event) ?? false,
-              drawMention: (element, mention) =>
-                latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
+              drawMention: (element, mention, node) =>
+                latest.current.mentions?.drawMention(element, mention, node) ?? (() => undefined),
               retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
               pasted: (words) => latest.current.mentions?.pasted(words),
               namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
@@ -728,7 +729,7 @@ export function PlanDocumentEditor({
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(useSideBundles().planEditor);
   const room = useRef<HTMLElement>(null);
-  const chips = useEditorDrawings<MentionNode>();
+  const chips = useEditorDrawings<DrawnMention>();
   const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
   // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.
@@ -807,7 +808,7 @@ export function PlanDocumentEditor({
         : {
             onTrigger: picker.onTrigger,
             onKey: picker.onKey,
-            drawMention: chips.draw,
+            drawMention: (element, mention, node) => chips.draw(element, { mention, node }),
             retarget: (target, change) =>
               retargetedMention(task.id, mentions.place, target, change),
             pasted: (words) =>
@@ -835,7 +836,11 @@ export function PlanDocumentEditor({
         ? null
         : chips.drawn.map((each) =>
             createPortal(
-              <MentionNodeChip mention={each.what} doors={mentions} />,
+              <MentionNodeChip
+                mention={each.what.mention}
+                doors={mentions}
+                edit={{ node: each.what.node, pickDate: picker.pickDate }}
+              />,
               each.element,
               each.key,
             ),
@@ -849,6 +854,12 @@ export function PlanDocumentEditor({
       )}
     </section>
   );
+}
+
+/** A mention the editor asked to be drawn: what it holds, and the doors to its node. */
+interface DrawnMention {
+  readonly mention: MentionNode;
+  readonly node: MentionNodeDoors;
 }
 
 /** Something the editor asked to be drawn: the element it stands as, what it is, and the key its drawing goes under. */

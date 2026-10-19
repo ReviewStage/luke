@@ -1642,7 +1642,43 @@ test("words after an @ that read as a date offer it first, said from today, and 
   }
 });
 
-test("an @ narrowed to dates offers today, tomorrow, and next Monday before a word is typed", async () => {
+test("a date's chip in the box opens its picker, and the day picked there is the date the message sends", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, sent } = await box(taskPage());
+
+    typeInComposer(container, "Ship it @tomorrow");
+    await settle();
+    pressInComposer(container, "Enter");
+    await settle();
+    const chip = composerEditor(container).querySelector<HTMLElement>("button[data-mention-ref]");
+    assert.ok(chip, "the date's chip is a button in the box");
+    act(() => chip.click());
+    await settle();
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(dialog, "the picker is open");
+    act(() =>
+      dialog
+        .querySelector<HTMLButtonElement>('button[aria-label="Thursday, October 22, 2026"]')
+        ?.click(),
+    );
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+    pressInComposer(container, "Enter");
+    await settle();
+
+    assert.equal(container.querySelector('[role="dialog"]'), null);
+    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](luke://date/2026-10-22)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ narrowed to dates offers today, tomorrow, and next Monday before a word is typed, then the row that opens the picker", async () => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   try {
     const { container } = await box(taskPage());
@@ -1651,7 +1687,9 @@ test("an @ narrowed to dates offers today, tomorrow, and next Monday before a wo
     await settle();
 
     assert.equal(crumb(container), "Dates");
-    assert.deepEqual(groupsListed(container), [["Dates", ["Today", "Tomorrow", "Oct 26"]]]);
+    assert.deepEqual(groupsListed(container), [
+      ["Dates", ["Today", "Tomorrow", "Oct 26", "Pick a date…"]],
+    ]);
   } finally {
     vi.useRealTimers();
   }
