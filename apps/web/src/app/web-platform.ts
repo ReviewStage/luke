@@ -57,8 +57,7 @@ export const WEB_PLATFORM: AppPlatform = {
   applySessionReplay: ignore,
 };
 
-/** The Factory's worlds and a call's avatar are the desktop's bundles, which the web does not ship. */
+/** A call's avatar is the desktop's bundle, which the web does not ship. */
 export const WEB_BUNDLES: ShellBundles = {
-  world: (key) => Promise.reject(new Error(`The web draws no Factory world, ${key} included.`)),
   avatarSession: () => Promise.reject(new Error("The web runs no avatar.")),
 };
