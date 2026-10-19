@@ -689,6 +689,7 @@ export function DesktopShell({
                 looks={looks}
                 captions={captionsInColumn ? captionStrip : undefined}
                 summary={summary}
+                room={room}
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             )}

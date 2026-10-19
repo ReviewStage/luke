@@ -2246,6 +2246,23 @@
   margin-inline-start: auto;
 }
 
+/* A narrow header, a phone's or the side panel's at its least, gives the
+   title a line of its own over the pill and the controls, which stand
+   under it at the row's two ends; beside them it would wrap a word to a
+   line. */
+@container pull-request-header (max-width: 520px) {
+  .pull-request-title-row {
+    flex-wrap: wrap;
+  }
+
+  .pull-request-title-row > .pull-request-title,
+  .pull-request-title-row > .luke-skeleton-region {
+    order: -1;
+    flex-basis: 100%;
+    padding-block: 0;
+  }
+}
+
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
    row that stays put over the conversation as it scrolls, each its word,
    the quiet count of what it leaves out, and its switch; the word and the

@@ -29,6 +29,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import type { ShellRoom } from "../shell-room.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
@@ -1016,9 +1017,12 @@ export function DesktopTasks({
   looks,
   captions,
   summary,
+  room,
   accountName,
 }: {
   tasks: TasksControl;
+  /** The room the panel's stage gives, which says how many tasks the home page lists; wide where left out. */
+  room?: ShellRoom | undefined;
   /** The signed-in account's name, which the home page greets. */
   accountName?: string | undefined;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
@@ -1057,7 +1061,7 @@ export function DesktopTasks({
           <div className="desktop-drag-strip" />
           <PageFind page={FIND_PAGE.HOME} active={tasks.shown}>
             <section className="home" aria-label="Home">
-              <DesktopHome tasks={tasks} accountName={accountName} />
+              <DesktopHome tasks={tasks} room={room} accountName={accountName} />
             </section>
           </PageFind>
           {secondCall}
