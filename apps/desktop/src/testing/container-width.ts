@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 /**
@@ -15,7 +16,8 @@ import path from "node:path";
  * `shown` reads up the element's ancestors.
  */
 
-const STYLES = path.join(import.meta.dirname, "../renderer/styles");
+/** Where `@luke/panel` keeps the panel's stylesheets. */
+const STYLES = path.dirname(createRequire(import.meta.url).resolve("@luke/panel/styles/tasks.css"));
 
 /** The panel's stylesheets, in the order `index.css` imports them. */
 const SHEETS = ["settings.css", "base.css", "markdown.css", "tasks.css", "desktop.css"] as const;
