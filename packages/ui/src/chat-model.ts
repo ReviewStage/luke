@@ -179,8 +179,28 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
   return { member, name, handle, agent, taskName };
 }
 
-/** What a channel is called: a channel's own name, a direct message's other member's handle. */
+/** Whether the reader is one of a direct message's two; a channel holds no such pair. */
+function inDm(chat: ChatAnswer, channel: ChatChannel): boolean {
+  return channel.members?.includes(chat.self) ?? false;
+}
+
+/**
+ * Whether the reader may post in a channel: one standing, and a direct
+ * message only where they are one of its two, as the service holds them
+ * to. Note that a reader shown a direct message between two others has
+ * no box to write in it, since a post there would open their own with
+ * one of the two instead.
+ */
+export function postsIn(chat: ChatAnswer, channel: ChatChannel): boolean {
+  if (channel.archived) return false;
+  return channel.kind !== CHANNEL_KIND.DM || inDm(chat, channel);
+}
+
+/** What a channel is called: a channel's own name, a direct message's other member's handle, or both of its two's where the reader is neither. */
 export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+  if (channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel)) {
+    return (channel.members ?? []).map((id) => chatWho(chat, names, id).handle).join(" ↔ ");
+  }
   const other = otherOf(chat, channel);
   if (other !== undefined) return chatWho(chat, names, other).handle;
   return (
@@ -253,7 +273,8 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
   const channels = new Map(chat.channels.map((channel) => [channel.id, channel]));
   const entries = chat.messages.toSorted(bySeq).flatMap((message): ForYouEntry[] => {
     const channel = channels.get(message.channelId);
-    if (channel === undefined || channel.archived) return [];
+    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
+    if (channel === undefined || !postsIn(chat, channel)) return [];
     const reason = waitingReason(chat, message, channel);
     if (reason === undefined) return [];
     const replies = chat.messages.filter((reply) => reply.parentId === message.id).toSorted(bySeq);
