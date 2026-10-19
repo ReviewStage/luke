@@ -34,10 +34,11 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * when those statements move, rather than the service looking every half
  * second. The page itself, its usage priced from the model catalog among
  * it, is still the service's. The subscription is let go a while after the
- * last read let go of it. A transcript the service seals nothing for, an
- * older service or one without Realtime, is read through the held read as
- * before, and so is one whose subscription stopped; one the account does
- * not reach is not found, as the held read said.
+ * last read let go of it. A seal the service did not answer is asked for
+ * again every `RESEAL`, and a subscription that stops is marked broken,
+ * which has the reader read at once, and sealed and opened again after
+ * `RESEAL`; one the account does not reach is not found, as the held read
+ * said.
  *
  * Note that the hold ends with one more read of the page, as the service's
  * own hold does, so where an agent stands only by the clock, such as one
@@ -48,6 +49,8 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 const HOLD = Duration.seconds(20);
 /** How long a subscription no read holds is kept, so the window's next read finds it standing. */
 const IDLE = Duration.seconds(30);
+/** How long after a seal the service did not answer, or a subscription that stopped, the transcript is sealed again. */
+const RESEAL = Duration.seconds(1);
 
 /** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. */
 export class TranscriptKey extends Data.Class<{
@@ -64,7 +67,6 @@ type LiveState =
 /** What a transcript's read is answered from. */
 type Standing =
   | { readonly kind: "live"; readonly state: SubscriptionRef.SubscriptionRef<LiveState> }
-  | { readonly kind: "held" }
   | { readonly kind: "refused" };
 
 /** A failure as the service answered one. */
@@ -83,8 +85,6 @@ export interface TranscriptFollowDependencies {
 export interface TranscriptReads {
   /** The page past the cursor at once, with whether the service's held read would have held on it. */
   readonly now: Effect.Effect<TranscriptNowAnswer | CodingAgentMessagesAnswerView>;
-  /** The service's own held read, as the window asked it before. */
-  readonly held: Effect.Effect<CodingAgentMessagesAnswerView>;
 }
 
 /** The subscriptions the windows' reads share, each held while read and a while after. */
@@ -98,6 +98,21 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
   return JSON.stringify(parts);
 }
 
+/** The transcript sealed, asked again every `RESEAL` until the service seals it; none where the account does not reach it. */
+function sealedOf(
+  dependencies: TranscriptFollowDependencies,
+  key: TranscriptKey,
+): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>> {
+  return Effect.gen(function* () {
+    while (true) {
+      const answer = yield* dependencies.seal(key);
+      if (!("failure" in answer)) return Option.some(answer);
+      if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return Option.none();
+      yield* Effect.sleep(RESEAL);
+    }
+  });
+}
+
 /** The map a composer holds for as long as it stands. */
 export function transcriptFollows(
   dependencies: TranscriptFollowDependencies,
@@ -107,29 +122,38 @@ export function transcriptFollows(
     idleTimeToLive: IDLE,
     lookup: (key: TranscriptKey) =>
       Effect.gen(function* () {
-        const first = yield* dependencies.seal(key);
-        if ("failure" in first) {
-          return first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
-            ? ({ kind: "refused" } as const)
-            : ({ kind: "held" } as const);
-        }
+        const first = yield* sealedOf(dependencies, key);
+        if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        const rows = liveRows(
-          {
-            openLive: dependencies.openLive,
-            reseal: () => dependencies.seal(key),
-            now: dependencies.now,
-          },
-          first,
-        );
+        /** One seal followed until its subscription stops, which marks the state broken. */
+        const follow = (sealed: AgentTranscriptLiveAnswer) =>
+          Stream.runForEach(
+            liveRows(
+              {
+                openLive: dependencies.openLive,
+                reseal: () => dependencies.seal(key),
+                now: dependencies.now,
+              },
+              sealed,
+            ),
+            (read) =>
+              Option.match(decode(read), {
+                onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
+                onSome: (decoded) =>
+                  SubscriptionRef.set(state, { kind: "standing", digest: digestOf(decoded) }),
+              }),
+          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: "broken" })));
         yield* Effect.forkScoped(
-          Stream.runForEach(rows, (read) =>
-            Option.match(decode(read), {
-              onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-              onSome: (decoded) =>
-                SubscriptionRef.set(state, { kind: "standing", digest: digestOf(decoded) }),
-            }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: "broken" }))),
+          Effect.gen(function* () {
+            let sealed = first.value;
+            while (true) {
+              yield* follow(sealed);
+              yield* Effect.sleep(RESEAL);
+              const again = yield* sealedOf(dependencies, key);
+              if (Option.isNone(again)) return;
+              sealed = again.value;
+            }
+          }),
         );
         return { kind: "live", state } as const;
       }),
@@ -153,9 +177,9 @@ function movedFrom(was: LiveState): (state: LiveState) => boolean {
 }
 
 /**
- * The page read at once, again each time the statements move while the
- * service says its held read would hold on it; the held read where the
- * subscription stops. Never ends of itself while the page holds.
+ * The page read at once, again each time the statements move, or their
+ * subscription stops or opens again, while the service says its held read
+ * would hold on it. Never ends of itself while the page holds.
  */
 function readUntilSaid(
   state: SubscriptionRef.SubscriptionRef<LiveState>,
@@ -164,7 +188,6 @@ function readUntilSaid(
   return Effect.gen(function* () {
     while (true) {
       const was = yield* SubscriptionRef.get(state);
-      if (was.kind === "broken") return yield* reads.held;
       const answer = yield* reads.now;
       if (!("holds" in answer) || !answer.holds) return windowsPage(answer);
       yield* SubscriptionRef.changes(state).pipe(Stream.filter(movedFrom(was)), Stream.runHead);
@@ -175,9 +198,8 @@ function readUntilSaid(
 /**
  * The transcript past the reader's cursor: at once where something stands
  * past it or the agent has ended, or as soon as something does within the
- * hold, or the page as it stands once the hold ends. The held read answers
- * it where the transcript is not followed live, or where its subscription
- * stopped.
+ * hold, or the page as it stands once the hold ends, a transcript not yet
+ * sealed among them.
  */
 export function transcriptPast(
   follows: TranscriptFollows,
@@ -186,10 +208,13 @@ export function transcriptPast(
 ): Effect.Effect<CodingAgentMessagesAnswerView> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const standing = yield* RcMap.get(follows, key);
-      if (standing.kind === "held") return yield* reads.held;
-      if (standing.kind === "refused") return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
-      const said = yield* readUntilSaid(standing.state, reads).pipe(Effect.timeoutOption(HOLD));
+      const said = yield* Effect.gen(function* () {
+        const standing = yield* RcMap.get(follows, key);
+        if (standing.kind === "refused") {
+          return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } as const;
+        }
+        return yield* readUntilSaid(standing.state, reads);
+      }).pipe(Effect.timeoutOption(HOLD));
       return Option.isSome(said) ? said.value : windowsPage(yield* reads.now);
     }),
   );

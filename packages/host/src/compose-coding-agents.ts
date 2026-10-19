@@ -122,7 +122,6 @@ export type CodingAgentClient = Pick<
   | "list"
   | "listWorkspace"
   | "start"
-  | "messages"
   | "message"
   | "choose"
   | "rename"
@@ -386,7 +385,6 @@ function composed(
         const answer = gate()
           ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
               now: asked(client.messagesNow(agentId, after, callId)),
-              held: asked(client.messages(agentId, after, callId)),
             })
           : UNANSWERED;
         return carried<CodingAgentMessagesAnswerView>(answer);

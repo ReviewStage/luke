@@ -234,7 +234,6 @@ function fakeService() {
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
-  let cursor = CODING_AGENT_CURSOR_START;
   const client: CodingAgentClient = {
     models: () =>
       Effect.sync(() => {
@@ -265,21 +264,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
-      }),
-    messages: (agentId, after, callId) =>
-      Effect.sync(() => {
-        asked.push(
-          callId === undefined
-            ? `messages:${agentId}:${after}`
-            : `worker:${agentId}:${callId}:${after}`,
-        );
-        cursor = "2:1";
-        return {
-          messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-          cursor,
-          status: CODING_AGENT_STATUS.RUNNING,
-          title: null,
-        };
       }),
     messagesNow: (agentId, after, callId) =>
       Effect.sync(() => {
@@ -686,7 +670,10 @@ function fakeRealtime() {
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, asked } = yield* subject();
+    const { call, asked, sealTranscript, pageNow: script } = yield* subject();
+    const page = pageNow("2:1", { holds: false, text: "Hi" });
+    sealTranscript(SEALED_TRANSCRIPT);
+    script(page);
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MODELS), { models: MODELS });
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ), {
@@ -725,12 +712,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
         agentId: AGENT_ID,
         after: CODING_AGENT_CURSOR_START,
       }),
-      {
-        messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-        cursor: "2:1",
-        status: CODING_AGENT_STATUS.RUNNING,
-        title: null,
-      },
+      windowPage(page),
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
@@ -738,12 +720,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
         after: CODING_AGENT_CURSOR_START,
         callId: "call-7",
       }),
-      {
-        messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-        cursor: "2:1",
-        status: CODING_AGENT_STATUS.RUNNING,
-        title: null,
-      },
+      windowPage(page),
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
@@ -963,9 +940,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       "workspace:workspace-1:acme/relay",
       `start:${TASK_ID}:press-1:default`,
       `transcript-live:${AGENT_ID}`,
-      `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `transcript-live:${AGENT_ID}:call-7`,
-      `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+      `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
@@ -1482,7 +1459,7 @@ function windowPage(page: TranscriptNowAnswer) {
 }
 
 it.effect(
-  "a running agent's transcript is held open on its Realtime subscription: the page read at once while it says something, then again only when the statements move, the empty page once the hold ends, and never a sealed statement nor the held read",
+  "a running agent's transcript is held open on its Realtime subscription: the page read at once while it says something, then again only when the statements move, the empty page once the hold ends, and never a sealed statement",
   () =>
     Effect.gen(function* () {
       const { call, asked, sealTranscript, pageNow: script, realtime } = yield* subject();
@@ -1538,12 +1515,13 @@ it.effect(
 );
 
 it.effect(
-  "a worker's transcript is followed under its own seal, a subscription that stops hands the read to the service's held read, and a sign-out lets every subscription go",
+  "a worker's transcript is followed under its own seal, a subscription that stops has the read read again at once and is sealed and opened again after a pause, and a sign-out lets every subscription go",
   () =>
     Effect.gen(function* () {
       const { call, asked, sealTranscript, pageNow: script, realtime, reset } = yield* subject();
       sealTranscript(SEALED_TRANSCRIPT);
-      script(pageNow("1:0", { holds: true }));
+      const said = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+      script(pageNow("1:0", { holds: true }), said);
       const read = yield* Effect.forkChild(
         call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
           agentId: AGENT_ID,
@@ -1554,26 +1532,27 @@ it.effect(
       yield* settled;
       realtime.fail("messages");
       yield* settled;
-      assert.deepEqual(yield* Fiber.join(read), {
-        messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-        cursor: "2:1",
-        status: CODING_AGENT_STATUS.RUNNING,
-        title: null,
-      });
+      assert.deepEqual(yield* Fiber.join(read), windowPage(said));
+      assert.deepEqual(realtime.closed, [SEALED_TRANSCRIPT.url]);
+
+      yield* TestClock.adjust("1 second");
+      yield* settled;
       assert.deepEqual(asked, [
         `transcript-live:${AGENT_ID}:call-7`,
         `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
-        `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+        `worker-now:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
+        `transcript-live:${AGENT_ID}:call-7`,
       ]);
+      assert.deepEqual(realtime.opened, [SEALED_TRANSCRIPT.url, SEALED_TRANSCRIPT.url]);
 
       yield* reset;
       yield* settled;
-      assert.deepEqual(realtime.closed, [SEALED_TRANSCRIPT.url]);
+      assert.deepEqual(realtime.closed, [SEALED_TRANSCRIPT.url, SEALED_TRANSCRIPT.url]);
     }),
 );
 
 it.effect(
-  "a transcript the account does not reach is not found, and one the service seals nothing for is the held read, as before",
+  "a transcript the account does not reach is not found, and one the service seals nothing for is sealed again each second, then read live",
   () =>
     Effect.gen(function* () {
       const refused = yield* subject();
@@ -1586,23 +1565,28 @@ it.effect(
         { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
       );
 
-      const held = yield* subject();
-      assert.deepEqual(
-        yield* held.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+      const unsealed = yield* subject();
+      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
+      unsealed.pageNow(said);
+      const read = yield* Effect.forkChild(
+        unsealed.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
           agentId: AGENT_ID,
           after: CODING_AGENT_CURSOR_START,
         }),
-        {
-          messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
-          cursor: "2:1",
-          status: CODING_AGENT_STATUS.RUNNING,
-          title: null,
-        },
       );
-      assert.deepEqual(held.asked, [
+      yield* settled;
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      unsealed.sealTranscript(SEALED_TRANSCRIPT);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.deepEqual(yield* Fiber.join(read), windowPage(said));
+      assert.deepEqual(unsealed.asked, [
         `transcript-live:${AGENT_ID}`,
-        `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+        `transcript-live:${AGENT_ID}`,
+        `transcript-live:${AGENT_ID}`,
+        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       ]);
-      assert.deepEqual(held.realtime.opened, []);
+      assert.deepEqual(unsealed.realtime.opened, [SEALED_TRANSCRIPT.url]);
     }),
 );

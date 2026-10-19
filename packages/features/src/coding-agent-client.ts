@@ -552,23 +552,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's transcript past the cursor, or a worker's where the delegation call that started it is named, held by the service while the agent or the worker runs and nothing new stands. */
-  messages(
-    agentId: string,
-    after: string,
-    callId?: string,
-  ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const asked =
-      callId === undefined
-        ? askHosted(this.#hosted.messages.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD)
-        : askHosted(
-            this.#hosted.messages.agentWorker,
-            { id: agentId, call: callId, after },
-            HOSTED_DEADLINE.HELD,
-          );
-    return hostedAnswer(asked, ROW_REFUSALS);
-  }
-
   /**
    * One agent's transcript past the cursor, or a worker's, read at once
    * rather than held, with whether the held read would have held on it: for
@@ -595,9 +578,8 @@ export class HostedCodingAgentClient {
   /**
    * One agent's transcript, or a worker's where the delegation call is
    * named, sealed for following over Neon Realtime, answered at once: not
-   * found where the account reaches no such agent, unanswered where the
-   * deployment has no Realtime and for anything else, which the caller
-   * answers by holding its read open as before.
+   * found where the account reaches no such agent, unanswered for anything
+   * else, which the caller answers by sealing it again.
    */
   agentTranscriptLive(
     agentId: string,

@@ -444,8 +444,8 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * agent's title, and its workers' titles and delegations. The page itself
  * is still read from the service, once they move. The service answers
  * `not-found` for an agent the account does not reach, and `unavailable`
- * where its deployment has no Realtime, and the desktop holds its read open
- * as before.
+ * where its deployment's Realtime is misconfigured, which the desktop
+ * answers by asking again.
  */
 export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
