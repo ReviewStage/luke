@@ -287,9 +287,6 @@ function hostRowDependencies(
       colourCode: highlightSnippet,
     },
     codingAgents: { host, notices },
-    integrations: { host },
-    automations: { host },
-    factory: { host },
   };
 }
 
@@ -305,7 +302,12 @@ const servedActPort = (operator: OperatorClient, services: Context.Context<never
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      createActPortHandler({ issues: { host: operator.host } }).upgrade(channel.port2, {
+      createActPortHandler({
+        automations: { host: operator.host },
+        factory: { host: operator.host },
+        integrations: { host: operator.host },
+        issues: { host: operator.host },
+      }).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },
           trusted: true,
