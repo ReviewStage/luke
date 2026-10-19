@@ -27,6 +27,14 @@ export const GITHUB_TOKEN_STATUS = {
 
 export type GitHubTokenStatus = (typeof GITHUB_TOKEN_STATUS)[keyof typeof GITHUB_TOKEN_STATUS];
 
+/**
+ * GitHub's page for a new classic token, opened with the scopes Luke asks
+ * for checked and Luke as its note. Creating one, in GitHub's docs:
+ * https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic
+ */
+export const GITHUB_TOKEN_CREATE_URL =
+  "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow,read:user&description=Luke";
+
 /** Why a save kept nothing. */
 export const GITHUB_TOKEN_REJECTION = {
   /** A fine-grained token (`github_pat_…`), which Luke does not take; nothing was sent to GitHub. */

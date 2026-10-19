@@ -1,0 +1,103 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "login": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "verified",
+                    "invalid",
+                    "unreadable"
+                  ]
+                },
+                "statusAt": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "addedAt": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "login",
+                "hint",
+                "status",
+                "statusAt",
+                "addedAt",
+                "expiresAt"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejected": {
+          "type": "string",
+          "enum": [
+            "fine_grained",
+            "invalid",
+            "no_repo_scope",
+            "no_github_account",
+            "other_user",
+            "unreachable",
+            "too_many_tries"
+          ]
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-unanswered",
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired",
+            "plan-archived"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

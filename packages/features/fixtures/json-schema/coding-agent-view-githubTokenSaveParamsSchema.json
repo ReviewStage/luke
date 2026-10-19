@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "token": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 255
+    }
+  },
+  "required": [
+    "token"
+  ],
+  "additionalProperties": false
+}

@@ -286,6 +286,44 @@
   font-family: var(--luke-font-mono);
 }
 
+/* Settings › Integrations › GitHub › Manage (`github-dialog.tsx`): the two
+   options, then the open option's panel under them, its facts on one line
+   and its press at the line's end. A login reads beside its avatar. */
+.github-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-field-gap);
+}
+
+.github-dialog-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  min-height: var(--luke-control-height);
+}
+
+.github-dialog-facts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-width: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.github-dialog-login {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+}
+
+.github-dialog-token {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
 /* Settings › Workspace › Invitations (`.workspace-invite-row`, a refusal
    standing under the form in a line of its own): the invite form, a row's height and inset, an
    address field taking its room, then the role's chip and Invite, the field

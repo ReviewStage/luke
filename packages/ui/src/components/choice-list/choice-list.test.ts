@@ -337,3 +337,26 @@ test("a settled list names each option, the pick beside its note and the rest wi
   );
   assert.equal(rows(page).length, 0);
 });
+
+test("a row's aside stands outside its radio, and a press or an arrow on it changes nothing", () => {
+  const options: readonly ChoiceOption<Retry>[] = [
+    { value: "three", label: "Retry 3 times" },
+    { value: "never", label: "Never retry", aside: createElement("a", { href: "#docs" }, "Docs") },
+  ];
+  const heardValues: string[] = [];
+  const page = render(
+    createElement(ChoiceList<Retry>, {
+      legend: "Retries",
+      options,
+      value: ["three"],
+      onChange: (next: readonly Retry[]) => heardValues.push(next.join("+")),
+    }),
+  );
+  const link = page.querySelector("a") ?? assert.fail("no aside");
+  assert.equal(link.closest('[role="radio"]'), null);
+  act(() => link.focus());
+  key(link, "ArrowDown");
+  act(() => link.click());
+  assert.deepEqual(heardValues, []);
+  assert.equal(document.activeElement, link);
+});

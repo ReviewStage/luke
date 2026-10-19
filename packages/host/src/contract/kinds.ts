@@ -30,6 +30,16 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /**
+   * Settings › Integrations › GitHub: the member's own classic GitHub
+   * personal access token read as its login, hint, and status, saved, and
+   * removed. The save's payload carries the token from the renderer once,
+   * on its way to the service; no answer carries one back, and nothing on
+   * the way keeps it.
+   */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
+  /**
    * Settings › Plan template: the Markdown the account's new tasks start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then

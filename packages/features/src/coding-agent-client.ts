@@ -52,6 +52,8 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
   githubImageTypeSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
@@ -82,6 +84,7 @@ import {
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
+import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -518,6 +521,42 @@ export class HostedCodingAgentClient {
     return hostedAnswer(
       askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
       {},
+    );
+  }
+
+  /** The member's own GitHub token, as what tells it apart; never the token. */
+  readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN }),
+      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * The member's GitHub token saved, answering it as it then stands and,
+   * where the service kept nothing, why; a token the service would refuse
+   * by shape is refused here without traveling at all.
+   */
+  saveGitHubToken(
+    params: GitHubTokenSaveParams,
+  ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(githubTokenSaveRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.GITHUB_TOKEN,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
+    );
+  }
+
+  /** The member's GitHub token removed, answering none. */
+  removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.DELETE, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN }),
+      (answer) => readAnswer(answer, githubTokenAnswerSchema, {}),
     );
   }
 

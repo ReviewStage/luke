@@ -26,6 +26,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -76,6 +77,8 @@ import { focusSearchField, Highlighted } from "../search-field.js";
 import { Shortcut } from "../shortcut.js";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner.js";
 import { commandKeyshortcuts } from "../tooltip.js";
+import { useExperiment } from "../use-app-state.js";
+import { GitHubDialog } from "./github-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -106,7 +109,10 @@ import { MenuRow } from "./menu-row.js";
  * over its acts: its Connect links that GitHub in the browser, and its
  * Disconnect unlinks it under the Mac's session, a refusal saying why in a
  * toast. A workspace's repositories are not this; they come from the GitHub
- * connected in Settings › Workspace. The window never sees a sign-in
+ * connected in Settings › Workspace. While the GitHub token experiment is
+ * on, a connected GitHub row offers Manage, which opens the dialog that
+ * chooses between the Luke GitHub App and the member's own personal access
+ * token (`github-dialog.tsx`). The window never sees a sign-in
  * address; the host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
@@ -500,6 +506,8 @@ function IntegrationRow({
   const signIn = statuses.signInOf(connection);
   const [connecting, setConnecting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [managing, setManaging] = useState(false);
+  const tokenOn = useExperiment(EXPERIMENT.GITHUB_TOKEN);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider each name themselves; one alone is the provider, as ever.
   const several = row.accounts > 1 && account !== undefined;
@@ -551,6 +559,7 @@ function IntegrationRow({
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
+  const manageable = tokenOn && bySignIn && connected;
   const disconnect = useConfirmDialog({ subject: connected, surfaceOpen: true }, () =>
     disconnectAccount(act, github, row, statuses),
   );
@@ -635,7 +644,13 @@ function IntegrationRow({
             </>
           ) : status === undefined ||
             status === INTEGRATION_STATUS.UNAVAILABLE ||
-            (connected && !broken) ? null : (
+            (connected && !broken) ? (
+            manageable ? (
+              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setManaging(true)}>
+                Manage
+              </Button>
+            ) : null
+          ) : (
             <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
               {grantLabel(status, signIn)}
             </Button>
@@ -645,6 +660,7 @@ function IntegrationRow({
       {connected && tools.expanded && tools.shown.length > 0 ? (
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
+      {managing ? <GitHubDialog onClose={() => setManaging(false)} /> : null}
       <ConfirmDialog
         confirm={disconnect}
         question={{

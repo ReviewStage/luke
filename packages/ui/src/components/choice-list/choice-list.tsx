@@ -39,6 +39,11 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * waits on the reader and the neutral one once settled, when it is history
  * rather than a call to act.
  *
+ * An open row may hold a control of its own at its top right, outside its
+ * press (`aside`), as a link the option names: the row and it stand
+ * together, the control a Tab stop of its own, and the arrows stay the
+ * radios' alone.
+ *
  * The list owns its rows' spacing, type, and states. The caller holds the
  * value and answers every change with the values it asks for.
  */
@@ -104,6 +109,8 @@ export interface ChoiceOption<Value extends string> {
   badgeTone?: BadgeTone | undefined;
   /** A picture before the words, a workspace's tile. */
   mark?: ReactNode;
+  /** A control at an open row's top right, outside its press, a link the option names. */
+  aside?: ReactNode;
   /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
   /** What a marked row's control fills with once checked; the accent where none is given. */
@@ -306,6 +313,10 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = STEP_KEYS.get(event.key);
     if (step === undefined || open.length === 0 || disabled) return;
+    // Note that a key on a row's aside is that control's own, because it stands outside the radios.
+    if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "radio") {
+      return;
+    }
     event.preventDefault();
     // Note that the step counts from the focused row, because clearing a pick leaves focus on an unchecked row.
     const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
@@ -331,20 +342,29 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     event.preventDefault();
     boxes[(at + step + boxes.length) % boxes.length]?.focus();
   };
-  const rows = options.map((option, index) => (
-    <ChoiceRow
-      key={option.value}
-      radio={one}
-      option={option}
-      checked={value.includes(option.value)}
-      tabStop={!one || option === landing}
-      disabled={disabled || option.disabled === true}
-      look={look}
-      number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
-      focusRef={option === landing ? focusRef : undefined}
-      onPress={() => press(option.value)}
-    />
-  ));
+  const rows = options.map((option, index) => {
+    const row = (
+      <ChoiceRow
+        key={option.value}
+        radio={one}
+        option={option}
+        checked={value.includes(option.value)}
+        tabStop={!one || option === landing}
+        disabled={disabled || option.disabled === true}
+        look={look}
+        number={numbered && index < CHOICE_NUMBERED_ROWS ? index + 1 : undefined}
+        focusRef={option === landing ? focusRef : undefined}
+        onPress={() => press(option.value)}
+      />
+    );
+    if (option.aside === undefined) return row;
+    return (
+      <div key={option.value} className="luke-choice-slot">
+        {row}
+        <span className="luke-choice-aside">{option.aside}</span>
+      </div>
+    );
+  });
   if (!one) {
     return (
       <fieldset
