@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "properties": {
+    "placements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "oldStart": {
+            "type": "integer"
+          },
+          "chapter": {
+            "type": "integer",
+            "description": "The number of the existing chapter, as listed."
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "The risk this hunk earns on its own, by the rubric."
+          },
+          "riskReason": {
+            "type": "string",
+            "description": "Why this hunk earns that risk, in a short phrase."
+          }
+        },
+        "required": [
+          "path",
+          "oldStart",
+          "chapter",
+          "risk",
+          "riskReason"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Left-out hunks that belong to an existing chapter."
+    },
+    "newChapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "An action-oriented verb phrase of at most 8 words."
+          },
+          "summary": {
+            "type": "string",
+            "description": "2 to 3 sentences in Markdown, leading with impact."
+          },
+          "hunkRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The exact path a hunk header names."
+                },
+                "oldStart": {
+                  "type": "integer",
+                  "description": "The oldStart that same hunk header names."
+                }
+              },
+              "required": [
+                "path",
+                "oldStart"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The chapter's hunks: a file's together, in ascending oldStart."
+          },
+          "keyChanges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "description": "One judgment call, as a single-sentence question."
+                },
+                "lineRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "side": {
+                        "type": "string",
+                        "enum": [
+                          "additions",
+                          "deletions"
+                        ],
+                        "description": "additions for the new (right) column's lines, deletions for the old (left) column's."
+                      },
+                      "startLine": {
+                        "type": "integer"
+                      },
+                      "endLine": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "side",
+                      "startLine",
+                      "endLine"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "content",
+                "lineRefs"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Judgment calls only a person can make; empty when there are none."
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "riskReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "hunkRefs",
+          "keyChanges",
+          "risk",
+          "riskReasons"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Chapters of left-out hunks that belong to none of the existing ones; empty when every hunk is placed."
+    }
+  },
+  "required": [
+    "placements",
+    "newChapters"
+  ],
+  "additionalProperties": false
+}

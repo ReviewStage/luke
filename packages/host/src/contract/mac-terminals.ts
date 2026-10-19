@@ -9,11 +9,11 @@ import { actProcedure, exactInput } from "./base.js";
 import { MAC_TERMINAL_ACT_KIND } from "./kinds.js";
 
 /**
- * mac-terminals.ts -- a coding agent's branch opened on this Mac: the run commands read and set, and a terminal opened and closed, as procedures.
+ * mac-terminals.ts -- a coding agent's branch run on this Mac: the run commands read and set, a run started, stopped, and closed, and its worktree opened in Terminal, as procedures.
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/mac-terminal-acts.ts`).
- * What a terminal prints and what is typed into it travel on the port an
- * open posts to the asking panel, never on these.
+ * What a run prints, and the terminal's size, travel on the port an open
+ * posts to the asking panel, never on these.
  */
 /** The refusal of a read of the run commands, which an open that could not read them answers too. */
 export const MAC_REPOSITORIES_REFUSAL = "Could not read the run commands set on this Mac.";
@@ -31,6 +31,14 @@ export const macTerminalActsContract = {
     .input(exactInput(macTerminalOpenParamsSchema))
     .output(EffectSchema.Void),
   [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_CLOSE]: actProcedure("Could not close the terminal.")
+    .input(exactInput(macTerminalKeySchema))
+    .output(EffectSchema.Void),
+  [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_STOP]: actProcedure("Could not stop the run.")
+    .input(exactInput(macTerminalKeySchema))
+    .output(EffectSchema.Void),
+  [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_REVEAL]: actProcedure(
+    "Could not open Terminal on this branch. Press Run first.",
+  )
     .input(exactInput(macTerminalKeySchema))
     .output(EffectSchema.Void),
 };

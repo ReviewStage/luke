@@ -598,8 +598,8 @@ function PlanDocument({
   const openTaskLink = (href: string) => {
     if (!openHere(href)) openLink(href);
   };
-  // Run opens the agent's terminal of this Mac in the side panel at once;
-  // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
+  // Run opens the agent's run on this Mac in the side panel at once;
+  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
   const { repository } = task;
   const openOnMac =
     repository === null || !macTerminalOffered
