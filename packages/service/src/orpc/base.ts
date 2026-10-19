@@ -36,9 +36,6 @@ import {
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
 
-/** The header a request states its body's length in. */
-const CONTENT_LENGTH_HEADER = "content-length";
-
 /** What every hosted procedure is called with: the request, and the web runtime's services. */
 export interface HostedContext extends WithEffectContext<WebServices> {
   readonly request: Request;
@@ -96,22 +93,14 @@ export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
 }
 
 /**
- * A procedure's own cap on its body, in bytes, as `readJsonBodyEffect`
- * held one: a request whose `content-length` states more is refused as
- * `request-too-large`. Note that the handler has read the body before any
- * middleware runs, so this reads the stated length alone; a body sent
- * without one is bounded by the handler's ceiling (`handler.ts`) and then
- * by the procedure's input schema. Use it on the resource's implementer
- * (`hosted.<resource>.use(…)`), after the caller middleware, so it runs
- * before the input is validated, as the old groups read the caller, then
- * the body, then its shape.
+ * Refuses a body its `Content-Length` says is past the procedure's own
+ * bound, as the old groups' `readJsonBodyEffect(maximumBytes)` refused one:
+ * `request-too-large`.
  */
-export function bodyLimit(maxBytes: number) {
+export function bodyLimit(maximumBytes: number) {
   return middlewareGen<HostedContext>(function* ({ context, next }) {
-    const stated = Number(context.request.headers.get(CONTENT_LENGTH_HEADER));
-    if (Number.isFinite(stated) && stated > maxBytes) {
-      return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
-    }
+    const length = Number(context.request.headers.get("content-length") ?? 0);
+    if (length > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
     return yield* next();
   });
 }

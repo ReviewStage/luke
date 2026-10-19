@@ -194,9 +194,9 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1", orpc: true },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
-  { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },
-  { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1" },
-  { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1" },
+  { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1", orpc: true },
+  { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1", orpc: true },
+  { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1", orpc: true },
   { src: "/api/issues/([^/]+)", route: "issues/issue", query: "id=$1" },
 ];
 

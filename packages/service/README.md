@@ -1615,7 +1615,8 @@ fails with the start's refusal. A claim left without its agent for ten
 minutes, its function gone, is settled by the sweep as the agent its key
 made where one stands, and failed as `unavailable` where none does.
 
-The routes are `src/automations/automations-app.ts`, under the account bearer, every
+The routes are procedures of the hosted oRPC router
+(`src/automations/automations-procedures.ts`), under the account bearer, every
 row gated by the store on the account owning the automation and still
 reaching its task, so another account's automation, or one on a task of a
 workspace the account left, is `not-found`:
@@ -1664,7 +1665,8 @@ past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
 `@luke/features/automation-wire` declares every body and `service-paths.ts`
-the addresses; `src/automations/automations-app.test.ts` holds the routes over a fake
+the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
+`src/automations/automations-procedures.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Luke App's own webhook

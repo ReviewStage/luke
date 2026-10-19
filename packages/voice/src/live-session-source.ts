@@ -212,7 +212,8 @@ export interface LiveSessionSource {
 
 /** The launch environment's voice, honoured only when it is one the API speaks. */
 export function environmentLiveVoice(
-  environment: NodeJS.ProcessEnv = process.env,
+  // A browser tab has no `process`, and so no launch environment to read.
+  environment: NodeJS.ProcessEnv = globalThis.process?.env ?? {},
 ): LiveVoice | undefined {
   const value = environment[LIVE_ENVIRONMENT.VOICE]?.trim();
   return isLiveVoice(value) ? value : undefined;
@@ -245,7 +246,8 @@ class OutcomeRecord {
     this.lastOutcome = outcome;
     this.lastDetail = detail;
     if (outcome === LIVE_SESSION_OUTCOME.SUCCEEDED) return;
-    process.stderr.write(`${this.#logLabel}: ${outcome}${detail ? ` (${detail})` : ""}\n`);
+    // The console, which a desktop's main process and a browser tab both have.
+    console.warn(`${this.#logLabel}: ${outcome}${detail ? ` (${detail})` : ""}`);
   }
 
   fields(): Pick<LiveDiagnostics, "lastOutcome" | "lastDetail" | "lastAttemptAt"> {

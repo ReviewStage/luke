@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask } from "@luke/database/models/task-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
@@ -45,8 +45,18 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Result, type Schema, Stream } from "effect";
-import { HttpRouter } from "effect/http";
+import {
+  Clock,
+  type Context,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  type Schema,
+  Stream,
+} from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import {
   EVE_CANCEL_OUTCOME,
@@ -56,19 +66,26 @@ import {
 } from "../agents/brain-host/eve-sessions.js";
 import { requestUserId } from "../auth/bearer.js";
 import { BRAIN_REQUEST_FAILURE } from "../core.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import { hostedFetch } from "../orpc/handler.js";
+import {
+  type ModelCatalog,
+  modelCatalogOf,
+  type OfferedModel,
+} from "../providers/model-catalog.js";
+import type { WebServices } from "../runtime.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
-import { automationsApp } from "./automations-app.js";
+import { automationsProcedures } from "./automations-procedures.js";
 
 /**
- * The automation routes, answered by the group the way a function answers
- * them, over a real dialect: an automation is made on the account's task
+ * The automation routes, answered by the hosted oRPC router the way the web
+ * route answers them, over a real dialect: an automation is made on the account's task
  * with its schedule's first due instant, refused where its schedule, model,
  * or task will not do, read and changed by its own account alone, paused
  * and resumed with its due instant cleared and computed again, a webhook's
@@ -85,7 +102,7 @@ const RELAY = { owner: "Acme", name: "Relay" } as const;
  * since one installation connects to one workspace and the suite's tests
  * share a database.
  */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 16 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 20 }, (_, index) => ({
   id: 7_000 + index,
   login: RELAY.owner,
   accountId: 70_000 + index,
@@ -119,7 +136,7 @@ function deploymentFor(account: string): string {
   return `deployment for ${account}`;
 }
 
-/** The group over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
+/** The automation procedures over the test's own database, GitHub, and a fake eve that writes down every session it opens and who opened it. */
 const standing = (bearers: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
     const opened: string[] = [];
@@ -141,15 +158,23 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     const sessions = new Map(
       [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
     );
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      githubReaching(INSTALLATIONS).layer,
-      modelCatalogOf(CATALOG),
+    const services = yield* Effect.context<
+      DatabaseServices | GitHubApp | HttpClient.HttpClient | ModelCatalog
+    >().pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+          Layer.succeed(Database, yield* Database),
+          Layer.succeed(Clock.Clock, yield* Clock.Clock),
+          githubReaching(INSTALLATIONS).layer,
+          modelCatalogOf(CATALOG),
+        ),
+      ),
     );
-    const app = HttpRouter.toWebHandler(
-      automationsApp({
+    // SAFETY: the automation procedures yield the database, the clock, GitHub, its HTTP client, and the catalog alone, which is all a test provides of the web runtime's services.
+    const webServices = services as Context.Context<WebServices>;
+    const handle = hostedFetch({
+      automations: automationsProcedures({
         // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
         resolveUserId: (incoming: Request) =>
           requestUserId(
@@ -164,10 +189,8 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
         eveOrigin: () => ORIGIN,
         eve: (authorization) => sessionsAs(Redacted.value(authorization)),
         eveAs: (account) => sessionsAs(deploymentFor(account)),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
+      }),
+    });
     const ask = (
       path: string,
       bearer: string | undefined,
@@ -179,26 +202,26 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       } = {},
     ) =>
       Effect.gen(function* () {
-        // Note that the rewrite moves a path's id into the `id` query, which the group reads.
-        const segments = /^\/api\/automations\/([^/]+)(?:\/(runs?))?$/u.exec(path);
-        const routed =
-          segments === null
-            ? path
-            : `/api/automations/${segments[2] ?? "automation"}?id=${segments[1]}`;
         const headers = new Headers({ "content-type": "application/json" });
         if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
         if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+        const sent = init.body === undefined ? undefined : JSON.stringify(init.body);
+        // The length the platform hands a function with every body.
+        if (sent !== undefined) {
+          headers.set("content-length", String(new TextEncoder().encode(sent).byteLength));
+        }
         const response = yield* Effect.promise(() =>
-          app.handler(
-            new Request(`${ORIGIN}${routed}`, {
+          handle(
+            new Request(`${ORIGIN}${path}`, {
               method: init.method ?? "GET",
               headers,
-              ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
+              ...(sent === undefined ? undefined : { body: sent }),
             }),
+            webServices,
           ),
         );
         const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the group answers JSON; the test reads it as the wire value it is.
+        // SAFETY: the router answers JSON; the test reads it as the wire value it is.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
@@ -1149,6 +1172,54 @@ it.layer(getTestDB())("the automation routes", (it) => {
           "the instant the sweep set stands",
         );
         assert.deepEqual(malformed.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+      }),
+  );
+
+  it.effect(
+    "an unsigned caller is refused as unauthenticated before its input is read, a filter named twice is refused as invalid, and a body past its bound is refused as too large, each as the old group answered it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openAccounts;
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: weekdays(task.id),
+          }),
+        );
+
+        const unsignedMalformed = yield* ask(automationPath(automation.id), undefined, {
+          method: "PATCH",
+          body: { enabled: "yes", owner: "someone-else" },
+        });
+        const unsignedMade = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, undefined, {
+          method: "POST",
+          body: { name: 7 },
+        });
+        const twice = yield* ask(
+          `${HOSTED_SERVICE_PATH.AUTOMATIONS}?planId=${task.id}&planId=${task.id}`,
+          owner,
+        );
+        const oversized = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+          method: "POST",
+          body: {
+            ...weekdays(task.id),
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
+            },
+          },
+        });
+
+        for (const unsigned of [unsignedMalformed, unsignedMade]) {
+          assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+          assert.deepEqual(unsigned.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });
+        }
+        assert.equal(twice.status, HOSTED_HTTP_STATUS.BAD_REQUEST, JSON.stringify(twice.body));
+        assert.deepEqual(twice.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+        assert.equal(oversized.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
+        assert.deepEqual(oversized.body, { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE });
       }),
   );
 });

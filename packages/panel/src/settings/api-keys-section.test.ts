@@ -8,19 +8,13 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
-} from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ApiKeysSection } from "./api-keys-section.js";
@@ -46,49 +40,42 @@ const ANTHROPIC_KEPT: ProviderKeySummary = {
 /** The keys the test's service holds, read and written by the page. */
 let stored: ProviderKeySummary[] = [];
 /** Every act the page sent, in order. */
-let sent: Act[] = [];
+let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Why the service keeps nothing of the next save, where it refuses one. */
 let refuseSave: ProviderKeyRejection | undefined;
 /** Whether the read is answered with a failure rather than the keys. */
 let refuseRead = false;
 /** Whether the read is never answered, so the page stands reading. */
 let holdRead = false;
-/** Where a save is held unanswered until the test lets it go, rather than answered at once. */
-let holdSaves: ((answer: ActOutcome) => void)[] | undefined;
 
-const done = (value: ActResultFor<ActKind>): ActOutcome => ({
-  status: ACT_OUTCOME_STATUS.DONE,
-  value,
-});
+type KeysAnswer = PortActResult<typeof ACT_KIND.PROVIDER_KEYS_READ>;
 
-/** The bridge, answering the page's acts the way the host would. */
-function answer(request: Act): Promise<ActOutcome> {
-  sent.push(request);
-  switch (request.kind) {
-    case ACT_KIND.PROVIDER_KEYS_READ:
-      if (holdRead) return new Promise(() => undefined);
+/** The act port, answering the page's asks of its keys the way the host would. */
+function answerKeys(): void {
+  fakeActPort({
+    [ACT_KIND.PROVIDER_KEYS_READ]: (payload) => {
+      sent.push({ kind: ACT_KIND.PROVIDER_KEYS_READ, payload });
+      if (holdRead) return new Promise<KeysAnswer>(() => undefined);
       return Promise.resolve(
-        done(refuseRead ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { keys: stored }),
+        refuseRead ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { keys: stored },
       );
-    case ACT_KIND.PROVIDER_KEYS_SAVE:
-      if (holdSaves !== undefined) {
-        const held = holdSaves;
-        return new Promise((resolve) => held.push(resolve));
-      }
+    },
+    [ACT_KIND.PROVIDER_KEYS_SAVE]: (
+      payload: PortActPayload<typeof ACT_KIND.PROVIDER_KEYS_SAVE>,
+    ) => {
+      sent.push({ kind: ACT_KIND.PROVIDER_KEYS_SAVE, payload });
       if (refuseSave !== undefined) {
-        return Promise.resolve(done({ keys: stored, rejected: refuseSave }));
+        return Promise.resolve({ keys: stored, rejected: refuseSave });
       }
-      stored = [
-        ...stored.filter((key) => key.provider !== request.payload.provider),
-        ANTHROPIC_KEPT,
-      ];
-      return Promise.resolve(done({ keys: stored }));
-    case ACT_KIND.PROVIDER_KEYS_REMOVE:
-      stored = stored.filter((key) => key.provider !== request.payload.provider);
-      return Promise.resolve(done({ keys: stored }));
-    default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-  }
+      stored = [...stored.filter((key) => key.provider !== payload.provider), ANTHROPIC_KEPT];
+      return Promise.resolve({ keys: stored });
+    },
+    [ACT_KIND.PROVIDER_KEYS_REMOVE]: (payload) => {
+      sent.push({ kind: ACT_KIND.PROVIDER_KEYS_REMOVE, payload });
+      stored = stored.filter((key) => key.provider !== payload.provider);
+      return Promise.resolve({ keys: stored });
+    },
+  });
 }
 
 const roots: Root[] = [];
@@ -100,8 +87,7 @@ beforeEach(() => {
   refuseSave = undefined;
   refuseRead = false;
   holdRead = false;
-  holdSaves = undefined;
-  fakeAppBridge({ act: answer });
+  answerKeys();
 });
 
 afterEach(() => {

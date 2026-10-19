@@ -46,8 +46,8 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
 }
 
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
-  eveOrigin: deploymentEveOrigin,
   resolveUserId: resolveHostedUserId,
+  eveOrigin: deploymentEveOrigin,
 };
 
 /** The deployment's hosted oRPC route. */

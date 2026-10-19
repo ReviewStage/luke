@@ -17,8 +17,6 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -34,9 +32,6 @@ const SENDER = Symbol("window");
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-
-/** A synthetic provider key, as Settings carries it once. */
-const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -261,53 +256,6 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`github-image:${agentId}`);
           return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } as const;
         }),
-      providerKeysRead: () =>
-        Effect.sync(() => {
-          asked.push("keys");
-          return { keys: [] };
-        }),
-      providerKeySave: ({ provider, key }) =>
-        Effect.sync(() => {
-          asked.push(`save:${provider}:${key === PROVIDER_KEY ? "the key" : "another"}`);
-          return { keys: [] };
-        }),
-      providerKeyRemove: ({ provider }) =>
-        Effect.sync(() => {
-          asked.push(`remove:${provider}`);
-          return { keys: [] };
-        }),
-      planTemplateRead: () =>
-        Effect.sync(() => {
-          asked.push("template");
-          return { template: DEFAULT_PLAN_TEMPLATE, custom: false };
-        }),
-      planTemplateWrite: ({ template }) =>
-        Effect.sync(() => {
-          asked.push(`template:${template ?? "the default"}`);
-          return { template: template ?? DEFAULT_PLAN_TEMPLATE, custom: template !== null };
-        }),
-      planTemplateRevisions: ({ before }) =>
-        Effect.sync(() => {
-          asked.push(`revisions:${before ?? "newest"}`);
-          return { revisions: [] };
-        }),
-      planTemplateRevision: ({ seq }) =>
-        Effect.sync(() => {
-          asked.push(`revision:${seq}`);
-          return {
-            revision: { seq, document: { body: "## Why\n", assumptions: [] }, previous: null },
-          };
-        }),
-      planTemplateRestore: ({ seq }) =>
-        Effect.sync(() => {
-          asked.push(`restore:${seq}`);
-          return { template: "## Why\n", custom: true };
-        }),
-      dictationTranscribe: ({ audio, keywords }) =>
-        Effect.sync(() => {
-          asked.push(`transcribe:${audio}:${keywords.join(",")}`);
-          return { text: "Run the tests" };
-        }),
       codingAgentInbox: ({ taskId, after }) =>
         Effect.sync(() => {
           asked.push(`inbox:${taskId}:${after}`);
@@ -439,43 +387,6 @@ it.effect(
       assert.deepEqual(asked, []);
     }),
 );
-it.effect(
-  "a panel's provider key reaches the host once, and the voice window can neither read, save, nor remove one",
-  () =>
-    Effect.gen(function* () {
-      const { router, asked } = fixture();
-      const save = {
-        kind: ACT_KIND.PROVIDER_KEYS_SAVE,
-        payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: PROVIDER_KEY },
-      } as const;
-      const remove = {
-        kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
-        payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI },
-      } as const;
-
-      const saved = yield* router.performAct(save, PANEL);
-      yield* router.performAct({ kind: ACT_KIND.PROVIDER_KEYS_READ }, PANEL);
-      yield* router.performAct(remove, PANEL);
-      const refused = [
-        yield* router.performAct(save, VOICE),
-        yield* router.performAct({ kind: ACT_KIND.PROVIDER_KEYS_READ }, VOICE),
-        yield* router.performAct(remove, VOICE),
-      ];
-
-      assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { keys: [] } });
-      assert.deepEqual(asked, [
-        `save:${PROVIDER_KEY_PROVIDER.OPENAI}:the key`,
-        "keys",
-        `remove:${PROVIDER_KEY_PROVIDER.OPENAI}`,
-      ]);
-      assert.deepEqual(
-        refused.map((outcome) => outcome.status),
-        [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
-      );
-      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
-    }),
-);
-
 it.effect(
   "a panel's ask for a workspace's agents reaches the host as asked, and the voice window's is refused before it",
   () =>

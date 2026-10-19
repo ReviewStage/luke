@@ -13,7 +13,11 @@ import {
   type PortActPayload,
   type PortActResult,
 } from "../contract/index.js";
-import { createActPortHandler, type IssueProceduresDependencies } from "./index.js";
+import {
+  type AccountAskProceduresDependencies,
+  createActPortHandler,
+  type IssueProceduresDependencies,
+} from "./index.js";
 
 /**
  * The Issues page's acts, through the act port as a window calls them: only
@@ -83,7 +87,9 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  const handler = createActPortHandler({ issues: { host } });
+  // SAFETY: no account ask is called here, so the account asks' host is never reached.
+  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
+  const handler = createActPortHandler({ accountAsks, issues: { host } });
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {

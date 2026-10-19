@@ -17,26 +17,31 @@ import { HOSTED_ERRORS } from "./errors.js";
 export const hostedProcedure = oc.errors(HOSTED_ERRORS);
 
 /**
- * A JSON body's schema as a procedure's input, refusing a key it does not
- * declare, as the old groups' body reads did; the extension's own reading
- * of an Effect Schema passes one over. A query's input keeps that default,
- * since the old groups never read a query key they did not name.
+ * A JSON body's schema as a Standard Schema whose decode refuses a key it
+ * does not name, as the old groups' `readEither` refused one; the effect
+ * extension's own conversion ignores an excess key. The schema is made
+ * afresh from its AST, because the conversion writes the Standard Schema
+ * onto the schema it is handed.
  */
 export function exactInput<Type, Encoded>(schema: EffectSchema.Codec<Type, Encoded>) {
-  return EffectSchema.toStandardSchemaV1(EffectSchema.make<typeof schema>(schema.ast), {
-    parseOptions: { onExcessProperty: "error" },
-  });
+  return EffectSchema.toStandardSchemaV1(
+    EffectSchema.make<EffectSchema.Codec<Type, Encoded>>(schema.ast),
+    {
+      parseOptions: { onExcessProperty: "error" },
+    },
+  );
 }
 
 /**
- * A procedure's path parameters and its JSON body as its input, under
- * `inputStructure: "detailed"`, so the body is read whole as its own schema
- * and never merged with the parameters, and refused with a key it does not
- * declare (`exactInput`).
+ * A procedure's input with both path parameters and a JSON body, read with
+ * `inputStructure: "detailed"`, so the body stays the object it was sent as
+ * (a check over its keys counts only its own): the body refuses a key it
+ * does not name, as `exactInput` does, and the query and headers the
+ * detailed input carries are passed over.
  */
-export function exactBodyInput<ParamsType, ParamsEncoded, BodyType, BodyEncoded>(
-  params: EffectSchema.Codec<ParamsType, ParamsEncoded>,
-  body: EffectSchema.Codec<BodyType, BodyEncoded>,
+export function exactBodyInput<Params, ParamsEncoded, Body, BodyEncoded>(
+  params: EffectSchema.Codec<Params, ParamsEncoded>,
+  body: EffectSchema.Codec<Body, BodyEncoded>,
 ) {
   return exactInput(
     EffectSchema.Struct({
