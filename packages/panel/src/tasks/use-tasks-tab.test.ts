@@ -160,7 +160,8 @@ function mount(
   const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
   const record = (kind: ActKind | PortActKind) => {
-    (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
+    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    else if (!isPortActKind(kind)) agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -217,7 +218,7 @@ function mount(
           isPortActKind(kind)
             ? portAnswer(kind, ...args)
             : appAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: a told kind's answer is read by no one, so either side's kind is recorded alike.
+        // SAFETY: a told kind is recorded alike whichever side carries it, the dispatch on the kind the one erasure.
         tell: ((kind: ActKind | PortActKind, ...args: unknown[]) => {
           record(kind);
           // The one told payload the tests read, parsed as the boundary would.

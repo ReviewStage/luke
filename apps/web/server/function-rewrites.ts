@@ -53,26 +53,31 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/account/integrations/([^/]+)/connect",
     route: "account/integrations/connect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/tools",
     route: "account/integrations/tools",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/cancel",
     route: "account/integrations/cancel",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/disconnect",
     route: "account/integrations/disconnect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/rename",
     route: "account/integrations/rename",
     query: "provider=$1",
+    orpc: true,
   },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
@@ -274,6 +279,26 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Array(RewriteSchema)),
 );
 
+/**
+ * A route of the web service as `vercel.json` writes it: a rewrite, and the
+ * response headers a page route sends beside it, as the app's routes send
+ * its Content Security Policy; or a redirect, its status and its `Location`
+ * header, as the app's built file name sends the browser to `/app`. A
+ * generated `/api/` rewrite carries neither.
+ */
+const WebRouteSchema = Schema.Union([
+  Schema.Struct({
+    src: Schema.String,
+    dest: Schema.String,
+    headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  }),
+  Schema.Struct({
+    src: Schema.String,
+    status: Schema.Number,
+    headers: Schema.Struct({ Location: Schema.String }),
+  }),
+]);
+
 /** The table as committed. */
 export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
   return decodeApiRewrites(await readFile(join(web, API_REWRITES_FILE), "utf8"));
@@ -304,7 +329,7 @@ const WebService = Schema.Struct({
   installCommand: Schema.String,
   buildCommand: Schema.String,
   ignoreCommand: Schema.String,
-  routes: Schema.Array(RewriteSchema),
+  routes: Schema.Array(WebRouteSchema),
 });
 
 const EveService = Schema.Struct({
@@ -385,9 +410,10 @@ async function readVercelConfig(web: string): Promise<VercelConfig> {
   return decodeVercelConfig(source);
 }
 
-const isApiRewrite = (rewrite: Rewrite) => rewrite.src.startsWith(API_ROUTE_PREFIX);
+const isApiRewrite = (rewrite: { readonly src: string }) =>
+  rewrite.src.startsWith(API_ROUTE_PREFIX);
 
-const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
+const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /**

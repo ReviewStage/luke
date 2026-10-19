@@ -18,6 +18,7 @@ import {
   type AgentProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type PlatformActProcedures,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -98,14 +99,14 @@ function windowPort(
   } as HostAsk;
   // SAFETY: no account ask is called here, so the account asks' host is never reached.
   const accountAsks = { host: {} } as AccountAskProceduresDependencies;
+  // SAFETY: these tests call the issue kinds alone, so no platform procedure is reached.
+  const platform = {} as PlatformActProcedures<unknown>;
   // SAFETY: no agent act is called here, so the agents' host and notices are never reached.
   const agents = { host: {}, notices: {} } as AgentProceduresDependencies;
-  const handler = createActPortHandler({
-    accountAsks,
-    agents,
-    issues: { host },
-    workspaces: NO_WORKSPACES,
-  });
+  const handler = createActPortHandler(
+    { accountAsks, agents, issues: { host }, workspaces: NO_WORKSPACES },
+    platform,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {
@@ -191,6 +192,21 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
       error instanceof ORPCError &&
       error.code === ACT_ERROR.REFUSED &&
       error.message === REFUSAL[ISSUE_ACT_KIND.ISSUES_CREATE],
+  );
+  assert.deepEqual(asked, []);
+});
+
+it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const call = portCall(client, ISSUE_ACT_KIND.ISSUES_LIST);
+  // SAFETY: the stray key is the point; a window's payload crosses as a structured-clone value.
+  const strayed = { workspaceId: WORKSPACE_ID, stray: true } as PortActPayload<PortActKind>;
+  await assert.rejects(
+    call(strayed),
+    (error) =>
+      error instanceof ORPCError &&
+      error.code === ACT_ERROR.REFUSED &&
+      error.message === REFUSAL[ISSUE_ACT_KIND.ISSUES_LIST],
   );
   assert.deepEqual(asked, []);
 });

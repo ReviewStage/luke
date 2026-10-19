@@ -18,25 +18,11 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
+import { Effect } from "effect";
 import type { ActSender } from "../act-router/router.js";
-import {
-  ACT_ERROR,
-  type ActPortClient,
-  AGENT_ACT_KIND,
-  type PortActKind,
-  type PortActPayload,
-  type PortActResult,
-} from "../contract/index.js";
-import {
-  type AccountAskProceduresDependencies,
-  type AgentProceduresDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type WorkspaceProceduresDependencies,
-} from "./index.js";
+import { AGENT_ACT_KIND, type PortActKind } from "../contract/index.js";
+import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
@@ -168,10 +154,10 @@ const ACTS: readonly {
   },
 ];
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /** What the host is asked to answer, by its ask, where a test answers one otherwise than unanswered. */
@@ -232,55 +218,20 @@ function windowPort(
       noted.push(`chat:${JSON.stringify(shown)}`);
     },
   };
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  // SAFETY: no issue act is called here, so the issues' host is never reached.
-  const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
-  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
-  const handler = createActPortHandler({
-    accountAsks,
-    agents: { host, notices },
-    issues,
-    workspaces,
-  });
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
-    }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
-  return { client, asked, noted };
-}
-
-/** Any port kind's procedure, erased to the union of what every one takes and answers. */
-type PortCall = (payload: PortActPayload<PortActKind>) => Promise<PortActResult<PortActKind>>;
-
-/** One kind called on the port with `payload`, settled to its answer or the sentence of its refusal. */
-async function settled(client: ActPortClient, kind: PortActKind, payload: WireBoundaryInput) {
-  // SAFETY: each test pairs a kind with the payload its own procedure takes, or one it refuses on purpose.
-  const call = client[kind] as PortCall;
-  try {
-    // SAFETY: as above; a window's payload crosses as a structured-clone value.
-    return { answer: await call(payload as PortActPayload<PortActKind>) };
-  } catch (error) {
-    assert.ok(error instanceof ORPCError);
-    assert.equal(error.code, ACT_ERROR.REFUSED);
-    return { refused: error.message };
-  }
+  const port = testActPort(agentProcedures({ host, notices }));
+  ports.push(port);
+  const trusted = options.trusted ?? true;
+  /** One kind called as this window, settled to its answer or the sentence of its refusal. */
+  const call = (kind: PortActKind, payload: WireBoundaryInput) =>
+    port.call(actor, kind, payload, { trusted });
+  return { call, asked, noted };
 }
 
 it("the voice and call windows are refused every agent act in the kind's own words, and the host is not asked nor anything noted", async () => {
   for (const actor of [VOICE, CALL]) {
-    const { client, asked, noted } = windowPort(actor);
+    const { call, asked, noted } = windowPort(actor);
     for (const act of ACTS) {
-      assert.deepEqual(await settled(client, act.kind, act.payload), {
+      assert.deepEqual(await call(act.kind, act.payload), {
         refused: REFUSAL[act.kind],
       });
     }
@@ -290,9 +241,9 @@ it("the voice and call windows are refused every agent act in the kind's own wor
 });
 
 it("a frame this build does not trust is refused every agent act, even as a panel, and the host is not asked nor anything noted", async () => {
-  const { client, asked, noted } = windowPort(PANEL, { trusted: false });
+  const { call, asked, noted } = windowPort(PANEL, { trusted: false });
   for (const act of ACTS) {
-    assert.deepEqual(await settled(client, act.kind, act.payload), {
+    assert.deepEqual(await call(act.kind, act.payload), {
       refused: REFUSAL[act.kind],
     });
   }
@@ -301,9 +252,9 @@ it("a frame this build does not trust is refused every agent act, even as a pane
 });
 
 it("a panel's ask reaches the host once with its payload, a kind that carries nothing with nothing, and the host's answer is the panel's", async () => {
-  const { client, asked } = windowPort(PANEL);
+  const { call, asked } = windowPort(PANEL);
   for (const act of ACTS) {
-    assert.deepEqual(await settled(client, act.kind, act.payload), {
+    assert.deepEqual(await call(act.kind, act.payload), {
       answer: act.ask === undefined ? undefined : UNANSWERED,
     });
   }
@@ -316,11 +267,11 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
 });
 
 it("a panel's Start reaches the host with the plan and the press's own key, hears the agent, and the agent is noted", async () => {
-  const { client, asked, noted } = windowPort(PANEL, {
+  const { call, asked, noted } = windowPort(PANEL, {
     answers: { codingAgentStart: () => Effect.succeed(STARTED) },
   });
 
-  const started = await settled(client, AGENT_ACT_KIND.CODING_AGENTS_START, {
+  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
     taskId: TASK_ID,
     idempotencyKey: "press-1",
   });
@@ -345,16 +296,16 @@ it("a rename, an archive, or a pin answering an agent with no plan reads the pla
   });
   const rename = { agentId: AGENT_ID, title: "Triage" };
 
-  await settled(taskless.client, AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
-  await settled(taskless.client, AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE, {
+  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
+  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_ARCHIVE, {
     agentId: AGENT_ID,
     archived: true,
   });
-  await settled(taskless.client, AGENT_ACT_KIND.CODING_AGENTS_PIN, {
+  await taskless.call(AGENT_ACT_KIND.CODING_AGENTS_PIN, {
     agentId: AGENT_ID,
     pinned: true,
   });
-  await settled(onTask.client, AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
+  await onTask.call(AGENT_ACT_KIND.CODING_AGENTS_RENAME, rename);
 
   assert.deepEqual(taskless.asked, [
     ["codingAgentRename", rename],
@@ -368,7 +319,7 @@ it("a rename, an archive, or a pin answering an agent with no plan reads the pla
 });
 
 it("a panel's reads are noted on their way: the models, a task's agents or the task gone, and an agent's title before its status, but a worker's page is no word on the agent", async () => {
-  const { client, noted } = windowPort(PANEL, {
+  const { call, noted } = windowPort(PANEL, {
     answers: {
       codingAgentModels: () => Effect.succeed({ models: [] }),
       codingAgentList: () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
@@ -383,15 +334,15 @@ it("a panel's reads are noted on their way: the models, a task's agents or the t
     },
   });
 
-  await settled(client, AGENT_ACT_KIND.CODING_AGENTS_MODELS, undefined);
-  await settled(client, AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: TASK_ID });
-  await settled(client, AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "0" });
-  await settled(client, AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, {
+  await call(AGENT_ACT_KIND.CODING_AGENTS_MODELS, undefined);
+  await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: TASK_ID });
+  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID, after: "0" });
+  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGES, {
     agentId: AGENT_ID,
     after: "0",
     callId: "call-worker",
   });
-  await settled(client, AGENT_ACT_KIND.CODING_AGENTS_MESSAGE, {
+  await call(AGENT_ACT_KIND.CODING_AGENTS_MESSAGE, {
     agentId: AGENT_ID,
     text: "Carry on.",
     clientKey: "send-1",
@@ -407,15 +358,15 @@ it("a panel's reads are noted on their way: the models, a task's agents or the t
 });
 
 it("a panel's word on what it shows is noted whole, the Chat as none where it names none, and answers nothing", async () => {
-  const { client, asked, noted } = windowPort(PANEL);
+  const { call, asked, noted } = windowPort(PANEL);
   const chat = { workspaceId: WORKSPACE_ID, taskId: TASK_ID };
 
-  const named = await settled(client, AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
+  const named = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
     agentId: AGENT_ID,
     inboxTaskId: TASK_ID,
     chatShown: chat,
   });
-  const none = await settled(client, AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
+  const none = await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
     agentId: null,
     inboxTaskId: null,
   });
@@ -436,10 +387,10 @@ it("a panel's word on what it shows is noted whole, the Chat as none where it na
 it("a host that dies, or answers what the kind cannot carry, is refused in the kind's own words", async () => {
   const died = windowPort(PANEL, { fallback: () => Effect.die(new Error("secret detail")) });
   const malformed = windowPort(PANEL, { fallback: () => Effect.succeed({ agents: "none" }) });
-  for (const { client } of [died, malformed]) {
+  for (const { call } of [died, malformed]) {
     for (const act of ACTS) {
       if (act.ask === undefined) continue;
-      assert.deepEqual(await settled(client, act.kind, act.payload), {
+      assert.deepEqual(await call(act.kind, act.payload), {
         refused: REFUSAL[act.kind],
       });
     }
@@ -447,13 +398,13 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 });
 
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
-  const { client, asked, noted } = windowPort(PANEL);
+  const { call, asked, noted } = windowPort(PANEL);
   assert.deepEqual(
-    await settled(client, AGENT_ACT_KIND.CODING_AGENTS_STOP, { agentId: AGENT_ID, stray: true }),
+    await call(AGENT_ACT_KIND.CODING_AGENTS_STOP, { agentId: AGENT_ID, stray: true }),
     { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_STOP] },
   );
   assert.deepEqual(
-    await settled(client, AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
+    await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, {
       agentId: AGENT_ID,
       inboxTaskId: null,
       stray: true,
@@ -465,18 +416,17 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 });
 
 it("a payload its kind's schema refuses, or one sent to a kind that carries none, is refused in the kind's own words, and the host is not asked nor anything noted", async () => {
-  const { client, asked, noted } = windowPort(PANEL);
+  const { call, asked, noted } = windowPort(PANEL);
   assert.deepEqual(
-    await settled(client, AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: " ", inboxTaskId: null }),
+    await call(AGENT_ACT_KIND.CODING_AGENTS_SHOWN, { agentId: " ", inboxTaskId: null }),
     { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_SHOWN] },
   );
-  assert.deepEqual(await settled(client, AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: "" }), {
+  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_LIST, { taskId: "" }), {
     refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_LIST],
   });
-  assert.deepEqual(
-    await settled(client, AGENT_ACT_KIND.CODING_AGENTS_MODELS, { workspaceId: WORKSPACE_ID }),
-    { refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_MODELS] },
-  );
+  assert.deepEqual(await call(AGENT_ACT_KIND.CODING_AGENTS_MODELS, { workspaceId: WORKSPACE_ID }), {
+    refused: REFUSAL[AGENT_ACT_KIND.CODING_AGENTS_MODELS],
+  });
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
 });

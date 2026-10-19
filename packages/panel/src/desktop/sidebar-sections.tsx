@@ -8,6 +8,7 @@ import {
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
+  ArchiveIcon,
   BUTTON_SIZE,
   ConfirmDialog,
   DIALOG_TONE,
@@ -21,20 +22,24 @@ import {
   useMenu,
 } from "@luke/ui";
 import {
+  placeAllWrites,
   placeWrites,
   sectionEntries,
   sectionMoveWrites,
   sectionOrder,
+  unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
+import { archiveAsks } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { LayersIcon } from "lucide-react";
+import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
-import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { archiveTasksQuestion, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
@@ -44,7 +49,11 @@ import { useRowDrag } from "./use-row-drag.js";
  * is a teammate's. Each stands under a header like a repository's, its icon
  * where a repository's picture stands, or its title alone where it has none,
  * folded and kept as a repository's
- * fold is, with Edit section and Delete section on its ⋯ and a right-click.
+ * fold is, with Edit section and Delete section on its ⋯ and a right-click,
+ * and between them, while it holds tasks, what acts on all of them at once:
+ * Mark all as read while any is unread, Move tasks to another section or a
+ * new one, Remove tasks from section, and Archive tasks, which asks first
+ * where any has coding agents, as a repository's does.
  * Its tasks stand in the order dragged, and a row is dragged within its
  * section, into another, onto Tasks, which takes it out of every section,
  * or onto Pinned, which pins it there and takes it out of every section too
@@ -265,6 +274,8 @@ interface SectionContext {
   readonly dialogs: SectionDialogs;
   /** Whether a task is the open one, which a fold leaves standing. */
   readonly current: (taskId: string) => boolean;
+  /** Whether a task is unread, as its row's weight says. */
+  readonly unread: (task: TaskSummary) => boolean;
   /** Whether the sidebar is in sight, which the menus close without. */
   readonly inSight: boolean;
   readonly folded: (sectionId: string) => boolean;
@@ -273,6 +284,85 @@ interface SectionContext {
   readonly row: (task: TaskSummary) => React.JSX.Element;
   /** Hears a task let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropTask: (taskId: string, zone: string, at: number) => void;
+}
+
+/** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
+interface SectionDoors {
+  readonly onMarkRead: () => void;
+  /** Archives every task, asking first where any has coding agents. */
+  readonly onArchive: () => void;
+}
+
+/**
+ * Move tasks to: the workspace's other sections and New section…, each
+ * taking every task of the section, in its order, onto the top of the one
+ * chosen.
+ */
+function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry {
+  const { section } = drawn;
+  const { tasks, dialogs } = context;
+  const taskIds = drawn.tasks.map(({ id }) => id);
+  const put = (sectionId: string) =>
+    placeAllWrites(tasks.taskSections, taskIds, sectionId, Date.now());
+  const others = workspaceSections(tasks.taskSections, section.workspaceId)
+    .filter((other) => other.id !== section.id)
+    .map((other): MenuAction => {
+      const glyph = sectionGlyph(other.icon);
+      return {
+        label: other.title,
+        ...(glyph === undefined ? undefined : { icon: glyph }),
+        onSelect: () => tasks.onWriteSections(put(other.id)),
+      };
+    });
+  return {
+    label: "Move tasks to",
+    icon: <LayersIcon />,
+    items: [
+      ...others,
+      { label: "New section…", onSelect: () => dialogs.askNew(section.workspaceId, put) },
+    ],
+  };
+}
+
+/**
+ * A section's menu: Edit section, then what acts on every task it draws
+ * while it draws any, then Delete section. Only the tasks drawn are acted
+ * on, so one kept in it but pinned or archived, which it draws not, is
+ * left where it stands.
+ */
+function sectionActionGroups(
+  drawn: DrawnSection,
+  context: SectionContext,
+  doors: SectionDoors,
+): MenuEntry[][] {
+  const { section } = drawn;
+  const { tasks, dialogs } = context;
+  const edit: MenuEntry[] = [
+    { label: "Edit section", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(section) },
+  ];
+  const remove: MenuEntry[] = [
+    {
+      label: "Delete section",
+      icon: <TrashIcon />,
+      danger: true,
+      onSelect: () => dialogs.askDelete(section),
+    },
+  ];
+  if (drawn.tasks.length === 0) return [edit, remove];
+  const read: MenuEntry[] = drawn.tasks.some(context.unread)
+    ? [{ label: "Mark all as read", icon: <MailOpenIcon />, onSelect: doors.onMarkRead }]
+    : [];
+  const bulk: MenuEntry[] = [
+    ...read,
+    moveTasksEntry(drawn, context),
+    {
+      label: "Remove tasks from section",
+      icon: <FolderOutputIcon />,
+      onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.tasks.map(({ id }) => id))),
+    },
+    { label: "Archive tasks", icon: <ArchiveIcon />, onSelect: doors.onArchive },
+  ];
+  return [edit, bulk, remove];
 }
 
 /** One section: its header, its menu, and its tasks, or a word that tasks are dragged in while it holds none. */
@@ -284,7 +374,7 @@ function SidebarSection({
   context: SectionContext;
 }): React.JSX.Element {
   const { section } = drawn;
-  const { tasks, dialogs } = context;
+  const { tasks } = context;
   const folded = context.folded(section.id);
   const rows = folded ? drawn.tasks.filter((task) => context.current(task.id)) : drawn.tasks;
   const drag = useRowDrag(
@@ -298,17 +388,34 @@ function SidebarSection({
   );
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const groups: MenuAction[][] = [
-    [{ label: "Edit section", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(section) }],
-    [
-      {
-        label: "Delete section",
-        icon: <TrashIcon />,
-        danger: true,
-        onSelect: () => dialogs.askDelete(section),
-      },
-    ],
-  ];
+  const reads = useReadMarks();
+  // Note that the question is about the tasks drawn when it was asked, so it goes once any of them leaves the section, moved by another window, rather than archiving whatever stands there now.
+  const [doomed, setDoomed] = useState<readonly string[]>([]);
+  const archiving = useConfirmDialog(
+    {
+      subject:
+        doomed.length > 0 && doomed.every((id) => drawn.tasks.some((task) => task.id === id)),
+      surfaceOpen: tasks.shown,
+    },
+    () => {
+      tasks.onArchiveTasks(doomed);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  const groups = sectionActionGroups(drawn, context, {
+    onMarkRead: () => {
+      for (const task of drawn.tasks.filter(context.unread)) reads.mark(task, false);
+    },
+    onArchive: () => {
+      const taskIds = drawn.tasks.map(({ id }) => id);
+      if (!archiveAsks(drawn.tasks)) {
+        tasks.onArchiveTasks(taskIds);
+        return;
+      }
+      setDoomed(taskIds);
+      archiving.ask();
+    },
+  });
   const glyph = sectionGlyph(section.icon);
   return (
     <div
@@ -344,6 +451,10 @@ function SidebarSection({
           onClose={menu.close}
         />
       )}
+      <ConfirmDialog
+        confirm={archiving}
+        question={archiveTasksQuestion(section.title, doomed.length)}
+      />
       {rows.length === 0 ? (
         folded ? null : (
           <p className="sidebar-section-empty">Drag tasks here</p>

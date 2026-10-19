@@ -7,8 +7,8 @@ import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
  * A picture stands in a plan's Markdown as `![alt](<address> "caption")`,
  * its address the plan's own, `https://tryluke.dev/<workspace>/plan/<plan>`
  * (`mention-link.ts`), with `/files/<picture>` after it. The address is a
- * real one on purpose: opened in a browser it lands on the "Open in Luke"
- * page, which opens the plan and reveals nothing, and pasted anywhere else it
+ * real one on purpose: opened in a browser it lands on the web app, which
+ * opens the plan to its readers alone, and pasted anywhere else it
  * names a picture only the plan's readers can fetch, through the service
  * on their own sign-in. Nothing here reaches the bytes.
  */

@@ -55,6 +55,28 @@ type FakeActPort = {
   readonly [Kind in PortActKind]: (payload: PortActPayload<Kind>) => Promise<PortActResult<Kind>>;
 };
 
+/** One act as a window sent it on its act port: its kind, and its payload where it carries one. */
+export type SentPortAct = { readonly kind: PortActKind; readonly payload?: WireBoundaryInput };
+
+/**
+ * Installs an act port answering every kind through `answer`, as a test
+ * that writes down what its window sent, whichever kind it was, does.
+ */
+export function fakeActPortAnswering(
+  answer: (request: SentPortAct) => Promise<WireBoundaryInput>,
+): void {
+  const procedures: Partial<FakeActPort> = {};
+  // SAFETY: the contract's keys are exactly its kinds.
+  for (const kind of Object.keys(actContract) as PortActKind[]) {
+    // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
+    Object.assign(procedures, {
+      [kind]: (payload: WireBoundaryInput) =>
+        answer(payload === undefined ? { kind } : { kind, payload }),
+    });
+  }
+  fakeActPort(procedures);
+}
+
 /** One act a window sent on its act port, its payload typed by its kind, and absent where the kind carries none. */
 type PortAct = {
   [Kind in PortActKind]: PortActPayload<Kind> extends undefined

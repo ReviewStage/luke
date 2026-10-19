@@ -101,13 +101,6 @@ import {
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
-import {
-  type MacRepositoriesAnswer,
-  macRepositoriesAnswerSchema,
-  macRepositorySchema,
-  macTerminalKeySchema,
-  macTerminalOpenParamsSchema,
-} from "@luke/features/mac-terminal-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -175,31 +168,8 @@ import {
   tasksTreeParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
-import {
-  type TerminalCreatedActAnswer,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
-  terminalAgentParamsSchema,
-  terminalAttachParamsSchema,
-  terminalCreatedActAnswerSchema,
-  terminalCreateParamsSchema,
-  terminalRenameParamsSchema,
-  terminalResumedActAnswerSchema,
-  terminalShellParamsSchema,
-  terminalsActAnswerSchema,
-} from "@luke/features/terminal-acts";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
-import {
-  type VoiceCreateLiveSessionResult,
-  voiceCreateLiveSessionParamsSchema,
-  voiceCreateLiveSessionResultSchema,
-  voiceEndLiveSessionParamsSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
-  voiceSetVideoParamsSchema,
-} from "@luke/gateway";
-import type { LiveDiagnostics } from "@luke/live";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -211,8 +181,6 @@ import {
 import type { UpdateSnapshot } from "@luke/settings/update";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
-import { avatarStateSchema } from "@luke/voice/avatar";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -402,20 +370,6 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
   /**
-   * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
-   * listed, started, named, and ended, its sandbox resumed on the
-   * developer's click, and a shell attached and detached. What a shell
-   * prints travels on the port an attach posts to the asking panel, never on
-   * an act.
-   */
-  TERMINAL_LIST: "terminal.list",
-  TERMINAL_CREATE: "terminal.create",
-  TERMINAL_RENAME: "terminal.rename",
-  TERMINAL_KILL: "terminal.kill",
-  TERMINAL_RESUME: "terminal.resume",
-  TERMINAL_ATTACH: "terminal.attach",
-  TERMINAL_DETACH: "terminal.detach",
-  /**
    * A Browser tab's view, which main owns over the panel that asked
    * (`browser-views.ts`): opened on an address and answered how its page
    * stands, sent to another, stepped back, forward, reloaded or stopped,
@@ -431,17 +385,6 @@ export const ACT_KIND = {
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
   /**
-   * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
-   * each repository's run command read and set; and a terminal of this Mac
-   * opened on the agent's branch for the asking panel, and closed with its
-   * tab. What the terminal prints and what is typed travel on the port an
-   * open posts to that panel, never on an act.
-   */
-  MAC_REPOSITORIES: "macRepositories.read",
-  MAC_REPOSITORY_SET: "macRepositories.set",
-  MAC_TERMINAL_OPEN: "macTerminal.open",
-  MAC_TERMINAL_CLOSE: "macTerminal.close",
-  /**
    * The workspace's chat: read past a cursor (held open by the service
    * while nothing moved), and written to as the account's own member, a
    * post, an answer to an ask, a resolve, or how far it has read. The
@@ -449,27 +392,6 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
-  VOICE_COMMAND: "voice.command",
-  /** The call card's way back: Luke's window brought forward on the call's own task. */
-  CALL_SHOW_TASK: "call.showTask",
-  /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
-  AVATAR_REPORT: "avatar.report",
-  /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
-  VOICE_SET_VIDEO: "voice.setVideo",
-  /**
-   * The voice window as a GPT Live peer: its SDP offer handed to the host,
-   * which creates the one session and answers the SDP; the hang-up it asks
-   * the host to decide; and the two reports the host reads its transport and
-   * its idle from. No credential travels in any of them.
-   */
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  /** Stop Luke, the stop key's and the Call tab's Stop's one action: on the task named, else the call's, else the open one. */
-  LUKE_STOP: "luke.stop",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
    * Where the developer's voice would be captured from, read afresh: the act
@@ -478,7 +400,6 @@ export const ACT_KIND = {
    * presses.
    */
   MICROPHONE_ROUTE: "microphone.route",
-  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
   NOTIFICATIONS_TEST: "notifications.test",
@@ -1162,61 +1083,6 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's picture on this system.",
   },
-  [ACT_KIND.TERMINAL_LIST]: {
-    payload: actSchema(terminalAgentParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not reach this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_CREATE]: {
-    payload: actSchema(terminalCreateParamsSchema),
-    result: wireResult<TerminalCreatedActAnswer>(isReadable(terminalCreatedActAnswerSchema)),
-    refusal: "Could not start a shell in this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_RENAME]: {
-    payload: actSchema(terminalRenameParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not rename that shell.",
-  },
-  [ACT_KIND.TERMINAL_KILL]: {
-    payload: actSchema(terminalShellParamsSchema),
-    result: wireResult<TerminalsActAnswer>(isReadable(terminalsActAnswerSchema)),
-    refusal: "Could not end that shell.",
-  },
-  [ACT_KIND.TERMINAL_RESUME]: {
-    payload: actSchema(terminalAgentParamsSchema),
-    result: wireResult<TerminalResumedActAnswer>(isReadable(terminalResumedActAnswerSchema)),
-    refusal: "Could not resume this agent's sandbox.",
-  },
-  [ACT_KIND.TERMINAL_ATTACH]: {
-    payload: actSchema(terminalAttachParamsSchema),
-    result: answersNothing,
-    refusal: "Could not open that shell.",
-  },
-  [ACT_KIND.MAC_REPOSITORIES]: {
-    payload: noPayload,
-    result: wireResult<MacRepositoriesAnswer>(isReadable(macRepositoriesAnswerSchema)),
-    refusal: "Could not read the run commands set on this Mac.",
-  },
-  [ACT_KIND.MAC_REPOSITORY_SET]: {
-    payload: actSchema(macRepositorySchema),
-    result: answersNothing,
-    refusal: "Could not save the repository's run command on this Mac.",
-  },
-  [ACT_KIND.MAC_TERMINAL_OPEN]: {
-    payload: actSchema(macTerminalOpenParamsSchema),
-    result: answersNothing,
-    refusal: "Could not open a terminal on this Mac.",
-  },
-  [ACT_KIND.MAC_TERMINAL_CLOSE]: {
-    payload: actSchema(macTerminalKeySchema),
-    result: answersNothing,
-    refusal: "Could not close the terminal.",
-  },
-  [ACT_KIND.TERMINAL_DETACH]: {
-    payload: actSchema(terminalShellParamsSchema),
-    result: answersNothing,
-    refusal: "Could not close that shell.",
-  },
   [ACT_KIND.BROWSER_OPEN]: {
     payload: actSchema(browserAddressParamsSchema),
     result: wireResult<BrowserPage>(isReadable(browserPageSchema)),
@@ -1260,52 +1126,6 @@ export const ACT = {
     ),
     refusal: "Could not write to the workspace's chat on this system.",
   },
-  [ACT_KIND.VOICE_COMMAND]: {
-    payload: record({
-      command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
-    }),
-    result: answersNothing,
-    refusal: "Could not carry that command on this system.",
-  },
-  [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
-    payload: actSchema(voiceCreateLiveSessionParamsSchema),
-    result: wireResult<VoiceCreateLiveSessionResult | undefined>(
-      (value) => value === undefined || isReadable(voiceCreateLiveSessionResultSchema)(value),
-    ),
-    refusal: "Could not open a voice session on this system.",
-  },
-  [ACT_KIND.VOICE_END_LIVE_SESSION]: {
-    payload: actSchema(voiceEndLiveSessionParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not end the voice session on this system.",
-  },
-  [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
-    payload: actSchema(voiceReportLiveTransportParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not report the voice transport on this system.",
-  },
-  [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
-    payload: actSchema(voiceReportLiveActivityParamsSchema),
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not report the voice activity on this system.",
-  },
-  [ACT_KIND.VOICE_STOP_SPEAKING]: {
-    payload: noPayload,
-    result: wireResult<boolean>((value) =>
-      Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
-    ),
-    refusal: "Could not tell Luke to stop speaking on this system.",
-  },
-  [ACT_KIND.LUKE_STOP]: {
-    payload: record({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
-    result: answersNothing,
-    refusal: "Could not stop Luke on this system.",
-  },
-  [ACT_KIND.VOICE_DIAGNOSTICS]: {
-    payload: noPayload,
-    result: wireResult<LiveDiagnostics | undefined>(),
-    refusal: "Could not read the voice diagnostics on this system.",
-  },
   [ACT_KIND.MICROPHONE_REQUEST]: {
     payload: noPayload,
     result: wireResult<MicrophoneStatus>(),
@@ -1316,22 +1136,10 @@ export const ACT = {
     result: wireResult<MicrophoneRoute | undefined>(),
     refusal: "Could not read the microphone route on this system.",
   },
-  [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.NOTIFICATIONS_TEST]: press("Could not post a notification on this system."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
-  [ACT_KIND.CALL_SHOW_TASK]: press("Could not bring the call's task forward on this system."),
-  [ACT_KIND.AVATAR_REPORT]: {
-    payload: actSchema(avatarStateSchema),
-    result: answersNothing,
-    refusal: "Could not report the video on this system.",
-  },
-  [ACT_KIND.VOICE_SET_VIDEO]: {
-    payload: actSchema(voiceSetVideoParamsSchema),
-    result: answersNothing,
-    refusal: "Could not turn the video on or off on this system.",
-  },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A task's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

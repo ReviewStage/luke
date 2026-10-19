@@ -11,10 +11,15 @@ import {
   type AutomationsProcedureSeams,
   automationsProcedures,
 } from "../automations/automations-procedures.js";
+import {
+  type IntegrationsProcedureSeams,
+  integrationsProcedures,
+} from "../integrations/integrations-procedures.js";
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment. */
 export type HostedRouterSeams = AutomationsProcedureSeams &
+  IntegrationsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams;
 
@@ -22,6 +27,7 @@ export type HostedRouterSeams = AutomationsProcedureSeams &
 export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
     automations: automationsProcedures(seams),
+    integrations: integrationsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
   });

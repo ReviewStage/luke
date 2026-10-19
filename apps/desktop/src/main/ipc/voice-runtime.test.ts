@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import { afterEach, it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
-import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
+import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
+import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
 import { LIVE_STATUS } from "@luke/live";
@@ -12,7 +13,7 @@ import type { WebContents } from "electron";
 import type { PanelManager } from "../window/panel-manager";
 import {
   type VoiceRuntimeDependencies,
-  voiceRuntimeActRows,
+  voiceRuntimeProcedures,
   voiceRuntimeReports,
 } from "./voice-runtime";
 
@@ -29,6 +30,13 @@ const RUN = {
   packaged: false,
   platform: "darwin",
 } as const;
+
+/** Every act port a fixture opened, closed once its test is done. */
+const ports: TestActPort<WebContents>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
 
 function fixture() {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
@@ -101,22 +109,32 @@ function fixture() {
     setShortcutCapturing: () => undefined,
   };
   const reports = voiceRuntimeReports(dependencies);
-  // SAFETY: only the voice rows are under test; the router dispatches on the
-  // kind alone, so the kinds this fragment does not answer are never reached.
-  const router = createActRouter(voiceRuntimeActRows(dependencies) as ActRows);
-  const senderOf = (sender: WebContents): ActSender => ({
-    sender,
-    panel: sender === panelSender,
-    voice: sender === voiceSender,
-    call: sender === callSender,
-  });
+  const actPort = testActPort(voiceRuntimeProcedures(dependencies));
+  ports.push(actPort);
+  /** One window as the port's procedures read it, the same object for every call it makes. */
+  const actors = new Map<WebContents, ActSender<WebContents>>();
+  const senderOf = (sender: WebContents): ActSender<WebContents> => {
+    const held = actors.get(sender);
+    if (held !== undefined) return held;
+    const actor = {
+      sender,
+      panel: sender === panelSender,
+      voice: sender === voiceSender,
+      call: sender === callSender,
+    };
+    actors.set(sender, actor);
+    return actor;
+  };
   const command = (sender: WebContents) =>
-    router.performAct(
+    actPort.perform(
       { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.END_CALL } },
       senderOf(sender),
     );
-  const perform = (sender: WebContents, act: Parameters<typeof router.performAct>[0]) =>
-    router.performAct(act, senderOf(sender));
+  const perform = (
+    sender: WebContents,
+    act: Parameters<typeof actPort.perform>[0],
+    options?: { readonly trusted?: boolean },
+  ) => actPort.perform(act, senderOf(sender), options);
   const report = (sender: WebContents, view: VoiceView) =>
     reports.reportVoiceView({ sender }, view, undefined);
   return {
@@ -144,7 +162,7 @@ it.effect("the five live session acts reach the host from the voice window alone
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
         payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
       }),
-      { status: "done", value: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
+      { answer: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
     );
     yield* f.perform(f.voiceSender, {
       kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
@@ -155,8 +173,7 @@ it.effect("the five live session acts reach the host from the voice window alone
       payload: { idle: true },
     });
     assert.deepEqual(yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
-      status: "done",
-      value: true,
+      answer: true,
     });
     yield* f.perform(f.voiceSender, {
       kind: ACT_KIND.VOICE_END_LIVE_SESSION,
@@ -176,15 +193,14 @@ it.effect("the five live session acts reach the host from the voice window alone
         kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
         payload: { sdp: offer, taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
       }),
-      { status: "done", value: undefined },
+      { answer: undefined },
     );
     yield* f.perform(f.panelSender, {
       kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
       payload: { idle: false },
     });
     assert.deepEqual(yield* f.perform(f.panelSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
-      status: "done",
-      value: false,
+      answer: false,
     });
     yield* f.perform(f.panelSender, {
       kind: ACT_KIND.VOICE_END_LIVE_SESSION,
@@ -225,5 +241,32 @@ it.effect(
         f.sentToVoice.map((sent) => sent.payload),
         [{ command: VOICE_COMMAND.STOP_SPEAKING }],
       );
+    }),
+);
+
+it.effect(
+  "a frame this build does not trust is refused every voice act in the kind's own words, and the host hears nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const untrusted = { trusted: false };
+      assert.deepEqual(
+        yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }, untrusted),
+        { refused: "Could not tell Luke to stop speaking on this system." },
+      );
+      assert.deepEqual(
+        yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} }, untrusted),
+        { refused: "Could not stop Luke on this system." },
+      );
+      assert.deepEqual(
+        yield* f.perform(
+          f.panelSender,
+          { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.END_CALL } },
+          untrusted,
+        ),
+        { refused: "Could not carry that command on this system." },
+      );
+      assert.deepEqual(f.liveCalls, []);
+      assert.deepEqual(f.sentToVoice, []);
     }),
 );

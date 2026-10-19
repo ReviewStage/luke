@@ -20,7 +20,11 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
-import { type AgentProceduresDependencies, createActPortHandler } from "@luke/host/act-port";
+import {
+  type AgentProceduresDependencies,
+  createActPortHandler,
+  refusedPlatformProcedures,
+} from "@luke/host/act-port";
 import {
   createHostActRouter,
   type HostActDependencies,
@@ -56,6 +60,7 @@ import {
   RunMode,
   reporterLayer,
   ServiceOrigin,
+  SettingsChangedElsewhere,
   ShutdownSignal,
   StateRoot,
   VoiceSocket,
@@ -67,7 +72,7 @@ import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import packageJson from "../../package.json";
-import { localStorageFileSystem } from "./local-storage-file-system";
+import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
 import { downloadText, openTab, webPlatform } from "./web-platform";
 
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
@@ -84,46 +89,24 @@ const CONTACT_MAILTO = "mailto:founders@stagereview.app";
 const FEEDBACK_PATH = "/api/feedback";
 
 /**
- * Every act a platform answers that a browser tab cannot carry yet: the
- * updater, the terminals and the Mac's own, Browser tabs, the voice, the
- * call window and the avatar, the microphone, and notifications.
+ * Every `app:act` kind a platform answers that a browser tab cannot carry
+ * yet: the updater, Browser tabs, the microphone, and notifications. The
+ * terminals and the Mac's own, the voice, the call window, and the avatar
+ * ride the act port, where `refusedPlatformProcedures` refuses them.
  */
 const REFUSED_KINDS = [
   ACT_KIND.UPDATE_CHECK,
   ACT_KIND.UPDATE_INSTALL,
   ACT_KIND.UPDATE_OPEN_RELEASE,
   ACT_KIND.UPDATE_OPEN_CHANGELOG,
-  ACT_KIND.TERMINAL_LIST,
-  ACT_KIND.TERMINAL_CREATE,
-  ACT_KIND.TERMINAL_RENAME,
-  ACT_KIND.TERMINAL_KILL,
-  ACT_KIND.TERMINAL_RESUME,
-  ACT_KIND.TERMINAL_ATTACH,
-  ACT_KIND.TERMINAL_DETACH,
   ACT_KIND.BROWSER_OPEN,
   ACT_KIND.BROWSER_NAVIGATE,
   ACT_KIND.BROWSER_STEP,
   ACT_KIND.BROWSER_PLACE,
   ACT_KIND.BROWSER_CAPTURE,
   ACT_KIND.BROWSER_CLOSE,
-  ACT_KIND.MAC_REPOSITORIES,
-  ACT_KIND.MAC_REPOSITORY_SET,
-  ACT_KIND.MAC_TERMINAL_OPEN,
-  ACT_KIND.MAC_TERMINAL_CLOSE,
-  ACT_KIND.VOICE_COMMAND,
-  ACT_KIND.CALL_SHOW_TASK,
-  ACT_KIND.AVATAR_REPORT,
-  ACT_KIND.VOICE_SET_VIDEO,
-  ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-  ACT_KIND.VOICE_END_LIVE_SESSION,
-  ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
-  ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
-  ACT_KIND.VOICE_STOP_SPEAKING,
-  ACT_KIND.LUKE_STOP,
-  ACT_KIND.VOICE_DIAGNOSTICS,
   ACT_KIND.MICROPHONE_REQUEST,
   ACT_KIND.MICROPHONE_ROUTE,
-  ACT_KIND.MICROPHONE_OPEN_SETTINGS,
   ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS,
   ACT_KIND.NOTIFICATIONS_TEST,
 ] as const;
@@ -197,6 +180,20 @@ function onTabFocusChanged(listener: (focused: boolean) => void): () => void {
   };
 }
 
+/**
+ * Each write another tab of this origin made to the files this tab's host
+ * keeps, which the browser says as a `storage` event in every tab but the
+ * writer's. A cleared storage (`key` null) is a change to them too.
+ */
+function filesChangedElsewhere(): Stream.Stream<void> {
+  const changed = Stream.filter(
+    Stream.fromEventListener<StorageEvent>(window, "storage"),
+    (event) =>
+      event.storageArea === localStorage && (event.key === FILES_KEY || event.key === null),
+  );
+  return Stream.as(changed, undefined);
+}
+
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
 function seamLayers() {
   return Layer.mergeAll(
@@ -210,6 +207,7 @@ function seamLayers() {
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
+    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere()),
   );
 }
 
@@ -309,12 +307,16 @@ const servedActPort = (
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      createActPortHandler({
-        accountAsks: { host: operator.host },
-        agents: { host: operator.host, notices },
-        issues: { host: operator.host },
-        workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
-      }).upgrade(channel.port2, {
+      // Every platform kind on the port is refused, since a tab carries none of them yet.
+      createActPortHandler(
+        {
+          accountAsks: { host: operator.host },
+          agents: { host: operator.host, notices },
+          issues: { host: operator.host },
+          workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
+        },
+        refusedPlatformProcedures<WebSender>(),
+      ).upgrade(channel.port2, {
         context: () => ({
           actor: { sender: window, panel: true, voice: false, call: false },
           trusted: true,

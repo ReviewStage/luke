@@ -5,23 +5,23 @@
   },
   {
     "src": "/api/account/integrations/([^/]+)/connect",
-    "dest": "/api/default.js?route=account/integrations/connect&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/connect&route-path=account/integrations/$1/connect&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/tools",
-    "dest": "/api/default.js?route=account/integrations/tools&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/tools&route-path=account/integrations/$1/tools&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/cancel",
-    "dest": "/api/default.js?route=account/integrations/cancel&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/cancel&route-path=account/integrations/$1/cancel&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/disconnect",
-    "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/disconnect&route-path=account/integrations/$1/disconnect&provider=$1"
   },
   {
     "src": "/api/account/integrations/([^/]+)/rename",
-    "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
+    "dest": "/api/default.js?route=account/integrations/rename&route-path=account/integrations/$1/rename&provider=$1"
   },
   {
     "src": "/api/plans/([^/]+)/board",

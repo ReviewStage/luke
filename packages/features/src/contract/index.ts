@@ -6,14 +6,17 @@
  */
 
 import { automationsContract } from "./automations.js";
+import { integrationsContract } from "./integrations.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 
 export { HOSTED_ERRORS } from "./errors.js";
+export { integrationStatusesReadSchema } from "./integrations.js";
 
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   automations: automationsContract,
+  integrations: integrationsContract,
   messages: messagesContract,
   models: modelsContract,
 };
