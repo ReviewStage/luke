@@ -17,6 +17,7 @@ import type { Board, BoardElement } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
+import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
@@ -30,14 +31,9 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
-import {
-  type PageLine,
-  type PageVersion,
-  planPageVersionAnswerSchema,
-  taskPagesAnswerSchema,
-} from "./page-wire.js";
+import type { PageLine, PageVersion } from "./page-wire.js";
 import { pictureTypeSchema } from "./picture-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL, planAttachmentAnswerSchema } from "./plan-attachment-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
   type PlanCommentActionRequest,
   type PlanCommentStartRequest,
@@ -49,16 +45,9 @@ import {
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
 import {
   planAttachmentPath,
-  planAttachmentsPath,
   planCommentsPath,
   planCommentThreadPath,
-  planPageVersionPath,
   type RepositoryPlace,
-  taskCodePath,
-  taskFilePath,
-  taskPagesPath,
-  taskSkillsPath,
-  taskTreePath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -90,11 +79,8 @@ import {
   type TaskTreeRequest,
   type TaskUpdateRequest,
   taskCreateRequestSchema,
-  taskFileAnswerSchema,
   taskFileRequestSchema,
   taskRenameRequestSchema,
-  taskSkillsAnswerSchema,
-  taskTreeAnswerSchema,
   taskTreeRequestSchema,
   taskUpdateRequestSchema,
 } from "./task-wire.js";
@@ -112,7 +98,6 @@ import {
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TaskWorkAnswer,
-  taskCodeAnswerSchema,
 } from "./tasks-view.js";
 import type { TaskTranscript } from "./transcript-wire.js";
 
@@ -451,10 +436,7 @@ export class HostedTaskClient {
   readCode(
     taskId: string,
   ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskCodePath(taskId) },
-      taskCodeAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskFiles.code, { id: taskId }));
   }
 
   /**
@@ -468,9 +450,15 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskFilePath(taskId, admitted) },
-      taskFileAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.file, {
+        id: taskId,
+        path: admitted.path,
+        first: String(admitted.firstLine),
+        last: String(admitted.lastLine),
+        ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
+        ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
+      }),
     );
   }
 
@@ -485,9 +473,12 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskTreePath(taskId, admitted) },
-      taskTreeAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.tree, {
+        id: taskId,
+        ...(admitted.path === "" ? undefined : { path: admitted.path }),
+        ...(admitted.recursive === true ? { recursive: TASK_FILE_QUERY_FLAG } : undefined),
+      }),
     );
   }
 
@@ -495,10 +486,7 @@ export class HostedTaskClient {
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskSkillsPath(taskId) },
-      taskSkillsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskFiles.skills, { id: taskId }));
   }
 
   /**
@@ -614,30 +602,27 @@ export class HostedTaskClient {
     taskId: string,
     picture: string,
   ): Effect.Effect<TasksPictureKeepAnswer, never, HttpClient.HttpClient> {
-    const send = this.#call.send;
-    return Effect.gen(function* () {
-      const answer = yield* send({
-        method: HTTP_METHOD.POST,
-        path: planAttachmentsPath(taskId),
-        body: JSON.stringify({ picture }),
-      });
-      if (!callAnswered(answer)) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) {
-        const refused = refusedAs(payload, NOT_FOUND_REFUSAL);
-        return { failure: refused.ok ? PICTURE_KEEP_FAILURE.UNANSWERED : refused.failure };
-      }
-      const kept = Result.getOrUndefined(readServiceAnswer(planAttachmentAnswerSchema)(payload));
-      if (kept === undefined) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
-      return "id" in kept
-        ? { id: kept.id }
-        : {
-            failure:
-              kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
-                ? PICTURE_KEEP_FAILURE.TOO_MANY
-                : PICTURE_KEEP_FAILURE.UNANSWERED,
-          };
-    });
+    return Effect.match(
+      askHosted(this.#hosted.taskFiles.keepPicture, {
+        params: { id: taskId },
+        body: { picture },
+      }),
+      {
+        onFailure: (failed): TasksPictureKeepAnswer =>
+          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.NOT_FOUND
+            ? { failure: TASK_CALL_FAILURE.NOT_FOUND }
+            : { failure: PICTURE_KEEP_FAILURE.UNANSWERED },
+        onSuccess: ({ body: kept }): TasksPictureKeepAnswer =>
+          "id" in kept
+            ? { id: kept.id }
+            : {
+                failure:
+                  kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
+                    ? PICTURE_KEEP_FAILURE.TOO_MANY
+                    : PICTURE_KEEP_FAILURE.UNANSWERED,
+              },
+      },
+    );
   }
 
   /** One plan's pages, each by its newest version; nothing where the service did not answer them. */
@@ -645,10 +630,7 @@ export class HostedTaskClient {
     taskId: string,
   ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
     return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: taskPagesPath(taskId) },
-        taskPagesAnswerSchema,
-      ),
+      orNothing(askHosted(this.#hosted.taskFiles.pages, { id: taskId })),
       (answer) => answer?.pages,
     );
   }
@@ -660,9 +642,12 @@ export class HostedTaskClient {
     version: number,
   ): Effect.Effect<PageVersion | undefined, never, HttpClient.HttpClient> {
     return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: planPageVersionPath(taskId, pageId, version) },
-        planPageVersionAnswerSchema,
+      orNothing(
+        askHosted(this.#hosted.taskFiles.page, {
+          id: taskId,
+          page: pageId,
+          version: String(version),
+        }),
       ),
       (answer) => answer?.page,
     );
