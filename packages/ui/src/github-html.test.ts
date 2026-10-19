@@ -86,3 +86,31 @@ test("a themed picture keeps its image alone, so no source names an address the 
     element("a", { href: "https://example.com/review" }, [element("picture", {}, [badge])]),
   ]);
 });
+
+test("a suggested change becomes a fenced block of its rows in order, a removed line marked - and an added one +, its words as they stand", () => {
+  const row = (side: "deletion" | "addition", words: HtmlNode[]) =>
+    element("tr", {}, [
+      element("td", { className: ["blob-num", `blob-num-${side}`] }),
+      element("td", { className: ["blob-code-inner", `blob-code-${side}`] }, words),
+    ]);
+  const blob = element("div", { className: ["my-2", "js-suggested-changes-blob", "diff-view"] }, [
+    element("div", { className: ["f6"] }, [text("Suggested change")]),
+    element("table", {}, [
+      element("tbody", {}, [
+        row("deletion", [
+          element("span", { className: ["pl-k"] }, [text("const")]),
+          text(" a = 1;"),
+        ]),
+        row("addition", []),
+        row("addition", [text("  const a = 2;")]),
+      ]),
+    ]),
+  ]);
+  assert.deepEqual(shaped(blob), [
+    element("pre", {}, [
+      element("code", { className: ["language-suggested-change"] }, [
+        text("-const a = 1;\n+\n+  const a = 2;"),
+      ]),
+    ]),
+  ]);
+});

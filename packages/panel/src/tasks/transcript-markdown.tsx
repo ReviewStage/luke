@@ -1,6 +1,7 @@
 import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import { IconButton } from "@luke/ui";
+import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
 import {
   type ComponentProps,
   createContext,
@@ -46,11 +47,32 @@ const COPY_LABEL = "Copy code";
 /** What a block whose fence names no language is labelled. */
 const PLAIN_LANGUAGE = "text";
 
-/** The language GitHub's suggested change is fenced as, and what its block's header calls it. */
+/** The language a suggestion is written in, and what a suggestion's block's header calls it. */
 const SUGGESTION = {
   LANGUAGE: "suggestion",
   LABEL: "Suggested change",
 } as const;
+
+/** The language a diff is fenced in, whose rows are tinted by what they do. */
+const DIFF_LANGUAGE = "diff";
+
+/** What a row of a block drawn as rows does: a line removed, one added, or one standing as it was. */
+const CODE_ROW = {
+  REMOVED: "removed",
+  ADDED: "added",
+  CONTEXT: "context",
+} as const;
+
+type CodeRow = (typeof CODE_ROW)[keyof typeof CODE_ROW];
+
+/** A diff's file header, `--- a/path` or `+++ b/path`: three marks, then a space or nothing. */
+const DIFF_HEADER = /^(?:---|\+\+\+)(?:\s|$)/u;
+
+/** A row of a block drawn as rows: what it does, and the words it shows. */
+interface Row {
+  readonly kind: CodeRow;
+  readonly text: string;
+}
 
 /** The language a fenced block's class names, as Streamdown hands it on. */
 const LANGUAGE_CLASS = /(?:^|\s)language-(\S+)/u;
@@ -199,12 +221,77 @@ function CodeRuns({ code, lines }: { code: string; lines: CodeLines | undefined 
 }
 
 /**
+ * A block's lines as rows tinted by what each does, or none for a block of
+ * plain lines. A suggestion as written holds the new lines alone, every one
+ * added; a suggested change GitHub rendered marks each line `-` or `+`
+ * (`@luke/ui/github-html`), which the row stands for in its mark's place, as
+ * GitHub draws one; a diff's lines keep their marks, and its other lines
+ * stand untinted.
+ */
+function rowsOf(language: string, code: string): readonly Row[] | undefined {
+  const lines = code.split("\n");
+  if (language === SUGGESTION.LANGUAGE) {
+    return lines.map((text) => ({ kind: CODE_ROW.ADDED, text }));
+  }
+  if (language === SUGGESTED_CHANGE_LANGUAGE) {
+    return lines.map((line) => ({
+      kind: line.startsWith("-") ? CODE_ROW.REMOVED : CODE_ROW.ADDED,
+      text: line.slice(1),
+    }));
+  }
+  if (language !== DIFF_LANGUAGE) return undefined;
+  return lines.map((text) => ({
+    kind: DIFF_HEADER.test(text)
+      ? CODE_ROW.CONTEXT
+      : text.startsWith("-")
+        ? CODE_ROW.REMOVED
+        : text.startsWith("+")
+          ? CODE_ROW.ADDED
+          : CODE_ROW.CONTEXT,
+    text,
+  }));
+}
+
+/**
+ * A block's lines as rows, each tinted by what it does and as wide as the
+ * widest, its runs in their colours where main coloured them. Note that an
+ * empty row holds a newline, so it stands a line tall.
+ */
+function CodeRows({
+  rows,
+  lines,
+}: {
+  rows: readonly Row[];
+  lines: CodeLines | undefined;
+}): ReactNode {
+  return rows.map((row, at) => {
+    const tokens = lines?.[at];
+    return (
+      // Note that a row's place is its identity: a block's rows never reorder.
+      <span key={at} className="transcript-code-row" data-row={row.kind}>
+        {row.text === ""
+          ? "\n"
+          : tokens === undefined
+            ? row.text
+            : tokens.map((token, run) => (
+                <span key={run} style={runColours(token)}>
+                  {token.text}
+                </span>
+              ))}
+      </span>
+    );
+  });
+}
+
+/**
  * A fenced block: a quiet header naming its language with a copy at its
  * right, over its lines, which keep whole and scroll sideways inside the
  * block rather than widening the transcript. A ```suggestion block, a
  * change suggested to the lines a review comment is on, is headed as
- * GitHub heads one and drawn on the added lines' tint, since its lines
- * are what those would read once it is taken.
+ * GitHub heads one, its lines drawn as rows on the added lines' tint, and a
+ * suggested change GitHub rendered its removed lines over its added ones on
+ * the removed lines' tint; its copy is the new lines alone, which is the
+ * suggestion. A diff's rows are tinted the same way (`rowsOf`).
  */
 function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & ExtraProps): ReactNode {
   const markdown = useContext(MarkdownSource);
@@ -214,10 +301,18 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
   const end = node?.position?.end.offset;
   const whole =
     start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
-  const lines = useColouredLines(language, code, whole);
-  const suggesting = language === SUGGESTION.LANGUAGE;
+  const suggesting = language === SUGGESTION.LANGUAGE || language === SUGGESTED_CHANGE_LANGUAGE;
+  // Note that a suggestion names no language of its own to colour it in.
+  const lines = useColouredLines(language, code, whole && !suggesting);
+  const rows = rowsOf(language, code);
+  const copied = suggesting
+    ? (rows ?? [])
+        .filter((row) => row.kind === CODE_ROW.ADDED)
+        .map((row) => row.text)
+        .join("\n")
+    : code;
   return (
-    <div className="transcript-code ph-no-capture" data-suggestion={suggesting || undefined}>
+    <div className="transcript-code ph-no-capture">
       <div className="transcript-code-header">
         {suggesting ? (
           <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
@@ -226,11 +321,15 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
             {language === "" ? PLAIN_LANGUAGE : language}
           </span>
         )}
-        <CopyCodeButton code={code} />
+        <CopyCodeButton code={copied} />
       </div>
-      <pre className="transcript-code-body">
+      <pre className="transcript-code-body" data-rows={rows === undefined ? undefined : true}>
         <code>
-          <CodeRuns code={code} lines={lines} />
+          {rows === undefined ? (
+            <CodeRuns code={code} lines={lines} />
+          ) : (
+            <CodeRows rows={rows} lines={lines} />
+          )}
         </code>
       </pre>
     </div>
