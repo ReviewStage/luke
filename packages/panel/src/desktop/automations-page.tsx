@@ -623,11 +623,14 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
   const { place } = view;
   // A new page filled in from Code review's preset goes back to the list once its experiment is off, here or
   // on another Mac, as Factory gives the task's place back; the window's leave guard asks first where it was written in.
+  // Note that the way out is read through a ref, because the window rebuilds it on every render, and a draft
+  // kept by Cancel is asked again only when the place or the experiment moves.
   const fromPreset = place.kind === AUTOMATIONS_PAGE.NEW && place.preset !== undefined;
-  const { onOpen } = view;
+  const open = useRef(view.onOpen);
+  open.current = view.onOpen;
   useEffect(() => {
-    if (fromPreset && !codeReviewOn) onOpen({ kind: AUTOMATIONS_PAGE.LIST });
-  }, [fromPreset, codeReviewOn, onOpen]);
+    if (fromPreset && !codeReviewOn) open.current({ kind: AUTOMATIONS_PAGE.LIST });
+  }, [fromPreset, codeReviewOn]);
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
     return <ListPage tasks={tasks} automations={automations} />;
   }

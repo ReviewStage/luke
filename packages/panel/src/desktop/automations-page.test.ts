@@ -2469,7 +2469,7 @@ test("while Code review is off nothing is suggested, under an empty list or a fu
   assert.equal(sent.querySelector("input[aria-label='Automation name']"), null);
 });
 
-test("a Code review draft goes back to the list once Code review turns off while it stands, asking first where it was written in, so no review is made with the experiment off", async () => {
+test("a Code review draft goes back to the list once Code review turns off while it stands, asking once first where it was written in, so no review is made with the experiment off", async () => {
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -2490,6 +2490,31 @@ test("a Code review draft goes back to the list once Code review turns off while
   });
   await settle();
   assert.ok(leaveAsked(), "the leave question stands before the written draft is lost");
+  act(() => button("Cancel").click());
+  await settle();
+  // The window draws again with nothing moved, as any delivery of its state draws it, which asks nothing again.
+  act(() => sendTo({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" }));
+  await settle();
+  assert.equal(
+    leaveAsked(),
+    undefined,
+    "Cancel keeps the draft until the place or the experiment moves",
+  );
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Review it all",
+  );
+
+  act(() => {
+    for (const listener of listeners)
+      listener(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {}));
+  });
+  await settle();
+  act(() => {
+    for (const listener of listeners) listener(stateWith({}, {}));
+  });
+  await settle();
+  assert.ok(leaveAsked(), "turned off again, it asks again");
   act(() => button("Leave").click());
   await settle();
 
