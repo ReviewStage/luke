@@ -6,6 +6,7 @@ import type { AdminViewer } from "./admin-access.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin-favorite.js";
 import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js";
+import { type AdminReliabilityOptions, handleAdminReliability } from "./admin-reliability.js";
 import { type AdminUserOptions, handleAdminUser } from "./admin-user.js";
 import { type AdminUsersOptions, handleAdminUsers } from "./admin-users.js";
 import { type AdminWorkspacesOptions, handleAdminWorkspaces } from "./admin-workspaces.js";
@@ -38,6 +39,7 @@ export interface AdminSeams {
   readUser: AdminUserOptions["readUser"];
   readDay: AdminDayOptions["readDay"];
   readWorkspaces: AdminWorkspacesOptions["readWorkspaces"];
+  readReliability: AdminReliabilityOptions["readReliability"];
   writeFavorite: AdminFavoriteOptions["writeFavorite"];
 }
 
@@ -99,6 +101,13 @@ export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
       ADMIN_ROUTE_PATH.DAY,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminDay({ request, readDay: seams.readDay }),
+      ),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ADMIN_ROUTE_PATH.RELIABILITY,
+      gate(seams, READ_METHOD, (_viewer, request) =>
+        handleAdminReliability({ request, readReliability: seams.readReliability }),
       ),
     ),
     HttpRouter.add(

@@ -1,20 +1,10 @@
-import type { AdminIntegration, AdminMetrics } from "@luke/service/admin/admin-metrics";
+import type { AdminMetrics } from "@luke/service/admin/admin-metrics";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import {
-  BADGE_TONE,
-  Badge,
-  List,
-  ListRow,
-  TEXT_LINK_LOOK,
-  TEXT_TONE,
-  Text,
-  TextLink,
-} from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { RetentionGrid } from "../charts/retention-grid";
 import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
-import { MetricCard, SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
+import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
@@ -50,25 +40,7 @@ const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.HEADING, label: "Most active hosted-tier accounts" },
   { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
   { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
-  { kind: SKELETON_SHAPE.HEADING, label: "Reliability" },
-  { kind: SKELETON_SHAPE.LINES, bones: ["100%", "100%", "40%"] },
-  { kind: SKELETON_SHAPE.HEADING, label: "System health" },
-  { kind: SKELETON_SHAPE.HEALTH },
 ];
-
-/** One integration in the health card's list: its name, and whether its keys are set. */
-function IntegrationRow({ integration }: { integration: AdminIntegration }): React.JSX.Element {
-  return (
-    <ListRow
-      title={integration.label}
-      meta={
-        <Badge tone={integration.configured ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
-          {integration.configured ? "Configured" : "Not configured"}
-        </Badge>
-      }
-    />
-  );
-}
 
 /**
  * The overview's own read. It is held by the shell rather than by the screen
@@ -147,7 +119,6 @@ export function DashboardScreen({
       );
     case "ready": {
       const metrics = state.value;
-      const db = metrics.systemHealth.database;
 
       return frame(
         <AdminPage
@@ -224,47 +195,6 @@ export function DashboardScreen({
               onOpen={onOpenAccount}
             />
             <TopAccountsNote />
-
-            <SectionHeading>Reliability</SectionHeading>
-            <Text tone={TEXT_TONE.MUTED}>
-              The service's own tables hold no rejection signal: nothing is refused on the usage
-              counts above. Per-request error rates and client-side failures are recorded as
-              product-analytics events, which live with{" "}
-              {metrics.reliability.analyticsConsoleUrl ? (
-                <TextLink
-                  href={metrics.reliability.analyticsConsoleUrl}
-                  look={TEXT_LINK_LOOK.UNDERLINED}
-                  external
-                  newTab
-                >
-                  the analytics processor
-                </TextLink>
-              ) : (
-                "the analytics processor"
-              )}{" "}
-              rather than in this database.
-            </Text>
-
-            <SectionHeading>System health</SectionHeading>
-            <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
-              <MetricCard
-                label="Database"
-                hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}
-              >
-                <div>
-                  <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
-                    {db.reachable ? "Reachable" : "Unreachable"}
-                  </Badge>
-                </div>
-              </MetricCard>
-              <MetricCard label="Integrations">
-                <List label="Integrations">
-                  {metrics.systemHealth.integrations.map((integration) => (
-                    <IntegrationRow key={integration.key} integration={integration} />
-                  ))}
-                </List>
-              </MetricCard>
-            </div>
           </Refreshing>
         </AdminPage>,
       );

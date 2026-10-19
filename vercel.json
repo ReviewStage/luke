@@ -302,6 +302,10 @@
           "dest": "/api/default.js?route=admin/metrics"
         },
         {
+          "src": "/api/admin/reliability",
+          "dest": "/api/default.js?route=admin/reliability"
+        },
+        {
           "src": "/api/admin/user",
           "dest": "/api/default.js?route=admin/user"
         },
