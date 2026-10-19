@@ -1,7 +1,13 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
-import { SCROLL_OVERSCROLL, SCROLL_SIZE, ScrollArea, TextArea } from "@luke/ui";
-import { type RefObject, useRef, useState } from "react";
-import { Segmented } from "../segmented.js";
+import {
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  SCROLL_OVERSCROLL,
+  SCROLL_SIZE,
+  ScrollArea,
+  TextArea,
+} from "@luke/ui";
+import { type RefObject, useId, useRef, useState } from "react";
 import { applyMarkdownEdit, fieldEdit, formatForKey, MarkdownToolbar } from "./markdown-toolbar.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -15,7 +21,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * suggestion among them. Preview draws what is written as the transcript
  * draws Markdown, which is near enough GitHub's own rendering to read it
  * back before sending, a suggestion block headed as one. The words are the
- * owner's, so they stand whichever is shown.
+ * owner's, so they stand whichever is shown. Write and Preview are tabs over
+ * the one panel that shows either, labelled by the tab whose view it shows.
  */
 
 /** The field's own words. */
@@ -62,6 +69,11 @@ export function MarkdownField({
   const ownField = useRef<HTMLTextAreaElement>(null);
   const field = fieldRef ?? ownField;
   const writing = mode === BODY_MODE.WRITE;
+  const panelId = useId();
+  const tabIds = {
+    [BODY_MODE.WRITE]: useId(),
+    [BODY_MODE.PREVIEW]: useId(),
+  } satisfies Record<BodyMode, string>;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: ⌘B, ⌘I and ⌘K in the words format them, as in GitHub's own box; the keys arrive here from the field.
     <div
@@ -77,42 +89,51 @@ export function MarkdownField({
       }}
     >
       <div className="markdown-field-head">
-        <Segmented
-          legend={`${label} ${FIELD_WORDS.MODE}`}
-          options={[
+        <ChoiceBar<BodyMode>
+          label={`${label} ${FIELD_WORDS.MODE}`}
+          items={[
             { value: BODY_MODE.WRITE, label: FIELD_WORDS.WRITE },
             { value: BODY_MODE.PREVIEW, label: FIELD_WORDS.PREVIEW },
           ]}
           value={mode}
           onChange={setMode}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          panels={(each) => ({ tab: tabIds[each], panel: panelId })}
         />
         {writing ? <MarkdownToolbar field={field} suggestion={suggestion} disabled={busy} /> : null}
       </div>
-      {writing ? (
-        <TextArea
-          ref={field}
-          label={label}
-          placeholder={placeholder}
-          value={value}
-          maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-          rows={4}
-          busy={busy}
-          onChange={onChange}
-          onSubmit={onSubmit}
-        />
-      ) : (
-        <div className="markdown-field-preview">
-          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
-            <div className="markdown-field-preview-words pull-request-words">
-              {value.trim() === "" ? (
-                <p className="pull-request-quiet">{FIELD_WORDS.NOTHING}</p>
-              ) : (
-                <TranscriptWords text={value} />
-              )}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
+      <div
+        className="markdown-field-panel"
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={tabIds[mode]}
+      >
+        {writing ? (
+          <TextArea
+            ref={field}
+            label={label}
+            placeholder={placeholder}
+            value={value}
+            maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
+            rows={4}
+            busy={busy}
+            onChange={onChange}
+            onSubmit={onSubmit}
+          />
+        ) : (
+          <div className="markdown-field-preview">
+            <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+              <div className="markdown-field-preview-words pull-request-words">
+                {value.trim() === "" ? (
+                  <p className="pull-request-quiet">{FIELD_WORDS.NOTHING}</p>
+                ) : (
+                  <TranscriptWords text={value} />
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import {
   BUTTON_VARIANT,
   Button,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -12,7 +14,6 @@ import {
   PAGE_FRAME,
   PAGE_WIDTH,
   PlusIcon,
-  Segmented,
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
@@ -69,7 +70,13 @@ function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
       filters={
         <>
           <TextField label="Search tasks" placeholder="Search" value={query} onChange={setQuery} />
-          <Segmented<Scope> legend="Show" options={SCOPES} value={scope} onChange={setScope} />
+          <ChoiceBar<Scope>
+            label="Show"
+            items={SCOPES}
+            value={scope}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            onChange={setScope}
+          />
         </>
       }
       state={state}
@@ -164,10 +171,11 @@ function SwitchedUnderToolbar(): React.JSX.Element {
   const [state, setState] = useState<CollectionState>(COLLECTION_STATE.READY);
   return (
     <div className="catalog-stack">
-      <Segmented<CollectionState>
-        legend="Content state"
-        options={STATES}
+      <ChoiceBar<CollectionState>
+        label="Content state"
+        items={STATES}
         value={state}
+        look={CHOICE_BAR_LOOK.SEGMENTED}
         onChange={setState}
       />
       <div className="catalog-screen catalog-screen-collection">
@@ -181,10 +189,11 @@ function Switched(): React.JSX.Element {
   const [state, setState] = useState<CollectionState>(COLLECTION_STATE.READY);
   return (
     <div className="catalog-stack">
-      <Segmented<CollectionState>
-        legend="Content state"
-        options={STATES}
+      <ChoiceBar<CollectionState>
+        label="Content state"
+        items={STATES}
         value={state}
+        look={CHOICE_BAR_LOOK.SEGMENTED}
         onChange={setState}
       />
       <div className="catalog-screen catalog-screen-collection">

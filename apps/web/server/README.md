@@ -641,6 +641,19 @@ request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
 'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
 origin.
 
+## The hosted oRPC route
+
+`server/orpc-route.ts` holds `orpcRoute`, the one route every path moved onto
+the hosted oRPC router answers through (`packages/service/src/orpc/`, its
+contract in `@luke/features/contract`); `/api/models` is the first. It meets
+the cookie origin guard, reads the web runtime's services through `runWeb`
+once per instance as `routeFromHttpRouter` does, and hands each request to
+`OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
+of its own (`tools/anti-slop/effect-edges.json`). The router matches the
+public path, so a migrated path with segments is a `SEGMENT_REWRITES` row
+marked `orpc` in `server/function-rewrites.ts`, whose rewrite carries the
+whole path in `route-path` for the dispatcher to restore.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so

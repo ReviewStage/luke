@@ -79,6 +79,10 @@
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
+  /* The Factory's floating layer bar: the room a fill bar names every option
+     in (`choice-bar.css`'s narrow look starts under 520px), with the box's
+     own padding and hairline around it and a pixel to spare each side. */
+  --world-pipeline-width: calc(520px + 2 * var(--luke-space-4) + 2 * var(--luke-space-2));
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
@@ -1460,6 +1464,14 @@ ul.actor-stack {
   margin: var(--luke-space-12) 0 0;
   padding: 0;
   border: 0;
+}
+
+/* The panel Icons and Emoji show, its parts spaced as the picker's own. */
+.section-icon-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
 }
 
 .section-icon-legend {
@@ -3987,39 +3999,22 @@ ul.actor-stack {
   box-shadow: 0 12px 32px var(--luke-color-shadow-soft);
 }
 
-/* The pipeline bar: planned → building → shipped, the defects' arrow
-   turning back, each count a filter chip pressed while its layer is the one
-   drawn alone, and none pressed while every layer is. */
+/* The pipeline bar, a fill bar of the layers floating over the scene, the
+   chosen layer's stage filled and none while every layer is drawn. Note
+   that it is handed a width, because a fill bar takes its container's and
+   has none of its own in a box that shrinks to fit it: the narrowest at
+   which a fill bar names every stage, its stages centred in it. Where the
+   scene is narrower, the stages not chosen show their glyphs alone. */
 .factory-world-pipeline {
   top: var(--luke-space-12);
   left: 50%;
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  margin: 0;
+  width: min(var(--world-pipeline-width), calc(100% - 2 * var(--luke-space-12)));
   padding: var(--luke-space-4);
   transform: translateX(-50%);
-  font-variant-numeric: tabular-nums;
 }
 
-.factory-world-stage-slot {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.factory-world-flow {
-  display: inline-flex;
-  color: var(--luke-color-text-subtle);
-}
-
-.factory-world-flow[data-back] {
-  color: var(--world-signal, var(--luke-color-text-subtle));
-}
-
-.factory-world-flow svg {
-  width: 14px;
-  height: 14px;
+.factory-world-pipeline > .luke-choice-bar {
+  justify-content: safe center;
 }
 
 .factory-world-signal {
@@ -4030,24 +4025,6 @@ ul.actor-stack {
 .factory-world-signal > svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
-}
-
-.factory-world-stage-count {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
-}
-
-/* While one count is pressed, the others' layers stand undrawn: their glyphs
-   and counts go to the quiet ink, the words staying legible, rather than the
-   chip fading, which would fade the keyboard's ring with it. */
-.factory-world-pipeline .luke-chip[data-faded] .factory-world-signal,
-.factory-world-pipeline .luke-chip[data-faded] .factory-world-stage-count {
-  color: var(--luke-color-text-subtle);
-}
-
-.factory-world-stuck {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
 }
 
 .factory-world-home {
@@ -6724,17 +6701,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text-subtle);
 }
 
-/* The filters under the field, one shared filter chip each, in a row that
-   wraps under the field. */
+/* The band under the field the filters stand in. Note that it is a block,
+   because a fill bar takes its container's width and has none of its own
+   in a row that shrinks to fit it. */
 .command-palette-filters {
-  display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
   min-width: 0;
-  margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  border: 0;
   border-bottom: 1px solid var(--luke-color-border);
 }
 

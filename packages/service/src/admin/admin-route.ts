@@ -16,6 +16,8 @@ import {
 } from "./admin-queries.js";
 import { buildAdminUserDetail } from "./admin-user.js";
 import { buildAdminUserList } from "./admin-users.js";
+import { buildAdminWorkspaceList } from "./admin-workspaces.js";
+import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 
 /**
  * The deployment's real seams behind the dashboard's group: the browser
@@ -91,6 +93,10 @@ export function hostedAdminSeams(): AdminSeams {
     readDay: (day, now, scope) =>
       Effect.map(readAdminDaySource({ day, scope }), (source) =>
         buildAdminDayDetail(source, now, day),
+      ),
+    readWorkspaces: (now, scope, kind, search) =>
+      Effect.map(readAdminWorkspacesSource({ now, scope, kind, search }), (source) =>
+        buildAdminWorkspaceList(source, now, kind, search),
       ),
     writeFavorite: (adminId, userId, favorite) => writeAdminFavorite({ adminId, userId, favorite }),
   };

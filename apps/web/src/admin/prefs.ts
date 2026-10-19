@@ -56,6 +56,12 @@ export const SIDEBAR_COLLAPSED = rememberedFlag("luke-admin-sidebar-collapsed");
  */
 export const ADMINS_HIDDEN = rememberedFlag("luke-admin-hide-admins", true);
 
+/**
+ * Whether the Workspaces table lists shared workspaces alone. The key marks
+ * the exception, so a browser that refuses storage opens on shared ones.
+ */
+export const WORKSPACES_SHARED_ONLY = rememberedFlag("luke-admin-workspaces-shared-only", true);
+
 interface RememberedValue<T> {
   read(): T | undefined;
   write(value: T): void;

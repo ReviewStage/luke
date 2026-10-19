@@ -13,14 +13,14 @@
 import { join } from "node:path";
 import type { Route } from "@luke/service/route";
 import { dispatchRoutes } from "../../server/function-dispatch";
-import { readApiRewritesTable } from "../../server/function-rewrites";
+import { type Rewrite, readApiRewritesTable } from "../../server/function-rewrites";
 
 const WEB = join(import.meta.dirname, "..", "..");
 
-/** The client's request as it arrives at its function: rewritten by the committed table, its own query and headers kept. */
-async function landed(request: Request): Promise<Request> {
+/** The client's request as it arrives at its function: rewritten by the table given, its own query and headers kept. */
+function landed(request: Request, rewrites: readonly Rewrite[]): Request {
   const asked = new URL(request.url);
-  for (const rewrite of await readApiRewritesTable(WEB)) {
+  for (const rewrite of rewrites) {
     const pattern = new RegExp(`^${rewrite.src}$`);
     if (!pattern.test(asked.pathname)) continue;
     const url = new URL(asked.pathname.replace(pattern, rewrite.dest), asked.origin);
@@ -35,5 +35,14 @@ export async function dispatched(
   request: Request,
   routes: ReadonlyMap<string, Route>,
 ): Promise<Response> {
-  return dispatchRoutes(routes).fetch(await landed(request));
+  return dispatchedBy(await readApiRewritesTable(WEB), request, routes);
+}
+
+/** The client's request answered by the routes given, after the platform landed it by the rewrites given rather than the committed table's. */
+export function dispatchedBy(
+  rewrites: readonly Rewrite[],
+  request: Request,
+  routes: ReadonlyMap<string, Route>,
+): Promise<Response> {
+  return dispatchRoutes(routes).fetch(landed(request, rewrites));
 }

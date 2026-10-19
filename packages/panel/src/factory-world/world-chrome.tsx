@@ -4,8 +4,10 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
-  CHIP_LOOK,
-  Chip,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  COUNT_TONE,
+  type CountPart,
   cssCustomProperties,
   IconButton,
   TEXT_ELEMENT,
@@ -24,19 +26,17 @@ import {
   type ZoneView,
 } from "@luke/ui/factory-world";
 import {
-  ArrowRightIcon,
   ArrowUpRightIcon,
   BlocksIcon,
   BotIcon,
   BugIcon,
-  CornerUpLeftIcon,
   FileTextIcon,
   GitMergeIcon,
   HouseIcon,
   ListTodoIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type FocusEvent, type PointerEvent, useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -93,20 +93,35 @@ function signalStyle(color: string) {
 }
 
 /** The count a stage shows: its pipeline count, building with those stuck beside it. */
-function stageCount(layer: WorldLayer, counts: PipelineCounts): number {
-  if (layer === WORLD_LAYER.PLANNED) return counts.planned;
-  if (layer === WORLD_LAYER.BUILDING) return counts.building;
-  if (layer === WORLD_LAYER.SHIPPED) return counts.shipped;
-  return counts.defects;
+function stageCount(layer: WorldLayer, counts: PipelineCounts): readonly CountPart[] {
+  if (layer === WORLD_LAYER.PLANNED) return [{ text: `${counts.planned}` }];
+  if (layer === WORLD_LAYER.SHIPPED) return [{ text: `${counts.shipped}` }];
+  if (layer === WORLD_LAYER.DEFECTS) return [{ text: `${counts.defects}` }];
+  const building = { text: `${counts.building}` };
+  return counts.stuck === 0
+    ? [building]
+    : [building, { text: `${counts.stuck} stuck`, tone: COUNT_TONE.ATTENTION }];
 }
 
 /**
- * The pipeline bar: planned, then building with those stuck beside it, then
- * shipped, and the defects that loop back to planned. Each count picks out
- * its layer: the pointer resting on it, or the keyboard on it, draws that
- * layer alone for as long as it stays, and a press keeps it alone, pressed,
- * until it is pressed again or another count is. With none pressed, every
- * layer is drawn.
+ * The layer of the stage a node of the bar stands in; none for a node
+ * between the stages or outside the bar. Note that a stage is found by its
+ * place among the bar's radios, which stand in `STAGES`' order.
+ */
+function layerAt(bar: HTMLElement, node: EventTarget | null): WorldLayer | undefined {
+  if (!(node instanceof Element) || !bar.contains(node)) return undefined;
+  const option = node.closest('[role="radio"]');
+  if (option === null) return undefined;
+  const at = [...bar.querySelectorAll('[role="radio"]')].indexOf(option);
+  return STAGES[at]?.layer;
+}
+
+/**
+ * The pipeline bar: planned, building with those stuck beside it, shipped,
+ * and the defects. Each stage picks out its layer: the pointer resting on
+ * it, or the keyboard on it, draws that layer alone for as long as it
+ * stays, and a press keeps it alone, chosen, until it is pressed again or
+ * another stage is. With none chosen, every layer is drawn.
  */
 export function PipelineBar({
   counts,
@@ -115,67 +130,56 @@ export function PipelineBar({
   onPreview,
 }: {
   counts: PipelineCounts;
-  /** The layer pressed, drawn alone; none while every layer is drawn. */
+  /** The layer chosen, drawn alone; none while every layer is drawn. */
   chosen: WorldLayer | undefined;
-  /** A press on a count: its layer alone, or every layer again where it was the one pressed. */
-  onChoose: (layer: WorldLayer) => void;
-  /** The count the pointer rests on, else the one the keyboard is on, or neither. */
+  /** A press on a stage: its layer alone, or none, every layer again, where it was the one chosen. */
+  onChoose: (layer: WorldLayer | undefined) => void;
+  /** The stage the pointer rests on, else the one the keyboard is on, or neither. */
   onPreview: (layer: WorldLayer | undefined) => void;
 }): React.JSX.Element {
-  // Note that the pointer and the keyboard are held apart, so one leaving a count never takes the other's preview with it.
+  // Note that the pointer and the keyboard are held apart, so one leaving a stage never takes the other's preview with it.
   const [pointed, setPointed] = useState<WorldLayer | undefined>(undefined);
   const [focused, setFocused] = useState<WorldLayer | undefined>(undefined);
   useEffect(() => onPreview(pointed ?? focused), [pointed, focused, onPreview]);
+  // Each moves to the stage it lands on, and to none on a gap between the stages or out of the bar.
+  const point = (event: PointerEvent<HTMLDivElement>, to: EventTarget | null) =>
+    setPointed(layerAt(event.currentTarget, to));
+  const focus = (event: FocusEvent<HTMLDivElement>, to: EventTarget | null) =>
+    setFocused(layerAt(event.currentTarget, to));
   return (
-    <fieldset className="factory-world-pipeline" aria-label="Layers">
-      {STAGES.map(({ layer, name, Icon, color }, index) => (
-        <span key={layer} className="factory-world-stage-slot">
-          {index === 0 ? null : (
-            <span
-              className="factory-world-flow"
-              data-back={layer === WORLD_LAYER.DEFECTS ? "" : undefined}
-              aria-hidden="true"
-            >
-              {layer === WORLD_LAYER.DEFECTS ? <CornerUpLeftIcon /> : <ArrowRightIcon />}
-            </span>
-          )}
-          <Chip
-            look={CHIP_LOOK.FILTER}
-            aria-pressed={chosen === layer}
-            data-layer={layer}
-            data-faded={chosen !== undefined && chosen !== layer ? "" : undefined}
-            onClick={() => {
-              onChoose(layer);
-              // Note that a press settles the preview: what is drawn now is the press, until the pointer or keyboard moves to another count.
-              setPointed(undefined);
-              setFocused(undefined);
-            }}
-            onPointerOver={() => setPointed(layer)}
-            onPointerOut={(event) => {
-              // Note that leaving a count for its own words keeps the preview, and for an arrow, a gap, or out of the bar ends it.
-              if (
-                !(
-                  event.relatedTarget instanceof Node &&
-                  event.currentTarget.contains(event.relatedTarget)
-                )
-              )
-                setPointed(undefined);
-            }}
-            onFocus={() => setFocused(layer)}
-            onBlur={() => setFocused(undefined)}
-          >
+    // biome-ignore lint/a11y/noStaticElementInteractions: the box only hears where the pointer and the keyboard rest among its radios, to preview a layer, and a press on one; the press and the keys are the radios'.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click it hears is a radio's, which the keyboard presses with Space.
+    <div
+      className="factory-world-pipeline"
+      onPointerOver={(event) => point(event, event.target)}
+      onPointerOut={(event) => point(event, event.relatedTarget)}
+      onFocus={(event) => focus(event, event.target)}
+      onBlur={(event) => focus(event, event.relatedTarget)}
+      onClick={(event) => {
+        // Note that a press settles the preview, so what is drawn is the press until the pointer or keyboard moves to another stage; an arrow, which chooses without a press, leaves a resting pointer's preview standing.
+        if (layerAt(event.currentTarget, event.target) === undefined) return;
+        setPointed(undefined);
+        setFocused(undefined);
+      }}
+    >
+      <ChoiceBar
+        label="Layers"
+        items={STAGES.map(({ layer, name, Icon, color }) => ({
+          value: layer,
+          label: name,
+          icon: (
             <span className="factory-world-signal" style={signalStyle(color)}>
-              <Icon aria-hidden="true" />
+              <Icon />
             </span>
-            <span className="factory-world-stage-count">{stageCount(layer, counts)}</span>
-            <span>{name}</span>
-            {layer === WORLD_LAYER.BUILDING && counts.stuck > 0 ? (
-              <span className="factory-world-stuck">{`${counts.stuck} stuck`}</span>
-            ) : null}
-          </Chip>
-        </span>
-      ))}
-    </fieldset>
+          ),
+          count: stageCount(layer, counts),
+        }))}
+        value={chosen}
+        onChange={onChoose}
+        look={CHOICE_BAR_LOOK.FILL}
+        clearable
+      />
+    </div>
   );
 }
 

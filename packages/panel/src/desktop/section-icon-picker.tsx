@@ -9,7 +9,14 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { IconButton, ScrollArea, SearchField, Segmented, TextField } from "@luke/ui";
+import {
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  IconButton,
+  ScrollArea,
+  SearchField,
+  TextField,
+} from "@luke/ui";
 import {
   emojiGroups,
   findEmoji,
@@ -37,7 +44,7 @@ import {
   StarIcon,
   ZapIcon,
 } from "lucide-react";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useId, useMemo, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Tooltip } from "../tooltip.js";
 
@@ -399,7 +406,8 @@ function restingLabel(event: React.SyntheticEvent): string | undefined {
  * category over a field any one emoji is typed or picked into (⌃⌘Space),
  * which chooses it as soon as it reads as one. One search filters the tab
  * shown, and a color chosen recolors the glyph chosen and every one picked
- * after it.
+ * after it. Icons and Emoji are tabs over the one panel that holds the tab
+ * shown, from its search to its emoji field.
  */
 export function SectionIconPicker({
   icon,
@@ -421,6 +429,11 @@ export function SectionIconPicker({
   const [typed, setTyped] = useState(icon?.kind === TASK_SECTION_ICON_KIND.EMOJI ? icon.emoji : "");
   const [resting, setResting] = useState<string | undefined>(undefined);
   const grid = useRef<HTMLDivElement | null>(null);
+  const panelId = useId();
+  const tabIds = {
+    [ICON_TAB.ICONS]: useId(),
+    [ICON_TAB.EMOJI]: useId(),
+  } satisfies Record<IconTab, string>;
   // A choice made anywhere but the field leaves the field empty, so it never names an emoji no longer chosen.
   const choose = useCallback(
     (next: TaskSectionIcon | undefined) => {
@@ -445,15 +458,17 @@ export function SectionIconPicker({
     <fieldset className="section-icon-picker" disabled={disabled}>
       <legend className="section-icon-legend">Icon</legend>
       <div className="section-icon-bar">
-        <Segmented
-          legend="Icon kind"
-          options={[
+        <ChoiceBar<IconTab>
+          label="Icon kind"
+          items={[
             { value: ICON_TAB.ICONS, label: "Icons" },
             { value: ICON_TAB.EMOJI, label: "Emoji" },
           ]}
           value={tab}
           disabled={disabled}
           onChange={setTab}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          panels={(each) => ({ tab: tabIds[each], panel: panelId })}
         />
         <Tooltip label="No icon">
           <IconButton
@@ -464,59 +479,66 @@ export function SectionIconPicker({
           />
         </Tooltip>
       </div>
-      <search onKeyDown={toGrid}>
-        <SearchField
-          label={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
-          placeholder={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
-          value={query}
-          onChange={setQuery}
-          onClear={() => setQuery("")}
-          onEnter={chooseFirst}
-          onShiftEnter={chooseFirst}
-        />
-      </search>
-      {tab === ICON_TAB.ICONS ? <ColorChoices color={color} onColor={recolor} /> : null}
-      <fieldset
-        className="section-icon-choices"
-        onKeyDown={stepGrid}
-        onPointerOver={(event) => setResting(restingLabel(event))}
-        onPointerLeave={() => setResting(undefined)}
-        onFocus={(event) => {
-          standTabStop(event);
-          setResting(restingLabel(event));
-        }}
+      <div
+        className="section-icon-panel"
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={tabIds[tab]}
       >
-        <legend className="visually-hidden">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</legend>
-        <div className="section-icon-scroll">
-          <ScrollArea ref={grid}>
-            {tab === ICON_TAB.ICONS ? (
-              <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
-            ) : (
-              <EmojiPanel query={query} icon={icon} onIcon={choose} />
-            )}
-          </ScrollArea>
-        </div>
-      </fieldset>
-      <p className="section-icon-resting" aria-hidden="true">
-        {resting ??
-          (tab === ICON_TAB.ICONS && icon?.kind === TASK_SECTION_ICON_KIND.GLYPH
-            ? glyphLabel(icon.glyph)
-            : "")}
-      </p>
-      {tab === ICON_TAB.EMOJI ? (
-        <TextField
-          label="Any emoji"
-          placeholder="Or type an emoji (⌃⌘Space)"
-          spellCheck={false}
-          value={typed}
-          maxLength={TASK_SECTION_BOUNDS.MAX_EMOJI_UNITS}
-          onChange={(next) => {
-            setTyped(next);
-            const asked = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: next.trim() };
-            if (isSectionIcon(asked)) onIcon(asked);
+        <search onKeyDown={toGrid}>
+          <SearchField
+            label={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
+            placeholder={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
+            value={query}
+            onChange={setQuery}
+            onClear={() => setQuery("")}
+            onEnter={chooseFirst}
+            onShiftEnter={chooseFirst}
+          />
+        </search>
+        {tab === ICON_TAB.ICONS ? <ColorChoices color={color} onColor={recolor} /> : null}
+        <fieldset
+          className="section-icon-choices"
+          onKeyDown={stepGrid}
+          onPointerOver={(event) => setResting(restingLabel(event))}
+          onPointerLeave={() => setResting(undefined)}
+          onFocus={(event) => {
+            standTabStop(event);
+            setResting(restingLabel(event));
           }}
-        />
-      ) : null}
+        >
+          <legend className="visually-hidden">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</legend>
+          <div className="section-icon-scroll">
+            <ScrollArea ref={grid}>
+              {tab === ICON_TAB.ICONS ? (
+                <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
+              ) : (
+                <EmojiPanel query={query} icon={icon} onIcon={choose} />
+              )}
+            </ScrollArea>
+          </div>
+        </fieldset>
+        <p className="section-icon-resting" aria-hidden="true">
+          {resting ??
+            (tab === ICON_TAB.ICONS && icon?.kind === TASK_SECTION_ICON_KIND.GLYPH
+              ? glyphLabel(icon.glyph)
+              : "")}
+        </p>
+        {tab === ICON_TAB.EMOJI ? (
+          <TextField
+            label="Any emoji"
+            placeholder="Or type an emoji (⌃⌘Space)"
+            spellCheck={false}
+            value={typed}
+            maxLength={TASK_SECTION_BOUNDS.MAX_EMOJI_UNITS}
+            onChange={(next) => {
+              setTyped(next);
+              const asked = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: next.trim() };
+              if (isSectionIcon(asked)) onIcon(asked);
+            }}
+          />
+        ) : null}
+      </div>
     </fieldset>
   );
 }

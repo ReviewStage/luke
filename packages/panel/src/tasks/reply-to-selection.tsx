@@ -1,4 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -6,6 +7,7 @@ import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -33,6 +35,8 @@ import { Tooltip } from "../tooltip.js";
  * selection as the log scrolls, and goes as the selection does. Note that
  * the press takes no focus and leaves the selection as it was until it is
  * pressed, because a press that took either would end what it answers.
+ * While it stands, R does what the press does (`APP_COMMAND.REPLY_TO_SELECTION`),
+ * as GitHub's R quotes words selected into a reply, its hover saying so.
  * An Inbox item's thread offers the same Reply over the agent's part of it,
  * its question's Markdown, its messages, and why it took the item back, and
  * lays the quote into the item's box (`inbox-pane.tsx`,
@@ -96,6 +100,8 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
     SCOPE_SELECTOR,
   );
   if (words === null || words === undefined || !scope.contains(words)) return undefined;
+  // Note that words a hidden pane holds keep their selection, as the narrow Inbox's item does behind its list, but are no longer on screen to reply to.
+  if (words.closest("[hidden]") !== null) return undefined;
   const reply = replyOf(selection.toString());
   if (reply === "") return undefined;
   const box = range.getBoundingClientRect();
@@ -147,41 +153,53 @@ export function ReplyToSelection({
     };
   }, [scope, settle]);
 
-  // Once offered, the press follows the selection as the log scrolls and goes as it does.
+  // Once offered, the press follows the selection as the log scrolls and goes as it does, or as the pane holding it is hidden.
   useEffect(() => {
     const element = scope.current;
     if (!shown || element === null) return undefined;
     const follow = () => setPicked(pickedIn(element));
+    // Note that hiding a pane changes no selection, so its `hidden` attribute is watched for itself.
+    const hiding = new MutationObserver(follow);
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
     document.addEventListener("selectionchange", follow);
     document.addEventListener("scroll", follow, true);
     window.addEventListener("resize", follow);
     return () => {
+      hiding.disconnect();
       document.removeEventListener("selectionchange", follow);
       document.removeEventListener("scroll", follow, true);
       window.removeEventListener("resize", follow);
     };
   }, [scope, shown]);
 
-  if (picked === undefined) return null;
+  const reply =
+    picked === undefined
+      ? undefined
+      : () => {
+          setPicked(undefined);
+          window.getSelection()?.removeAllRanges();
+          onReply(picked.reply);
+        };
+  useAppCommand(APP_COMMAND.REPLY_TO_SELECTION, reply);
+
+  if (picked === undefined || reply === undefined) return null;
   return createPortal(
     <div
       className="menu-surface reply-to-selection"
       data-below={picked.below ? "" : undefined}
       style={{ left: picked.left, top: picked.top }}
     >
-      <Button
-        icon={<ReplyIcon aria-hidden="true" />}
-        // Note that the press keeps the selection and the focus where they stand until it lands.
-        keepFocus
-        onPointerDown={(event) => event.preventDefault()}
-        onClick={() => {
-          setPicked(undefined);
-          window.getSelection()?.removeAllRanges();
-          onReply(picked.reply);
-        }}
-      >
-        {REPLY_WORDS.REPLY}
-      </Button>
+      <Tooltip label={REPLY_WORDS.REPLY} command={APP_COMMAND.REPLY_TO_SELECTION}>
+        <Button
+          icon={<ReplyIcon aria-hidden="true" />}
+          // Note that the press keeps the selection and the focus where they stand until it lands.
+          keepFocus
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={reply}
+        >
+          {REPLY_WORDS.REPLY}
+        </Button>
+      </Tooltip>
     </div>,
     document.body,
   );

@@ -11,8 +11,10 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   ErrorState,
   SettingsLine,
   SettingsRow,
@@ -26,7 +28,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { HarnessMark } from "../harness-marks.js";
-import { Segmented } from "../segmented.js";
 import {
   choiceModelId,
   choiceOn,
@@ -78,7 +79,7 @@ import { SwitchRow } from "./switch-row.js";
  * there is no default to show, and the page says so.
  *
  * The group is `@luke/ui`'s `SettingsSection`, and Effort and Context each
- * its `SettingsRow` holding the shared `Segmented`.
+ * its `SettingsRow` holding the shared `ChoiceBar`, segmented.
  */
 
 /** What the page says while it cannot read or write, and with no account. */
@@ -259,12 +260,13 @@ function DefaultRows({
       {/* A refusal of any of the rows stands under them all, in the last row's error line. */}
       <SettingsRow label="Effort" error={windows === undefined ? rejection : undefined}>
         {() => (
-          <Segmented
-            legend="Effort"
-            options={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
+          <ChoiceBar
+            label="Effort"
+            items={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
             value={choice.effort}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
             disabled={busy}
-            anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT}
+            {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
             onChange={(effort) => run({ ...choice, effort })}
           />
         )}
@@ -272,13 +274,14 @@ function DefaultRows({
       {windows === undefined ? null : (
         <SettingsRow label="Context" description={longWindowNote(windows)} error={rejection}>
           {() => (
-            <Segmented
-              legend="Context"
-              options={[
+            <ChoiceBar
+              label="Context"
+              items={[
                 { value: CONTEXT_WINDOW.STANDARD, label: windowLabel(windows.standardTokens) },
                 { value: CONTEXT_WINDOW.LONG, label: windowLabel(windows.longTokens) },
               ]}
               value={window}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
               disabled={busy}
               onChange={(each) => run(choiceOn(models ?? [], choice, each))}
             />

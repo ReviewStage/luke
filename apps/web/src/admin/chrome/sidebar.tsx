@@ -50,6 +50,25 @@ function DashboardIcon(): React.JSX.Element {
   );
 }
 
+/** A workspace as a stack of shared layers, apart from the Users glyph's one person. */
+function WorkspacesIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="size-4 shrink-0"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 1.9 14.1 5 8 8.1 1.9 5 8 1.9Z" />
+      <path d="M1.9 8 8 11.1 14.1 8" />
+      <path d="M1.9 11 8 14.1 14.1 11" />
+    </svg>
+  );
+}
+
 function UsersIcon(): React.JSX.Element {
   return (
     <svg
@@ -170,12 +189,13 @@ export function AdminSidebar({
     <>
       <nav
         aria-label="Admin sections"
-        className="grid grid-cols-[auto_repeat(3,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
+        className="grid grid-cols-[auto_repeat(4,minmax(0,1fr))] items-center gap-1 border-b border-(--luke-color-border) bg-(--luke-color-surface) px-3 py-2 min-[720px]:hidden"
       >
         <span className="mr-1 inline-flex w-6 shrink-0 text-(--luke-color-text)" aria-hidden="true">
           <LukeMark className="h-auto w-full" />
         </span>
         {barItem("dashboard", "Dashboard", <DashboardIcon />)}
+        {barItem("workspaces", "Workspaces", <WorkspacesIcon />)}
         {barItem("users", "Users", <UsersIcon />)}
         {barItem("animations", "Animations", <AnimationsIcon />)}
       </nav>
@@ -199,6 +219,7 @@ export function AdminSidebar({
         </div>
         <div className="mt-8 grid gap-1 px-4">
           {item("dashboard", "Dashboard", <DashboardIcon />)}
+          {item("workspaces", "Workspaces", <WorkspacesIcon />)}
           {item("users", "Users", <UsersIcon />)}
           {item("animations", "Animations", <AnimationsIcon />)}
         </div>

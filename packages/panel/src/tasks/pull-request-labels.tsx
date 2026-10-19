@@ -3,7 +3,7 @@ import { cssCustomProperties } from "@luke/ui";
 import type { CSSProperties } from "react";
 
 /**
- * pull-request-labels.tsx -- a pull request's labels under its title, each a pill in its GitHub colour, readable in either appearance.
+ * pull-request-labels.tsx -- a pull request's labels at the end of its header's line of people, each a pill in its GitHub colour, readable in either appearance.
  *
  * GitHub names a label's colour as six hex digits, and a label is drawn in
  * it as stage-cli draws one. In the light appearance it is a solid fill,
@@ -82,7 +82,7 @@ function labelColours(color: string): CSSProperties | undefined {
   });
 }
 
-/** The pull request's labels under its title, in the order GitHub lists them; nothing where it has none. */
+/** The pull request's labels, in the order GitHub lists them; nothing where it has none. */
 export function PullRequestLabels({
   labels,
 }: {

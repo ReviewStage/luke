@@ -35,33 +35,220 @@
  * attributes its search lands on.
  */
 
-import type { ReactNode } from "react";
 import {
-  CHOICE_BAR_FOCUS,
-  CHOICE_BAR_INSET,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  type ChoiceAppAttributes,
-  type ChoiceBarFocus,
-  type ChoiceBarInset,
-  type ChoiceBarLook,
-  type ChoiceBarSize,
-  type ChoicePanelIds,
-  ChoiceRow,
-} from "../choice/choice-row.js";
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
+import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
 
-export {
-  CHOICE_BAR_FOCUS,
-  CHOICE_BAR_INSET,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  type ChoiceBarFocus,
-  type ChoiceBarInset,
-  type ChoiceBarLook,
-  type ChoiceBarSize,
-  type ChoicePanelIds,
-};
+/** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
+export const CHOICE_BAR_LOOK = {
+  FILL: "fill",
+  SEGMENTED: "segmented",
+} as const;
+
+export type ChoiceBarLook = (typeof CHOICE_BAR_LOOK)[keyof typeof CHOICE_BAR_LOOK];
+
+/** How much room the bar keeps around its options: a page's, or a step smaller in the caption's type. */
+export const CHOICE_BAR_SIZE = {
+  REGULAR: "regular",
+  COMPACT: "compact",
+} as const;
+
+export type ChoiceBarSize = (typeof CHOICE_BAR_SIZE)[keyof typeof CHOICE_BAR_SIZE];
+
+/** Whether the bar's options take the keyboard, one tab stop roving among them, or none, its owner driving the keys. */
+export const CHOICE_BAR_FOCUS = {
+  ROVING: "roving",
+  NONE: "none",
+} as const;
+
+export type ChoiceBarFocus = (typeof CHOICE_BAR_FOCUS)[keyof typeof CHOICE_BAR_FOCUS];
+
+/** Where a fill bar stands its options: at its container's edges, with the words of a page read at its measure, or at a column's inset. */
+export const CHOICE_BAR_INSET = {
+  NONE: "none",
+  READING: "reading",
+  COLUMN: "column",
+} as const;
+
+export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_INSET];
+
+/** The ids a tab and the panel it controls carry. */
+export interface ChoicePanelIds {
+  readonly tab: string;
+  readonly panel: string;
+}
+
+/** The attributes an app hands the bar for finding it, its `data-` attributes alone. */
+export type ChoiceAppAttributes = { [attribute: `data-${string}`]: string | undefined };
+
+/** Where the thumb stands: hidden while nothing is chosen or drawn, placed at once, or sliding to a new option. */
+const THUMB = {
+  PLACED: "placed",
+  SLIDING: "sliding",
+} as const;
+
+/** The bar's thumb, of its own children. */
+const THUMB_ELEMENT = ":scope > .luke-choice-bar-thumb";
+
+/** The option a bar's thumb stands under, of the bar's own options. */
+const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
+
+/** A box in a bar, in pixels from its padding edge. */
+interface ThumbBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Sets where the thumb stands, its box, and the scale it is drawn at from its corner. */
+function setThumb(bar: HTMLElement, box: ThumbBox, scaleX: number, scaleY: number): void {
+  const style = bar.style;
+  style.setProperty("--luke-choice-bar-thumb-x", `${box.x}px`);
+  style.setProperty("--luke-choice-bar-thumb-y", `${box.y}px`);
+  style.setProperty("--luke-choice-bar-thumb-width", `${box.width}px`);
+  style.setProperty("--luke-choice-bar-thumb-height", `${box.height}px`);
+  style.setProperty("--luke-choice-bar-thumb-scale-x", String(scaleX));
+  style.setProperty("--luke-choice-bar-thumb-scale-y", String(scaleY));
+}
+
+/** Whether the thumb already stands, unscaled, on `box`. */
+function thumbStands(bar: HTMLElement, box: ThumbBox): boolean {
+  const style = bar.style;
+  return (
+    style.getPropertyValue("--luke-choice-bar-thumb-x") === `${box.x}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-y") === `${box.y}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-width") === `${box.width}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-height") === `${box.height}px` &&
+    style.getPropertyValue("--luke-choice-bar-thumb-scale-x") === "1" &&
+    style.getPropertyValue("--luke-choice-bar-thumb-scale-y") === "1"
+  );
+}
+
+/**
+ * Stands `bar`'s thumb under its chosen option, sliding there where `slide`
+ * asks and the thumb already shows, and at once otherwise.
+ *
+ * A slide is played FLIP-style, on `transform` alone, as the motion
+ * contract has it (`docs/DESIGN.md`): the thumb lands in its new box at
+ * once, drawn by a transform where it was drawn before, from wherever a
+ * slide still running had it; then, with its transition on, the transform
+ * is let go. Note that the attribute that turns the transition on or off is
+ * set beside each step, because a transition starts from the style after a
+ * change, so the step back is never seen and the let go always is; and that
+ * a thumb already where it should be is left alone, so a resize the slide
+ * itself set off does not cut it short.
+ */
+function placeThumb(bar: HTMLElement, slide: boolean): void {
+  const chosen = bar.querySelector<HTMLElement>(CHOSEN);
+  const thumb = bar.querySelector<HTMLElement>(THUMB_ELEMENT);
+  if (chosen === null || thumb === null || chosen.offsetWidth === 0) {
+    bar.removeAttribute("data-thumb");
+    return;
+  }
+  const box = {
+    x: chosen.offsetLeft,
+    y: chosen.offsetTop,
+    width: chosen.offsetWidth,
+    height: chosen.offsetHeight,
+  };
+  const shown = bar.hasAttribute("data-thumb");
+  if (shown && thumbStands(bar, box)) return;
+  if (slide && shown) {
+    const drawn = thumb.getBoundingClientRect();
+    const within = bar.getBoundingClientRect();
+    const from = {
+      x: drawn.left - within.left - bar.clientLeft + bar.scrollLeft,
+      y: drawn.top - within.top - bar.clientTop + bar.scrollTop,
+      width: box.width,
+      height: box.height,
+    };
+    bar.setAttribute("data-thumb", THUMB.PLACED);
+    setThumb(bar, from, drawn.width / box.width, drawn.height / box.height);
+    // Note that measuring the thumb settles its step back before the slide starts.
+    thumb.getBoundingClientRect();
+  }
+  bar.setAttribute("data-thumb", slide && shown ? THUMB.SLIDING : THUMB.PLACED);
+  setThumb(bar, box, 1, 1);
+}
+
+/**
+ * The ref the bar's own element takes and the one each option takes, which
+ * keep its thumb under the chosen option: sliding to it after a render that
+ * chose another, and placed at once when the bar or an option resizes (a
+ * narrow bar dropping its names, a count growing, a hidden panel shown).
+ * Note that each element is watched by an observer of its own, let go with
+ * `disconnect`, the one way every observer has to stop.
+ */
+function useThumb() {
+  const bar = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (bar.current !== null) placeThumb(bar.current, true);
+  });
+  const optionRef = useCallback((element: HTMLElement | null) => {
+    if (element === null || !("ResizeObserver" in globalThis)) return undefined;
+    const resized = new ResizeObserver(() => {
+      if (bar.current !== null) placeThumb(bar.current, false);
+    });
+    resized.observe(element);
+    return () => resized.disconnect();
+  }, []);
+  const barRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      bar.current = element;
+      const unwatch = optionRef(element);
+      return () => {
+        bar.current = null;
+        unwatch?.();
+      };
+    },
+    [optionRef],
+  );
+  return { barRef, optionRef };
+}
+
+/**
+ * What the bar's own element says it is, and the keys it takes: a tablist,
+ * or a radio group. Note that the role, its name, and its handler are
+ * handed over together, because the bar is one element whichever role it
+ * takes, and Biome's a11y rules read a role only where it is a literal.
+ */
+function groupAttributes(
+  role: ChoiceRole,
+  label: string,
+  onKeyDown: ChoiceKeys<string>["onKeyDown"],
+): HTMLAttributes<HTMLDivElement> {
+  return {
+    role: role === CHOICE_ROLE.TAB ? "tablist" : "radiogroup",
+    "aria-label": label,
+    onKeyDown,
+  };
+}
+
+/** What an option says it is: a tab selected while chosen and controlling its panel, or a radio checked while chosen. */
+function optionAttributes(
+  role: ChoiceRole,
+  chosen: boolean,
+  ids: ChoicePanelIds | undefined,
+): ButtonHTMLAttributes<HTMLButtonElement> {
+  return role === CHOICE_ROLE.TAB
+    ? { role, id: ids?.tab, "aria-selected": chosen, "aria-controls": ids?.panel }
+    : { role, "aria-checked": chosen };
+}
+
+/** Keeps the keyboard where it was when an option that takes no focus is pressed. */
+function keepFocus(event: ReactMouseEvent<HTMLButtonElement>): void {
+  event.preventDefault();
+}
 
 /** One option: the value it chooses, its name, its glyph, what it counts, and whether it can be chosen. */
 export interface ChoiceItem<Value extends string> {
@@ -125,29 +312,67 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     items,
     value,
     look,
-    size,
+    size = CHOICE_BAR_SIZE.REGULAR,
     panels,
-    focus,
-    inset,
-    disabled,
+    focus = CHOICE_BAR_FOCUS.ROVING,
+    inset = CHOICE_BAR_INSET.NONE,
+    disabled = false,
     clearable: _,
     onChange: __,
     ...appAttributes
   } = props;
+  const thumb = useThumb();
+  const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
+  const roving = focus === CHOICE_BAR_FOCUS.ROVING;
+  const choose = (chosen: Value) => props.onChange(chosen);
+  // An arrow chooses the next option along and takes the keyboard there; Home and End go to either end.
+  const keys = useChoiceKeys({
+    options: items,
+    value,
+    role,
+    disabled: disabled || !roving,
+    onChoose: choose,
+  });
+  const press = (pressed: Value) => {
+    if (pressed !== value) choose(pressed);
+    else if (props.clearable === true) props.onChange(undefined);
+  };
   return (
-    <ChoiceRow<Value>
-      label={label}
-      options={items.map((item) => ({ ...item, count: countOf(item.count) }))}
-      value={value}
-      onChoose={(chosen) => props.onChange(chosen)}
-      onClear={props.clearable === true ? () => props.onChange(undefined) : undefined}
-      look={look}
-      size={size}
-      panels={panels}
-      focus={focus}
-      inset={inset}
-      disabled={disabled}
-      appAttributes={appAttributes}
-    />
+    <div
+      ref={thumb.barRef}
+      {...groupAttributes(role, label, keys.onKeyDown)}
+      {...appAttributes}
+      className="luke-choice-bar"
+      data-look={look}
+      data-size={size}
+      data-inset={inset}
+    >
+      <span className="luke-choice-bar-thumb" aria-hidden="true" />
+      {items.map((item) => {
+        const chosen = item.value === value;
+        const count = countOf(item.count);
+        return (
+          <button
+            key={item.value}
+            ref={thumb.optionRef}
+            type="button"
+            {...optionAttributes(role, chosen, panels?.(item.value))}
+            tabIndex={roving ? keys.tabIndexOf(item.value) : -1}
+            className="luke-choice-bar-option"
+            disabled={disabled || item.disabled === true}
+            onMouseDown={roving ? undefined : keepFocus}
+            onClick={() => press(item.value)}
+          >
+            {item.icon === undefined ? null : (
+              <span className="luke-choice-bar-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+            )}
+            <span className="luke-choice-bar-label">{item.label}</span>
+            {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }

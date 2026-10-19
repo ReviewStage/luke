@@ -5,7 +5,7 @@ import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
-import { MarkdownMessage } from "../markdown-message.js";
+import { MarkdownMessage, markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorDiagram,
@@ -226,7 +226,8 @@ export function IssueDescription({
     focus: true,
     label: "Description",
     placeholder: PLACEHOLDER,
-    className: `markdown ${READ_CLASS}`,
+    // Note that the editor wears the drawn words' own classes, the prose's among them, so a list keeps its gutter and nothing moves as it opens or closes.
+    className: markdownClass(READ_CLASS),
     onDraft: (markdown) => {
       drafted.current = markdown;
     },

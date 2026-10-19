@@ -683,6 +683,17 @@ function keptUrl(url: string): string {
 }
 
 /**
+ * The classes drawn Markdown wears, with a place's own after them. An editor
+ * that stands in the drawn words' place wears the same, so its lists keep
+ * the prose's gutter and markers and opening or closing it moves no word.
+ */
+export function markdownClass(className?: string): string {
+  return className === undefined
+    ? `markdown ${PROSE_CLASS}`
+    : `markdown ${PROSE_CLASS} ${className}`;
+}
+
+/**
  * A message's words drawn as the Markdown they were written in: inline emphasis, code, strikethrough, and web
  * links inside the paragraph, and the blocks a paragraph cannot hold —
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
@@ -769,11 +780,7 @@ export function MarkdownMessage({
     return drawing;
   }, [link, openLink, diagrams, picture, toggles]);
   return (
-    <div
-      className={
-        className === undefined ? `markdown ${PROSE_CLASS}` : `markdown ${PROSE_CLASS} ${className}`
-      }
-    >
+    <div className={markdownClass(className)}>
       <FenceEdit.Provider value={edit}>
         <Markdown
           remarkPlugins={REMARK_PLUGINS}

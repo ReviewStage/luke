@@ -190,12 +190,28 @@ function press(element: Element | null | undefined): void {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-/** The pipeline bar as a reader scans it: each stage's words, and whether it is the one pressed. */
+/** The radio group of the layers. */
+function layers(page: HTMLElement): HTMLElement {
+  const found = page.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Layers"]');
+  assert.ok(found, "the layers are a radio group");
+  return found;
+}
+
+/** The pipeline bar as a reader scans it: each stage's words, and whether it is the one chosen. */
 function pipeline(page: HTMLElement): string[] {
-  return [...page.querySelectorAll<HTMLButtonElement>(".factory-world-pipeline button")].map(
+  return [...layers(page).querySelectorAll<HTMLElement>('[role="radio"]')].map(
     (stage) =>
-      `${stage.textContent}${stage.getAttribute("aria-pressed") === "true" ? " (pressed)" : ""}`,
+      `${stage.textContent}${stage.getAttribute("aria-checked") === "true" ? " (chosen)" : ""}`,
   );
+}
+
+/** The stage of the layer named `name`. */
+function stage(page: HTMLElement, name: string): HTMLButtonElement {
+  const found = [...layers(page).querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent?.startsWith(name),
+  );
+  assert.ok(found, `no stage ${name}`);
+  return found;
 }
 
 /** The layers the campus draws, by name: those it does not hide. */
@@ -206,7 +222,7 @@ function drawn(page: HTMLElement): string[] {
 
 let pointed: Element | undefined;
 
-/** The pointer moving from where it was to a count, to another part of the bar (an arrow between counts), or off the bar onto the page. */
+/** The pointer moving from where it was to a stage, to another part of the bar (a gap between stages), or off the bar onto the page. */
 function pointTo(page: HTMLElement, to: Element | undefined): void {
   const target = to ?? page;
   act(() => {
@@ -216,12 +232,6 @@ function pointTo(page: HTMLElement, to: Element | undefined): void {
     );
   });
   pointed = to;
-}
-
-function arrow(page: HTMLElement): Element {
-  const found = page.querySelector(".factory-world-flow");
-  assert.ok(found);
-  return found;
 }
 
 /** The container at the gate holding the agent's pull request. */
@@ -234,7 +244,7 @@ test("the listed workspace's world is read as the page opens, and the campus is 
   await settle();
   assert.deepEqual(asked, [WORKSPACE.id]);
   assert.ok(campus(page));
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2", "Defects0"]);
   assert.equal(page.querySelector('input[aria-label="Time"]'), null, "no clock winds it back");
 });
 
@@ -328,45 +338,45 @@ test("the pointer resting on a building names its task in the label, and leaving
   assert.ok(page.querySelector(".factory-world-label") === null, "the label is taken down");
 });
 
-test("the pointer resting on a count of the pipeline bar draws its layer alone, and leaving the bar draws every layer again", async () => {
+test("the pointer resting on a stage of the pipeline bar draws its layer alone, and leaving the bar draws every layer again", async () => {
   const { page } = mount();
   await settle();
   assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
-  pointTo(page, button(page, "2Shipped"));
+  pointTo(page, stage(page, "Shipped"));
   assert.deepEqual(drawn(page), ["shipped"]);
-  pointTo(page, button(page, "1Planned"));
+  pointTo(page, stage(page, "Planned"));
   assert.deepEqual(drawn(page), ["planned"]);
   pointTo(page, undefined);
   assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2", "Defects0"]);
 });
 
-test("a press on a count keeps its layer alone until it is pressed again, and another count's press moves it there", async () => {
+test("the layers are a radio group whose press keeps a layer alone until it is pressed again, and another stage's press moves it there", async () => {
   const { page } = mount();
   await settle();
-  act(() => button(page, "2Shipped").click());
+  act(() => stage(page, "Shipped").click());
   pointTo(page, undefined);
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped (pressed)", "0Defects"]);
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2 (chosen)", "Defects0"]);
   assert.deepEqual(drawn(page), ["shipped"]);
-  // Note that resting on another count previews it, and leaving goes back to the one pressed.
-  pointTo(page, button(page, "1Building"));
+  // Note that resting on another stage previews it, and leaving goes back to the one chosen.
+  pointTo(page, stage(page, "Building"));
   assert.deepEqual(drawn(page), ["building"]);
   pointTo(page, undefined);
   assert.deepEqual(drawn(page), ["shipped"]);
-  act(() => button(page, "1Building").click());
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building (pressed)", "2Shipped", "0Defects"]);
+  act(() => stage(page, "Building").click());
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1 (chosen)", "Shipped2", "Defects0"]);
   assert.deepEqual(drawn(page), ["building"]);
-  act(() => button(page, "1Building").click());
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+  act(() => stage(page, "Building").click());
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2", "Defects0"]);
   assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
 });
 
-test("the pointer leaving a count for the arrow beside it ends that count's preview", async () => {
+test("the pointer leaving a stage for a gap in the bar ends that stage's preview", async () => {
   const { page } = mount();
   await settle();
-  pointTo(page, button(page, "2Shipped"));
+  pointTo(page, stage(page, "Shipped"));
   assert.deepEqual(drawn(page), ["shipped"]);
-  pointTo(page, arrow(page));
+  pointTo(page, layers(page));
   assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
   pointTo(page, undefined);
 });
@@ -374,22 +384,64 @@ test("the pointer leaving a count for the arrow beside it ends that count's prev
 test("the pointer leaving the bar leaves the keyboard's preview standing, and the pointer's comes first while both rest", async () => {
   const { page } = mount();
   await settle();
-  act(() => button(page, "0Defects").focus());
-  pointTo(page, button(page, "1Planned"));
+  act(() => stage(page, "Defects").focus());
+  pointTo(page, stage(page, "Planned"));
   assert.deepEqual(drawn(page), ["planned"]);
   pointTo(page, undefined);
   assert.deepEqual(drawn(page), ["defects"]);
 });
 
-test("the keyboard on a count previews its layer as the pointer does, and leaving the bar draws every layer again", async () => {
+test("the keyboard on a stage previews its layer as the pointer does, and leaving the bar draws every layer again", async () => {
   const { page } = mount();
   await settle();
-  act(() => button(page, "1Planned").focus());
+  act(() => stage(page, "Planned").focus());
   assert.deepEqual(drawn(page), ["planned"]);
-  act(() => button(page, "0Defects").focus());
+  act(() => stage(page, "Defects").focus());
   assert.deepEqual(drawn(page), ["defects"]);
-  act(() => button(page, "0Defects").blur());
+  act(() => stage(page, "Defects").blur());
   assert.deepEqual(drawn(page), ["planned", "building", "shipped", "defects"]);
+});
+
+test("the layers are one tab stop, and the arrows move the choice along it, drawing the layer they land on", async () => {
+  const { page } = mount();
+  await settle();
+  const stops = () =>
+    [...layers(page).querySelectorAll<HTMLElement>('[role="radio"]')].filter(
+      (each) => each.tabIndex === 0,
+    );
+  assert.deepEqual(
+    stops().map((each) => each.textContent),
+    ["Planned1"],
+  );
+  act(() => stage(page, "Planned").focus());
+  act(() => {
+    stage(page, "Planned").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+  });
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1 (chosen)", "Shipped2", "Defects0"]);
+  assert.equal(document.activeElement, stage(page, "Building"));
+  assert.deepEqual(drawn(page), ["building"]);
+  assert.deepEqual(
+    stops().map((each) => each.textContent),
+    ["Building1"],
+  );
+});
+
+test("an arrow moving the choice leaves the preview of the stage the pointer rests on standing", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => stage(page, "Shipped").focus());
+  pointTo(page, stage(page, "Planned"));
+  act(() => {
+    stage(page, "Shipped").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+  });
+  assert.deepEqual(pipeline(page), ["Planned1", "Building1", "Shipped2", "Defects0 (chosen)"]);
+  assert.deepEqual(drawn(page), ["planned"]);
+  pointTo(page, undefined);
+  assert.deepEqual(drawn(page), ["defects"]);
 });
 
 /** A registry whose runtime reads `clock`, so the page's minute moves on the test's own time. */

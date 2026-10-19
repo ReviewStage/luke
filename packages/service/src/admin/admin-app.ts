@@ -8,14 +8,15 @@ import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin-favorite
 import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js";
 import { type AdminUserOptions, handleAdminUser } from "./admin-user.js";
 import { type AdminUsersOptions, handleAdminUsers } from "./admin-users.js";
+import { type AdminWorkspacesOptions, handleAdminWorkspaces } from "./admin-workspaces.js";
 import { adminViewerGate } from "./gate.js";
 import { ADMIN_ROUTE_PATH } from "./http.js";
 import { ADMIN_REFUSAL, adminRefusalResponse } from "./http-effect.js";
 
 /**
- * The dashboard as the one route group its five functions serve: four reads
- * and the Users tab's one star write. Each is its own function and the group
- * declares all five, so a function answers its own address and the admin
+ * The dashboard as the one route group its functions serve: its reads and
+ * the Users tab's one star write. Each is its own function and the group
+ * declares them all, so a function answers its own address and the admin
  * vocabulary's `not-found` anywhere else.
  *
  * What the group owns is the gate, in the order the pages depend on: a method
@@ -36,6 +37,7 @@ export interface AdminSeams {
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];
   readDay: AdminDayOptions["readDay"];
+  readWorkspaces: AdminWorkspacesOptions["readWorkspaces"];
   writeFavorite: AdminFavoriteOptions["writeFavorite"];
 }
 
@@ -60,7 +62,7 @@ function gate(
 
 /**
  * The admin vocabulary's own `not-found`, on the wildcard the router reaches
- * only once all five addresses have failed to match.
+ * only once every address of the group has failed to match.
  */
 const adminNotFoundRoute = HttpRouter.add(
   ANY_METHOD,
@@ -68,7 +70,7 @@ const adminNotFoundRoute = HttpRouter.add(
   adminRefusalResponse(ADMIN_REFUSAL.NOT_FOUND),
 );
 
-/** The group, which is the dashboard's five addresses and the refusal anywhere else. */
+/** The group, which is the dashboard's addresses and the refusal anywhere else. */
 export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(
@@ -97,6 +99,13 @@ export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
       ADMIN_ROUTE_PATH.DAY,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminDay({ request, readDay: seams.readDay }),
+      ),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ADMIN_ROUTE_PATH.WORKSPACES,
+      gate(seams, READ_METHOD, (_viewer, request) =>
+        handleAdminWorkspaces({ request, readWorkspaces: seams.readWorkspaces }),
       ),
     ),
     HttpRouter.add(
