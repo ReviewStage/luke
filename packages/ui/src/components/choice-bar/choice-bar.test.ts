@@ -332,10 +332,12 @@ test("a count's glyph says its state in words beside the count", () => {
   assert.equal(checks.textContent, "Checks×1");
 });
 
-test("a bar folding together folds every option once their names no longer fit its width, and unfolds only once the room they need stands again", () => {
-  // Note that jsdom lays nothing out, so the bar's width and the width its named options need are the test's, and so is when it resizes.
+test("a bar folding together folds every option once their names no longer fit its width, and names them again once they would, measured as they stand", () => {
+  // Note that jsdom lays nothing out, so the bar's width, its options' widths, each name's, and when it resizes are the test's.
+  const NAME = 40;
+  const GLYPHS = 280;
   let room = 500;
-  const needs = 400;
+  let glyphs = GLYPHS;
   const observers: (() => void)[] = [];
   vi.stubGlobal(
     "ResizeObserver",
@@ -348,17 +350,28 @@ test("a bar folding together folds every option once their names no longer fit i
     },
   );
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => room);
-  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => needs);
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.classList.contains("luke-choice-bar-label")) return NAME;
+    // A folded bar's options stand by their glyphs and counts alone; drawn, each name stands beside them.
+    return this.getAttribute("data-folded") === "true" ? glyphs : glyphs + 3 * NAME;
+  });
   const resize = (width: number) => {
     room = width;
     act(() => {
       for (const heard of observers) heard();
     });
   };
+  const items: readonly ChoiceItem<View>[] = [
+    { value: VIEW.CONVERSATION, label: "Conversation", icon: "C", count: "12" },
+    { value: VIEW.CHECKS, label: "Checks", icon: "K" },
+    { value: VIEW.FILES, label: "Files", icon: "F", count: linesCount(214, 38) },
+  ];
   const page = render(
     createElement(ChoiceBar<View>, {
       label: "Pull request",
-      items: ITEMS,
+      items,
       value: VIEW.CONVERSATION,
       onChange: () => undefined,
       look: CHOICE_BAR_LOOK.FILL,
@@ -371,10 +384,18 @@ test("a bar folding together folds every option once their names no longer fit i
     assert.equal(folded(), false, "names that fit stand");
     resize(300);
     assert.equal(folded(), true, "names that no longer fit fold, every option at once");
-    resize(350);
-    assert.equal(folded(), true, "short of the room the names need, the bar stays folded");
+    resize(380);
+    assert.equal(folded(), true, "short of the room the names take, the bar stays folded");
     resize(420);
-    assert.equal(folded(), false, "with the room they need, the names come back");
+    assert.equal(folded(), false, "with the room they take, the names come back");
+    resize(300);
+    glyphs = GLYPHS - 40;
+    resize(370);
+    assert.equal(
+      folded(),
+      false,
+      "options drawn tighter while folded are measured as they stand, so names that now fit come back",
+    );
   } finally {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

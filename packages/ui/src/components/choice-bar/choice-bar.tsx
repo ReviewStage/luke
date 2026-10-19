@@ -236,54 +236,47 @@ function useThumb() {
   return { bar, barRef, optionRef };
 }
 
-/** What the options say, which a fold measured with their names stands for until it changes. */
-function namesOf(items: readonly ChoiceItem<string>[]): string {
-  return JSON.stringify(
-    items.map((item) => [
-      item.label,
-      item.count === undefined || !isParts(item.count)
-        ? item.count
-        : item.count.map((part) => part.text),
-    ]),
-  );
+/** The room the folded options' names would take back: each name's own width and the gap it would stand in. */
+function foldedNames(bar: HTMLElement): number {
+  let room = 0;
+  for (const label of bar.querySelectorAll<HTMLElement>(
+    ".luke-choice-bar-icon + .luke-choice-bar-label",
+  )) {
+    const option = label.parentElement;
+    const gap = option === null ? 0 : Number.parseFloat(getComputedStyle(option).columnGap) || 0;
+    room += label.scrollWidth + gap;
+  }
+  return room;
 }
+
+/** How far short of the bar's width named options must stand before a folded bar names them again, so a width on the edge never sets it folding and unfolding in turn. */
+const UNFOLD_SLACK = 2;
 
 /**
  * Whether a bar folding together draws its options by their glyphs alone:
- * while their names do not fit its width. Note that the width the names
- * need is measured while they are drawn and kept while they are folded,
- * when it cannot be read, so the bar unfolds only once that much room
- * stands; options that say something new are measured named again, before
- * the frame is painted.
+ * while their names do not fit its width. The width the names take is
+ * measured as the bar stands, drawn or folded, a folded name read by its own
+ * width (`foldedNames`), so a change that makes them fit, a tighter step's
+ * padding among them, unfolds the bar at once. It is measured on every draw,
+ * before the frame is painted, and whenever the bar or an option resizes.
  */
-function useFoldTogether(
-  on: boolean,
-  bar: React.RefObject<HTMLDivElement | null>,
-  names: string,
-): boolean {
+function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null>): boolean {
   const [folded, setFolded] = useState(false);
-  const needed = useRef(0);
-  // Note that new names are measured named again, which is all this effect is for.
-  useLayoutEffect(() => {
-    setFolded(false);
-  }, [names]);
+  const measure = useCallback(() => {
+    const element = bar.current;
+    if (!on || element === null) return;
+    const named = element.scrollWidth + (folded ? foldedNames(element) : 0);
+    setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
+  }, [on, bar, folded]);
+  useLayoutEffect(measure);
   useLayoutEffect(() => {
     const element = bar.current;
-    if (!on || element === null) return undefined;
-    const measure = () => {
-      if (!folded && element.scrollWidth > element.clientWidth) {
-        needed.current = element.scrollWidth;
-        setFolded(true);
-      } else if (folded && element.clientWidth >= needed.current) {
-        setFolded(false);
-      }
-    };
-    measure();
-    if (!("ResizeObserver" in globalThis)) return undefined;
+    if (!on || element === null || !("ResizeObserver" in globalThis)) return undefined;
     const resized = new ResizeObserver(measure);
     resized.observe(element);
+    for (const option of element.children) resized.observe(option);
     return () => resized.disconnect();
-  }, [on, folded, bar, names]);
+  }, [on, bar, measure]);
   return on && folded;
 }
 
@@ -395,7 +388,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     ...appAttributes
   } = props;
   const thumb = useThumb();
-  const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar, namesOf(items));
+  const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar);
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
