@@ -3612,6 +3612,67 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a teammate's session cookie messages and stops the owner's agent, stops Luke on the owner's task, and deletes it, each as the deployment acting for the teammate and never for the owner the rows name",
+    () =>
+      Effect.gen(function* () {
+        // An idle agent of the owner's, which the teammate messages.
+        const messaged = yield* startedAgent(fakeEve(), { running: false });
+        yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
+        // A running agent of the owner's, and Luke at work on its task, which the teammate stops and then deletes.
+        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
+        const taskSession = yield* lukeRunning(stopped.owner, stopped.task.id);
+        const teammate = sessionCookieOf(stopped.other);
+
+        const sent = yield* messaged.ask(
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: messaged.agent.id,
+            cookie: sessionCookieOf(messaged.other),
+            body: { text: "Use the new table.", clientKey: randomUUID() },
+          }),
+        );
+        const agentStop = yield* stopped.ask(
+          request(AGENT_STOP, undefined, {
+            method: "POST",
+            id: stopped.agent.id,
+            cookie: teammate,
+          }),
+        );
+        const lukeStop = yield* stopped.ask(
+          request(TASK_STOP, undefined, { method: "POST", id: stopped.task.id, cookie: teammate }),
+        );
+        const deleted = yield* stopped.ask(
+          request(TASK, undefined, { method: "DELETE", id: stopped.task.id, cookie: teammate }),
+        );
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+        assert.deepEqual(
+          messaged.eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[deploymentFor(messaged.other), messaged.sessionId]],
+        );
+        assert.deepEqual(
+          [agentStop.status, lukeStop.status],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(stopped.eve.cancelled, [
+          [stopped.sessionId, "turn_0"],
+          [taskSession, "turn_0"],
+        ]);
+        assert.deepEqual(stopped.eve.cancelledAs, [
+          deploymentFor(stopped.other),
+          deploymentFor(stopped.other),
+        ]);
+        assert.deepEqual(stopped.eve.reset.toSorted(), [taskSession, stopped.sessionId].toSorted());
+        assert.deepEqual(stopped.eve.resetAs, [
+          deploymentFor(stopped.other),
+          deploymentFor(stopped.other),
+        ]);
+      }),
+  );
+
+  it.effect(
     "another account's session cookie reaches none of an agent's or its task's controls, which answer as nothing there and ask eve nothing",
     () =>
       Effect.gen(function* () {

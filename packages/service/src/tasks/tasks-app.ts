@@ -72,7 +72,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
-import { retireSessions } from "../agents/retire-sessions.js";
+import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import {
   TASK_LIST_ARCHIVED,
@@ -732,7 +732,9 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
  * browser's session cookie, as the deployment acting for the account the
  * cookie named, which eve's door admits for a cancel and a retire on a
  * session that account reaches, so a cookie's delete retires the task's
- * sessions as a bearer's does.
+ * sessions as a bearer's does. A cookie's delete on a deployment that cannot
+ * reach eve as itself is refused as unavailable before anything is stopped
+ * (`retiringReach`), where a bearer's goes on with its retires a courtesy.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -741,6 +743,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+  const eveAt = yield* retiringReach(seams, request, userId);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, taskId, { includeArchived: true }),
   );
@@ -756,7 +759,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       // agent started meanwhile refuses retires nothing.
       beforeDelete: (conversationIds) =>
         Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
-          retireSessions((mount) => eveFor(seams, request, userId, mount), sessions),
+          retireSessions(eveAt, sessions),
         ),
     }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
   );

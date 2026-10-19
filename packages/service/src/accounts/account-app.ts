@@ -30,8 +30,8 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
-import { retireSessions } from "../agents/retire-sessions.js";
+import type { EveReach } from "../agents/coder-host/stop.js";
+import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -216,7 +216,9 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * (`coder-host/stop.ts`'s `eveFor`: over the bearer, or as the deployment
  * acting for the account the cookie named), while eve's door still admits
  * them to it (`retire-sessions.ts`); a session eve did not retire is logged
- * and the delete proceeds, and the delete itself queues the sandbox of every
+ * and the delete proceeds, though a cookie's deletion on a deployment that
+ * cannot reach eve as itself is refused as unavailable before anything is
+ * erased (`retiringReach`); the delete itself queues the sandbox of every
  * session the account ran for the sweep. Every grant the account's integration rows
  * name is revoked at Vercel Connect once the rows are gone, as a Disconnect
  * revokes one, so no grant outlives the account; a revoke that fails is logged by its
@@ -237,8 +239,9 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams);
+  const eveAt = yield* retiringReach(seams, request, userId);
   const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
-  yield* retireSessions((mount) => eveFor(seams, request, userId, mount), sessions);
+  yield* retireSessions(eveAt, sessions);
   yield* forgetAnalytics(userId);
   // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
   const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));

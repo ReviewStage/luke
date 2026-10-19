@@ -185,9 +185,14 @@ function retiringEve() {
 /**
  * Two accounts, each behind its own bearer. The owner signed in with GitHub
  * through the App; the other signed in with Google alone, and reaches
- * nothing on GitHub.
+ * nothing on GitHub. eve is a fake that writes down each retire, unless the
+ * test asks for none, when the deployment composes its own: on an
+ * environment naming no secret, over a network nothing answers on.
  */
-const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
+const openAccounts = (
+  github: FakeGitHub = UNREACHED_GITHUB,
+  options: { readonly reachesEve?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openGithubUser();
@@ -203,10 +208,10 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
         [sessionCookieOf(other), other],
       ]),
     };
-    const eve = retiringEve();
+    const eve = options.reachesEve === false ? undefined : retiringEve();
     const ask = (request: Request, landedAs?: string) =>
       answer(signedIn, github, eve, request, landedAs);
-    return { owner, other, ask, retired: eve.retired };
+    return { owner, other, ask, retired: eve?.retired ?? [] };
   });
 
 /** How the suite's accounts sign in: each one's OAuth bearer, and the session cookie of a browser signed in to it. */
@@ -243,7 +248,7 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
 const answer = (
   signedIn: SignedIn,
   github: FakeGitHub,
-  eve: ReturnType<typeof retiringEve>,
+  eve: ReturnType<typeof retiringEve> | undefined,
   request: Request,
   landedAs?: string,
 ) =>
@@ -265,8 +270,7 @@ const answer = (
           requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
         workspaces: yield* fakeWorkspaceSeams,
         eveOrigin: () => ORIGIN,
-        eve: eve.eve,
-        eveAs: eve.eveAs,
+        ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -745,6 +749,38 @@ it.layer(getTestDB())("the plan routes", (it) => {
         refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
       );
     }),
+  );
+
+  it.effect(
+    "a session cookie's delete is refused as unavailable, stopping and deleting nothing, on a deployment that cannot reach eve as itself, while the bearer's delete goes on with its retires a courtesy",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts(UNREACHED_GITHUB, { reachesEve: false });
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* sessionOn(owner, taskId);
+
+        assert.deepEqual(
+          yield* ask(
+            request(ONE_TASK, undefined, {
+              id: taskId,
+              method: "DELETE",
+              cookie: sessionCookieOf(owner),
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(
+          (yield* ask(request(ONE_TASK, owner, { id: taskId }))).status,
+          HOSTED_HTTP_STATUS.OK,
+          "the task stands",
+        );
+        assert.deepEqual(yield* ask(request(ONE_TASK, owner, { id: taskId, method: "DELETE" })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
+      }),
   );
 
   it.effect(

@@ -349,7 +349,11 @@ none, whose account the cookie named, reaches eve as the deployment acting
 for that account, under the deployment's own `CRON_SECRET` with the account
 in `x-luke-account`. The account is always the one the route resolved from
 that request, never one the request or a row names, and a deployment with
-no secret or no eve origin answers such a request unavailable. The channels'
+no secret or no eve origin answers such a request unavailable, a delete
+included: a cookie's delete composes eve before it stops or erases anything
+and is refused where it cannot (`src/agents/retire-sessions.ts`'s
+`retiringReach`), while a bearer's goes on with its retires a courtesy, as
+it always has. The channels'
 door holds the deployment to what its actor admits
 (`src/agents/brain-host/auth.ts`): on the coding agents' channel the typed
 opening and line it already carried for the voice brain, which is an

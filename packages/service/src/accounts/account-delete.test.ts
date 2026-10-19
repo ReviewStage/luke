@@ -31,7 +31,7 @@ import { EVE_RESET_OUTCOME, type EveSessions } from "../agents/brain-host/eve-se
 import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { accountApp } from "./account-app.js";
@@ -121,8 +121,13 @@ const sessionOf = (
     return sessionId;
   });
 
-/** Two accounts, each behind its bearer and its browser's session cookie, and the group answering on the test's database and clock over the eve given. */
-const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
+/**
+ * Two accounts, each behind its bearer and its browser's session cookie, and
+ * the group answering on the test's database and clock over the eve given,
+ * or, with none, over the eve the deployment composes itself, which names no
+ * secret and reaches no network.
+ */
+const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openUser;
@@ -141,8 +146,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
     const app = accountApp({
       resolveUserId: (incoming) => requestUserId(incoming, userInfo, session),
       eveOrigin: () => ORIGIN,
-      eve: eve.eve,
-      eveAs: eve.eveAs,
+      ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
       standingSessions: (userId) => standingSessionsOf(userId),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
@@ -250,6 +254,42 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         assert.deepEqual(eve.retired, [[`Bearer ${owner}`, taskSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie is refused as unavailable, erasing nothing, on a deployment that cannot reach eve as itself, while the bearer's deletion goes on with its retires a courtesy",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, stands, ask } = yield* openAccounts(undefined);
+        yield* sessionOf(owner, CONVERSATION_KIND.TASK);
+        yield* sessionOf(other, CONVERSATION_KIND.TASK);
+
+        assert.deepEqual(
+          yield* ask(
+            sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, HTTP_METHOD.POST, {
+              cookie: sessionCookieOf(owner),
+            }),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+            body: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          },
+        );
+        assert.equal(yield* stands(owner), true, "the cookie's deletion erased nothing");
+        assert.deepEqual(
+          yield* ask(
+            sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, HTTP_METHOD.POST, {
+              authorization: `Bearer ${other}`,
+            }),
+          ),
+          { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } },
+        );
+        assert.equal(
+          yield* stands(other),
+          false,
+          "the bearer's went on though eve was out of reach",
+        );
       }),
   );
 });

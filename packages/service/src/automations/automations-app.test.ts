@@ -782,6 +782,37 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
+    "a teammate's Run now of the owner's workspace automation over a session cookie starts its agent as the deployment acting for the teammate, never for the automation's creator",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, openedAs } = yield* openAccounts;
+        yield* joinWorkspace(task.workspaceId, other);
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: { ...weekdays(task.id), scope: AUTOMATION_SCOPE.WORKSPACE },
+          }),
+        );
+
+        const { run } = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(automation.id), undefined, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+            cookie: sessionCookieOf(other),
+          }),
+        );
+
+        assert.equal(run.status, AUTOMATION_RUN_STATUS.STARTED);
+        assert.deepEqual(run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: other });
+        assert.deepEqual(openedAs, [deploymentFor(other)]);
+      }),
+  );
+
+  it.effect(
     "a webhook sent again keeps its secret, the owner's own pause clears why the service paused it, a prompt at its bound fits however JSON spells it, and a Run now key must be a UUID",
     () =>
       Effect.gen(function* () {
