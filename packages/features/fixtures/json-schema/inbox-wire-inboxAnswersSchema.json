@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "properties": {
+    "ask": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "reply": {
+      "type": "string",
+      "enum": [
+        "chose",
+        "approved",
+        "declined",
+        "answered",
+        "done",
+        "not-done",
+        "submitted",
+        "acknowledged"
+      ]
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 8
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxItems": 8
+    }
+  },
+  "required": [
+    "ask",
+    "reply"
+  ],
+  "additionalProperties": false
+}

@@ -1,20 +1,20 @@
 import { Schema as EffectSchema } from "effect";
 import {
   fieldValueWords,
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxBlock,
   type InboxFormValue,
-  type InboxReadResponse,
-  type InboxReply,
+  inboxBlockSchema,
+  inboxFieldSchema,
+  inboxFormValuesSchema,
   inboxKeySchema,
+  inboxOptionSchema,
   inboxPostBlocksSchema,
-  inboxReadBlockSchema,
-  inboxReadResponseSchema,
   inboxReplyRefusal,
-  inboxReplySchema,
-  inboxResponseSchema,
   inboxWordBlockSchema,
 } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
@@ -37,15 +37,11 @@ export {
   /** @public */
   type InboxBlock as ChatBlock,
   /** @public */
-  type InboxChoice as ChatChoice,
-  /** @public */
   type InboxCodeBlock as ChatCodeBlock,
   /** @public */
   type InboxField as ChatField,
   /** @public */
   type InboxFieldValue as ChatFieldValue,
-  /** @public */
-  type InboxForm as ChatForm,
   /** @public */
   type InboxFormValue as ChatFormValue,
   /** @public */
@@ -55,15 +51,7 @@ export {
   /** @public */
   type InboxPostBlock as ChatPostBlock,
   /** @public */
-  type InboxReadBlock as ChatReadBlock,
-  /** @public */
-  type InboxReadResponse as ChatReadResponse,
-  /** @public */
-  type InboxReply as ChatReply,
-  /** @public */
   type InboxReplyKind as ChatReplyKind,
-  /** @public */
-  type InboxResponse as ChatResponse,
   /** @public */
   type InboxStatus as AskStatus,
   /** @public */
@@ -88,18 +76,6 @@ export {
   inboxPostBlockSchema as chatPostBlockSchema,
   /** @public */
   inboxPostBlocksSchema as chatPostBlocksSchema,
-  /** @public */
-  inboxReadBlockSchema as chatReadBlockSchema,
-  /** @public */
-  inboxReadResponseSchema as chatReadResponseSchema,
-  /** @public */
-  inboxReplySchema as chatReplySchema,
-  /** @public */
-  inboxResponseSchema as chatResponseSchema,
-  /** @public */
-  knownBlock,
-  /** @public */
-  knownResponse,
 } from "./inbox-wire.js";
 
 /**
@@ -120,8 +96,12 @@ export {
  * may carry an ask under a key of its poster's: the same response shapes
  * the Inbox asks with, re-posted under the key to update it in place at a
  * bumped revision, answered by any member at the revision it names as a
- * reply in its thread, and resolved by its poster. The block and ask shapes
- * are the Inbox's own (`inbox-wire.ts`), named here as the chat's.
+ * reply in its thread, and resolved by its poster. The block shapes are the
+ * Inbox's own (`inbox-wire.ts`), named here as the chat's. The ask's shapes,
+ * its response, its answer, and how a block or a response of a type this
+ * build does not know is read, are the chat's own, copied from the Inbox's
+ * version 4, because the Inbox's asks moved on to a vocabulary of their own
+ * (version 5) and a chat ask must not move with them.
  *
  * The tools an agent talks through are named here, as the Inbox's are, and
  * their inputs declared here so the model is shown, eve holds, and the
@@ -137,6 +117,10 @@ function filledText(maximumChars: number) {
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(maximumChars),
   );
+}
+
+function boundedText(maximumChars: number) {
+  return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
 }
 
 /**
@@ -337,13 +321,136 @@ export function mentionedHandles(text: string): readonly string[] {
 }
 
 /**
+ * What an ask asks for, one of six, as the Inbox asked before its version 5:
+ * a choice among options, several where `multiple`, the label it recommends
+ * named; an approval; words, with what the box says while empty; a task; a
+ * form of fields; or nothing but an acknowledgement.
+ * @public
+ */
+export const chatResponseSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(CHAT_ASK.CHOICE),
+    options: EffectSchema.Array(inboxOptionSchema).check(
+      EffectSchema.isMinLength(2),
+      EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_OPTIONS),
+    ),
+    multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
+    recommended: EffectSchema.optionalKey(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(CHAT_ASK.APPROVAL) }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(CHAT_ASK.TEXT),
+    placeholder: EffectSchema.optionalKey(boundedText(CHAT_BOUNDS.MAX_LABEL_CHARS)),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(CHAT_ASK.TASK) }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(CHAT_ASK.FORM),
+    fields: EffectSchema.Array(inboxFieldSchema).check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_FIELDS),
+    ),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(CHAT_ASK.NONE) }),
+]);
+
+/** @public */
+export type ChatResponse = typeof chatResponseSchema.Type;
+
+/**
+ * A choice as an ask asks it, with the options an answer must name.
+ * @public
+ */
+export type ChatChoice = Extract<ChatResponse, { type: typeof CHAT_ASK.CHOICE }>;
+
+/**
+ * A form as an ask asks it, with the fields an answer fills.
+ * @public
+ */
+export type ChatForm = Extract<ChatResponse, { type: typeof CHAT_ASK.FORM }>;
+
+/**
+ * A member's answer to an ask: how they answered, the options where they
+ * picked, the form's values where they filled one, and their note.
+ * @public
+ */
+export const chatReplySchema = EffectSchema.Struct({
+  reply: EffectSchema.Literals(Object.values(INBOX_REPLY)),
+  choices: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String).check(
+      EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_OPTIONS),
+    ),
+  ),
+  values: EffectSchema.optionalKey(inboxFormValuesSchema),
+  note: EffectSchema.optionalKey(boundedText(CHAT_BOUNDS.MAX_NOTE_CHARS)),
+});
+
+/** @public */
+export type ChatReply = typeof chatReplySchema.Type;
+
+/** The block and ask types this build draws, by which a read tells a type it does not know. */
+const CHAT_KNOWN_TYPES: ReadonlySet<string> = new Set([
+  ...Object.values(INBOX_BLOCK),
+  ...Object.values(CHAT_ASK),
+]);
+
+/**
+ * A block or ask type this build does not know, as a newer service wrote
+ * one: read as the type's name alone, and drawn as a placeholder naming a
+ * newer Luke. A type this build knows is refused here, because a known one
+ * that fails its own shape is a broken read and not a newer one.
+ */
+const unknownChatTypeSchema = EffectSchema.String.check(
+  EffectSchema.makeFilter((type) => !CHAT_KNOWN_TYPES.has(type)),
+).pipe(EffectSchema.brand("UnknownChatType"));
+
+/**
+ * A block as a reader reads one: one this build knows, or the type alone of one it does not.
+ * @public
+ */
+export const chatReadBlockSchema = EffectSchema.Union([
+  ...inboxBlockSchema.members,
+  EffectSchema.Struct({ type: unknownChatTypeSchema }),
+]);
+
+/** @public */
+export type ChatReadBlock = typeof chatReadBlockSchema.Type;
+
+/**
+ * A response as a reader reads one: one this build knows, or the type alone of one it does not.
+ * @public
+ */
+export const chatReadResponseSchema = EffectSchema.Union([
+  ...chatResponseSchema.members,
+  EffectSchema.Struct({ type: unknownChatTypeSchema }),
+]);
+
+/** @public */
+export type ChatReadResponse = typeof chatReadResponseSchema.Type;
+
+/**
+ * Whether a response read off the wire is one this build knows, which its type decides.
+ * @public
+ */
+export function knownResponse(response: ChatReadResponse): response is ChatResponse {
+  return Object.values<string>(CHAT_ASK).includes(response.type);
+}
+
+/**
+ * Whether a block read off the wire is one this build knows, which its type decides.
+ * @public
+ */
+export function knownBlock(block: ChatReadBlock): block is InboxBlock {
+  return Object.values<string>(INBOX_BLOCK).includes(block.type);
+}
+
+/**
  * An ask as its poster states it: the response it asks for, a one-line
  * title where the message's words are not its heading, and whether the
  * poster needs to hear back, which it does unless it says not.
  */
 export const chatAskSchema = EffectSchema.Struct({
   title: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TITLE_CHARS)),
-  response: inboxResponseSchema,
+  response: chatResponseSchema,
   needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
@@ -450,9 +557,9 @@ export const chatMessageAskSchema = EffectSchema.Struct({
   revision: countedNumber,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
   title: EffectSchema.optionalKey(EffectSchema.String),
-  response: inboxReadResponseSchema,
+  response: chatReadResponseSchema,
   needsReply: EffectSchema.Boolean,
-  answer: EffectSchema.optionalKey(inboxReplySchema),
+  answer: EffectSchema.optionalKey(chatReplySchema),
   answeredBy: EffectSchema.optionalKey(wireUuidSchema),
   closedReason: EffectSchema.optionalKey(EffectSchema.String),
 });
@@ -470,7 +577,7 @@ export const chatMessageSchema = EffectSchema.Struct({
   channelId: wireUuidSchema,
   parentId: EffectSchema.optionalKey(wireUuidSchema),
   authorId: wireUuidSchema,
-  blocks: EffectSchema.Array(inboxReadBlockSchema),
+  blocks: EffectSchema.Array(chatReadBlockSchema),
   mentions: EffectSchema.Array(wireUuidSchema),
   postedAt: countedNumber,
   ask: EffectSchema.optionalKey(chatMessageAskSchema),
@@ -533,7 +640,7 @@ export function formValueLines(values: readonly InboxFormValue[]): string {
  * An answer's own words, as its poster reads them.
  * @public
  */
-export function replyWords(reply: InboxReply): string {
+export function replyWords(reply: ChatReply): string {
   switch (reply.reply) {
     case INBOX_REPLY.CHOSE:
       return `Chose ${(reply.choices ?? []).map((choice) => `"${choice}"`).join(", ")}.`;
@@ -556,10 +663,12 @@ export function replyWords(reply: InboxReply): string {
 
 /**
  * Why an answer does not fit the response it answers, or nothing where it
- * does, as the Inbox reads an answer to an item.
+ * does, as the Inbox read an answer to an item before its version 5. A
+ * response this build does not know takes nothing.
  * @public
  */
-export function replyRefusal(response: InboxReadResponse, reply: InboxReply): string | undefined {
+export function replyRefusal(response: ChatReadResponse, reply: ChatReply): string | undefined {
+  if (!knownResponse(response)) return "The item asks something this Luke does not know.";
   return inboxReplyRefusal({ response }, reply);
 }
 
@@ -602,7 +711,7 @@ export const chatAnswerRequestSchema = EffectSchema.Struct({
   answer: EffectSchema.Struct({
     seq: countedNumber,
     revision: countedNumber,
-    reply: inboxReplySchema,
+    reply: chatReplySchema,
   }),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
