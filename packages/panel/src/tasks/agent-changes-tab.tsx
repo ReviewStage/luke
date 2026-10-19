@@ -771,8 +771,7 @@ function threadLines(
     if (thread.line === null) return [];
     const side = COMMENT_SIDE[thread.startSide ?? thread.side];
     const start = thread.startLine ?? thread.line;
-    // Note that a first line no row of the patch holds stands before every row
-    // drawn, since the threads all end on one drawn line.
+    // Note that an undrawn first line precedes drawn rows, because the threads share a drawn end.
     const place = rowPlace(file, side, start) ?? Number.NEGATIVE_INFINITY;
     const selection = { start, side, end: thread.line, endSide: COMMENT_SIDE[thread.side] };
     return [{ place, lines: { path: thread.path, selection } }];
