@@ -225,22 +225,6 @@ it.effect(
 );
 
 it.effect(
-  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        [`GET /api/agents/${AGENT_ID}/inbox`]: {
-          answer: () => ({ items: [], cursor: "3" }),
-        },
-      });
-
-      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
-
-      assert.deepEqual(read, { items: [], cursor: "3" });
-    }),
-);
-
-it.effect(
   "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
   () =>
     Effect.gen(function* () {

@@ -123,7 +123,6 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "stop"
   | "agent"
-  | "agentInbox"
   | "pullRequest"
   | "changes"
   | "overviewPullRequest"
@@ -142,7 +141,6 @@ export type CodingAgentClient = Pick<
   | "readPlanTemplateRevision"
   | "restorePlanTemplate"
   | "transcribeDictation"
-  | "inbox"
   | "answerInbox"
   | "closeInbox"
   | "messageInbox"
@@ -544,9 +542,7 @@ function composed(
           params,
           "reading a task's inbox names the task and a cursor",
         );
-        const answer = gate()
-          ? yield* inboxPast(inboxes, `plan:${taskId}`, after, asked(client.inbox(taskId, after)))
-          : UNANSWERED;
+        const answer = gate() ? yield* inboxPast(inboxes, `plan:${taskId}`, after) : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
@@ -556,14 +552,7 @@ function composed(
           params,
           "reading an agent's inbox names the agent and a cursor",
         );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              `agent:${agentId}`,
-              after,
-              asked(client.agentInbox(agentId, after)),
-            )
-          : UNANSWERED;
+        const answer = gate() ? yield* inboxPast(inboxes, `agent:${agentId}`, after) : UNANSWERED;
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>

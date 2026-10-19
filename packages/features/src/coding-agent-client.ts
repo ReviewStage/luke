@@ -31,7 +31,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
@@ -103,7 +102,6 @@ import {
   type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
-  inboxAnswerSchema,
   inboxCloseRequestSchema,
   inboxImageTypeSchema,
   inboxMessagedSchema,
@@ -135,7 +133,6 @@ import { type RepositoryUnreached, repositoryNotReachableSchema } from "./reposi
 import {
   agentChangesPath,
   agentGitHubImagePath,
-  agentInboxPath,
   agentOverviewChecksPath,
   agentOverviewConversationPath,
   agentOverviewPullRequestPath,
@@ -153,7 +150,6 @@ import {
   inboxItemReadPath,
   inboxMessagesPath,
   taskAgentsPath,
-  taskInboxPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -180,9 +176,6 @@ import type { TaskAgentRefusal } from "./task-wire.js";
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
-
-/** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
-const HELD_READ_TIMEOUT_MS = 35_000;
 
 /**
  * How long a Start may stand: a Start from another agent copies its work,
@@ -356,7 +349,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefa
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
-  readonly #held: AccountCallEffects;
   readonly #start: AccountCallEffects;
 
   readonly #hosted: HostedClient;
@@ -372,11 +364,6 @@ export class HostedCodingAgentClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: options.requestTimeoutMs,
-    });
-    this.#held = accountCall({
-      baseUrl: options.serviceBaseUrl,
-      credential,
-      requestTimeoutMs: HELD_READ_TIMEOUT_MS,
     });
     this.#start = accountCall({
       baseUrl: options.serviceBaseUrl,
@@ -798,28 +785,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One task's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
-  inbox(
-    taskId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: taskInboxPath(taskId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
-  /** One agent's inbox past the cursor, an agent with no task as much as one on a task: every item it posted, held by the service while nothing changed. */
-  agentInbox(
-    agentId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: agentInboxPath(agentId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
@@ -880,8 +845,7 @@ export class HostedCodingAgentClient {
   /**
    * One plan's inbox sealed for following over Neon Realtime, answered at
    * once: not found where the account reaches no such plan, unanswered
-   * where the deployment has no Realtime and for anything else, which the
-   * caller answers by holding its read open as before.
+   * for anything else, which the caller answers by asking again.
    */
   taskInboxLive(
     taskId: string,

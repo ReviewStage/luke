@@ -31,9 +31,9 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * statements (`live-follow.ts`) the first time a window asks, keeps the
  * items as each change lands, and lets the subscription go a while after
  * the last read let go of it. Nothing asks the service on a clock. A scope
- * the service seals nothing for, an older service or one without Realtime,
- * is read through the held read as before; one the account does not reach
- * is not found, as the held read said.
+ * the account does not reach is not found, as the held read said; a seal
+ * the service did not answer, or a subscription that stopped, is answered
+ * unanswered and let go, so the window's next read subscribes again.
  */
 
 /** How long a read is held while nothing moved past its cursor, as the service held it. */
@@ -53,8 +53,12 @@ interface LiveInbox {
 /** What a scope's read is answered from. */
 type Standing =
   | { readonly kind: "live"; readonly inbox: SubscriptionRef.SubscriptionRef<LiveState> }
-  | { readonly kind: "held" }
-  | { readonly kind: "refused"; readonly failure: typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND };
+  | { readonly kind: "refused"; readonly failure: CodingAgentCallFailure };
+
+/** Why a scope's read is refused: not found, or unanswered. */
+type CodingAgentCallFailure =
+  | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
+  | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED;
 
 /** A subscription before its first rows, with them, or stopped for good. */
 type LiveState =
@@ -103,9 +107,11 @@ export function scopeInboxes(
       Effect.gen(function* () {
         const first = yield* dependencies.seal(scope);
         if ("failure" in first) {
-          return first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
-            ? ({ kind: "refused", failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } as const)
-            : ({ kind: "held" } as const);
+          const failure =
+            first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
+              ? CODING_AGENT_CALL_FAILURE.NOT_FOUND
+              : CODING_AGENT_CALL_FAILURE.UNANSWERED;
+          return { kind: "refused", failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
         const rows = liveRows(
@@ -136,21 +142,22 @@ export function scopeInboxes(
 
 /**
  * The scope's inbox past the reader's cursor: at once where it moved, or
- * once it does within the hold, or unchanged once the hold ends. The held
- * read answers it where the scope is not followed live, or where its
- * subscription stopped or had nothing to say within the hold.
+ * once it does within the hold, or unchanged once the hold ends. A scope
+ * refused, or whose subscription stopped or had no rows within the hold,
+ * is answered why and let go, so the next read subscribes again.
  */
 export function inboxPast(
   inboxes: ScopeInboxes,
   scope: InboxScopeKey,
   after: string,
-  held: Effect.Effect<CodingAgentInboxAnswerView>,
 ): Effect.Effect<CodingAgentInboxAnswerView> {
   return Effect.scoped(
     Effect.gen(function* () {
       const standing = yield* RcMap.get(inboxes, scope);
-      if (standing.kind === "held") return yield* held;
-      if (standing.kind === "refused") return { failure: standing.failure };
+      if (standing.kind === "refused") {
+        yield* RcMap.invalidate(inboxes, scope);
+        return { failure: standing.failure };
+      }
       const moved = yield* SubscriptionRef.changes(standing.inbox).pipe(
         Stream.filter(
           (state) =>
@@ -161,9 +168,10 @@ export function inboxPast(
         Effect.map(Option.flatten),
       );
       const state = Option.isSome(moved) ? moved.value : yield* SubscriptionRef.get(standing.inbox);
-      return state.kind === "standing"
-        ? { items: state.inbox.items, cursor: state.inbox.cursor }
-        : yield* held;
+      if (state.kind === "standing")
+        return { items: state.inbox.items, cursor: state.inbox.cursor };
+      yield* RcMap.invalidate(inboxes, scope);
+      return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
     }),
   );
 }

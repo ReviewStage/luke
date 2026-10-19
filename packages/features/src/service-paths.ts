@@ -355,24 +355,6 @@ export function taskAgentsPath(taskId: string): string {
   return `${taskPath(taskId)}/agents`;
 }
 
-/**
- * One task's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function taskInboxPath(taskId: string, after?: string): string {
-  const path = `${taskPath(taskId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `taskInboxPath`'s read. */
-export function agentInboxPath(agentId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
-}
-
 /** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;

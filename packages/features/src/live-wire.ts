@@ -233,8 +233,8 @@ export function nextFailedRunExpiry(
  * One plan's inbox, or one agent's, sealed for following: the address, and
  * its open items and its latest settled ones as one statement, as the held
  * read reads them, so an item settling moves in one change. The service answers `not-found` for a plan or agent the
- * account does not reach, and `unavailable` where its deployment has no
- * Realtime, and the desktop holds its read open as before.
+ * account does not reach, and `unavailable` where its deployment's Realtime
+ * is misconfigured, which the desktop answers by asking again.
  */
 export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
