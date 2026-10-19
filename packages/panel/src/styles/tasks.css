@@ -1144,6 +1144,9 @@
   position: fixed;
   z-index: var(--luke-z-menu);
   max-height: calc(100vh - 16px);
+}
+
+[data-luke-profile="desktop"] .file-crumb-tree {
   -webkit-app-region: no-drag;
 }
 
@@ -4532,6 +4535,9 @@ ol.transcript-list {
   z-index: var(--luke-z-menu);
   padding: var(--luke-space-2);
   translate: -50% -100%;
+}
+
+[data-luke-profile="desktop"] .reply-to-selection {
   -webkit-app-region: no-drag;
 }
 
