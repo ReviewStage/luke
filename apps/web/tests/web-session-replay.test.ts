@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import type { AppPlatform } from "@luke/panel/app-platform";
 import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
@@ -36,6 +36,9 @@ const WORDS = [
 
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
 const GZIP_MAGIC = "\u001f\u008b";
+
+/** The host's word on recording, as the panel hands it to the platform. */
+type SessionReplayBootstrap = Parameters<AppPlatform["applySessionReplay"]>[0];
 
 function bootstrap(permitted: boolean): SessionReplayBootstrap {
   return { permitted, appVersion: "0.18.0", packaged: true, accountId: "user-1" };

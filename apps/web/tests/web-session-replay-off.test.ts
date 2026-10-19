@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import type { AppPlatform } from "@luke/panel/app-platform";
 import { sessionRecorderLoaded } from "@luke/panel/session-recorder/contract";
 import { afterEach, test, vi } from "vitest";
 import { webPlatform } from "../src/app/web-platform";
@@ -21,6 +21,9 @@ const requests = vi.hoisted(() => {
   };
   return made;
 });
+
+/** The host's word on recording, as the panel hands it to the platform. */
+type SessionReplayBootstrap = Parameters<AppPlatform["applySessionReplay"]>[0];
 
 function bootstrap(permitted: boolean): SessionReplayBootstrap {
   return { permitted, appVersion: "0.18.0", packaged: true, accountId: "user-1" };
