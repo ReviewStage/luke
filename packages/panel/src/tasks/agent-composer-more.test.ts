@@ -10,29 +10,25 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { AgentComposer } from "@luke/panel/tasks/agent-composer";
-import { useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
-import {
-  editorBundleLanded,
-  installEditorLayout,
-  QUIET_COMPOSER,
-} from "@luke/panel/testing/composer";
-import { onRegistry } from "@luke/panel/testing/copy-feedback";
-import { relayout } from "@luke/panel/testing/resize-observer";
-import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { layContainersAt, shown } from "#testing/container-width";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "../testing/composer.js";
+import { layContainersAt, shown } from "../testing/container-width.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { relayout } from "../testing/resize-observer.js";
+import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { AgentComposer } from "./agent-composer.js";
+import { useAgentComposer } from "./use-agent-composer.js";
 
 /**
  * The agent's message box on a card too narrow for every press: the ⋯
  * offers each press the card had no room for, a popover it opens standing
  * as its own press would have opened it, and it closes once the card changes
  * width. jsdom lays nothing out, so each width is the stylesheets' container
- * queries resolved for a card that wide (`#testing/container-width`).
+ * queries resolved for a card that wide (`testing/container-width.ts`).
  * Synthetic throughout.
  */
 

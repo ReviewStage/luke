@@ -29,6 +29,7 @@ import { ApiKeysSection } from "./settings/api-keys-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { AgentChangesTab } from "./tasks/agent-changes-tab.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
 
@@ -74,6 +75,7 @@ function answer(request: Act): Promise<ActOutcome> {
 }
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   answering = false;
   window.localStorage.clear();
   // The window's motion as a Mac with none reduced answers it.
@@ -201,6 +203,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onChoose: ignore,
           pages: undefined,
           onRereadPages: () => undefined,
+          onTaskAgents: () => undefined,
         },
       }),
     }),

@@ -51,6 +51,19 @@ export interface IdSourceSeam {
 export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
 
 /**
+ * The origin of the service this host talks to, such as
+ * `https://preview.example.test`, for a shell that knows it: a host in a
+ * browser tab calls the origin that served it rather than production
+ * cross-origin. Every hosted address the host builds — the account service,
+ * the hosted routes, the voice socket — then stands on it, and no development
+ * override redirects any of them. It is optional: a host handed none derives
+ * its addresses as a desktop build does, so the desktop provides none.
+ */
+export class ServiceOrigin extends Context.Service<ServiceOrigin, string>()(
+  "@luke/host/ServiceOrigin",
+) {}
+
+/**
  * The voice sideband's WebSocket to the service. It arrives rather than being
  * built here, because the only implementation so far is over `ws`
  * (`@luke/host/node`), and a host that imported it could not load where `ws`

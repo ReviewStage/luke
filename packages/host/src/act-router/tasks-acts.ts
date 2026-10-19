@@ -179,7 +179,7 @@ export interface TasksActsDependencies {
   /** Whether a call is in progress, which a start leaves standing for the panel to ask about moving. */
   callStanding: () => boolean;
   /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
-  colourCode: (language: string, code: string) => CodeLines;
+  colourCode: (language: string, code: string) => Effect.Effect<CodeLines>;
 }
 
 export type TasksActKind =
@@ -276,9 +276,12 @@ function refuseUnlessPanel(kind: TasksActKind, sender: ActSender): void {
 }
 
 /** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
-function pageSourceLines(html: string, colourCode: TasksActsDependencies["colourCode"]): CodeLines {
+function pageSourceLines(
+  html: string,
+  colourCode: TasksActsDependencies["colourCode"],
+): Effect.Effect<CodeLines> {
   if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
-  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
+  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
 }
 
 /**
@@ -538,12 +541,14 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
     [ACT_KIND.TASKS_PAGE_SOURCE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_PAGE_SOURCE, sender);
-      return Effect.map(
+      return Effect.flatMap(
         host.tasksPage(params),
-        (answer): TasksPageSourceAnswer =>
+        (answer): Effect.Effect<TasksPageSourceAnswer> =>
           "page" in answer
-            ? { lines: pageSourceLines(answer.page.html, dependencies.colourCode) }
-            : answer,
+            ? Effect.map(pageSourceLines(answer.page.html, dependencies.colourCode), (lines) => ({
+                lines,
+              }))
+            : Effect.succeed(answer),
       );
     },
     [ACT_KIND.TASKS_PAGES]: (params, sender) => {

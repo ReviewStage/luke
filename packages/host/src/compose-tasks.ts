@@ -527,6 +527,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The tasks whose brain just settled a turn, whose new name the loop below reads the list again for. */
   const nameReads = yield* Queue.sliding<string>(1);
 
+  /** The code a call showed, coloured and drawn in the order shown by the loop below. */
+  const codeShows = yield* Queue.unbounded<{ taskId: string; shown: TaskShownCode }>();
+
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
 
@@ -799,8 +802,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** A code shown as the Code tab's card draws it: the lines around those pointed at, coloured. */
-  function showingOf({ code, ...shown }: TaskShownCode): TaskCodeShowing {
-    return { ...shown, code: highlightCode(codeExcerpt(code)) };
+  function showingOf({ code, ...shown }: TaskShownCode): Effect.Effect<TaskCodeShowing> {
+    return Effect.map(highlightCode(codeExcerpt(code)), (coloured) => ({
+      ...shown,
+      code: coloured,
+    }));
   }
 
   /**
@@ -809,12 +815,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * rather than coloured again, because the task's work is read again on
    * every refresh and colouring the windows is what costs.
    */
-  function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
-    const held = view.shownCode ?? [];
-    const byCall = new Map(held.map((showing) => [showing.callId, showing]));
-    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
-    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
-    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
+  function withShownCode(recorded: readonly TaskShownCode[]): Effect.Effect<TaskCodeShowing[]> {
+    const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
+    return Effect.map(
+      Effect.forEach(recorded, (shown) => {
+        const held = byCall.get(shown.callId);
+        return held === undefined ? showingOf(shown) : Effect.succeed(held);
+      }),
+      (read) => {
+        const recordedCalls = new Set(recorded.map((shown) => shown.callId));
+        const held = view.shownCode ?? [];
+        return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
+      },
+    );
   }
 
   /**
@@ -851,12 +864,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ workStatus: TASKS_READ.FAILED });
         return;
       }
+      const shownCode = yield* withShownCode(stored.code ?? []);
+      if (view.activeTaskId !== taskId) return;
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
       const olderHeld =
         oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
       const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
-      const shownCode = withShownCode(stored.code ?? []);
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
@@ -1029,12 +1043,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (paged || stopped) Queue.offerUnsafe(pageReads, taskId);
   }
 
+  /** Whether code shown about a task is still for the screen: the task is open and the call's code is not drawn already, since a call's code told again is the showing already drawn. */
+  function showsCode(taskId: string, shown: TaskShownCode): boolean {
+    if (view.activeTaskId !== taskId) return false;
+    return !(view.shownCode ?? []).some((showing) => showing.callId === shown.callId);
+  }
+
   function showCode(taskId: string, shown: TaskShownCode): void {
-    if (view.activeTaskId !== taskId) return;
-    const held = view.shownCode ?? [];
-    // A call's code told again is the showing already drawn.
-    if (held.some((showing) => showing.callId === shown.callId)) return;
-    write({ shownCode: [...held, showingOf(shown)] });
+    if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
+  }
+
+  /**
+   * Colours a code shown and draws it after the rest, where it is still for
+   * the screen both as the loop takes it and once coloured.
+   */
+  function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
+    if (!showsCode(taskId, shown)) return Effect.void;
+    return Effect.flatMap(showingOf(shown), (showing) =>
+      Effect.sync(() => {
+        if (showsCode(taskId, shown)) write({ shownCode: [...(view.shownCode ?? []), showing] });
+      }),
+    );
   }
 
   function showWork(taskId: string, turn: TaskWorkTurn): void {
@@ -1279,7 +1308,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         return carried<TasksFileAnswer>(
-          "file" in answer ? { file: highlightFile(answer.file) } : answer,
+          "file" in answer ? { file: yield* highlightFile(answer.file) } : answer,
         );
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
@@ -2089,7 +2118,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The board and page reads a settled draw or page asks for, the document
+    // The code a call shows, coloured in turn, the board and page reads a
+    // settled draw or page asks for, the document
     // reads one of Luke's plan edits asks for, now and once a save cut off
     // with its turn has had time to land, the
     // transcript and work reads a call's end asks for, the list read a
@@ -2097,6 +2127,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // parked conversation read the call's words ask for; every other read of
     // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
+      yield* Effect.forkScoped(
+        Effect.forever(Effect.flatMap(Queue.take(codeShows), drawShownCode)),
+      );
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>

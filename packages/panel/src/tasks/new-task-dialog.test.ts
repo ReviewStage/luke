@@ -14,6 +14,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
@@ -26,6 +27,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -33,12 +35,13 @@ import type { RepositoryChooser } from "./repository-chip.js";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
- * New task as the developer meets it: a card over the window holding the
- * workspace it starts in and the composer, whose words start a coding agent
- * in Agent mode, or the plan and a call with Luke in Plan mode, with the
- * repository and Linear chips and the Plan toggle at its foot. Each test
+ * New task as the developer meets it: a card over the window whose head row
+ * holds its title, the repository chip, and the Linear chip at the right,
+ * over the composer, whose words start a coding agent in Agent mode, or the
+ * plan and a call with Luke in Plan mode, with the Plan toggle at its foot. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
- * does, so closing is read as the card leaving the window.
+ * does, so closing is read as the card leaving the window, on a registry
+ * of its own, as one launch of the window holds.
  */
 
 const roots: Root[] = [];
@@ -130,11 +133,16 @@ async function mount(
     ...chooser,
   };
   const links: SettingsLink[] = [];
+  let registry = AtomRegistry.make();
+  let listed = control.newTask.workspaceId;
+  let openAgain = (): void => undefined;
   function Owner() {
     const [open, setOpen] = useState(true);
+    openAgain = () => setOpen(true);
     const dialog = createElement(NewTaskDialog, {
       newTask: {
         ...control.newTask,
+        workspaceId: listed,
         open,
         preset,
         repositoriesIn: () => repositories,
@@ -179,9 +187,9 @@ async function mount(
   opener.focus();
   const container = document.createElement("div");
   document.body.append(container);
-  const root = createRoot(container);
+  let root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Owner)));
+  act(() => root.render(onRegistry(registry, createElement(Owner))));
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
   const field = (): HTMLElement => composerEditor(document);
@@ -233,7 +241,27 @@ async function mount(
     /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
-      act(() => root.render(createElement(Owner)));
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      await settle();
+    },
+    /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
+    list: async (workspaceId: string) => {
+      listed = workspaceId;
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      await settle();
+    },
+    /** Opens New task again, as another press of it does. */
+    reopen: async () => {
+      act(() => openAgain());
+      await settle();
+    },
+    /** Stands the window again from what it stored, as a relaunch does, the card open. */
+    relaunch: async () => {
+      act(() => root.unmount());
+      registry = AtomRegistry.make();
+      root = createRoot(container);
+      roots.push(root);
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
     },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
@@ -260,18 +288,24 @@ function modeToggle(): HTMLButtonElement {
   );
 }
 
-test("the card holds the composer with its words focused, the repository chip after the +, and the Plan toggle, the model chip on the account's default, and Start at its foot", async () => {
+test("the card holds the composer with its words focused, the repository chip in the head row after the title, and the Plan toggle, the model chip on the account's default, and Start at its foot", async () => {
   const card = await mount();
   const controls = card.controls();
+  const head = card.dialog()?.querySelector(".new-task-head");
+  const foot = card.dialog()?.querySelector(".prompt-input-footer");
 
   assert.equal(document.activeElement, card.field());
   assert.equal(card.placeholder(), "Describe the change for a coding agent…");
   for (const each of ["Attach files", "acme/web", "Plan with Luke first", "Start agent"]) {
     assert.ok(controls.includes(each), `${each} stands in the card`);
   }
-  assert.ok(
-    controls.indexOf("acme/web") < controls.indexOf("Plan with Luke first"),
-    "the repository chip leads the foot",
+  assert.equal(head?.querySelector("h2")?.textContent, "New task");
+  assert.equal(head?.querySelector(".repository-chip")?.textContent, "acme/web");
+  assert.equal(foot?.querySelector(".repository-chip"), null, "the foot holds no repository chip");
+  assert.equal(
+    document.querySelector('[aria-label^="Workspace"]'),
+    null,
+    "the card offers no workspace picker",
   );
   assert.equal(
     document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
@@ -460,6 +494,36 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
   assert.equal(card.dialog(), null);
   assert.equal(document.activeElement, card.opener);
   assert.deepEqual(card.starts, []);
+});
+
+test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
+  const card = await mount();
+  card.type("Dark mode");
+  await card.key("Escape");
+  assert.equal(card.dialog(), null);
+
+  await card.reopen();
+  assert.equal(card.field().textContent, "Dark mode");
+  await card.relaunch();
+  assert.equal(card.field().textContent, "Dark mode");
+
+  await card.key("Enter");
+  assert.equal(card.agents[0]?.prompt, "Dark mode");
+  await card.reopen();
+  assert.equal(card.field().textContent, "");
+  await card.relaunch();
+  assert.equal(card.field().textContent, "");
+});
+
+test("words typed before the workspaces are read stay in the box as the workspace lands, and are its draft", async () => {
+  const card = await mount();
+  card.type("Dark mode");
+  await card.list("workspace-personal");
+  assert.equal(card.field().textContent, "Dark mode");
+
+  await card.key("Escape");
+  await card.reopen();
+  assert.equal(card.field().textContent, "Dark mode");
 });
 
 test("Escape in the repository menu closes the menu and leaves the dialog standing", async () => {
@@ -860,9 +924,14 @@ test("with Linear connected, typing in the box lists no issues and searches no L
   }
 });
 
-test("the Linear chip stands after the repository chip only where the workspace has Linear connected", async () => {
+test("the Linear chip stands at the right end of the head row, after the repository chip, only where the workspace has Linear connected", async () => {
   const connected = await mount(undefined, undefined, {}, ISSUES);
   const withLinear = connected.controls();
+  const head = connected.dialog()?.querySelector(".new-task-head");
+  const placed = {
+    last: head?.lastElementChild?.querySelector(LINEAR_CHIP) !== null,
+    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${LINEAR_CHIP}`) !== null,
+  };
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   const plain = await mount();
@@ -872,6 +941,7 @@ test("the Linear chip stands after the repository chip only where the workspace 
     withLinear.indexOf("acme/web") + 1,
     "the Linear chip follows the repository chip",
   );
+  assert.deepEqual(placed, { last: true, inFoot: false });
   assert.equal(plain.controls().includes("Choose from Linear"), false);
 });
 

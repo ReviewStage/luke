@@ -3,12 +3,11 @@ import { Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import { agentSandboxResumePath, agentTerminalPath, agentTerminalsPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -42,7 +41,9 @@ import {
  * relay socket alone.
  */
 
-export interface HostedTerminalClientOptions extends AccountToken {
+export interface HostedTerminalClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -118,7 +119,7 @@ export class HostedTerminalClient {
   constructor(options: HostedTerminalClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

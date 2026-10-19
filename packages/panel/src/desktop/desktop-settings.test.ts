@@ -6,7 +6,7 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
-import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -452,7 +452,7 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);
 });
 
-test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows", () => {
+test("Appearance draws every diff setting in a Diffs group of its own, under the page's own rows, which View settings' foot lands on", () => {
   const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.APPEARANCE }));
   const group =
     [...page.querySelectorAll("section[aria-labelledby]")].find(
@@ -460,6 +460,7 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
         document.getElementById(each.getAttribute("aria-labelledby") ?? "")?.textContent ===
         "Diffs",
     ) ?? assert.fail("a Diffs group stands");
+  assert.equal(group.getAttribute("data-search-anchor"), SETTINGS_SECTION.APPEARANCE_DIFFS);
   assert.deepEqual(
     [...group.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
       // A pop-up's name ends with the value it names, which is not the row's.
@@ -470,7 +471,7 @@ test("Appearance draws every diff setting in a Diffs group of its own, under the
       "Word wrap",
       "Layout",
       "Indicators",
-      "Inline diffs",
+      "Changed words",
       "Backgrounds",
       "Dark theme",
       "Light theme",

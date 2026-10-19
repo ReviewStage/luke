@@ -3,6 +3,8 @@ import { it } from "@effect/vitest";
 import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
+import { accountBearer } from "../account-call.js";
+import type { AccountToken } from "../account-token.js";
 import { PRODUCT_EVENT } from "./product-events.js";
 import {
   ProductEventSender,
@@ -14,11 +16,20 @@ const BASE_URL = "https://luke.test";
 const APP_VERSION = "0.2.0";
 const NOON = Date.parse("2026-08-19T12:00:00.000Z");
 
+/** What a test changes of the sender: its options, and the account its bearer is read from. */
+type SenderOverrides = Partial<Omit<ProductEventSenderOptions, "credential"> & AccountToken>;
+
 function senderWith(
-  overrides: Partial<ProductEventSenderOptions> = {},
+  overrides: SenderOverrides = {},
   respond: (request: RecordedRequest) => Response = () => new Response("{}"),
 ) {
   const { layer, requests } = recordingHttpClient(respond);
+  const {
+    readAccessToken = () => Effect.succeed("token-1"),
+    refreshAccount = () => Effect.void,
+    readAccountKey,
+    ...options
+  } = overrides;
   return Effect.map(
     Effect.andThen(
       TestClock.setTime(NOON),
@@ -27,11 +38,10 @@ function senderWith(
         appVersion: APP_VERSION,
         packaged: true,
         sends: true,
-        readAccessToken: () => Effect.succeed("token-1"),
-        refreshAccount: () => Effect.void,
+        credential: accountBearer({ readAccessToken, refreshAccount, readAccountKey }),
         httpClient: layer,
         now: () => NOON,
-        ...overrides,
+        ...options,
       }),
     ),
     (sender) => ({ sender, requests }),
@@ -40,7 +50,7 @@ function senderWith(
 
 /** The armed sender every test that is not about arming starts from. */
 function sharingSender(
-  overrides: Partial<ProductEventSenderOptions> = {},
+  overrides: SenderOverrides = {},
   respond?: (request: RecordedRequest) => Response,
 ) {
   return Effect.tap(senderWith(overrides, respond), ({ sender }) =>
@@ -114,10 +124,7 @@ function dayMarkers(requests: readonly RecordedRequest[]): number {
  * the day as the host does at launch and on its first tick, flushes, and
  * answers how many day markers it sent.
  */
-function launch(
-  options: Partial<ProductEventSenderOptions>,
-  respond?: (request: RecordedRequest) => Response,
-) {
+function launch(options: SenderOverrides, respond?: (request: RecordedRequest) => Response) {
   return Effect.scoped(
     Effect.gen(function* () {
       const { sender, requests } = yield* sharingSender(options, respond);

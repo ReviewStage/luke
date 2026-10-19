@@ -1,8 +1,9 @@
 /**
  * integrations-app.ts -- the integrations group: an account's connections read, begun, ended, and settled.
  *
- * Six endpoints the signed-in desktop calls with its bearer, and one
- * browser navigation that carries none. A Luke account may hold more than
+ * Seven endpoints the signed-in desktop calls with its bearer, or a page of
+ * the deployment's own with its session cookie, and one browser navigation
+ * that carries neither. A Luke account may hold more than
  * one account at a provider, each its own row and grant under its own
  * connection name; every route about one account reads it from the
  * `connection` query beside the provider, and without one means the
@@ -10,8 +11,9 @@
  * exactly what it saw before.
  *
  * - `GET /api/account/integrations` answers where every provider's
- *   connection stands. A sign-in still under way is settled here too, by
- *   asking Connect for a token afresh, so a desktop that reads again after
+ *   connection stands. For a caller with a bearer, a sign-in still under
+ *   way is settled here too, by asking Connect for a token afresh, so a
+ *   desktop that reads again after
  *   the browser closed learns the outcome whatever address the browser was
  *   returned to; one with no token yet is asked after by the handle Connect
  *   began it with, and one Connect says was cancelled or refused is ended
@@ -19,7 +21,14 @@
  *   Connect's own line where it is shaped like no credential, since a
  *   sign-in that failed on Connect's own page never returns to Luke. A provider the deployment does not offer the account
  *   (`accountIntegrationConnect`) stands unavailable, and every route below
- *   refuses it as one with no connector here.
+ *   refuses it as one with no connector here. A caller with only the
+ *   session cookie is answered where each row stands as stored, a sign-in
+ *   under way `pending`, and nothing is settled, ended, or labelled: a Lax
+ *   cookie rides a link another site's page sends a browser on, which must
+ *   not settle the account's sign-in or spend its one failure notice.
+ * - `POST /api/account/integrations/settle` is that read with its settling,
+ *   for any caller; a POST a cookie carries is held to the deployment's own
+ *   pages by the origin guard before it gets here.
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
  *   to begin a browser sign-in to the provider for the account, records the
  *   sign-in's one-time state, and answers the address the desktop opens and
@@ -105,6 +114,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedCarriesBearer,
   hostedJsonResponse,
   hostedMethod,
   hostedNotFoundRoute,
@@ -150,6 +160,8 @@ const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
 const INTEGRATIONS_PATH = {
   /** GET reads where every provider stands. */
   STATUSES: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS,
+  /** POST settles every sign-in under way, then reads where every provider stands. */
+  SETTLE: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE,
   /** POST begins a sign-in; the rewrite moves the path's provider into the `provider` query. */
   CONNECT: "/api/account/integrations/connect",
   /** POST ends a sign-in under way; the rewrite moves the path's provider into the `provider` query. */
@@ -517,17 +529,24 @@ interface ProviderStanding {
  * Where one Connect provider stands for the account: every row settled as
  * `standingStatus` settles it, the first account's word kept for the
  * provider's own, and every account answered but one whose first sign-in
- * ended without a grant, which stands for nothing.
+ * ended without a grant, which stands for nothing. A read that `settles`
+ * nothing answers each row as stored (`storedStanding`) and asks Connect
+ * nothing.
  */
 const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   connector: ConnectorService,
   provider: IntegrationProvider,
   rows: readonly IntegrationConnectionRow[],
+  settles: boolean,
 ): Effect.fn.Return<ProviderStanding, HostedRefusal, DatabaseServices> {
   const held = providerRows(rows, provider);
-  const settled = yield* Effect.forEach(held, (row) =>
-    Effect.gen(function* () {
+  const settled = yield* Effect.forEach(held, (row) => {
+    if (!settles) {
+      const standing: Standing = { status: storedStanding(seams, row) };
+      return Effect.succeed({ row, standing });
+    }
+    return Effect.gen(function* () {
       const standing = yield* standingStatus(seams, connector, row);
       // A sign-in this read settled stored its grant's name as the label; the row read before it does not carry it yet.
       const settled =
@@ -535,8 +554,8 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
           ? { ...row, label: standing.accountName }
           : row;
       return { row: yield* labelledRow(seams, connector, settled, standing.status), standing };
-    }),
-  );
+    });
+  });
   const first = settled.find(({ row }) => row.connectionName === provider);
   return {
     status: first?.standing.status ?? INTEGRATION_STATUS.DISCONNECTED,
@@ -552,25 +571,22 @@ const providerStanding = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * GET: where every one of the caller's connections stands; a provider with
- * no connector here, or not offered to the caller, is unavailable, and one
- * the caller's GitHub sign-in grants stands where that sign-in does. Beside
- * each provider's word, every account the caller holds, and the providers
- * it may add another account at.
+ * Where every one of the account's connections stands, each sign-in under
+ * way settled first where the read `settles`; a provider with no connector
+ * here, or not offered to the account, is unavailable, and one the
+ * account's GitHub sign-in grants stands where that sign-in does. Beside
+ * each provider's word, every account it holds, the providers it may add
+ * another account at, and why each sign-in this read ended failed.
  */
-const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndpoint")(function* (
+const statusesAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
+  userId: string,
+  settles: boolean,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  | HttpServerRequest.HttpServerRequest
-  | DatabaseServices
-  | IntegrationConnect
-  | GitHubApp
-  | HttpClient.HttpClient
+  DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient
 > {
-  yield* hostedMethod(HTTP_METHOD.GET);
-  const userId = yield* resolvedUserId(seams);
   const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(userId));
   // A deployment with no connector at all answers from its configuration alone, whatever the store.
   const anyConfigured = INTEGRATION_PROVIDER_LIST.some((provider) => connect[provider].configured);
@@ -588,7 +604,7 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
             (status): ProviderStanding => ({ status, accounts: [], failures: [] }),
           )
         : connect[provider].configured
-          ? providerStanding(seams, connect[provider], provider, rows)
+          ? providerStanding(seams, connect[provider], provider, rows, settles)
           : Effect.succeed(unavailable),
       (standing) => ({ provider, ...standing }),
     ),
@@ -613,6 +629,46 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
     ...(addable.length > 0 ? { addable } : undefined),
     ...(signInFailures.length > 0 ? { signInFailures } : undefined),
   });
+});
+
+/** The services both statuses endpoints answer from. */
+type StatusesServices =
+  | HttpServerRequest.HttpServerRequest
+  | DatabaseServices
+  | IntegrationConnect
+  | GitHubApp
+  | HttpClient.HttpClient;
+
+/**
+ * GET: where every one of the caller's connections stands, settling each
+ * sign-in under way only for a caller that carries a bearer, as the
+ * desktop does. The endpoint reads the header itself rather than its
+ * route file handing the group a bearer-only resolver, because every
+ * function holding the group answers every path it declares, a landing's
+ * `route-path` included (`apps/web/server/function-dispatch.ts`).
+ */
+const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, StatusesServices> {
+  yield* hostedMethod(HTTP_METHOD.GET);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const userId = yield* resolvedUserId(seams);
+  return yield* statusesAnswer(seams, userId, hostedCarriesBearer(request));
+});
+
+/**
+ * POST: every sign-in under way settled, then where every one of the
+ * caller's connections stands, as the bearer's read answers it, for any
+ * caller; the origin guard holds a POST a cookie carries to the
+ * deployment's own pages before it reaches here.
+ */
+const settleEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsSettleEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, StatusesServices> {
+  yield* hostedMethod(HTTP_METHOD.POST);
+  const userId = yield* resolvedUserId(seams);
+  return yield* statusesAnswer(seams, userId, true);
 });
 
 /** The wire's word for each way a server's tools read can fail. */
@@ -885,11 +941,13 @@ const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoin
 });
 
 /**
- * Where a provider stands once a Cancel ended its sign-in: its row's own
- * status, or disconnected with none, unless a sign-in begun again while the
- * Cancel was out still stands, which is pending.
+ * Where a provider stands as stored, settling nothing: its row's own
+ * status, or disconnected with none, unless a sign-in still within its
+ * window stands, which is pending. A Cancel answers this once it ended its
+ * sign-in, where only one begun again meanwhile still stands, and so does a
+ * statuses read that settles nothing.
  */
-function standingAfterCancel(
+function storedStanding(
   seams: IntegrationsAppSeams,
   row: IntegrationConnectionRow | undefined,
 ): IntegrationStatus {
@@ -927,7 +985,7 @@ const cancelEndpoint = /* @__PURE__ */ Effect.fn("web/integrationCancelEndpoint"
     yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
   }
   const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-  const status = standingAfterCancel(seams, named(after));
+  const status = storedStanding(seams, named(after));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status });
 });
 
@@ -1111,7 +1169,7 @@ function refusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** The group: the seven paths, one of them the browser's, and the hosted vocabulary's own refusal for any other. */
+/** The group: the eight paths, one of them the browser's, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
 ): WebRoutes<DatabaseServices | IntegrationConnect | GitHubApp | HttpClient.HttpClient> {
@@ -1119,6 +1177,7 @@ export function integrationsApp(
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.TOOLS, refusing(toolsEndpoint(seams, tools))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.STATUSES, refusing(statusesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.SETTLE, refusing(settleEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECT, refusing(connectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CANCEL, refusing(cancelEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),

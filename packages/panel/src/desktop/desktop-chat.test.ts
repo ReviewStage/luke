@@ -19,6 +19,7 @@ import {
   stagedAnswer,
   stagedPost,
 } from "../tasks/chat-fixture.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -44,6 +45,7 @@ beforeAll(installEditorLayout);
 let root: Root | undefined;
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {

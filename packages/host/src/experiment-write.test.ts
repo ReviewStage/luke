@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { fixedBearer } from "@luke/features";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { fakeHttpClientLayer, temporaryDirectory } from "@luke/wire/testing";
@@ -63,8 +64,7 @@ function serviceAnswering(
   const bodies: { experiments: ExperimentChoices }[] = [];
   const client = new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token"),
-    refreshAccount: () => Effect.void,
+    credential: fixedBearer("token"),
     httpClient: fakeHttpClientLayer(async (_url, init) => {
       const body = JSON.parse(String(init?.body));
       bodies.push(body);

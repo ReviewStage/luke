@@ -13,8 +13,9 @@ import { applySessionReplay } from "./session-replay";
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,
  * and the browser are main's, reached over the act channel; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `luke-page:` scheme main serves; and
- * the session recording is the desktop's own (`session-replay.ts`).
+ * entries; a page is drawn from the `luke-page:` scheme main serves; the
+ * static files are the build's copies beside the document; and the session
+ * recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge
  * is installed as safely as after.
  */
@@ -23,6 +24,7 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   saveFile: ({ name, text }) => askAct(ACT_KIND.WINDOW_SAVE_FILE, { name, text }),
   focusPanel: () => tellAct(ACT_KIND.WINDOW_FOCUS_PANEL),
   pageFrameUrl,
+  assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
   setShortcutCapturing: (capturing) => appBridge().setShortcutCapturing(capturing),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),

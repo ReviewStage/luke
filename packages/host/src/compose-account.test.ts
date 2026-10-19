@@ -5,7 +5,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER } from "@luke/credentials/snapshot";
-import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@luke/features";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -14,16 +14,23 @@ import {
   type GatewayMethod,
 } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { scriptedOpenSocket } from "@luke/voice/testing";
-import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
+import { HTTP_STATUS, isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { jsonResponse } from "@luke/wire/testing";
 import { ConfigProvider, Effect, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { composeAccount } from "./compose-account.js";
 import { composeSettings } from "./compose-settings.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import { AppIdentity, Environment, SecretCipher, SignInConsent } from "./effect/seams.js";
-import { hostKernelOver } from "./host-kernel.js";
+import {
+  AppIdentity,
+  Environment,
+  SecretCipher,
+  ServiceOrigin,
+  SignInConsent,
+} from "./effect/seams.js";
+import { type HostKernel, hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 
 /**
@@ -68,32 +75,21 @@ const until = (holds: () => boolean) =>
     for (let turn = 0; turn < 2_000 && !holds(); turn += 1) await nextTurn();
   });
 
-it.effect("a sign-in after a deletion in the same run lets session replay record again", () =>
+/**
+ * The account concern over the real settings store, already holding a
+ * signed-in account, linked and started on `machine`'s identity and whatever
+ * else it adds.
+ */
+const signedInAccount = (input: {
+  readonly kernel: HostKernel;
+  readonly machine: Layer.Layer<AppIdentity>;
+  readonly openSocket: OpenSocket;
+}) =>
   Effect.gen(function* () {
-    const stateRoot = yield* temporaryDirectoryScoped("luke-account-replay-");
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
-    const kernel = hostKernelOver({
-      stateRoot,
-      runMode: runModeFor({ capture: false, fixture: false }),
-      accountBaseUrl: ACCOUNT_BASE_URL,
-      now: () => 0,
-      createId: () => "id",
-      report: () => undefined,
-      emit: (kind, payload) => {
-        events.push({ kind, payload });
-      },
-    });
-    const lastReplay = () =>
-      events.findLast((event) => event.kind === GATEWAY_EVENT.SESSION_REPLAY_CHANGED)?.payload;
-    const lastPermitted = () => {
-      const replay = lastReplay();
-      return isRecord(replay) ? replay.permitted : undefined;
-    };
-
     const machine = Layer.mergeAll(
-      Layer.succeed(HostKernelTag, kernel),
+      input.machine,
+      Layer.succeed(HostKernelTag, input.kernel),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
       // The store keeps an account only where it can encrypt one.
       Layer.succeed(SecretCipher, {
         isAvailable: () => true,
@@ -116,11 +112,41 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
       }),
     );
     const account = yield* Effect.provide(
-      composeAccount({ settings, openSocket: scriptedOpenSocket([]).openSocket }),
+      composeAccount({ settings, openSocket: input.openSocket }),
       machine,
     );
     yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
     yield* account.lifetime;
+    return account;
+  });
+
+it.effect("a sign-in after a deletion in the same run lets session replay record again", () =>
+  Effect.gen(function* () {
+    const stateRoot = yield* temporaryDirectoryScoped("luke-account-replay-");
+    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    const kernel = hostKernelOver({
+      stateRoot,
+      runMode: runModeFor({ capture: false, fixture: false }),
+      accountBaseUrl: ACCOUNT_BASE_URL,
+      now: () => 0,
+      createId: () => "id",
+      report: () => undefined,
+      emit: (kind, payload) => {
+        events.push({ kind, payload });
+      },
+    });
+    const lastReplay = () =>
+      events.findLast((event) => event.kind === GATEWAY_EVENT.SESSION_REPLAY_CHANGED)?.payload;
+    const lastPermitted = () => {
+      const replay = lastReplay();
+      return isRecord(replay) ? replay.permitted : undefined;
+    };
+
+    const account = yield* signedInAccount({
+      kernel,
+      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      openSocket: scriptedOpenSocket([]).openSocket,
+    });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = account.methods[method];
       assert.ok(handler, method);
@@ -144,4 +170,38 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     Effect.provideService(FetchHttpClient.Fetch, accountService),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
   ),
+);
+
+it.effect("a packaged host handed a service origin opens its voice socket on that origin", () =>
+  Effect.gen(function* () {
+    const origin = "https://preview.example.test";
+    const stateRoot = yield* temporaryDirectoryScoped("luke-account-origin-");
+    const script = scriptedOpenSocket([
+      () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: HTTP_STATUS.FORBIDDEN }),
+    ]);
+    const account = yield* signedInAccount({
+      // The kernel as `hostKernelLayer` builds it over that origin.
+      kernel: hostKernelOver({
+        stateRoot,
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: `${origin}/api/auth`,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: () => undefined,
+      }),
+      machine: Layer.merge(
+        Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: true }),
+        Layer.succeed(ServiceOrigin, origin),
+      ),
+      openSocket: script.openSocket,
+    });
+
+    yield* Effect.orDie(account.voiceCapabilities.apply());
+    const sessions = account.voiceCapabilities.liveSessions;
+    assert.ok(sessions);
+    yield* Effect.scoped(sessions.create({ sdpOffer: "v=0\r\n", taskId: "task-1" }));
+
+    assert.equal(script.opens[0]?.url, `wss://preview.example.test${VOICE_SERVICE_PATH.SESSIONS}`);
+  }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
 );

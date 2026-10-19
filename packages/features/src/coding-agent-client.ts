@@ -9,9 +9,9 @@ import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
 import {
@@ -19,7 +19,6 @@ import {
   ACCOUNT_INBOX_QUERY,
   accountInboxAnswerSchema,
 } from "./account-inbox-wire.js";
-import type { AccountToken } from "./account-token.js";
 import {
   CHAT_QUERY,
   type ChatWriteRequest,
@@ -201,7 +200,9 @@ const HELD_READ_TIMEOUT_MS = 35_000;
  */
 const START_TIMEOUT_MS = 120_000;
 
-export interface HostedCodingAgentClientOptions extends AccountToken {
+export interface HostedCodingAgentClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -334,7 +335,7 @@ export class HostedCodingAgentClient {
   readonly #start: AccountCallEffects;
 
   constructor(options: HostedCodingAgentClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,

@@ -43,6 +43,12 @@ export const HOSTED_SERVICE_PATH = {
   /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
   ACCOUNT_INTEGRATIONS: "/api/account/integrations",
   /**
+   * Where every one of the account's integrations stands, each sign-in
+   * still under way settled first (POST): the statuses read's own answer.
+   * The read settles only for a bearer, so a browser's cookie settles here.
+   */
+  ACCOUNT_INTEGRATIONS_SETTLE: "/api/account/integrations/settle",
+  /**
    * Where Vercel Connect returns the browser from an integration's sign-in
    * (GET), with the sign-in's own state, which names the provider too: the
    * route settles it and sends the browser on to the landing page

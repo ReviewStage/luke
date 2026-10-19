@@ -9,11 +9,10 @@ import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
@@ -165,7 +164,9 @@ export type TaskCallResult<Answer, Failure> =
   | { readonly ok: true; readonly answer: Answer }
   | { readonly ok: false; readonly failure: Failure };
 
-export interface HostedTaskClientOptions extends AccountToken {
+export interface HostedTaskClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -241,7 +242,7 @@ export class HostedTaskClient {
   readonly #held: AccountCallEffects;
 
   constructor(options: HostedTaskClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,

@@ -24,6 +24,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -77,6 +78,7 @@ const roots: Root[] = [];
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   installEditorLayout();
   sent = [];

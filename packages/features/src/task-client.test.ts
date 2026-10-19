@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, recordedRoutes } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer } from "./account-call.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
@@ -35,8 +36,10 @@ const TASK = {
 function client(): HostedTaskClient {
   return new HostedTaskClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+    }),
   });
 }
 

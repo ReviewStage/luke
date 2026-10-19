@@ -116,3 +116,10 @@ on the settings snapshot.
   the history can reach (`navigation-history.ts`'s `reachable`).
 - Graduating one deletes its key, which makes every gate left behind fail to
   compile, so the one PR that graduates it deletes them all.
+
+## Test fixtures
+
+`src/testing/` holds what the panel's tests share, behind `@luke/panel/testing/*`.
+**A fixture earns its place by having more than one caller** — a helper one test
+file needs stays in that file, where a reader can see it beside the assertions it
+serves.
