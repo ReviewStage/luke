@@ -176,3 +176,22 @@ it.effect("a voice another tab chose reaches this tab's live source", () =>
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
   ),
 );
+
+it.effect(
+  "a voice another tab chose reaches this tab's live source after this tab wrote another setting",
+  () =>
+    Effect.gen(function* () {
+      const { writer, reader, signal } = yield* twoTabs();
+      yield* reader.settings.store.snapshot();
+
+      yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
+      // This tab's own write reads the file first, and so already holds the voice before the signal lands.
+      yield* reader.settings.store.set("theme", THEME.DARK);
+      Queue.offerUnsafe(signal, undefined);
+
+      assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);

@@ -408,11 +408,26 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       endLiveSession: linked((links) => links.endLiveSession),
     });
 
+    /**
+     * Each setting's value as its host side effect last carried it, kept
+     * apart from the store's held copy: a write re-reads the file, so the
+     * held copy may already hold a value another tab chose that no side
+     * effect here has carried yet. Kept only where the file has another
+     * writer (`SettingsChangedElsewhere`), and filled when that watch starts.
+     */
+    const carriedValues = new Map<AppSettingField, string>();
+    const carry = (field: AppSettingField, stored: StoredSettings): void => {
+      carriedValues.set(field, JSON.stringify(stored[field]));
+    };
+
     const applyHostSettingSideEffect = (
       field: AppSettingField,
       settings: SettingsUpdateResult["settings"],
     ): Effect.Effect<void> =>
-      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
+      Effect.andThen(
+        sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored }),
+        Effect.sync(() => carry(field, settings.stored)),
+      );
 
     const applyAccountPreferenceSideEffects = /* @__PURE__ */ Effect.fnUntraced(function* (
       result: SettingsUpdateResult,
@@ -425,17 +440,17 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     });
 
     /**
-     * The file as another writer left it, read again: each setting it moved
-     * has its host side effect here, as a write of this host's own has (a
-     * voice another tab chose reaches this tab's live source), and the panel
-     * is sent the settings as they now stand.
+     * The file as another writer left it, read again: each setting standing
+     * other than its side effect last carried it has that side effect here,
+     * as a write of this host's own has (a voice another tab chose reaches
+     * this tab's live source), and the panel is sent the settings as they
+     * now stand.
      */
     const applyChangedElsewhere = Effect.gen(function* () {
-      const before = (yield* store.snapshot()).stored;
       yield* store.reload();
       const after = yield* store.snapshot();
       for (const field of APP_SETTING_FIELDS) {
-        if (JSON.stringify(before[field]) !== JSON.stringify(after.stored[field])) {
+        if (carriedValues.get(field) !== JSON.stringify(after.stored[field])) {
           yield* applyHostSettingSideEffect(field, after);
         }
       }
@@ -623,6 +638,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         // read again, and carried as any update is. A read that fails is
         // written down and the next change is still heard.
         if (Option.isSome(changedElsewhere)) {
+          // What this host was built on is what its side effects carry until one runs.
+          const built = yield* Effect.option(store.snapshot());
+          if (Option.isSome(built)) {
+            for (const field of APP_SETTING_FIELDS) carry(field, built.value.stored);
+          }
           yield* Effect.forkScoped(
             Stream.runForEach(changedElsewhere.value, () =>
               catchAllButInterrupt(applyChangedElsewhere, (cause) =>
